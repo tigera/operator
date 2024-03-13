@@ -127,12 +127,8 @@ const (
 	managedByValue = "tigera-operator"
 )
 
-// hasOwner returns true if the given IP pool is owned by the given Installation object, and
-// false otherwise.
-func hasOwner(pool *crdv1.IPPool) bool {
-	// Check for the managed-by label. Once OwnerReferences are supported on projectcalico.org/v3
-	// resources, we can remove this shortcut. Ideally, we would be comparing the OwnerReference to the UID
-	// on the Installation here instead.
+// hasOwnerLabel returns true if the given IP pool is owned by the tigera/operator, and false otheriwse.
+func hasOwnerLabel(pool *crdv1.IPPool) bool {
 	if val, ok := pool.Labels[managedByLabel]; ok && val == managedByValue {
 		return true
 	}
@@ -163,28 +159,28 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.OnCRFound()
 	defer r.status.SetMetaData(&installation.ObjectMeta)
 
+	// If the installation is terminating, do nothing.
+	if installation.DeletionTimestamp != nil {
+		reqLogger.Info("Installation is terminating, skipping IP pool reconciliation")
+		return reconcile.Result{}, nil
+	}
+
 	// This controller relies on the core Installation controller to perform initial defaulting before it can continue.
 	// The core installation controller adds a specific finalizer as part of performing defaulting,
 	// so wait for that before we continue.
-	finalizerExists := false
+	readyToGo := false
 	for _, finalizer := range installation.GetFinalizers() {
 		if finalizer == render.OperatorCompleteFinalizer {
-			finalizerExists = true
+			readyToGo = true
 			break
 		}
 	}
-	if !finalizerExists {
+	if !readyToGo {
 		r.status.SetDegraded(operator.ResourceNotReady, "Waiting for Installation defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 	if installation.Spec.CNI == nil || installation.Spec.CNI.Type == "" {
 		r.status.SetDegraded(operator.ResourceNotReady, "Waiting for CNI type to be configured on Installation", nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
-
-	// If the installation is terminating, do nothing.
-	if installation.DeletionTimestamp != nil {
-		reqLogger.Info("Installation is terminating, skipping reconciliation")
 		return reconcile.Result{}, nil
 	}
 
@@ -224,11 +220,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	apiAvailable := apiserver != nil && apiserver.Status.State == v1.TigeraStatusReady
 
 	// Create a lookup map of pools owned by this controller for easy access.
-	// This controller will ignore any IP pools that it itself did not create.
+	// This controller will only modify IP pools if:
+	// - The pool was created by or last updated by this controller (as indicated by the managed-by label).
+	// - The IP pool is present in the cluster, present in the Installation, and both match exactly.
+	// The latter case exists for upgrade scenarios, allowing the operator to assume control of existing IP pools gracefully.
 	ourPools := map[string]crdv1.IPPool{}
 	notOurs := map[string]bool{}
 	for _, p := range currentPools.Items {
-		if hasOwner(&p) {
+		if hasOwnerLabel(&p) {
 			// This pool is owned by the Installation object, so consider it ours.
 			reqLogger.V(1).Info("IP pool is owned by operator", "name", p.Name, "cidr", p.Spec.CIDR)
 			ourPools[p.Spec.CIDR] = p
@@ -245,8 +244,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				v1p.FromProjectCalicoV1(p)
 				reqLogger.V(1).Info("Comparing IP pool", "clusterPool", p, "installationPool", cnp)
 				if !reflect.DeepEqual(cnp, v1p) {
-					// The IP pool in the cluster doesn't match the IP pool
-					// in the Installation - ignore it.
+					// The IP pool in the cluster doesn't match the IP pool in the Installation - ignore it.
 					reqLogger.V(1).Info("IP pool doesn't match", "clusterPool", v1p, "installationPool", cnp)
 					continue
 				}
@@ -258,6 +256,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			if _, ok := ourPools[p.Spec.CIDR]; !ok {
 				// This IP pool exists in the cluster, but is not owned by us - mark it down so that
 				// we can refuse to update any pool with this CIDR if it exists in the Installation.
+				// This branch is only hit if the pool does not have the managed-by label, and does
+				// not exactly match any pool in the Installation.
 				notOurs[p.Spec.CIDR] = true
 			}
 		}

@@ -17,7 +17,6 @@ package manager
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -343,28 +342,6 @@ func (builder *voltronRouteConfigBuilder) mountSecretReference(name, key string)
 	}
 
 	return fmt.Sprintf("%s/%s/%s", configMapFolder, name, key), nil
-}
-
-// mapToSortedArray returns an array with the contents of the map, ordered lexicographically by the map keys.
-// This provides a consistent ordering to the contents of the map.
-func mapToSortedArray[E any](m map[string]E) []E {
-	keys := make([]string, len(m))
-	i := 0
-	for key := range m {
-		keys[i] = key
-		i++
-	}
-
-	sort.Strings(keys)
-
-	i = 0
-	values := make([]E, len(keys))
-	for _, key := range keys {
-		values[i] = m[key]
-		i++
-	}
-
-	return values
 }
 
 // VoltronRouteConfig contains everything needed to configure the voltron pod / container with routes via a mounted file.

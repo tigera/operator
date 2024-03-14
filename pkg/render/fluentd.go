@@ -1148,11 +1148,9 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		},
 	}
 
-	if c.cfg.LogCollector.Spec.AdditionalSources != nil {
-		if c.cfg.LogCollector.Spec.AdditionalSources.EksCloudwatchLog != nil {
-			if overrides := c.cfg.LogCollector.Spec.AdditionalSources.EksCloudwatchLog.EKSLogForwarderDeployment; overrides != nil {
-				rcomponents.ApplyDeploymentOverrides(d, overrides)
-			}
+	if c.cfg.LogCollector != nil {
+		if overrides := c.cfg.LogCollector.Spec.EKSLogForwarderDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
 		}
 	}
 

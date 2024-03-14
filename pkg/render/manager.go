@@ -20,8 +20,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tigera/operator/pkg/url"
-
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -49,8 +47,10 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
+	"github.com/tigera/operator/pkg/url"
 )
 
 const (
@@ -127,6 +127,8 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 // ManagerConfiguration contains all the config information needed to render the component.
 type ManagerConfiguration struct {
+	VoltronRouteConfig *manager.VoltronRouteConfig
+
 	KeyValidatorConfig authentication.KeyValidatorConfig
 	ESSecrets          []*corev1.Secret
 	ClusterConfig      *relasticsearch.ClusterConfig
@@ -249,6 +251,10 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.getTLSObjects()...)
 	objs = append(objs, c.managerService())
 
+	if c.cfg.VoltronRouteConfig != nil {
+		objs = append(objs, c.cfg.VoltronRouteConfig.RoutesConfigMap(c.cfg.Namespace))
+	}
+
 	// If we're running on openshift, we need to add in an SCC.
 	if c.cfg.Openshift {
 		objs = append(objs, c.securityContextConstraints())
@@ -296,11 +302,18 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	if c.cfg.Tenant == nil {
 		managerPodContainers = append(managerPodContainers, c.managerContainer())
 	}
+	annotations := c.tlsAnnotations
+	if c.cfg.VoltronRouteConfig != nil {
+		for key, value := range c.cfg.VoltronRouteConfig.Annotations() {
+			annotations[key] = value
+		}
+	}
+
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ManagerDeploymentName,
 			Namespace:   c.cfg.Namespace,
-			Annotations: c.tlsAnnotations,
+			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -363,6 +376,10 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		v = append(v, c.cfg.KeyValidatorConfig.RequiredVolumes()...)
+	}
+
+	if c.cfg.VoltronRouteConfig != nil {
+		v = append(v, c.cfg.VoltronRouteConfig.Volumes()...)
 	}
 
 	return v
@@ -528,6 +545,10 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 
+	if c.cfg.VoltronRouteConfig != nil {
+		env = append(env, c.cfg.VoltronRouteConfig.EnvVars()...)
+	}
+
 	if c.cfg.ManagementCluster != nil {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName)})
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_KEY", Value: linseedKeyPath})
@@ -567,6 +588,10 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		}
 	}
 	env = append(env, linseedEndpointEnv)
+
+	if c.cfg.VoltronRouteConfig != nil {
+		mounts = append(mounts, c.cfg.VoltronRouteConfig.VolumeMounts()...)
+	}
 
 	return corev1.Container{
 		Name:            VoltronName,

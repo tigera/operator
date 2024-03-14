@@ -293,10 +293,10 @@ var _ = Describe("compliance rendering tests", func() {
 	It("should render resource requests and limits for compliance report", func() {
 		cfg.Compliance = &operatorv1.Compliance{
 			Spec: operatorv1.ComplianceSpec{
-				ComplianceReportPodTemplate: &operatorv1.ComplianceReportPodTemplate{
-					Template: &operatorv1.ComplianceReportPodTemplateSpec{
-						Spec: &operatorv1.ComplianceReportPodSpec{
-							Containers: []operatorv1.ComplianceReportPodTemplateContainer{{
+				ComplianceReporterPodTemplate: &operatorv1.ComplianceReporterPodTemplate{
+					Template: &operatorv1.ComplianceReporterPodTemplateSpec{
+						Spec: &operatorv1.ComplianceReporterPodSpec{
+							Containers: []operatorv1.ComplianceReporterPodTemplateContainer{{
 								Name:      "reporter",
 								Resources: &complianceResources,
 							}},
@@ -894,10 +894,10 @@ var _ = Describe("compliance rendering tests", func() {
 							},
 						},
 					},
-					ComplianceReportPodTemplate: &operatorv1.ComplianceReportPodTemplate{
-						Template: &operatorv1.ComplianceReportPodTemplateSpec{
-							Spec: &operatorv1.ComplianceReportPodSpec{
-								InitContainers: []operatorv1.ComplianceReportPodTemplateInitContainer{{
+					ComplianceReporterPodTemplate: &operatorv1.ComplianceReporterPodTemplate{
+						Template: &operatorv1.ComplianceReporterPodTemplateSpec{
+							Spec: &operatorv1.ComplianceReporterPodSpec{
+								InitContainers: []operatorv1.ComplianceReporterPodTemplateInitContainer{{
 									Name:      "tigera-compliance-reporter-tls-key-cert-provisioner",
 									Resources: &complianceResources,
 								}},

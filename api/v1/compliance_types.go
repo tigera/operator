@@ -39,9 +39,9 @@ type ComplianceSpec struct {
 	// +optional
 	ComplianceServerDeployment *ComplianceServerDeployment `json:"complianceServerDeployment,omitempty"`
 
-	// ComplianceReportPodTemplate configures the Compliance Report PodTemplate.
+	// ComplianceReporterPodTemplate configures the Compliance Reporter PodTemplate.
 	// +optional
-	ComplianceReportPodTemplate *ComplianceReportPodTemplate `json:"complianceReportPodTemplate,omitempty"`
+	ComplianceReporterPodTemplate *ComplianceReporterPodTemplate `json:"complianceReporterPodTemplate,omitempty"`
 }
 
 // ComplianceStatus defines the observed state of Tigera compliance reporting capabilities.

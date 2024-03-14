@@ -21,39 +21,39 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-// ComplianceReportPodTemplate is the configuration for the ComplianceReport PodTemplate.
-type ComplianceReportPodTemplate struct {
+// ComplianceReporterPodTemplate is the configuration for the ComplianceReporter PodTemplate.
+type ComplianceReporterPodTemplate struct {
 
-	// Spec is the specification of the ComplianceReport PodTemplateSpec.
+	// Spec is the specification of the ComplianceReporter PodTemplateSpec.
 	// +optional
-	Template *ComplianceReportPodTemplateSpec `json:"spec,omitempty"`
+	Template *ComplianceReporterPodTemplateSpec `json:"template,omitempty"`
 }
 
-// ComplianceReportPodTemplateSpec is the ComplianceReport PodTemplateSpec.
-type ComplianceReportPodTemplateSpec struct {
+// ComplianceReporterPodTemplateSpec is the ComplianceReporter PodTemplateSpec.
+type ComplianceReporterPodTemplateSpec struct {
 
-	// Spec is the ComplianceReport PodTemplate's PodSpec.
+	// Spec is the ComplianceReporter PodTemplate's PodSpec.
 	// +optional
-	Spec *ComplianceReportPodSpec `json:"spec,omitempty"`
+	Spec *ComplianceReporterPodSpec `json:"spec,omitempty"`
 }
 
-// ComplianceReportPodSpec is the ComplianceReport PodSpec.
-type ComplianceReportPodSpec struct {
-	// InitContainers is a list of ComplianceReport PodSpec init containers.
-	// If specified, this overrides the specified ComplianceReport PodSpec init containers.
+// ComplianceReporterPodSpec is the ComplianceReporter PodSpec.
+type ComplianceReporterPodSpec struct {
+	// InitContainers is a list of ComplianceReporter PodSpec init containers.
+	// If specified, this overrides the specified ComplianceReporter PodSpec init containers.
 	// If omitted, the ComplianceServer Deployment will use its default values for its init containers.
 	// +optional
-	InitContainers []ComplianceReportPodTemplateInitContainer `json:"initContainers,omitempty"`
+	InitContainers []ComplianceReporterPodTemplateInitContainer `json:"initContainers,omitempty"`
 
 	// Containers is a list of ComplianceServer containers.
-	// If specified, this overrides the specified ComplianceReport PodSpec containers.
+	// If specified, this overrides the specified ComplianceReporter PodSpec containers.
 	// If omitted, the ComplianceServer Deployment will use its default values for its containers.
 	// +optional
-	Containers []ComplianceReportPodTemplateContainer `json:"containers,omitempty"`
+	Containers []ComplianceReporterPodTemplateContainer `json:"containers,omitempty"`
 }
 
-// ComplianceReportPodTemplateContainer is a ComplianceServer Deployment container.
-type ComplianceReportPodTemplateContainer struct {
+// ComplianceReporterPodTemplateContainer is a ComplianceServer Deployment container.
+type ComplianceReporterPodTemplateContainer struct {
 	// Name is an enum which identifies the ComplianceServer Deployment container by name.
 	// +kubebuilder:validation:Enum=reporter
 	Name string `json:"name"`
@@ -65,32 +65,32 @@ type ComplianceReportPodTemplateContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// ComplianceReportPodTemplateInitContainer is a ComplianceServer Deployment init container.
-type ComplianceReportPodTemplateInitContainer struct {
-	// Name is an enum which identifies the ComplianceReport PodSpec init container by name.
+// ComplianceReporterPodTemplateInitContainer is a ComplianceServer Deployment init container.
+type ComplianceReporterPodTemplateInitContainer struct {
+	// Name is an enum which identifies the ComplianceReporter PodSpec init container by name.
 	// +kubebuilder:validation:Enum=tigera-compliance-reporter-tls-key-cert-provisioner
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
-	// If specified, this overrides the named ComplianceReport PodSpec init container's resources.
+	// If specified, this overrides the named ComplianceReporter PodSpec init container's resources.
 	// If omitted, the ComplianceServer Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceReportPodTemplate) GetMetadata() *Metadata {
+func (c *ComplianceReporterPodTemplate) GetMetadata() *Metadata {
 	return nil
 }
 
-func (c *ComplianceReportPodTemplate) GetMinReadySeconds() *int32 {
+func (c *ComplianceReporterPodTemplate) GetMinReadySeconds() *int32 {
 	return nil
 }
 
-func (c *ComplianceReportPodTemplate) GetPodTemplateMetadata() *Metadata {
+func (c *ComplianceReporterPodTemplate) GetPodTemplateMetadata() *Metadata {
 	return nil
 }
 
-func (c *ComplianceReportPodTemplate) GetInitContainers() []v1.Container {
+func (c *ComplianceReporterPodTemplate) GetInitContainers() []v1.Container {
 	if c.Template != nil {
 		if c.Template.Spec != nil {
 			if c.Template.Spec.InitContainers != nil {
@@ -110,7 +110,7 @@ func (c *ComplianceReportPodTemplate) GetInitContainers() []v1.Container {
 	return nil
 }
 
-func (c *ComplianceReportPodTemplate) GetContainers() []v1.Container {
+func (c *ComplianceReporterPodTemplate) GetContainers() []v1.Container {
 	if c.Template != nil {
 		if c.Template.Spec != nil {
 			if c.Template.Spec.Containers != nil {
@@ -130,30 +130,30 @@ func (c *ComplianceReportPodTemplate) GetContainers() []v1.Container {
 	return nil
 }
 
-func (c *ComplianceReportPodTemplate) GetAffinity() *v1.Affinity {
+func (c *ComplianceReporterPodTemplate) GetAffinity() *v1.Affinity {
 	return nil
 }
 
-func (c *ComplianceReportPodTemplate) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
+func (c *ComplianceReporterPodTemplate) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }
 
-func (c *ComplianceReportPodTemplate) GetNodeSelector() map[string]string {
+func (c *ComplianceReporterPodTemplate) GetNodeSelector() map[string]string {
 	return nil
 }
 
-func (c *ComplianceReportPodTemplate) GetTolerations() []v1.Toleration {
+func (c *ComplianceReporterPodTemplate) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *ComplianceReportPodTemplate) GetTerminationGracePeriodSeconds() *int64 {
+func (c *ComplianceReporterPodTemplate) GetTerminationGracePeriodSeconds() *int64 {
 	return nil
 }
 
-func (c *ComplianceReportPodTemplate) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
+func (c *ComplianceReporterPodTemplate) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
 
-func (c *ComplianceReportPodTemplate) GetPriorityClassName() string {
+func (c *ComplianceReporterPodTemplate) GetPriorityClassName() string {
 	return ""
 }

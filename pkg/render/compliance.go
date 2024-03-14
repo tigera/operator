@@ -681,7 +681,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 	}
 
 	if c.cfg.Compliance != nil {
-		if overrides := c.cfg.Compliance.Spec.ComplianceReportPodTemplate; overrides != nil {
+		if overrides := c.cfg.Compliance.Spec.ComplianceReporterPodTemplate; overrides != nil {
 			rcomponents.ApplyPodTemplateOverrides(podtemplate, overrides)
 		}
 	}

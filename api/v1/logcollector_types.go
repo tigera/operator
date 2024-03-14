@@ -44,6 +44,10 @@ type LogCollectorSpec struct {
 
 	// FluentdDaemonSet configures the Fluentd DaemonSet.
 	FluentdDaemonSet *FluentdDaemonSet `json:"fluentdDaemonSet,omitempty"`
+
+	// EKSLogForwarderDeployment configures the EKSLogForwarderDeployment Deployment.
+	// +optional
+	EKSLogForwarderDeployment *EKSLogForwarderDeployment `json:"eksLogForwarderDeployment,omitempty"`
 }
 
 type CollectProcessPathOption string
@@ -177,10 +181,6 @@ type EksCloudwatchLogsSpec struct {
 	// Default: 60
 	// +optional
 	FetchInterval int32 `json:"fetchInterval,omitempty"`
-
-	// EKSLogForwarderDeployment configures the EksCloudwatchLogs Deployment.
-	// +optional
-	EKSLogForwarderDeployment *EKSLogForwarderDeployment `json:"eksLogForwarderDeployment,omitempty"`
 }
 
 // LogCollectorStatus defines the observed state of Tigera flow and DNS log collection

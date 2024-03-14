@@ -159,7 +159,7 @@ func ApplyJobOverrides(job *batchv1.Job, overrides components.ReplicatedPodResou
 		return
 	}
 
-	// Pull out the data we'll override from the DaemonSet.
+	// Pull out the data we'll override from the Job.
 	r := &replicatedPodResource{
 		labels:          job.Labels,
 		annotations:     job.Annotations,
@@ -168,7 +168,7 @@ func ApplyJobOverrides(job *batchv1.Job, overrides components.ReplicatedPodResou
 	// Apply the overrides.
 	applyReplicatedPodResourceOverrides(r, overrides)
 
-	// Set the possibly new fields back onto the DaemonSet.
+	// Set the possibly new fields back onto the Job.
 	job.Labels = r.labels
 	job.Annotations = r.annotations
 	job.Spec.Template = *r.podTemplateSpec
@@ -197,6 +197,28 @@ func ApplyStatefulSetOverrides(s *appsv1.StatefulSet, overrides components.Repli
 	s.Annotations = r.annotations
 	s.Spec.MinReadySeconds = *r.minReadySeconds
 	s.Spec.Template = *r.podTemplateSpec
+}
+
+// ApplyPodTemplateOverrides applies the overrides to the given PodTemplate.
+func ApplyPodTemplateOverrides(podtemplate *corev1.PodTemplate, overrides components.ReplicatedPodResourceOverrides) {
+	// Catch if caller passes in an explicit nil.
+	if overrides == nil || podtemplate == nil {
+		return
+	}
+
+	// Pull out the data we'll override from the PodTemplate.
+	r := &replicatedPodResource{
+		labels:          podtemplate.Labels,
+		annotations:     podtemplate.Annotations,
+		podTemplateSpec: &podtemplate.Template,
+	}
+	// Apply the overrides.
+	applyReplicatedPodResourceOverrides(r, overrides)
+
+	// Set the possibly new fields back onto the PodTemplate.
+	podtemplate.Labels = r.labels
+	podtemplate.Annotations = r.annotations
+	podtemplate.Template = *r.podTemplateSpec
 }
 
 // ApplyKibanaOverrides applies the overrides to the given Kibana.
@@ -239,7 +261,6 @@ func ApplyPrometheusOverrides(prom *monitoringv1.Prometheus, overrides *operator
 	}
 
 	prom.Spec.CommonPrometheusFields = *prometheusFields
-
 }
 
 // mergeContainers copies the ResourceRequirements from the provided containers

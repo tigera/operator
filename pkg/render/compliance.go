@@ -33,6 +33,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render/common/authentication"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -119,7 +120,8 @@ type ComplianceConfiguration struct {
 	Namespace string
 
 	// Whether to run the rendered components in multi-tenant, single-tenant, or zero-tenant mode
-	Tenant *operatorv1.Tenant
+	Tenant     *operatorv1.Tenant
+	Compliance *operatorv1.Compliance
 }
 
 type complianceComponent struct {
@@ -478,7 +480,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		},
 	}
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
@@ -495,6 +497,13 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			Template: *podTemplate,
 		},
 	}
+
+	if c.cfg.Compliance != nil {
+		if overrides := c.cfg.Compliance.Spec.ComplianceControllerDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
+	}
+	return d
 }
 
 func (c *complianceComponent) complianceControllerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
@@ -621,7 +630,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		initContainers = append(initContainers, c.cfg.ReporterKeyPair.InitContainer(c.cfg.Namespace))
 	}
 
-	return &corev1.PodTemplate{
+	podtemplate := &corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera.io.report",
@@ -670,6 +679,14 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			},
 		},
 	}
+
+	if c.cfg.Compliance != nil {
+		if overrides := c.cfg.Compliance.Spec.ComplianceReporterPodTemplate; overrides != nil {
+			rcomponents.ApplyPodTemplateOverrides(podtemplate, overrides)
+		}
+	}
+
+	return podtemplate
 }
 
 func (c *complianceComponent) complianceReporterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
@@ -890,7 +907,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		},
 	}
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceServerName,
@@ -904,6 +921,13 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			Template: *podTemplate,
 		},
 	}
+
+	if c.cfg.Compliance != nil {
+		if overrides := c.cfg.Compliance.Spec.ComplianceServerDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
+	}
+	return d
 }
 
 func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
@@ -1068,7 +1092,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		},
 	}
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
@@ -1082,6 +1106,13 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			Template: *podTemplate,
 		},
 	}
+
+	if c.cfg.Compliance != nil {
+		if overrides := c.cfg.Compliance.Spec.ComplianceSnapshotterDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
+	}
+	return d
 }
 
 func (c *complianceComponent) complianceSnapshotterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
@@ -1267,7 +1298,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		},
 	}
 
-	return &appsv1.DaemonSet{
+	ds := &appsv1.DaemonSet{
 		TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceBenchmarkerName,
@@ -1278,6 +1309,13 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 			Template: *podTemplate,
 		},
 	}
+
+	if c.cfg.Compliance != nil {
+		if overrides := c.cfg.Compliance.Spec.ComplianceBenchmarkerDaemonSet; overrides != nil {
+			rcomponents.ApplyDaemonSetOverrides(ds, overrides)
+		}
+	}
+	return ds
 }
 
 func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() *ocsv1.SecurityContextConstraints {

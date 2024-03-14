@@ -109,6 +109,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
+	err = c.WatchObject(&operatorv1.TLSTerminatedRoute{}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("manager-controller failed to watch TLSTerminatedRoutes: %w", err)
+	}
+
+	err = c.WatchObject(&operatorv1.TLSPassThroughRoute{}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("manager-controller failed to watch TLSPassThroughRoutes: %w", err)
+	}
+
 	// Watch for other operator.tigera.io resources.
 	if err = c.WatchObject(&operatorv1.Installation{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch Installation resource: %w", err)

@@ -18,6 +18,8 @@ import (
 	"crypto/x509"
 	"fmt"
 
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -547,7 +549,11 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 			},
 		},
 	}
-
+	if c.cfg.LogCollector != nil {
+		if overrides := c.cfg.LogCollector.Spec.FluentdDaemonSet; overrides != nil {
+			rcomponents.ApplyDaemonSetOverrides(ds, overrides)
+		}
+	}
 	setNodeCriticalPod(&(ds.Spec.Template))
 	return ds
 }
@@ -1087,7 +1093,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 
 	var eksLogForwarderReplicas int32 = 1
 
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      EKSLogForwarderName,
@@ -1141,6 +1147,14 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 			},
 		},
 	}
+
+	if c.cfg.LogCollector != nil {
+		if overrides := c.cfg.LogCollector.Spec.EKSLogForwarderDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
+	}
+
+	return d
 }
 
 func trustedBundleVolume(bundle certificatemanagement.TrustedBundle) corev1.Volume {

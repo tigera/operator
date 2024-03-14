@@ -279,6 +279,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		UseRemoteAddressXFF:    instance.Spec.EnvoySettings.UseRemoteAddress,
 		NumTrustedHopsXFF:      instance.Spec.EnvoySettings.XFFNumTrustedHops,
 		UsePSP:                 r.usePSP,
+		ApplicationLayer:       instance,
 	}
 	component := applicationlayer.ApplicationLayer(config)
 

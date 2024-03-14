@@ -41,6 +41,13 @@ type LogCollectorSpec struct {
 	// the management cluster's tenant services are running.
 	// +optional
 	MultiTenantManagementClusterNamespace string `json:"multiTenantManagementClusterNamespace,omitempty"`
+
+	// FluentdDaemonSet configures the Fluentd DaemonSet.
+	FluentdDaemonSet *FluentdDaemonSet `json:"fluentdDaemonSet,omitempty"`
+
+	// EKSLogForwarderDeployment configures the EKSLogForwarderDeployment Deployment.
+	// +optional
+	EKSLogForwarderDeployment *EKSLogForwarderDeployment `json:"eksLogForwarderDeployment,omitempty"`
 }
 
 type CollectProcessPathOption string

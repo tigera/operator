@@ -18,6 +18,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/test"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -48,6 +51,7 @@ import (
 
 var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	var cfg *render.FluentdConfiguration
+	var cli client.Client
 
 	expectedFluentdPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/fluentd_unmanaged.json")
 	expectedFluentdPolicyForUnmanagedOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/fluentd_unmanaged_ocp.json")
@@ -58,7 +62,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		// desired configuration.
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
-		cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
@@ -235,6 +239,71 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		// The metrics service should have the correct configuration.
 		ms := rtest.GetResource(resources, render.FluentdMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
+	})
+
+	It("should render fluentd Daemonset with resources requests/limits", func() {
+
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+
+		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+
+		cfg.FluentdKeyPair = metricsSecret
+
+		fluentdResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		logCollectorcfg := operatorv1.LogCollector{
+			Spec: operatorv1.LogCollectorSpec{
+				FluentdDaemonSet: &operatorv1.FluentdDaemonSet{
+					Spec: &operatorv1.FluentdDaemonSetSpec{
+						Template: &operatorv1.FluentdDaemonSetPodTemplateSpec{
+							Spec: &operatorv1.FluentdDaemonSetPodSpec{
+								InitContainers: []operatorv1.FluentdDaemonSetInitContainer{{
+									Name:      "tigera-fluentd-prometheus-tls-key-cert-provisioner",
+									Resources: &fluentdResources,
+								}},
+								Containers: []operatorv1.FluentdDaemonSetContainer{{
+									Name:      "fluentd",
+									Resources: &fluentdResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg.LogCollector = &logCollectorcfg
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+
+		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+		container := test.GetContainer(ds.Spec.Template.Spec.Containers, "fluentd")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(fluentdResources))
+
+		Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		initContainer := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "tigera-fluentd-prometheus-tls-key-cert-provisioner")
+		Expect(initContainer).NotTo(BeNil())
+		Expect(initContainer.Resources).To(Equal(fluentdResources))
 	})
 
 	It("should render with a configuration for a managed cluster", func() {
@@ -1032,6 +1101,60 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		Expect(envs).To(Equal(expectedEnvVars))
+	})
+
+	It("should render with EKS Cloudwatch Log with resources", func() {
+
+		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
+		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+		cfg.Installation = &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderEKS,
+		}
+
+		eksResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		logCollectorcfg := operatorv1.LogCollector{
+			Spec: operatorv1.LogCollectorSpec{
+				EKSLogForwarderDeployment: &operatorv1.EKSLogForwarderDeployment{
+					Spec: &operatorv1.EKSLogForwarderDeploymentSpec{
+						Template: &operatorv1.EKSLogForwarderDeploymentPodTemplateSpec{
+							Spec: &operatorv1.EKSLogForwarderDeploymentPodSpec{
+								Containers: []operatorv1.EKSLogForwarderDeploymentContainer{{
+									Name:      "eks-log-forwarder",
+									Resources: &eksResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cfg.LogCollector = &logCollectorcfg
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+		deploy := rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+		container := test.GetContainer(deploy.Spec.Template.Spec.Containers, "eks-log-forwarder")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(eksResources))
+
+		initContainer := test.GetContainer(deploy.Spec.Template.Spec.InitContainers, "eks-log-forwarder-startup")
+		Expect(initContainer).NotTo(BeNil())
+		Expect(initContainer.Resources).To(Equal(corev1.ResourceRequirements{}))
+
 	})
 
 	It("should render with EKS Cloudwatch Log with multi tenant envvars", func() {

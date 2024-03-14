@@ -20,8 +20,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tigera/operator/pkg/url"
-
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -49,8 +47,10 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
+	"github.com/tigera/operator/pkg/url"
 )
 
 const (
@@ -127,7 +127,7 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 
 // ManagerConfiguration contains all the config information needed to render the component.
 type ManagerConfiguration struct {
-	VoltronRouteConfig *VoltronRouteConfig
+	VoltronRouteConfig *manager.VoltronRouteConfig
 
 	KeyValidatorConfig authentication.KeyValidatorConfig
 	ESSecrets          []*corev1.Secret

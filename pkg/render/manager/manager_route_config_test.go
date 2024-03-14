@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render_test
+package manager_test
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/go-cmp/cmp"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -29,12 +28,12 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/ptr"
-	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/manager"
 )
 
 var _ = Describe("VoltronRouteConfigBuilder", func() {
 	var (
-		builder render.VoltronRouteConfigBuilder
+		builder manager.VoltronRouteConfigBuilder
 
 		route                      operatorv1.TLSTerminatedRoute
 		routesConfigMapVolumeMount corev1.VolumeMount
@@ -56,7 +55,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 	)
 
 	BeforeEach(func() {
-		builder = render.NewVoltronRouteConfigBuilder()
+		builder = manager.NewVoltronRouteConfigBuilder()
 
 		route = operatorv1.TLSTerminatedRoute{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-route", Namespace: "tigera-manager"},
@@ -225,7 +224,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 
 			It("returns an error if the MTLS key is not specified", func() {
 				route.Spec.Target = operatorv1.TargetTypeUI
-				route.Spec.MTLSCert = &corev1.SecretKeySelector{
+				route.Spec.ForwardingMTLSCert = &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: mtlsCert.Name,
 					},
@@ -242,13 +241,13 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 
 			DescribeTable("succeeds if the MTLS key is specified", func(target operatorv1.TargetType, fileName string) {
 				route.Spec.Target = target
-				route.Spec.MTLSCert = &corev1.SecretKeySelector{
+				route.Spec.ForwardingMTLSCert = &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: mtlsCert.Name,
 					},
 					Key: "cert.pem",
 				}
-				route.Spec.MTLSKey = &corev1.SecretKeySelector{
+				route.Spec.ForwardingMTLSKey = &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: mtlsKey.Name,
 					},
@@ -271,7 +270,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				}))
 				Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{caBundleVolumeMount, mtlsCertVolumeMount, mtlsKeyVolumeMount, routesConfigMapVolumeMount}))
 
-				Expect(config.Volumes()).Should(Equal([]corev1.Volume{caBundleVolume, mtlsCertVolume, mtlsKeyVolume, routesConfigMapVolume}), cmp.Diff(config.Volumes(), []corev1.Volume{caBundleVolume, mtlsCertVolume, mtlsKeyVolume, routesConfigMapVolume}))
+				Expect(config.Volumes()).Should(Equal([]corev1.Volume{caBundleVolume, mtlsCertVolume, mtlsKeyVolume, routesConfigMapVolume}))
 
 				cm := config.RoutesConfigMap("tigera-manager")
 				cm.Data[fileName] = compactJSONString(cm.Data[fileName])

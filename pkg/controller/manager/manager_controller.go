@@ -47,6 +47,7 @@ import (
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	rmanager "github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -752,7 +753,7 @@ func fillDefaults(mc *operatorv1.ManagementCluster) {
 	}
 }
 
-func getVoltronRouteConfig(ctx context.Context, cli client.Client, managerNamespace string) (*render.VoltronRouteConfig, error) {
+func getVoltronRouteConfig(ctx context.Context, cli client.Client, managerNamespace string) (*rmanager.VoltronRouteConfig, error) {
 	terminatedRouteList := &operatorv1.TLSTerminatedRouteList{}
 	if err := cli.List(ctx, terminatedRouteList); err != nil {
 		return nil, err
@@ -767,7 +768,7 @@ func getVoltronRouteConfig(ctx context.Context, cli client.Client, managerNamesp
 		return nil, nil
 	}
 
-	builder := render.NewVoltronRouteConfigBuilder()
+	builder := rmanager.NewVoltronRouteConfigBuilder()
 	for _, route := range terminatedRouteList.Items {
 		if route.Spec.CABundle != nil {
 			cm := &corev1.ConfigMap{}
@@ -780,20 +781,20 @@ func getVoltronRouteConfig(ctx context.Context, cli client.Client, managerNamesp
 			builder.AddConfigMap(cm)
 		}
 
-		if route.Spec.MTLSCert != nil {
+		if route.Spec.ForwardingMTLSCert != nil {
 			certSecret := &corev1.Secret{}
 			// Verify that the MTLS cert secret exist in the manager namespace.
-			if err := cli.Get(ctx, client.ObjectKey{Name: route.Spec.MTLSCert.Name, Namespace: managerNamespace}, certSecret); err != nil {
+			if err := cli.Get(ctx, client.ObjectKey{Name: route.Spec.ForwardingMTLSCert.Name, Namespace: managerNamespace}, certSecret); err != nil {
 				return nil, fmt.Errorf("failed to retrieve the Secret containing the MTLS certificate for TLS terminated route %s: %w", route.Name, err)
 			}
 
 			builder.AddSecret(certSecret)
 		}
 
-		if route.Spec.MTLSKey != nil {
+		if route.Spec.ForwardingMTLSKey != nil {
 			keySecret := &corev1.Secret{}
 			// Verify that the MTLS secrets exist in the manager namespace.
-			if err := cli.Get(ctx, client.ObjectKey{Name: route.Spec.MTLSKey.Name, Namespace: managerNamespace}, keySecret); err != nil {
+			if err := cli.Get(ctx, client.ObjectKey{Name: route.Spec.ForwardingMTLSKey.Name, Namespace: managerNamespace}, keySecret); err != nil {
 				return nil, fmt.Errorf("failed to retrieve the Secret containing the MTLS key for TLS terminated route %s: %w", route.Name, err)
 			}
 

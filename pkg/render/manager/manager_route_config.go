@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package manager
 
 import (
 	"encoding/json"
@@ -184,12 +184,12 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 		}
 
 		// Require that either both MTLSCert and MTLSKey are set or neither are.
-		if (route.Spec.MTLSCert != nil && route.Spec.MTLSKey == nil) || (route.Spec.MTLSKey != nil && route.Spec.MTLSCert == nil) {
+		if (route.Spec.ForwardingMTLSCert != nil && route.Spec.ForwardingMTLSKey == nil) || (route.Spec.ForwardingMTLSKey != nil && route.Spec.ForwardingMTLSCert == nil) {
 			return nil, fmt.Errorf("must set both MTLSCert and MTLSKey, or neither for TLS terminated route %s", route.Name)
 		}
 
-		if route.Spec.MTLSCert != nil {
-			path, err := builder.mountSecretReference(route.Spec.MTLSCert.Name, route.Spec.MTLSCert.Key)
+		if route.Spec.ForwardingMTLSCert != nil {
+			path, err := builder.mountSecretReference(route.Spec.ForwardingMTLSCert.Name, route.Spec.ForwardingMTLSCert.Key)
 			if err != nil {
 				return nil, err
 			}
@@ -197,7 +197,7 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 
 			// At this point, if MTLSCert is set then MTLSKey will be set otherwise this if statement wouldn't be executed
 			// or an error would have already been returned.
-			path, err = builder.mountSecretReference(route.Spec.MTLSKey.Name, route.Spec.MTLSKey.Key)
+			path, err = builder.mountSecretReference(route.Spec.ForwardingMTLSKey.Name, route.Spec.ForwardingMTLSKey.Key)
 			if err != nil {
 				return nil, err
 			}

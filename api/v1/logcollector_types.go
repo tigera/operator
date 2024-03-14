@@ -45,7 +45,7 @@ type LogCollectorSpec struct {
 	// FluentdDaemonSet configures the Fluentd DaemonSet.
 	FluentdDaemonSet *FluentdDaemonSet `json:"fluentdDaemonSet,omitempty"`
 
-	// EKSLogForwarderDeployment configures the EksCloudwatchLogs Deployment.
+	// EKSLogForwarderDeployment configures the EKSLogForwarderDeployment Deployment.
 	// +optional
 	EKSLogForwarderDeployment *EKSLogForwarderDeployment `json:"eksLogForwarderDeployment,omitempty"`
 }

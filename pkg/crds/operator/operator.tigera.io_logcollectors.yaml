@@ -154,7 +154,7 @@ spec:
                 - Disabled
                 type: string
               eksLogForwarderDeployment:
-                description: EKSLogForwarderDeployment configures the EksCloudwatchLogs
+                description: EKSLogForwarderDeployment configures the EKSLogForwarderDeployment
                   Deployment.
                 properties:
                   spec:

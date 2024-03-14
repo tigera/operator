@@ -55,7 +55,9 @@ spec:
                   is routed to.
                 type: string
               mtlsCert:
-                description: MTLS settings, and if both are specified MTLs is used.
+                description: ForwardingMTLSCert is the certificate used for mTLS between
+                  voltron and the destination. Either both ForwardingMTLSCert and
+                  ForwardingMTLSKey must be specified, or neither can be specified.
                 properties:
                   key:
                     description: The key of the secret to select from.  Must be a
@@ -73,7 +75,9 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               mtlsKey:
-                description: SecretKeySelector selects a key of a Secret.
+                description: ForwardingMTLSKey is the key used for mTLS between voltron
+                  and the destination. Either both ForwardingMTLSCert and ForwardingMTLSKey
+                  must be specified, or neither can be specified.
                 properties:
                   key:
                     description: The key of the secret to select from.  Must be a

@@ -4768,13 +4768,13 @@ func (in *TLSTerminatedRouteSpec) DeepCopyInto(out *TLSTerminatedRouteSpec) {
 		*out = new(corev1.ConfigMapKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.MTLSCert != nil {
-		in, out := &in.MTLSCert, &out.MTLSCert
+	if in.ForwardingMTLSCert != nil {
+		in, out := &in.ForwardingMTLSCert, &out.ForwardingMTLSCert
 		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.MTLSKey != nil {
-		in, out := &in.MTLSKey, &out.MTLSKey
+	if in.ForwardingMTLSKey != nil {
+		in, out := &in.ForwardingMTLSKey, &out.ForwardingMTLSKey
 		*out = new(corev1.SecretKeySelector)
 		(*in).DeepCopyInto(*out)
 	}

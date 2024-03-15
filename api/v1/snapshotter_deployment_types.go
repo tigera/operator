@@ -63,6 +63,7 @@ type ComplianceSnapshotterDeploymentPodSpec struct {
 // ComplianceSnapshotterDeploymentContainer is a compliance snapshotter Deployment container.
 type ComplianceSnapshotterDeploymentContainer struct {
 	// Name is an enum which identifies the compliance snapshotter Deployment container by name.
+	// Supported values are compliance-snapshotter.
 	// +kubebuilder:validation:Enum=compliance-snapshotter
 	Name string `json:"name"`
 

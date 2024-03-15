@@ -63,6 +63,7 @@ type ComplianceBenchmarkerDaemonSetPodSpec struct {
 // ComplianceBenchmarkerDaemonSetContainer is a Compliance Benchmarker DaemonSet container.
 type ComplianceBenchmarkerDaemonSetContainer struct {
 	// Name is an enum which identifies the Compliance Benchmarker DaemonSet container by name.
+	// Supported values are compliance-benchmarker.
 	// +kubebuilder:validation:Enum=compliance-benchmarker
 	Name string `json:"name"`
 

@@ -182,7 +182,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the EKSLogForwarder Deployment container by
-                                        name.
+                                        name. Supported values are eks-log-forwarder.
                                       enum:
                                       - eks-log-forwarder
                                       type: string
@@ -265,7 +265,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the EKSLogForwarder Deployment init container
-                                        by name.
+                                        by name. Supported values are eks-log-forwarder-startup.
                                       enum:
                                       - eks-log-forwarder-startup
                                       type: string
@@ -363,7 +363,8 @@ spec:
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
-                                        the Fluentd DaemonSet container by name.
+                                        the Fluentd DaemonSet container by name. Supported
+                                        values are fluentd.
                                       enum:
                                       - fluentd
                                       type: string
@@ -446,6 +447,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the Fluentd DaemonSet init container by name.
+                                        Supported values are tigera-fluentd-prometheus-tls-key-cert-provisioner.
                                       enum:
                                       - tigera-fluentd-prometheus-tls-key-cert-provisioner
                                       type: string

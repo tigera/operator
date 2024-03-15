@@ -141,7 +141,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the IntrusionDetectionController Deployment
-                                        container by name.
+                                        container by name. Supported values are controller;webhooks-processor
                                       enum:
                                       - controller
                                       - webhooks-processor
@@ -227,7 +227,8 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the IntrusionDetectionController Deployment
-                                        init container by name.
+                                        init container by name. Supported values are
+                                        intrusion-detection-tls-key-cert-provisioner.
                                       enum:
                                       - intrusion-detection-tls-key-cert-provisioner
                                       type: string

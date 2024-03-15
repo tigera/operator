@@ -24,6 +24,7 @@ import (
 // CalicoKubeControllersDeploymentContainer is a calico-kube-controllers Deployment container.
 type CalicoKubeControllersDeploymentContainer struct {
 	// Name is an enum which identifies the calico-kube-controllers Deployment container by name.
+	// Supported values are: calico-kube-controllers
 	// +kubebuilder:validation:Enum=calico-kube-controllers
 	Name string `json:"name"`
 

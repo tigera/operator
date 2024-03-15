@@ -59,8 +59,10 @@ spec:
                                     Deployment container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the Manager Deployment container by name.
+                                        Supported values are: tigera-voltron, tigera-manager,
+                                        tigera-es-proxy'
                                       enum:
                                       - tigera-voltron
                                       - tigera-manager
@@ -143,8 +145,11 @@ spec:
                                     Manager Deployment init container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the Manager Deployment init container by name.
+                                        Supported values are: manager-tls-key-cert-provisioner,
+                                        internal-manager-tls-key-cert-provisioner,
+                                        tigera-voltron-linseed-tls-key-cert-provisioner'
                                       enum:
                                       - manager-tls-key-cert-provisioner
                                       - internal-manager-tls-key-cert-provisioner

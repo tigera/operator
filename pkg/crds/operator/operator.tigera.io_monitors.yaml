@@ -359,8 +359,9 @@ spec:
                               description: PrometheusContainer is a Prometheus container.
                               properties:
                                 name:
-                                  description: Name is an enum which identifies the
-                                    Prometheus Deployment container by name.
+                                  description: 'Name is an enum which identifies the
+                                    Prometheus Deployment container by name. Supported
+                                    values are: authn-proxy'
                                   enum:
                                   - authn-proxy
                                   type: string

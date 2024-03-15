@@ -157,6 +157,7 @@ type CommonPrometheusFields struct {
 // PrometheusContainer is a Prometheus container.
 type PrometheusContainer struct {
 	// Name is an enum which identifies the Prometheus Deployment container by name.
+	// Supported values are: authn-proxy
 	// +kubebuilder:validation:Enum=authn-proxy
 	Name string `json:"name"`
 

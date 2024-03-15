@@ -63,6 +63,7 @@ type DexDeploymentPodSpec struct {
 // DexDeploymentContainer is a Dex Deployment container.
 type DexDeploymentContainer struct {
 	// Name is an enum which identifies the Dex Deployment container by name.
+	// Supported values are: tigera-dex
 	// +kubebuilder:validation:Enum=tigera-dex
 	Name string `json:"name"`
 
@@ -76,6 +77,7 @@ type DexDeploymentContainer struct {
 // DexDeploymentInitContainer is a Dex Deployment init container.
 type DexDeploymentInitContainer struct {
 	// Name is an enum which identifies the Dex Deployment init container by name.
+	// Supported values are: tigera-dex-tls-key-cert-provisioner
 	// +kubebuilder:validation:Enum=tigera-dex-tls-key-cert-provisioner
 	Name string `json:"name"`
 

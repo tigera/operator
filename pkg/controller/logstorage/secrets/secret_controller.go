@@ -510,7 +510,7 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 	}
 
 	// Sort the keys then add them to the upstreamCerts in that order so the keys are always in the same order
-	keys := make([]string, len(certs))
+	keys := make([]string, 0, len(certs))
 	for k := range certs {
 		keys = append(keys, k)
 	}

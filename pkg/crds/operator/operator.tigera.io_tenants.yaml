@@ -211,6 +211,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the linseed Deployment container by name.
+                                        Supported values are tigera-linseed.
                                       enum:
                                       - tigera-linseed
                                       type: string
@@ -293,6 +294,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the linseed Deployment init container by name.
+                                        Supported values are tigera-secure-linseed-token-tls-key-cert-provisioner;tigera-secure-linseed-cert-key-cert-provisioner.
                                       enum:
                                       - tigera-secure-linseed-token-tls-key-cert-provisioner
                                       - tigera-secure-linseed-cert-key-cert-provisioner

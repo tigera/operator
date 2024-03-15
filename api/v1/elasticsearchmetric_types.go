@@ -63,6 +63,7 @@ type ElasticsearchMetricsDeploymentPodSpec struct {
 // ElasticsearchMetricsDeploymentContainer is a ElasticsearchMetricsDeployment container.
 type ElasticsearchMetricsDeploymentContainer struct {
 	// Name is an enum which identifies the ElasticsearchMetricsDeployment container by name.
+	// Supported values are tigera-elasticsearch-metrics.
 	// +kubebuilder:validation:Enum=tigera-elasticsearch-metrics
 	Name string `json:"name"`
 
@@ -76,6 +77,7 @@ type ElasticsearchMetricsDeploymentContainer struct {
 // ElasticsearchMetricsDeploymentInitContainer is a ElasticsearchMetricsDeployment init container.
 type ElasticsearchMetricsDeploymentInitContainer struct {
 	// Name is an enum which identifies the ElasticsearchMetricsDeployment init container by name.
+	// Supported values are tigera-ee-elasticsearch-metrics-tls-key-cert-provisioner.
 	// +kubebuilder:validation:Enum=tigera-ee-elasticsearch-metrics-tls-key-cert-provisioner
 	Name string `json:"name"`
 

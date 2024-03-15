@@ -63,6 +63,7 @@ type ComplianceControllerDeploymentPodSpec struct {
 // ComplianceControllerDeploymentContainer is a compliance controller Deployment container.
 type ComplianceControllerDeploymentContainer struct {
 	// Name is an enum which identifies the compliance controller Deployment container by name.
+	// Supported values are compliance-controller.
 	// +kubebuilder:validation:Enum=compliance-controller
 	Name string `json:"name"`
 
@@ -76,6 +77,7 @@ type ComplianceControllerDeploymentContainer struct {
 // ComplianceControllerDeploymentInitContainer is a compliance controller Deployment init container.
 type ComplianceControllerDeploymentInitContainer struct {
 	// Name is an enum which identifies the compliance controller Deployment init container by name.
+	// Supported values are tigera-compliance-controller-tls-key-cert-provisioner.
 	// +kubebuilder:validation:Enum=tigera-compliance-controller-tls-key-cert-provisioner
 	Name string `json:"name"`
 

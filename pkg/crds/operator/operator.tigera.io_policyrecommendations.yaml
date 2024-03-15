@@ -65,7 +65,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the PolicyRecommendation Deployment container
-                                        by name.
+                                        by name. Supported values are policy-recommendation-controller.
                                       enum:
                                       - policy-recommendation-controller
                                       type: string

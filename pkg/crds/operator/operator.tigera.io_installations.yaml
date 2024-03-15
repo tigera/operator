@@ -1164,7 +1164,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the calico-kube-controllers Deployment container
-                                        by name.
+                                        by name. Supported values are calico-kube-controllers.
                                       enum:
                                       - calico-kube-controllers
                                       type: string
@@ -2645,6 +2645,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the calico-node DaemonSet container by name.
+                                        Supported values are calico-node.
                                       enum:
                                       - calico-node
                                       type: string
@@ -2729,7 +2730,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the calico-node DaemonSet init container by
-                                        name.
+                                        name. Supported values are install-cni;hostpath-init;flexvol-driver;mount-bpffs;node-certs-key-cert-provisioner;calico-node-prometheus-server-tls-key-cert-provisioner.
                                       enum:
                                       - install-cni
                                       - hostpath-init
@@ -4000,7 +4001,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the calico-node-windows DaemonSet container
-                                        by name.
+                                        by name. Supported values are calico-node-windows.
                                       enum:
                                       - calico-node-windows
                                       type: string
@@ -4085,7 +4086,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the calico-node-windows DaemonSet init container
-                                        by name.
+                                        by name. Supported values are install-cni;hostpath-init;flexvol-driver;mount-bpffs;node-certs-key-cert-provisioner;calico-node-windows-prometheus-server-tls-key-cert-provisioner.
                                       enum:
                                       - install-cni
                                       - hostpath-init
@@ -6847,7 +6848,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the csi-node-driver DaemonSet container by
-                                        name.
+                                        name. Supported values are csi-node-driver.
                                       enum:
                                       - csi-node-driver
                                       type: string
@@ -8566,7 +8567,8 @@ spec:
                                   properties:
                                     name:
                                       description: Name is an enum which identifies
-                                        the typha Deployment container by name.
+                                        the typha Deployment container by name. Supported
+                                        values are calico-typha.
                                       enum:
                                       - calico-typha
                                       type: string
@@ -8651,6 +8653,7 @@ spec:
                                     name:
                                       description: Name is an enum which identifies
                                         the typha Deployment init container by name.
+                                        Supported values are typha-certs-key-cert-provisioner.
                                       enum:
                                       - typha-certs-key-cert-provisioner
                                       type: string
@@ -10297,7 +10300,8 @@ spec:
                                         name:
                                           description: Name is an enum which identifies
                                             the calico-kube-controllers Deployment
-                                            container by name.
+                                            container by name. Supported values are
+                                            calico-kube-controllers.
                                           enum:
                                           - calico-kube-controllers
                                           type: string
@@ -11885,7 +11889,7 @@ spec:
                                         name:
                                           description: Name is an enum which identifies
                                             the calico-node DaemonSet container by
-                                            name.
+                                            name. Supported values are calico-node.
                                           enum:
                                           - calico-node
                                           type: string
@@ -11972,7 +11976,7 @@ spec:
                                         name:
                                           description: Name is an enum which identifies
                                             the calico-node DaemonSet init container
-                                            by name.
+                                            by name. Supported values are install-cni;hostpath-init;flexvol-driver;mount-bpffs;node-certs-key-cert-provisioner;calico-node-prometheus-server-tls-key-cert-provisioner.
                                           enum:
                                           - install-cni
                                           - hostpath-init
@@ -13341,7 +13345,7 @@ spec:
                                         name:
                                           description: Name is an enum which identifies
                                             the calico-node-windows DaemonSet container
-                                            by name.
+                                            by name. Supported values are calico-node-windows.
                                           enum:
                                           - calico-node-windows
                                           type: string
@@ -13429,7 +13433,8 @@ spec:
                                         name:
                                           description: Name is an enum which identifies
                                             the calico-node-windows DaemonSet init
-                                            container by name.
+                                            container by name. Supported values are
+                                            install-cni;hostpath-init;flexvol-driver;mount-bpffs;node-certs-key-cert-provisioner;calico-node-windows-prometheus-server-tls-key-cert-provisioner.
                                           enum:
                                           - install-cni
                                           - hostpath-init
@@ -16393,7 +16398,7 @@ spec:
                                         name:
                                           description: Name is an enum which identifies
                                             the csi-node-driver DaemonSet container
-                                            by name.
+                                            by name. Supported values are csi-node-driver.
                                           enum:
                                           - csi-node-driver
                                           type: string
@@ -18229,6 +18234,7 @@ spec:
                                         name:
                                           description: Name is an enum which identifies
                                             the typha Deployment container by name.
+                                            Supported values are calico-typha.
                                           enum:
                                           - calico-typha
                                           type: string
@@ -18315,7 +18321,7 @@ spec:
                                         name:
                                           description: Name is an enum which identifies
                                             the typha Deployment init container by
-                                            name.
+                                            name. Supported values are typha-certs-key-cert-provisioner.
                                           enum:
                                           - typha-certs-key-cert-provisioner
                                           type: string

@@ -360,7 +360,8 @@ spec:
                               properties:
                                 name:
                                   description: Name is an enum which identifies the
-                                    Prometheus Deployment container by name.
+                                    Prometheus Deployment container by name. Supported
+                                    values are authn-proxy.
                                   enum:
                                   - authn-proxy
                                   type: string

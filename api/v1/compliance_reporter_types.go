@@ -55,6 +55,7 @@ type ComplianceReporterPodSpec struct {
 // ComplianceReporterPodTemplateContainer is a ComplianceServer Deployment container.
 type ComplianceReporterPodTemplateContainer struct {
 	// Name is an enum which identifies the ComplianceServer Deployment container by name.
+	// Supported values are reporter.
 	// +kubebuilder:validation:Enum=reporter
 	Name string `json:"name"`
 
@@ -68,6 +69,7 @@ type ComplianceReporterPodTemplateContainer struct {
 // ComplianceReporterPodTemplateInitContainer is a ComplianceServer Deployment init container.
 type ComplianceReporterPodTemplateInitContainer struct {
 	// Name is an enum which identifies the ComplianceReporter PodSpec init container by name.
+	// Supported values are tigera-compliance-reporter-tls-key-cert-provisioner.
 	// +kubebuilder:validation:Enum=tigera-compliance-reporter-tls-key-cert-provisioner
 	Name string `json:"name"`
 

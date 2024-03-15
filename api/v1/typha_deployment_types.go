@@ -24,6 +24,7 @@ import (
 // TyphaDeploymentContainer is a typha Deployment container.
 type TyphaDeploymentContainer struct {
 	// Name is an enum which identifies the typha Deployment container by name.
+	// Supported values are: calico-typha
 	// +kubebuilder:validation:Enum=calico-typha
 	Name string `json:"name"`
 
@@ -38,6 +39,7 @@ type TyphaDeploymentContainer struct {
 // TyphaDeploymentInitContainer is a typha Deployment init container.
 type TyphaDeploymentInitContainer struct {
 	// Name is an enum which identifies the typha Deployment init container by name.
+	// Supported values are: typha-certs-key-cert-provisioner
 	// +kubebuilder:validation:Enum=typha-certs-key-cert-provisioner
 	Name string `json:"name"`
 

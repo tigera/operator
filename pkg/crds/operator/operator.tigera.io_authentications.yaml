@@ -56,8 +56,9 @@ spec:
                                     container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
-                                        the Dex Deployment container by name.
+                                      description: 'Name is an enum which identifies
+                                        the Dex Deployment container by name. Supported
+                                        values are: tigera-dex'
                                       enum:
                                       - tigera-dex
                                       type: string
@@ -138,8 +139,9 @@ spec:
                                     Deployment init container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the Dex Deployment init container by name.
+                                        Supported values are: tigera-dex-tls-key-cert-provisioner'
                                       enum:
                                       - tigera-dex-tls-key-cert-provisioner
                                       type: string

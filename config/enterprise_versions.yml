@@ -151,3 +151,6 @@ components:
   egress-gateway:
     image: tigera/egress-gateway
     version: master
+  key-cert-provisioner:
+    version: master
+

@@ -84,9 +84,10 @@ spec:
                                     a L7LogCollector DaemonSet container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the L7LogCollector DaemonSet container by
-                                        name.
+                                        name. Supported values are: l7-collector,
+                                        envoy-proxy, dikastes'
                                       enum:
                                       - l7-collector
                                       - envoy-proxy

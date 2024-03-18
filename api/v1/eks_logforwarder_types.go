@@ -63,6 +63,7 @@ type EKSLogForwarderDeploymentPodSpec struct {
 // EKSLogForwarderDeploymentContainer is a EKSLogForwarder Deployment container.
 type EKSLogForwarderDeploymentContainer struct {
 	// Name is an enum which identifies the EKSLogForwarder Deployment container by name.
+	// Supported values are: eks-log-forwarder
 	// +kubebuilder:validation:Enum=eks-log-forwarder
 	Name string `json:"name"`
 
@@ -76,6 +77,7 @@ type EKSLogForwarderDeploymentContainer struct {
 // EKSLogForwarderDeploymentInitContainer is a EKSLogForwarder Deployment init container.
 type EKSLogForwarderDeploymentInitContainer struct {
 	// Name is an enum which identifies the EKSLogForwarder Deployment init container by name.
+	// Supported values are: eks-log-forwarder-startup
 	// +kubebuilder:validation:Enum=eks-log-forwarder-startup
 	Name string `json:"name"`
 

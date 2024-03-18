@@ -72,6 +72,7 @@ type ManagerDeploymentPodSpec struct {
 // ManagerDeploymentContainer is a Manager Deployment container.
 type ManagerDeploymentContainer struct {
 	// Name is an enum which identifies the Manager Deployment container by name.
+	// Supported values are: tigera-voltron, tigera-manager, tigera-es-proxy
 	// +kubebuilder:validation:Enum=tigera-voltron;tigera-manager;tigera-es-proxy
 	Name string `json:"name"`
 
@@ -85,6 +86,7 @@ type ManagerDeploymentContainer struct {
 // ManagerDeploymentInitContainer is a Manager Deployment init container.
 type ManagerDeploymentInitContainer struct {
 	// Name is an enum which identifies the Manager Deployment init container by name.
+	// Supported values are: manager-tls-key-cert-provisioner, internal-manager-tls-key-cert-provisioner, tigera-voltron-linseed-tls-key-cert-provisioner
 	// +kubebuilder:validation:Enum=manager-tls-key-cert-provisioner;internal-manager-tls-key-cert-provisioner;tigera-voltron-linseed-tls-key-cert-provisioner
 	Name string `json:"name"`
 

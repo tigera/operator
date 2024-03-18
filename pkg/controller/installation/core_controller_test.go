@@ -273,8 +273,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentCSRInitContainer.Image,
-					components.ComponentCSRInitContainer.Version)))
+					components.ComponentCSRInitContainerPrivate.Image,
+					components.ComponentCSRInitContainerPrivate.Version)))
 
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -308,14 +308,14 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentCSRInitContainer.Image,
-					components.ComponentCSRInitContainer.Version)))
+					components.ComponentCSRInitContainerPrivate.Image,
+					components.ComponentCSRInitContainerPrivate.Version)))
 			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 			Expect(csrinit2).ToNot(BeNil())
 			Expect(csrinit2.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentCSRInitContainer.Image,
-					components.ComponentCSRInitContainer.Version)))
+					components.ComponentCSRInitContainerPrivate.Image,
+					components.ComponentCSRInitContainerPrivate.Version)))
 		})
 
 		It("should use images from imageset", func() {
@@ -375,7 +375,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentCSRInitContainer.Image,
+					components.ComponentCSRInitContainerPrivate.Image,
 					"sha256:calicocsrinithash")))
 
 			ds := appsv1.DaemonSet{
@@ -410,13 +410,13 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentCSRInitContainer.Image,
+					components.ComponentCSRInitContainerPrivate.Image,
 					"sha256:calicocsrinithash")))
 			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 			Expect(csrinit2).ToNot(BeNil())
 			Expect(csrinit2.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentCSRInitContainer.Image,
+					components.ComponentCSRInitContainerPrivate.Image,
 					"sha256:calicocsrinithash")))
 
 			inst := operator.Installation{

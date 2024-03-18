@@ -97,7 +97,7 @@ func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.A
 		return err
 	}
 
-	// The users controller runs in multi-tenant mode only, and is responsible for genmerating unique credentials for each Linseed instance
+	// The users controller runs in multi-tenant mode only, and is responsible for generating unique credentials for each Linseed instance
 	// and provisioning users into Elasticsearch for them to use.
 	if err := users.Add(mgr, opts); err != nil {
 		return err

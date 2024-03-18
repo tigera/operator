@@ -23,6 +23,7 @@ import (
 	"time"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
@@ -192,7 +193,6 @@ func AddCSRWatchWithRelevancyFn(c ctrlruntime.Controller, isRelevantFn func(*cer
 		CreateFunc: func(e event.CreateEvent) bool {
 			csr, ok := e.Object.(*certificatesv1.CertificateSigningRequest)
 			return ok && isRelevantFn(csr)
-
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			csr, ok := e.ObjectNew.(*certificatesv1.CertificateSigningRequest)
@@ -625,7 +625,7 @@ func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Inte
 					objLog.WithValues("Error", err).Info(msg)
 				}
 			} else if !ok {
-				objLog.Info("Waiting for resource to be ready - will retry")
+				objLog.Info("Waiting for resource to be ready to watch - will retry watch attempt")
 			} else if err := controller.WatchObject(obj, &handler.EnqueueRequestForObject{}, predicateFn); err != nil {
 				objLog.WithValues("Error", err).Info("Failed to watch resource - will retry")
 			} else {
@@ -872,6 +872,7 @@ func IsDexDisabled(authentication *operatorv1.Authentication) bool {
 	}
 	return disableDex
 }
+
 func VerifySysctl(pluginData []operatorv1.Sysctl) error {
 	for _, setting := range pluginData {
 		if _, ok := AllowedSysctlKeys[setting.Key]; !ok {
@@ -905,4 +906,16 @@ func getContainer(spec corev1.PodSpec, name string) *corev1.Container {
 		}
 	}
 	return nil
+}
+
+func SetInstallationFinalizer(i *operatorv1.Installation, finalizer string) {
+	if !stringsutil.StringInSlice(finalizer, i.GetFinalizers()) {
+		i.SetFinalizers(append(i.GetFinalizers(), finalizer))
+	}
+}
+
+func RemoveInstallationFinalizer(i *operatorv1.Installation, finalizer string) {
+	if stringsutil.StringInSlice(finalizer, i.GetFinalizers()) {
+		i.SetFinalizers(stringsutil.RemoveStringInSlice(finalizer, i.GetFinalizers()))
+	}
 }

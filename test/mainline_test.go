@@ -44,6 +44,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/apis"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crds"
@@ -134,7 +135,7 @@ var _ = Describe("Mainline component function tests", func() {
 
 	Describe("Installing CRD", func() {
 		It("Should install resources for a CRD", func() {
-			operatorDone = installResourceCRD(c, mgr, shutdownContext, nil)
+			operatorDone = createInstallation(c, mgr, shutdownContext, nil)
 			verifyCalicoHasDeployed(c)
 
 			instance := &operator.Installation{
@@ -177,7 +178,7 @@ var _ = Describe("Mainline component function tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			}
 
-			operatorDone = installResourceCRD(c, mgr, shutdownContext, nil)
+			operatorDone = createInstallation(c, mgr, shutdownContext, nil)
 			verifyCalicoHasDeployed(c)
 
 			By("Deleting CR after its tigera status becomes available")
@@ -206,7 +207,7 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 	})
 
 	AfterEach(func() {
-		removeInstallResourceCR(c, "not-default", context.Background())
+		removeInstallation(c, "not-default", context.Background())
 	})
 
 	It("Should ignore a CRD resource not named 'default'", func() {
@@ -285,6 +286,7 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
+
 	// Create a manager to use in the tests.
 	mgr, err := manager.New(cfg, manager.Options{
 		MetricsBindAddress: "0",
@@ -331,12 +333,43 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 	return mgr.GetClient(), ctx, cancel, mgr
 }
 
-func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Context, spec *operator.InstallationSpec) (doneChan chan struct{}) {
+func createAPIServer(c client.Client, mgr manager.Manager, ctx context.Context, spec *operator.APIServerSpec) {
+	s := operator.APIServerSpec{}
+	if spec != nil {
+		s = *spec
+	}
+	By("Creating an APIServer CRD")
+	instance := &operator.APIServer{
+		TypeMeta:   metav1.TypeMeta{Kind: "APIServer", APIVersion: "operator.tigera.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		Spec:       s,
+	}
+	err := c.Create(context.Background(), instance)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+func removeAPIServer(c client.Client, ctx context.Context) {
+	instance := &operator.APIServer{
+		TypeMeta:   metav1.TypeMeta{Kind: "APIServer", APIVersion: "operator.tigera.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+	}
+	err := c.Get(ctx, client.ObjectKey{Name: "default"}, instance)
+	if err != nil && kerror.IsNotFound(err) {
+		return
+	}
+	Expect(err).NotTo(HaveOccurred())
+
+	By("Deleting the APIServer CRD")
+	err = c.Delete(ctx, instance)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+func createInstallation(c client.Client, mgr manager.Manager, ctx context.Context, spec *operator.InstallationSpec) (doneChan chan struct{}) {
 	s := operator.InstallationSpec{}
 	if spec != nil {
 		s = *spec
 	}
-	By("Creating a CRD")
+	By("Creating an Installation CRD")
 	instance := &operator.Installation{
 		TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -349,7 +382,7 @@ func installResourceCRD(c client.Client, mgr manager.Manager, ctx context.Contex
 	return RunOperator(mgr, ctx)
 }
 
-func removeInstallResourceCR(c client.Client, name string, ctx context.Context) {
+func removeInstallation(c client.Client, name string, ctx context.Context) {
 	// Delete any CRD that might have been created by the test.
 	instance := &operator.Installation{
 		TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
@@ -369,18 +402,53 @@ func removeInstallResourceCR(c client.Client, name string, ctx context.Context) 
 	// which will in turn terminate the operator. Race conditions can occur otherwise that will leave the
 	// Installation resource intact while the operator is no longer running which will result in test failures
 	// that try to create an Installation resource of their own
-	By("Waiting for the Installation CRD to be removed")
-	ExpectResourceDestroyed(c, instance, 20*time.Second)
+	By("Waiting for the Installation CR to be removed")
+	Eventually(func() error {
+		err := c.Get(ctx, client.ObjectKey{Name: name}, instance)
+		if kerror.IsNotFound(err) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		return fmt.Errorf("Installation still exists")
+	}, 120*time.Second).ShouldNot(HaveOccurred())
+}
+
+func verifyAPIServerHasDeployed(c client.Client) {
+	By("Verifying API server was created")
+	apiserver := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-apiserver"}}
+	ExpectResourceCreated(c, apiserver)
+
+	By("Verifying the API server resources are ready")
+	Eventually(func() error {
+		err := GetResource(c, apiserver)
+		if err != nil {
+			return err
+		}
+		if apiserver.Status.AvailableReplicas >= 1 {
+			return nil
+		}
+		return fmt.Errorf("apiserver not yet ready")
+	}, 240*time.Second).Should(BeNil())
+
+	By("Verifying the apiserver tigera status CRD is updated")
+	Eventually(func() error {
+		ts, err := getTigeraStatus(c, "apiserver")
+		if err != nil {
+			return err
+		}
+		return assertAvailable(ts)
+	}, 120*time.Second).Should(BeNil())
 }
 
 func verifyCalicoHasDeployed(c client.Client) {
-	By("Verifying the resources were created")
+	By("Verifying calico-system resources were created")
 	ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
 	ExpectResourceCreated(c, ds)
 	kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
 	ExpectResourceCreated(c, kc)
 
-	By("Verifying the resources are ready")
+	By("Verifying calico-system resources are ready")
 	Eventually(func() error {
 		err := GetResource(c, ds)
 		if err != nil {
@@ -406,7 +474,7 @@ func verifyCalicoHasDeployed(c client.Client) {
 		return fmt.Errorf("kube-controllers not yet ready")
 	}, 240*time.Second).Should(BeNil())
 
-	By("Verifying the tigera status CRD is updated")
+	By("Verifying the calico tigera status CRD is updated")
 	Eventually(func() error {
 		ts, err := getTigeraStatus(c, "calico")
 		if err != nil {
@@ -478,7 +546,29 @@ func waitForProductTeardown(c client.Client) {
 	}, 240*time.Second).ShouldNot(HaveOccurred())
 }
 
+func cleanupIPPools(c client.Client) {
+	By("Cleaning up IP pools")
+	Eventually(func() error {
+		ipPools := &crdv1.IPPoolList{}
+		err := c.List(context.Background(), ipPools)
+		if err != nil {
+			return err
+		}
+
+		for _, p := range ipPools.Items {
+			By(fmt.Sprintf("Deleting IP pool %s with CIDR %s (%s)", p.Name, p.Spec.CIDR, p.UID))
+			err = c.Delete(context.Background(), &p)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}, 30*time.Second).ShouldNot(HaveOccurred())
+}
+
 func cleanupResources(c client.Client) {
-	removeInstallResourceCR(c, "default", context.Background())
+	removeAPIServer(c, context.Background())
+	removeInstallation(c, "default", context.Background())
+	cleanupIPPools(c)
 	waitForProductTeardown(c)
 }

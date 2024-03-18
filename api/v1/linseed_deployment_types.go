@@ -63,6 +63,7 @@ type LinseedDeploymentPodSpec struct {
 // LinseedDeploymentContainer is a linseed Deployment container.
 type LinseedDeploymentContainer struct {
 	// Name is an enum which identifies the linseed Deployment container by name.
+	// Supported values are: tigera-linseed
 	// +kubebuilder:validation:Enum=tigera-linseed
 	Name string `json:"name"`
 
@@ -76,6 +77,7 @@ type LinseedDeploymentContainer struct {
 // LinseedDeploymentInitContainer is a linseed Deployment init container.
 type LinseedDeploymentInitContainer struct {
 	// Name is an enum which identifies the linseed Deployment init container by name.
+	// Supported values are: tigera-secure-linseed-token-tls-key-cert-provisioner,tigera-secure-linseed-cert-key-cert-provisioner
 	// +kubebuilder:validation:Enum=tigera-secure-linseed-token-tls-key-cert-provisioner;tigera-secure-linseed-cert-key-cert-provisioner
 	Name string `json:"name"`
 

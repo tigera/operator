@@ -63,6 +63,7 @@ type ECKOperatorStatefulSetPodSpec struct {
 // ECKOperatorStatefulSetContainer is a ECKOperator StatefulSet container.
 type ECKOperatorStatefulSetContainer struct {
 	// Name is an enum which identifies the ECKOperator StatefulSet container by name.
+	// Supported values are: manager
 	// +kubebuilder:validation:Enum=manager
 	Name string `json:"name"`
 

@@ -1157,8 +1157,9 @@ spec:
                                     API server Deployment container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the API server Deployment container by name.
+                                        Supported values are: calico-apiserver, tigera-queryserver'
                                       enum:
                                       - calico-apiserver
                                       - tigera-queryserver
@@ -1242,9 +1243,9 @@ spec:
                                     an API server Deployment init container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the API server Deployment init container by
-                                        name.
+                                        name. Supported values are: calico-apiserver-certs-key-cert-provisioner'
                                       enum:
                                       - calico-apiserver-certs-key-cert-provisioner
                                       type: string

@@ -59,6 +59,7 @@ type KibanaPodSpec struct {
 // KibanaContainer is a Kibana container.
 type KibanaContainer struct {
 	// Name is an enum which identifies the Kibana Deployment container by name.
+	// Supported values are: kibana
 	// +kubebuilder:validation:Enum=kibana
 	Name string `json:"name"`
 
@@ -72,6 +73,7 @@ type KibanaContainer struct {
 // KibanaInitContainer is a Kibana init container.
 type KibanaInitContainer struct {
 	// Name is an enum which identifies the Kibana init container by name.
+	// Supported values are: key-cert-provisioner
 	// +kubebuilder:validation:Enum=key-cert-provisioner
 	Name string `json:"name"`
 

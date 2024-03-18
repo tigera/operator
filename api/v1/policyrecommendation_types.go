@@ -71,6 +71,7 @@ type PolicyRecommendationDeploymentPodSpec struct {
 // PolicyRecommendationDeploymentContainer is a PolicyRecommendation Deployment container.
 type PolicyRecommendationDeploymentContainer struct {
 	// Name is an enum which identifies the PolicyRecommendation Deployment container by name.
+	// Supported values are: policy-recommendation-controller
 	// +kubebuilder:validation:Enum=policy-recommendation-controller
 	Name string `json:"name"`
 

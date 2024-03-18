@@ -1119,8 +1119,9 @@ spec:
                             Deployment container.
                           properties:
                             name:
-                              description: Name is an enum which identifies the EGW
-                                Deployment container by name.
+                              description: 'Name is an enum which identifies the EGW
+                                Deployment container by name. Supported values are:
+                                calico-egw'
                               enum:
                               - calico-egw
                               type: string
@@ -1197,8 +1198,9 @@ spec:
                             Deployment init container.
                           properties:
                             name:
-                              description: Name is an enum which identifies the EGW
-                                Deployment init container by name.
+                              description: 'Name is an enum which identifies the EGW
+                                Deployment init container by name. Supported values
+                                are: egress-gateway-init'
                               enum:
                               - egress-gateway-init
                               type: string

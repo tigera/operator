@@ -63,7 +63,7 @@ type ComplianceSnapshotterDeploymentPodSpec struct {
 // ComplianceSnapshotterDeploymentContainer is a compliance snapshotter Deployment container.
 type ComplianceSnapshotterDeploymentContainer struct {
 	// Name is an enum which identifies the compliance snapshotter Deployment container by name.
-	// Supported values are compliance-snapshotter.
+	// Supported values are: compliance-snapshotter
 	// +kubebuilder:validation:Enum=compliance-snapshotter
 	Name string `json:"name"`
 
@@ -77,6 +77,7 @@ type ComplianceSnapshotterDeploymentContainer struct {
 // ComplianceSnapshotterDeploymentInitContainer is a compliance snapshotter Deployment init container.
 type ComplianceSnapshotterDeploymentInitContainer struct {
 	// Name is an enum which identifies the compliance snapshotter Deployment init container by name.
+	// Supported values are: tigera-compliance-snapshotter-tls-key-cert-provisioner
 	// +kubebuilder:validation:Enum=tigera-compliance-snapshotter-tls-key-cert-provisioner
 	Name string `json:"name"`
 

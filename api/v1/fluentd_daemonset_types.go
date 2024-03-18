@@ -63,7 +63,7 @@ type FluentdDaemonSetPodSpec struct {
 // FluentdDaemonSetContainer is a Fluentd DaemonSet container.
 type FluentdDaemonSetContainer struct {
 	// Name is an enum which identifies the Fluentd DaemonSet container by name.
-	// Supported values are fluentd.
+	// Supported values are: fluentd
 	// +kubebuilder:validation:Enum=fluentd
 	Name string `json:"name"`
 
@@ -77,7 +77,7 @@ type FluentdDaemonSetContainer struct {
 // FluentdDaemonSetInitContainer is a Fluentd DaemonSet init container.
 type FluentdDaemonSetInitContainer struct {
 	// Name is an enum which identifies the Fluentd DaemonSet init container by name.
-	// Supported values are tigera-fluentd-prometheus-tls-key-cert-provisioner.
+	// Supported values are: tigera-fluentd-prometheus-tls-key-cert-provisioner
 	// +kubebuilder:validation:Enum=tigera-fluentd-prometheus-tls-key-cert-provisioner
 	Name string `json:"name"`
 

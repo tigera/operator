@@ -63,7 +63,7 @@ type ComplianceBenchmarkerDaemonSetPodSpec struct {
 // ComplianceBenchmarkerDaemonSetContainer is a Compliance Benchmarker DaemonSet container.
 type ComplianceBenchmarkerDaemonSetContainer struct {
 	// Name is an enum which identifies the Compliance Benchmarker DaemonSet container by name.
-	// Supported values are compliance-benchmarker.
+	// Supported values are: compliance-benchmarker
 	// +kubebuilder:validation:Enum=compliance-benchmarker
 	Name string `json:"name"`
 
@@ -77,6 +77,7 @@ type ComplianceBenchmarkerDaemonSetContainer struct {
 // ComplianceBenchmarkerDaemonSetInitContainer is a Compliance Benchmarker DaemonSet init container.
 type ComplianceBenchmarkerDaemonSetInitContainer struct {
 	// Name is an enum which identifies the Compliance Benchmarker DaemonSet init container by name.
+	// Supported values are: tigera-compliance-benchmarker-tls-key-cert-provisioner
 	// +kubebuilder:validation:Enum=tigera-compliance-benchmarker-tls-key-cert-provisioner
 	Name string `json:"name"`
 

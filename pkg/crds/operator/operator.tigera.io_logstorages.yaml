@@ -141,9 +141,9 @@ spec:
                                     a ECKOperator StatefulSet container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the ECKOperator StatefulSet container by name.
-                                        Supported values are manager.
+                                        Supported values are: manager'
                                       enum:
                                       - manager
                                       type: string
@@ -325,9 +325,9 @@ spec:
                                     is a ElasticsearchMetricsDeployment container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the ElasticsearchMetricsDeployment container
-                                        by name. Supported values are tigera-elasticsearch-metrics.
+                                        by name. Supported values are: tigera-elasticsearch-metrics'
                                       enum:
                                       - tigera-elasticsearch-metrics
                                       type: string
@@ -408,9 +408,9 @@ spec:
                                     is a ElasticsearchMetricsDeployment init container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the ElasticsearchMetricsDeployment init container
-                                        by name. Supported values are tigera-ee-elasticsearch-metrics-tls-key-cert-provisioner.
+                                        by name. Supported values are: tigera-ee-elasticsearch-metrics-tls-key-cert-provisioner'
                                       enum:
                                       - tigera-ee-elasticsearch-metrics-tls-key-cert-provisioner
                                       type: string
@@ -516,9 +516,9 @@ spec:
                                   description: KibanaContainer is a Kibana container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the Kibana Deployment container by name. Supported
-                                        values are kibana.
+                                        values are: kibana'
                                       enum:
                                       - kibana
                                       type: string
@@ -598,8 +598,9 @@ spec:
                                     container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
-                                        the Kibana init container by name.
+                                      description: 'Name is an enum which identifies
+                                        the Kibana init container by name. Supported
+                                        values are: key-cert-provisioner'
                                       enum:
                                       - key-cert-provisioner
                                       type: string
@@ -698,9 +699,9 @@ spec:
                                     Deployment container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the linseed Deployment container by name.
-                                        Supported values are tigera-linseed.
+                                        Supported values are: tigera-linseed'
                                       enum:
                                       - tigera-linseed
                                       type: string
@@ -781,9 +782,9 @@ spec:
                                     linseed Deployment init container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the linseed Deployment init container by name.
-                                        Supported values are tigera-secure-linseed-token-tls-key-cert-provisioner;tigera-secure-linseed-cert-key-cert-provisioner.
+                                        Supported values are: tigera-secure-linseed-token-tls-key-cert-provisioner,tigera-secure-linseed-cert-key-cert-provisioner'
                                       enum:
                                       - tigera-secure-linseed-token-tls-key-cert-provisioner
                                       - tigera-secure-linseed-cert-key-cert-provisioner

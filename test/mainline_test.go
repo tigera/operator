@@ -362,21 +362,6 @@ func removeAPIServer(c client.Client, ctx context.Context) {
 	By("Deleting the APIServer CRD")
 	err = c.Delete(ctx, instance)
 	Expect(err).NotTo(HaveOccurred())
-
-	// Deleting the APIServer doesn't delete the Namespace - likely a GC bug related to
-	// this API server bug: https://github.com/projectcalico/calico/issues/5715#issuecomment-1482093803
-	// Do it explicitly to work around this.
-	By("Deleting the calico-apiserver Namespace")
-	Expect(c.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver"}})).NotTo(HaveOccurred())
-	Eventually(func() error {
-		err := c.Get(ctx, client.ObjectKey{Name: "calico-apiserver"}, &corev1.Namespace{})
-		if kerror.IsNotFound(err) {
-			return nil
-		} else if err != nil {
-			return err
-		}
-		return fmt.Errorf("calico-apiserver Namespace still exists")
-	}, 120*time.Second).ShouldNot(HaveOccurred())
 }
 
 func createInstallation(c client.Client, mgr manager.Manager, ctx context.Context, spec *operator.InstallationSpec) (doneChan chan struct{}) {

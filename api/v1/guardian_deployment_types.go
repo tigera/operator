@@ -63,6 +63,7 @@ type GuardianDeploymentPodSpec struct {
 // GuardianDeploymentContainer is a guardian Deployment container.
 type GuardianDeploymentContainer struct {
 	// Name is an enum which identifies the guardian Deployment container by name.
+	// Supported values are: tigera-guardian
 	// +kubebuilder:validation:Enum=tigera-guardian
 	Name string `json:"name"`
 

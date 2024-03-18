@@ -23,3 +23,5 @@ components:
     version: master
   csi-node-driver-registrar:
     version: master
+  key-cert-provisioner:
+    version: master

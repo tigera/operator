@@ -35,7 +35,6 @@ The command does the following:
 format `vX.Y.Z` for each of the following files:
   1. `config/calico_versions.yml` (Calico OSS version)
   2. `config/enterprise_versions.yml` (Calico Enterprise version)
-  3. `config/common_versions.yaml` (components common to both)
 
 - It updates the registry reference to `quay.io` from `gcr.io` for each of the following files:
 

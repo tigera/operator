@@ -56,6 +56,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentCSRInitContainerPrivate = component{
+		Version:  "master",
+		Image:    "tigera/key-cert-provisioner",
+		Registry: "",
+	}
+
 	ComponentDeepPacketInspection = component{
 		Version:  "master",
 		Image:    "tigera/deep-packet-inspection",
@@ -323,6 +329,7 @@ var (
 		ComponentComplianceReporter,
 		ComponentComplianceServer,
 		ComponentComplianceSnapshotter,
+		ComponentCSRInitContainerPrivate,
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,

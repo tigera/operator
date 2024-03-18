@@ -124,6 +124,7 @@ type DashboardsJobPodSpec struct {
 // DashboardsJobContainer is the Dashboards job container.
 type DashboardsJobContainer struct {
 	// Name is an enum which identifies the Dashboard Job container by name.
+	// Supported values are: dashboards-installer
 	// +kubebuilder:validation:Enum=dashboards-installer
 	Name string `json:"name"`
 

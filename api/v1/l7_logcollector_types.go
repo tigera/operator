@@ -63,6 +63,7 @@ type L7LogCollectorDaemonSetPodSpec struct {
 // L7LogCollectorDaemonSetContainer is a L7LogCollector DaemonSet container.
 type L7LogCollectorDaemonSetContainer struct {
 	// Name is an enum which identifies the L7LogCollector DaemonSet container by name.
+	// Supported values are: l7-collector, envoy-proxy, dikastes
 	// +kubebuilder:validation:Enum=l7-collector;envoy-proxy;dikastes
 	Name string `json:"name"`
 

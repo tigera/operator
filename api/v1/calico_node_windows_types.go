@@ -24,6 +24,7 @@ import (
 // CalicoNodeWindowsDaemonSetContainer is a calico-node-windows DaemonSet container.
 type CalicoNodeWindowsDaemonSetContainer struct {
 	// Name is an enum which identifies the calico-node-windows DaemonSet container by name.
+	// Supported values are: calico-node-windows
 	// +kubebuilder:validation:Enum=calico-node-windows
 	Name string `json:"name"`
 
@@ -38,6 +39,7 @@ type CalicoNodeWindowsDaemonSetContainer struct {
 // CalicoNodeWindowsDaemonSetInitContainer is a calico-node-windows DaemonSet init container.
 type CalicoNodeWindowsDaemonSetInitContainer struct {
 	// Name is an enum which identifies the calico-node-windows DaemonSet init container by name.
+	// Supported values are: install-cni;hostpath-init, flexvol-driver, mount-bpffs, node-certs-key-cert-provisioner, calico-node-windows-prometheus-server-tls-key-cert-provisioner
 	// +kubebuilder:validation:Enum=install-cni;hostpath-init;flexvol-driver;mount-bpffs;node-certs-key-cert-provisioner;calico-node-windows-prometheus-server-tls-key-cert-provisioner
 	Name string `json:"name"`
 

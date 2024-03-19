@@ -175,16 +175,27 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			return nil, err
 		}
 		// We instantiate csrImage regardless of whether certificate management is enabled; it may still be used.
-		csrImage, err = components.GetReference(
-			components.ComponentCSRInitContainer,
-			installation.Registry,
-			installation.ImagePath,
-			installation.ImagePrefix,
-			imageSet,
-		)
+		if installation.Variant == operatorv1.TigeraSecureEnterprise {
+			csrImage, err = components.GetReference(
+				components.ComponentCSRInitContainerPrivate,
+				installation.Registry,
+				installation.ImagePath,
+				installation.ImagePrefix,
+				imageSet,
+			)
+		} else {
+			csrImage, err = components.GetReference(
+				components.ComponentCSRInitContainer,
+				installation.Registry,
+				installation.ImagePath,
+				installation.ImagePrefix,
+				imageSet,
+			)
+		}
 		if err != nil {
 			return nil, err
 		}
+
 		if installation.CertificateManagement != nil {
 			// Configured to use certificate management. Get the CACert from
 			// the installation spec.
@@ -448,7 +459,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 			}
 
 			if invalidKeyUsage {
-				log.Info("secret %s/%s must specify ext key usages: %+v", secretNamespace, secretName, requiredKeyUsages)
+				cm.log.Info(fmt.Sprintf("secret %s/%s must specify ext key usages: %+v", secretNamespace, secretName, requiredKeyUsages))
 			}
 			// We return nil, so a new secret will be created for expired (legacy) operator signed secrets.
 			cm.log.Info("KeyPair is an expired legacy operator cert, make a new one", "name", secretName)

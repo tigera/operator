@@ -323,6 +323,11 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "watch", "update"},
 		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"alertexceptions"},
+			Verbs:     []string{"get", "list"},
+		},
 	}
 
 	if !c.cfg.ManagedCluster {

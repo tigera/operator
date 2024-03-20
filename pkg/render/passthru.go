@@ -1,4 +1,4 @@
-// Copyright (c) 2021,2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021,2023-2024 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,17 +15,22 @@
 package render
 
 import (
+	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 func NewDeletionPassthrough(objs ...client.Object) Component {
-	return &passthroughComponent{isDelete: true, objs: objs}
+	return &passthroughComponent{isDelete: true, objs: objs, log: log}
 }
 
 func NewPassthrough(objs ...client.Object) Component {
-	return &passthroughComponent{isDelete: false, objs: objs}
+	return &passthroughComponent{isDelete: false, objs: objs, log: log}
+}
+
+func NewPassthroughWithLog(l logr.Logger, objs ...client.Object) Component {
+	return &passthroughComponent{isDelete: false, objs: objs, log: l}
 }
 
 // passthroughComponent is an implementation of a Component that simply passes back
@@ -33,6 +38,7 @@ func NewPassthrough(objs ...client.Object) Component {
 type passthroughComponent struct {
 	isDelete bool
 	objs     []client.Object
+	log      logr.Logger
 }
 
 // ResolveImages should call components.GetReference for all images that the Component
@@ -53,6 +59,7 @@ func (p *passthroughComponent) Objects() (objsToCreate []client.Object, objsToDe
 		if o == nil {
 			continue
 		}
+		p.log.V(1).Info("PassThrough processing object", "obj", o)
 		objs = append(objs, o)
 	}
 	if p.isDelete {

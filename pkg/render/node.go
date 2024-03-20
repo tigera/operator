@@ -60,7 +60,7 @@ const (
 	BGPLayoutPath                     = "/etc/calico/early-networking.yaml"
 	K8sSvcEndpointConfigMapName       = "kubernetes-services-endpoint"
 	nodeTerminationGracePeriodSeconds = 5
-	NodeFinalizer                     = "tigera.io/cni-protector"
+	CNIFinalizer                      = "tigera.io/cni-protector"
 
 	CalicoNodeMetricsService      = "calico-node-metrics"
 	NodePrometheusTLSServerSecret = "calico-node-prometheus-server-tls"
@@ -93,6 +93,7 @@ type TyphaNodeTLS struct {
 type NodeConfiguration struct {
 	K8sServiceEp  k8sapi.ServiceEndpoint
 	Installation  *operatorv1.InstallationSpec
+	IPPools       []operatorv1.IPPool
 	TLS           *TyphaNodeTLS
 	ClusterDomain string
 
@@ -103,10 +104,13 @@ type NodeConfiguration struct {
 	NodeAppArmorProfile     string
 	BirdTemplates           map[string]string
 	NodeReporterMetricsPort int
-	// Indicates node is being terminated, so remove most resources but
-	// leave RBAC and SA to allow any CNI plugin calls to continue to function
+
+	// CanRemoveCNIFinalizer specifies whether CNI plugin is still needed during uninstall since the CNI plugin and
+	// associated RBAC resources are required for pod teardown to succeed. Setting this to true removes
+	// the finalizer from the CNI plugin and associated RBAC resources, allowing them to be deleted.
 	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
-	Terminating         bool
+	CanRemoveCNIFinalizer bool
+
 	PrometheusServerTLS certificatemanagement.KeyPairInterface
 
 	// BGPLayouts is returned by the rendering code after modifying its namespace
@@ -193,10 +197,11 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		c.cniPluginRoleBinding(),
 	}
 
-	// These are objects to keep even when we're terminating
+	// These are objects to keep even when we're terminating. They will be deleted by the Kubernetes
+	// garbage collector when the Installation is finally deleted.
 	objsToKeep := []client.Object{}
 
-	if c.cfg.Terminating {
+	if c.cfg.CanRemoveCNIFinalizer {
 		objsToKeep = objs
 		objs = []client.Object{}
 	}
@@ -239,7 +244,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objsToDelete = append(objsToDelete, migration.ClusterRoleBindingForKubeSystemNode())
 	}
 
-	if c.cfg.Terminating {
+	if c.cfg.CanRemoveCNIFinalizer {
 		return objsToKeep, append(objs, objsToDelete...)
 	}
 	return objs, objsToDelete
@@ -252,8 +257,8 @@ func (c *nodeComponent) Ready() bool {
 // nodeServiceAccount creates the node's service account.
 func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+	if !c.cfg.CanRemoveCNIFinalizer {
+		finalizer = []string{CNIFinalizer}
 	}
 
 	return &corev1.ServiceAccount{
@@ -269,8 +274,8 @@ func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 // cniPluginServiceAccount creates the Calico CNI plugin's service account.
 func (c *nodeComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+	if !c.cfg.CanRemoveCNIFinalizer {
+		finalizer = []string{CNIFinalizer}
 	}
 
 	return &corev1.ServiceAccount{
@@ -286,8 +291,8 @@ func (c *nodeComponent) cniPluginServiceAccount() *corev1.ServiceAccount {
 // nodeRoleBinding creates a clusterrolebinding giving the node service account the required permissions to operate.
 func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+	if !c.cfg.CanRemoveCNIFinalizer {
+		finalizer = []string{CNIFinalizer}
 	}
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -318,8 +323,8 @@ func (c *nodeComponent) nodeRoleBinding() *rbacv1.ClusterRoleBinding {
 // cniPluginRoleBinding creates a rolebinding giving the Calico CNI plugin service account the required permissions to operate.
 func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+	if !c.cfg.CanRemoveCNIFinalizer {
+		finalizer = []string{CNIFinalizer}
 	}
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -346,8 +351,8 @@ func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 // nodeRole creates the clusterrole containing policy rules that allow the node daemonset to operate normally.
 func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+	if !c.cfg.CanRemoveCNIFinalizer {
+		finalizer = []string{CNIFinalizer}
 	}
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -558,8 +563,8 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 // cniPluginRole creates the role containing policy rules that allow the Calico CNI plugin to operate normally.
 func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 	finalizer := []string{}
-	if !c.cfg.Terminating {
-		finalizer = []string{NodeFinalizer}
+	if !c.cfg.CanRemoveCNIFinalizer {
+		finalizer = []string{CNIFinalizer}
 	}
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -624,7 +629,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 
 	ipam := c.getCalicoIPAM()
 	if c.cfg.Installation.CNI.IPAM.Type == operatorv1.IPAMPluginHostLocal {
-		ipam = buildHostLocalIPAM(c.cfg.Installation.CalicoNetwork)
+		ipam = buildHostLocalIPAM(c.cfg.IPPools)
 	}
 
 	apiRoot := c.cfg.K8sServiceEp.CNIAPIRoot()
@@ -782,12 +787,12 @@ func (c *nodeComponent) getCalicoIPAM() map[string]interface{} {
 	// Determine what address families to enable.
 	var assign_ipv4 string
 	var assign_ipv6 string
-	if v4pool := GetIPv4Pool(c.cfg.Installation.CalicoNetwork.IPPools); v4pool != nil {
+	if v4pool := GetIPv4Pool(c.cfg.IPPools); v4pool != nil {
 		assign_ipv4 = "true"
 	} else {
 		assign_ipv4 = "false"
 	}
-	if v6pool := GetIPv6Pool(c.cfg.Installation.CalicoNetwork.IPPools); v6pool != nil {
+	if v6pool := GetIPv6Pool(c.cfg.IPPools); v6pool != nil {
 		assign_ipv6 = "true"
 	} else {
 		assign_ipv6 = "false"
@@ -799,9 +804,9 @@ func (c *nodeComponent) getCalicoIPAM() map[string]interface{} {
 	}
 }
 
-func buildHostLocalIPAM(cns *operatorv1.CalicoNetworkSpec) map[string]interface{} {
-	v6 := GetIPv6Pool(cns.IPPools) != nil
-	v4 := GetIPv4Pool(cns.IPPools) != nil
+func buildHostLocalIPAM(pools []operatorv1.IPPool) map[string]interface{} {
+	v6 := GetIPv6Pool(pools) != nil
+	v4 := GetIPv4Pool(pools) != nil
 
 	if v4 && v6 {
 		// Dual-stack
@@ -1430,7 +1435,9 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_TYPHACERTFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "FELIX_TYPHAKEYFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
+		{Name: "NO_DEFAULT_POOLS", Value: "true"},
 	}
+
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.
 	if c.cfg.TLS.TyphaCommonName != "" {
@@ -1449,75 +1456,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginAmazonVPC {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"})
-	}
-
-	// If there are no IP pools specified, then configure no default IP pools.
-	if c.cfg.Installation.CalicoNetwork == nil || len(c.cfg.Installation.CalicoNetwork.IPPools) == 0 {
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "NO_DEFAULT_POOLS", Value: "true"})
-	} else {
-		// Configure IPv4 pool
-		if v4pool := GetIPv4Pool(c.cfg.Installation.CalicoNetwork.IPPools); v4pool != nil {
-			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_CIDR", Value: v4pool.CIDR})
-
-			switch v4pool.Encapsulation {
-			case operatorv1.EncapsulationIPIPCrossSubnet:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "CrossSubnet"})
-			case operatorv1.EncapsulationIPIP:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
-			case operatorv1.EncapsulationVXLAN:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "Always"})
-			case operatorv1.EncapsulationVXLANCrossSubnet:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_VXLAN", Value: "CrossSubnet"})
-			case operatorv1.EncapsulationNone:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Never"})
-			default:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_IPIP", Value: "Always"})
-			}
-
-			if v4pool.BlockSize != nil {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v4pool.BlockSize)})
-			}
-			if v4pool.NATOutgoing == operatorv1.NATOutgoingDisabled {
-				// Default for IPv4 NAT Outgoing is enabled so it is only necessary to
-				// set when it is being disabled.
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_NAT_OUTGOING", Value: "false"})
-			}
-			if v4pool.NodeSelector != "" {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_NODE_SELECTOR", Value: v4pool.NodeSelector})
-			}
-			if v4pool.DisableBGPExport != nil {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV4POOL_DISABLE_BGP_EXPORT", Value: fmt.Sprintf("%t", *v4pool.DisableBGPExport)})
-			}
-		}
-
-		// Configure IPv6 pool.
-		if v6pool := GetIPv6Pool(c.cfg.Installation.CalicoNetwork.IPPools); v6pool != nil {
-			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_CIDR", Value: v6pool.CIDR})
-
-			switch v6pool.Encapsulation {
-			case operatorv1.EncapsulationVXLAN:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "Always"})
-			case operatorv1.EncapsulationVXLANCrossSubnet:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "CrossSubnet"})
-			case operatorv1.EncapsulationNone:
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_VXLAN", Value: "Never"})
-			}
-
-			if v6pool.BlockSize != nil {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_BLOCK_SIZE", Value: fmt.Sprintf("%d", *v6pool.BlockSize)})
-			}
-			if v6pool.NATOutgoing == operatorv1.NATOutgoingEnabled {
-				// Default for IPv6 NAT Outgoing is disabled so it is only necessary to
-				// set when it is being enabled.
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_NAT_OUTGOING", Value: "true"})
-			}
-			if v6pool.NodeSelector != "" {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_NODE_SELECTOR", Value: v6pool.NodeSelector})
-			}
-			if v6pool.DisableBGPExport != nil {
-				nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_IPV6POOL_DISABLE_BGP_EXPORT", Value: fmt.Sprintf("%t", *v6pool.DisableBGPExport)})
-			}
-		}
 	}
 
 	if c.vppDataplaneEnabled() {

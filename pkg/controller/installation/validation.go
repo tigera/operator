@@ -376,7 +376,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify the CSINodeDriverDaemonSet overrides, if specified, is valid.
 	if ds := instance.Spec.CSINodeDriverDaemonSet; ds != nil {
-		err := validation.ValidateReplicatedPodResourceOverrides(ds, csinodedriver.ValidateCSIDaemonsetContainer, validation.NoContainersDefined)
+		err := validation.ValidateReplicatedPodResourceOverrides(ds, csinodedriver.ValidateCSINodeDriverDaemonSetContainer, validation.NoContainersDefined)
 		if err != nil {
 			return fmt.Errorf("Installation spec.CSINodeDriverDaemonSet is not valid: %w", err)
 		}

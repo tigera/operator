@@ -17,6 +17,8 @@ package installation
 import (
 	"path/filepath"
 
+	"github.com/tigera/operator/pkg/render"
+
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	. "github.com/onsi/ginkgo"
@@ -1088,6 +1090,58 @@ var _ = Describe("Installation validation tests", func() {
 				},
 			}
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+	})
+
+	Describe("validate CSINodeDriverDaemonSet", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if it is invalid", func() {
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+
+			var invalidMinReadySeconds int32 = -1
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
+				Spec: &operator.CSINodeDriverDaemonSetSpec{
+					MinReadySeconds: &invalidMinReadySeconds,
+				},
+			}
+			err = validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return nil when resource requirements are set", func() {
+			instance.Spec.CSINodeDriverDaemonSet = &operator.CSINodeDriverDaemonSet{
+				Spec: &operator.CSINodeDriverDaemonSetSpec{
+					Template: &operator.CSINodeDriverDaemonSetPodTemplateSpec{
+						Spec: &operator.CSINodeDriverDaemonSetPodSpec{
+							Containers: []operator.CSINodeDriverDaemonSetContainer{
+								{
+									Name:      render.CSIContainerName,
+									Resources: &v1.ResourceRequirements{Requests: v1.ResourceList{"cpu": resource.MustParse("1")}},
+								},
+							},
+						},
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

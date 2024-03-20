@@ -24,7 +24,8 @@ import (
 // CSINodeDriverDaemonSetContainer is a csi-node-driver DaemonSet container.
 type CSINodeDriverDaemonSetContainer struct {
 	// Name is an enum which identifies the csi-node-driver DaemonSet container by name.
-	// +kubebuilder:validation:Enum=csi-node-driver
+	// Supported values are: calico-csi, csi-node-driver-registrar.
+	// +kubebuilder:validation:Enum=calico-csi;csi-node-driver-registrar;csi-node-driver
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

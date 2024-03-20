@@ -6830,10 +6830,12 @@ spec:
                                     a csi-node-driver DaemonSet container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
+                                      description: 'Name is an enum which identifies
                                         the csi-node-driver DaemonSet container by
-                                        name.
+                                        name. Supported values are: calico-csi, csi-node-driver-registrar.'
                                       enum:
+                                      - calico-csi
+                                      - csi-node-driver-registrar
                                       - csi-node-driver
                                       type: string
                                     resources:
@@ -16352,10 +16354,13 @@ spec:
                                         is a csi-node-driver DaemonSet container.
                                       properties:
                                         name:
-                                          description: Name is an enum which identifies
+                                          description: 'Name is an enum which identifies
                                             the csi-node-driver DaemonSet container
-                                            by name.
+                                            by name. Supported values are: calico-csi,
+                                            csi-node-driver-registrar.'
                                           enum:
+                                          - calico-csi
+                                          - csi-node-driver-registrar
                                           - csi-node-driver
                                           type: string
                                         resources:

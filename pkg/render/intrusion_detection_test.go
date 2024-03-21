@@ -214,6 +214,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				Resources: []string{"securityeventwebhooks"},
 				Verbs:     []string{"get", "watch", "update"},
 			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"alertexceptions"},
+				Verbs:     []string{"get", "list"},
+			},
 		))
 
 		role := rtest.GetResource(resources, render.IntrusionDetectionName, render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)

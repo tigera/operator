@@ -80,7 +80,6 @@ func (f *fakeNamespaceMigration) CleanupMigration(ctx context.Context) error {
 }
 
 var _ = Describe("Testing core-controller installation", func() {
-
 	var c client.Client
 	var cs *kfake.Clientset
 	var ctx context.Context
@@ -113,7 +112,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	ready.MarkAsReady()
 
 	Context("image reconciliation tests", func() {
-
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
 			scheme = runtime.NewScheme()
@@ -519,7 +517,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	)
 
 	Context("management cluster exists", func() {
-
 		var expectedDNSNames []string
 		var certificateManager certificatemanager.CertificateManager
 
@@ -1443,6 +1440,142 @@ var _ = Describe("Testing core-controller installation", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(0))
+		})
+	})
+
+	Context("Using EKS networking", func() {
+		var certificateManager certificatemanager.CertificateManager
+
+		BeforeEach(func() {
+			// The schema contains all objects that should be known to the fake client when the test runs.
+			scheme = runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+
+			// Create a client that will have a crud interface of k8s objects.
+			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+			ctx, cancel = context.WithCancel(context.Background())
+
+			// Create a fake clientset for the autoscaler.
+			var replicas int32 = 1
+			objs := []runtime.Object{
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node1",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
+				&appsv1.Deployment{
+					TypeMeta:   metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: &replicas,
+					},
+				},
+			}
+			cs = kfake.NewSimpleClientset(objs...)
+
+			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("SetMetaData", mock.Anything).Return()
+
+			// Create the indexer and informer used by the typhaAutoscaler
+			nlw := test.NewNodeListWatch(cs)
+			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
+
+			go nodeIndexInformer.Run(ctx.Done())
+			for nodeIndexInformer.HasSynced() {
+				time.Sleep(100 * time.Millisecond)
+			}
+
+			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
+			r = ReconcileInstallation{
+				config:               nil, // there is no fake for config
+				client:               c,
+				scheme:               scheme,
+				autoDetectedProvider: operator.ProviderNone,
+				status:               mockStatus,
+				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				namespaceMigration:   &fakeNamespaceMigration{},
+				amazonCRDExists:      true,
+				enterpriseCRDsExist:  true,
+				migrationChecked:     true,
+				clusterDomain:        dns.DefaultClusterDomain,
+				tierWatchReady:       ready,
+			}
+			r.typhaAutoscaler.start(ctx)
+
+			cr = &operator.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operator.InstallationSpec{
+					Variant:            operator.TigeraSecureEnterprise,
+					Registry:           "some.registry.org/",
+					KubernetesProvider: operator.ProviderEKS,
+					CNI: &operator.CNISpec{
+						Type: operator.PluginAmazonVPC,
+						IPAM: &operator.IPAMSpec{
+							Type: operator.IPAMPluginAmazonVPC,
+						},
+					},
+				},
+				Status: operator.InstallationStatus{
+					Variant: operator.TigeraSecureEnterprise,
+					Computed: &operator.InstallationSpec{
+						Registry: "my-reg",
+						// The test is provider agnostic.
+						KubernetesProvider: operator.ProviderNone,
+					},
+				},
+			}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+			// NOTE: We do NOT create an IP pool for this test suite, as it is not needed for the Amazon VPC plugin.
+
+			var err error
+			certificateManager, err = certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			cancel()
+		})
+
+		It("should reconcile successfully and create resources", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			secret := &corev1.Secret{}
+			cfgMap := &corev1.ConfigMap{}
+
+			Expect(c.Get(ctx, client.ObjectKey{Name: "tigera-ca-bundle", Namespace: common.CalicoNamespace}, cfgMap)).ShouldNot(HaveOccurred())
+			Expect(cfgMap.GetOwnerReferences()).To(HaveLen(1))
+
+			Expect(c.Get(ctx, client.ObjectKey{Name: render.NodeTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+
+			Expect(c.Get(ctx, client.ObjectKey{Name: render.TyphaTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
+			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 	})
 })

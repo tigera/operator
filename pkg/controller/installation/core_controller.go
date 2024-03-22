@@ -931,7 +931,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operator.ResourceReadError, "error querying IP pools", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if len(currentPools.Items) == 0 {
+
+	// Make sure CNI is configured before continuing.
+	if instance.Spec.CNI == nil || instance.Spec.CNI.IPAM == nil {
+		r.status.SetDegraded(operator.InvalidConfigurationError, "waiting for spec.cni to be filled in", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
+	// Determine if this cluster needs IP pools in order to operate.
+	// - If the installation has IP pools specified, then the cluster wants IP pools.
+	// - If the installation has no IP pools specified, it may still need them if it's using Calico IPAM or networking.
+	needsIPPools := instance.Spec.CalicoNetwork != nil && len(instance.Spec.CalicoNetwork.IPPools) != 0
+	if instance.Spec.CNI.Type == operator.PluginCalico || instance.Spec.CNI.IPAM.Type == operator.IPAMPluginCalico {
+		needsIPPools = true
+	}
+	if needsIPPools && len(currentPools.Items) == 0 {
 		r.status.SetDegraded(operator.ResourceNotFound, "waiting for enabled IP pools to be created", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}

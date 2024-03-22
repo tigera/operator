@@ -328,9 +328,21 @@ spec:
                 type: string
               debugDisableLogDropping:
                 type: boolean
+              debugHost:
+                description: DebugHost is the host IP or hostname to bind the debug
+                  port to.  Only used if DebugPort is set. [Default:localhost]
+                type: string
               debugMemoryProfilePath:
                 type: string
+              debugPort:
+                description: DebugPort if set, enables Felix's debug HTTP port, which
+                  allows memory and CPU profiles to be retrieved.  The debug port
+                  is not secure, it should not be exposed to the internet.
+                type: integer
               debugSimulateCalcGraphHangAfter:
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
+                type: string
+              debugSimulateDataplaneApplyDelay:
                 pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               debugSimulateDataplaneHangAfter:
@@ -549,6 +561,12 @@ spec:
                 type: string
               endpointReportingEnabled:
                 type: boolean
+              endpointStatusPathPrefix:
+                description: "EndpointStatusPathPrefix is the path to the directory
+                  where endpoint status will be written. Endpoint status file reporting
+                  is disabled if field is left empty. \n Chosen directory should match
+                  the directory used by the CNI for PodStartupDelay. [Default: \"\"]"
+                type: string
               externalNetworkRoutingRulePriority:
                 description: 'ExternalNetworkRoutingRulePriority controls the priority
                   value to use for the external network routing rule. [Default: 102]'

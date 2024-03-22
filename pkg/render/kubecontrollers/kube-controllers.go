@@ -58,12 +58,13 @@ const (
 	KubeControllerMetrics           = "calico-kube-controllers-metrics"
 	KubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "kube-controller-access"
 
-	EsKubeController                  = "es-calico-kube-controllers"
-	EsKubeControllerRole              = "es-calico-kube-controllers"
-	EsKubeControllerRoleBinding       = "es-calico-kube-controllers"
-	EsKubeControllerPodSecurityPolicy = "es-calico-kube-controllers"
-	EsKubeControllerMetrics           = "es-calico-kube-controllers-metrics"
-	EsKubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
+	EsKubeController                     = "es-calico-kube-controllers"
+	EsKubeControllerRole                 = "es-calico-kube-controllers"
+	EsKubeControllerRoleBinding          = "es-calico-kube-controllers"
+	EsKubeControllerPodSecurityPolicy    = "es-calico-kube-controllers"
+	EsKubeControllerMetrics              = "es-calico-kube-controllers-metrics"
+	EsKubeControllerNetworkPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
+	MultiTenantManagedClustersAccessName = "es-calico-kube-controllers-managed-cluster-access"
 
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
@@ -184,7 +185,10 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Resources: []string{"elasticsearches"},
 				Verbs:     []string{"watch", "get", "list"},
 			},
-			// TODO: This should be provided via a separate namespaced role / role binding once we have a namespaced version of this.
+			// We need to allow to watch/get/list ManagedClusters resource in order to watch newly added managed clusters
+			// and configure them. Zero and single tenant bind this cluster role for service account
+			// calico-system/calico-kube-controllers for es-kube-controllers. A Multi-tenant setup will bind these rules
+			// to the same service account, but in the tenant namespace.
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
@@ -211,16 +215,17 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	}
 
 	return &kubeControllersComponent{
-		cfg:                              cfg,
-		kubeControllerServiceAccountName: KubeControllerServiceAccount,
-		kubeControllerRoleName:           EsKubeControllerRole,
-		kubeControllerRoleBindingName:    EsKubeControllerRoleBinding,
-		kubeControllerName:               EsKubeController,
-		kubeControllerConfigName:         "elasticsearch",
-		kubeControllerMetricsName:        EsKubeControllerMetrics,
-		kubeControllersRules:             kubeControllerRolePolicyRules,
-		kubeControllerAllowTigeraPolicy:  kubeControllerAllowTigeraPolicy,
-		enabledControllers:               enabledControllers,
+		cfg:                                 cfg,
+		kubeControllerServiceAccountName:    KubeControllerServiceAccount,
+		kubeControllerRoleName:              EsKubeControllerRole,
+		kubeControllerRoleBindingName:       EsKubeControllerRoleBinding,
+		kubeControllerName:                  EsKubeController,
+		kubeControllerConfigName:            "elasticsearch",
+		kubeControllerMetricsName:           EsKubeControllerMetrics,
+		kubeControllersRules:                kubeControllerRolePolicyRules,
+		additionalManagedClusterClusterRole: cfg.Tenant.MultiTenant(),
+		kubeControllerAllowTigeraPolicy:     kubeControllerAllowTigeraPolicy,
+		enabledControllers:                  enabledControllers,
 	}
 }
 
@@ -238,8 +243,9 @@ type kubeControllersComponent struct {
 	kubeControllerConfigName         string
 	kubeControllerMetricsName        string
 
-	kubeControllersRules            []rbacv1.PolicyRule
-	kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
+	kubeControllersRules                []rbacv1.PolicyRule
+	additionalManagedClusterClusterRole bool
+	kubeControllerAllowTigeraPolicy     *v3.NetworkPolicy
 
 	enabledControllers []string
 }
@@ -270,6 +276,12 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 
 	if c.kubeControllerAllowTigeraPolicy != nil {
 		objectsToCreate = append(objectsToCreate, c.kubeControllerAllowTigeraPolicy)
+	}
+
+	// We only want to create this additional ClusterRole and ClusterRoleBinding
+	// in a multi-tenant setup only for ES-Kube-Controllers
+	if c.additionalManagedClusterClusterRole {
+		objectsToCreate = append(objectsToCreate, c.multiTenantManagedClustersAccess()...)
 	}
 
 	objectsToCreate = append(objectsToCreate,
@@ -304,6 +316,51 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	}
 
 	return objectsToCreate, objectsToDelete
+}
+
+func (c *kubeControllersComponent) multiTenantManagedClustersAccess() []client.Object {
+	var objects []client.Object
+	objects = append(objects, &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs: []string{
+					// The Authentication Proxy in Voltron checks if EsKubeControllers (using impersonation headers for
+					// calico-kube-controllers service in calico-system namespace) can get a managed clusters before
+					// sending the request down the tunnel.
+					"get",
+				},
+			},
+		},
+	})
+
+	// In a multi-tenant setup ES-Kube-Controllers from the tenant's namespace impersonates service
+	// calico-kube-controllers from calico-system namespace. (This is done via an additional ClusterRole and a
+	// ClusterRoleBinding)
+	objects = append(objects, &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessName},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     MultiTenantManagedClustersAccessName,
+		},
+		Subjects: []rbacv1.Subject{
+			// requests for ES-Kube-Controllers to get managed clusters in Voltron are done using service account
+			// calico-kube-controllers from calico-system namespace regardless of tenancy mode (zero-tenant, single-tenant
+			// or multi-tenant)
+			{
+				Kind:      "ServiceAccount",
+				Name:      KubeControllerServiceAccount,
+				Namespace: common.CalicoNamespace,
+			},
+		},
+	})
+
+	return objects
 }
 
 func (c *kubeControllersComponent) Ready() bool {

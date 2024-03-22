@@ -1161,6 +1161,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				kind    string
 			}{
 				{name: kubecontrollers.EsKubeControllerNetworkPolicyName, ns: tenant.Namespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: kubecontrollers.MultiTenantManagedClustersAccessName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: kubecontrollers.MultiTenantManagedClustersAccessName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 				{name: kubecontrollers.KubeControllerServiceAccount, ns: tenant.Namespace, group: "", version: "v1", kind: "ServiceAccount"},
 				{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 				{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -1241,8 +1243,47 @@ var _ = Describe("kube-controllers rendering tests", func() {
 						fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, common.CalicoNamespace),
 					},
 				},
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"managedclusters"},
+					Verbs:     []string{"watch", "list", "get"},
+				},
 			}
 			Expect(cr.Rules).To(ContainElements(expectedRules))
+
+			clusterRoleBinding := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole,
+				"", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(clusterRoleBinding.RoleRef.Name).To(Equal(kubecontrollers.EsKubeControllerRole))
+			Expect(clusterRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      kubecontrollers.KubeControllerServiceAccount,
+					Namespace: tenant.Namespace,
+				},
+			}))
+
+			managedClusterAccessClusterRole := rtest.GetResource(resources,
+				kubecontrollers.MultiTenantManagedClustersAccessName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedManagedClusterAccessRules := []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"managedclusters"},
+					Verbs:     []string{"get"},
+				},
+			}
+			Expect(managedClusterAccessClusterRole.Rules).To(ContainElements(expectedManagedClusterAccessRules))
+
+			managedClusterAccessClusterRoleBinding := rtest.GetResource(resources,
+				kubecontrollers.MultiTenantManagedClustersAccessName,
+				"", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(managedClusterAccessClusterRoleBinding.RoleRef.Name).To(Equal(kubecontrollers.MultiTenantManagedClustersAccessName))
+			Expect(managedClusterAccessClusterRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      kubecontrollers.KubeControllerServiceAccount,
+					Namespace: common.CalicoNamespace,
+				},
+			}))
 		})
 	})
 })

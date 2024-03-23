@@ -544,13 +544,16 @@ ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
 endif
 
-release-prep: var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
+release-prep: var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION var-require-one-of-CONFIRM-DRYRUN
+	$(MAKE) release-prep/update-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-pr-labels
+
+release-prep/update-versions: var-require-all-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
 	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
 	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
 	$(YQ_V4) ".title = \"$(COMMON_VERSION)\" | .components.key-cert-provisioner.version = \"$(COMMON_VERSION)\"" -i config/common_versions.yml
 	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
 	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
-	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-pr-labels
+	$(MAKE) gen-versions
 
 GIT_REMOTE?=origin
 ifneq ($(if $(GIT_REPO_SLUG),$(shell dirname $(GIT_REPO_SLUG)),), $(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`))
@@ -569,15 +572,30 @@ endif
 	git checkout -b $(RELEASE_UPDATE_BRANCH)
 	$(GIT) add config/*_versions.yml hack/gen-versions/main.go pkg/components/* pkg/crds/*
 	$(GIT) commit -m "Automatic version updates for $(VERSION) release"
+ifeq ($(DRYRUN),true)
+	echo 'Dry run, skipping push of $(RELEASE_UPDATE_BRANCH)'
+endif
+ifeq ($(CONFIRM),true)
 	$(GIT) push $(GIT_REMOTE) $(RELEASE_UPDATE_BRANCH)
+endif
 
 release-prep/create-pr:
+ifeq ($(DRYRUN),true)
+	echo 'Dry run, skipping pull request creation for $(RELEASE_VERSION) update'
+endif
+ifeq ($(CONFIRM),true)
 	$(call github_pr_create,$(GIT_REPO_SLUG),[$(GIT_PR_BRANCH_BASE)] $(if $(SEMAPHORE), Semaphore,) Auto Release Update for $(VERSION),$(GIT_PR_BRANCH_HEAD),$(GIT_PR_BRANCH_BASE))
 	echo 'Created release update pull request for $(VERSION): $(PR_NUMBER)'
+endif
 
 release-prep/set-pr-labels:
+ifeq ($(DRYRUN),true)
+	echo 'Dry run, skipping adding labels to pull request created for $(RELEASE_VERSION) update'
+endif
+ifeq ($(CONFIRM),true)
 	$(call github_pr_add_comment,$(GIT_REPO_SLUG),$(PR_NUMBER),/merge-when-ready release-note-not-required docs-not-required delete-branch)
 	echo "Added labels to pull request $(PR_NUMBER): merge-when-ready, release-note-not-required, docs-not-required & delete-branch"
+endif
 
 ###############################################################################
 # Utilities

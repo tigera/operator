@@ -547,7 +547,6 @@ endif
 release-prep: var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
 	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
 	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
-	$(YQ_V4) ".title = \"$(COMMON_VERSION)\" | .components.key-cert-provisioner.version = \"$(COMMON_VERSION)\"" -i config/common_versions.yml
 	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
 	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
 	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-pr-labels
@@ -600,20 +599,16 @@ gen-files: manifests generate
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml
-COMMON_VERSIONS?=config/common_versions.yml
 
-.PHONY: gen-versions gen-versions-calico gen-versions-enterprise gen-versions-common
+.PHONY: gen-versions gen-versions-calico gen-versions-enterprise
 
-gen-versions: gen-versions-calico gen-versions-enterprise gen-versions-common
+gen-versions: gen-versions-calico gen-versions-enterprise
 
 gen-versions-calico: $(BINDIR)/gen-versions update-calico-crds
 	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) > pkg/components/calico.go
 
 gen-versions-enterprise: $(BINDIR)/gen-versions update-enterprise-crds
 	$(BINDIR)/gen-versions -ee-versions=$(EE_VERSIONS) > pkg/components/enterprise.go
-
-gen-versions-common: $(BINDIR)/gen-versions
-	$(BINDIR)/gen-versions -common-versions=$(COMMON_VERSIONS) > pkg/components/common.go
 
 $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	mkdir -p $(BINDIR)

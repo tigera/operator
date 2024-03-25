@@ -243,6 +243,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentTigeraCSRInitContainer = component{
+		Version:  "master",
+		Image:    "tigera/key-cert-provisioner",
+		Registry: "",
+	}
+
 	ComponentTigeraKubeControllers = component{
 		Version:  "master",
 		Image:    "tigera/kube-controllers",
@@ -347,6 +353,7 @@ var (
 		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
+		ComponentTigeraCSRInitContainer,
 		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,

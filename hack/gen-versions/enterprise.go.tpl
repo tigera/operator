@@ -280,6 +280,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "tigera/key-cert-provisioner" }}
+	ComponentTigeraCSRInitContainer = component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "cnx-kube-controllers" }}
 	ComponentTigeraKubeControllers = component{
 		Version:  "{{ .Version }}",
@@ -397,6 +404,7 @@ var (
 		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
+		ComponentTigeraCSRInitContainer,
 		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,

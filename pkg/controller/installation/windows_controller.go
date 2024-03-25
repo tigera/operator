@@ -183,7 +183,6 @@ type ReconcileWindows struct {
 	autoDetectedProvider operatorv1.Provider
 	status               status.StatusManager
 	enterpriseCRDsExist  bool
-	amazonCRDExists      bool
 	clusterDomain        string
 	ipamConfigWatchReady *utils.ReadyFlag
 }

@@ -2931,12 +2931,6 @@ var _ = Describe("Node rendering tests", func() {
 			})
 
 			It("should set TIGERA_*_SECURITY_GROUP variables when AmazonCloudIntegration is defined", func() {
-				cfg.AmazonCloudIntegration = &operatorv1.AmazonCloudIntegration{
-					Spec: operatorv1.AmazonCloudIntegrationSpec{
-						NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
-						PodSecurityGroupID:   "sg-podsgid",
-					},
-				}
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()

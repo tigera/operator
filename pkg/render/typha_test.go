@@ -244,12 +244,6 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
 
-		cfg.AmazonCloudIntegration = &operatorv1.AmazonCloudIntegration{
-			Spec: operatorv1.AmazonCloudIntegrationSpec{
-				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
-				PodSecurityGroupID:   "sg-podsgid",
-			},
-		}
 		component := render.Typha(&cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))

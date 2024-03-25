@@ -3,7 +3,6 @@ module github.com/tigera/operator
 go 1.20
 
 require (
-	github.com/aws/aws-sdk-go v1.44.106
 	github.com/cloudflare/cfssl v1.6.4
 	github.com/containernetworking/cni v1.0.1
 	github.com/elastic/cloud-on-k8s/v2 v2.9.0
@@ -70,7 +69,6 @@ require (
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jinzhu/copier v0.3.5 // indirect
-	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/joeshaw/multierror v0.0.0-20140124173710-69b34d4ec901 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect

@@ -634,12 +634,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should set TIGERA_*_SECURITY_GROUP variables on queryserver when AmazonCloudIntegration is defined", func() {
-		cfg.AmazonCloudIntegration = &operatorv1.AmazonCloudIntegration{
-			Spec: operatorv1.AmazonCloudIntegrationSpec{
-				NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
-				PodSecurityGroupID:   "sg-podsgid",
-			},
-		}
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())

@@ -29,11 +29,9 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
-	operatorv1beta1 "github.com/tigera/operator/api/v1beta1"
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/awssgsetup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -81,7 +79,6 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(operatorv1.AddToScheme(scheme))
-	utilruntime.Must(operatorv1beta1.AddToScheme(scheme))
 	utilruntime.Must(apis.AddToScheme(scheme))
 }
 
@@ -203,20 +200,6 @@ func main() {
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)
-	}
-
-	// Because we only run this as a job that is set up by the operator, it should not be
-	// launched except by an operator that is the active operator. So we do not need to
-	// check that we're the active operator before running the AWS SG setup.
-	if sgSetup {
-		log.Info("Setting up AWS Security Groups")
-
-		err = awssgsetup.SetupAWSSecurityGroups(ctx, c)
-		if err != nil {
-			log.Error(err, "")
-			os.Exit(1)
-		}
-		os.Exit(0)
 	}
 
 	if preDelete {
@@ -388,12 +371,6 @@ func main() {
 	}
 	setupLog.WithValues("required", enterpriseCRDExists).Info("Checking if TSEE controllers are required")
 
-	amazonCRDExists, err := utils.RequiresAmazonController(mgr.GetConfig())
-	if err != nil {
-		setupLog.Error(err, "Failed to determine if AmazonCloudIntegration is required")
-		os.Exit(1)
-	}
-
 	clusterDomain, err := dns.GetClusterDomain(dns.DefaultResolveConfPath)
 	if err != nil {
 		clusterDomain = dns.DefaultClusterDomain
@@ -447,7 +424,6 @@ func main() {
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
 		UsePSP:              usePSP,
-		AmazonCRDExists:     amazonCRDExists,
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
 		ManageCRDs:          manageCRDs,

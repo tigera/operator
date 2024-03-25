@@ -125,7 +125,6 @@ var _ = Describe("windows-controller installation tests", func() {
 				scheme:               scheme,
 				autoDetectedProvider: operator.ProviderNone,
 				status:               mockStatus,
-				amazonCRDExists:      true,
 				enterpriseCRDsExist:  true,
 				ipamConfigWatchReady: &utils.ReadyFlag{},
 			}
@@ -596,7 +595,6 @@ var _ = Describe("windows-controller installation tests", func() {
 						scheme:               scheme,
 						autoDetectedProvider: operator.ProviderNone,
 						status:               mockStatus,
-						amazonCRDExists:      true,
 						enterpriseCRDsExist:  true,
 						ipamConfigWatchReady: &utils.ReadyFlag{},
 					}

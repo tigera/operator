@@ -94,7 +94,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		client:              mgr.GetClient(),
 		scheme:              mgr.GetScheme(),
 		provider:            opts.DetectedProvider,
-		amazonCRDExists:     opts.AmazonCRDExists,
 		enterpriseCRDsExist: opts.EnterpriseCRDExists,
 		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
@@ -122,14 +121,6 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 
 	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
-	}
-
-	if r.amazonCRDExists {
-		err = c.WatchObject(&operatorv1.AmazonCloudIntegration{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
-			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
-		}
 	}
 
 	if r.enterpriseCRDsExist {
@@ -198,7 +189,6 @@ type ReconcileAPIServer struct {
 	client              client.Client
 	scheme              *runtime.Scheme
 	provider            operatorv1.Provider
-	amazonCRDExists     bool
 	enterpriseCRDsExist bool
 	status              status.StatusManager
 	clusterDomain       string
@@ -293,7 +283,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// Query enterprise-only data.
 	var tunnelCAKeyPair certificatemanagement.KeyPairInterface
 	var trustedBundle certificatemanagement.TrustedBundle
-	var amazon *operatorv1.AmazonCloudIntegration
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	includeV3NetworkPolicy := false
@@ -333,16 +322,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			}
 			if tunnelCASecret != nil {
 				tunnelCAKeyPair = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
-			}
-		}
-
-		if r.amazonCRDExists {
-			amazon, err = utils.GetAmazonCloudIntegration(ctx, r.client)
-			if errors.IsNotFound(err) {
-				amazon = nil
-			} else if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading AmazonCloudIntegration", err, reqLogger)
-				return reconcile.Result{}, err
 			}
 		}
 
@@ -397,7 +376,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		ForceHostNetwork:            false,
 		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,
-		AmazonCloudIntegration:      amazon,
 		TLSKeyPair:                  tlsSecret,
 		PullSecrets:                 pullSecrets,
 		Openshift:                   r.provider == operatorv1.ProviderOpenShift,

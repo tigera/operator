@@ -25,7 +25,6 @@ def main():
 
     # The controller dependencies are deduced from controller Reconcile() function.
     # This is still a manual process at the moment.
-    # [APIServer] --> [AmazonCloudIntegration]
     # [APIServer] --> [ClusterConnection]
     # [APIServer] -> [Installation]
     graph.add_edge(Edge('apiserver', 'clusterconnection', label='TSEE', style='dashed'))

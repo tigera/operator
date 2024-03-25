@@ -28,7 +28,6 @@ import (
 type AddOptions struct {
 	DetectedProvider    v1.Provider
 	EnterpriseCRDExists bool
-	AmazonCRDExists     bool
 	ClusterDomain       string
 	KubernetesVersion   *common.VersionInfo
 	ManageCRDs          bool

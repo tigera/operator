@@ -34,7 +34,8 @@ var _ = Describe("test GetReference", func() {
 			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "tigera/cnx-node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry, "tigera/eck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry, "tigera/operator"),
-			Entry("a CSR init image correctly", ComponentCSRInitContainer, CSRInitRegistry, "tigera/key-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoRegistry, "calico/key-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraRegistry, "tigera/key-cert-provisioner"),
 		)
 	})
 
@@ -48,7 +49,8 @@ var _ = Describe("test GetReference", func() {
 			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "tigera/cnx-node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry, "tigera/eck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry, "tigera/operator"),
-			Entry("a CSR init image correctly", ComponentCSRInitContainer, CSRInitRegistry, "tigera/key-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoRegistry, "calico/key-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraRegistry, "tigera/key-cert-provisioner"),
 		)
 	})
 
@@ -61,7 +63,8 @@ var _ = Describe("test GetReference", func() {
 			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/cnx-node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, "tigera/eck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, "tigera/operator"),
-			Entry("a CSR init image correctly", ComponentCSRInitContainer, "tigera/key-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, "calico/key-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, "tigera/key-cert-provisioner"),
 		)
 	})
 
@@ -74,7 +77,8 @@ var _ = Describe("test GetReference", func() {
 			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/prefcnx-node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, "tigera/prefeck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, "tigera/prefoperator"),
-			Entry("a CSR init image correctly", ComponentCSRInitContainer, "tigera/prefkey-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, "calico/prefkey-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, "tigera/prefkey-cert-provisioner"),
 		)
 	})
 
@@ -87,7 +91,8 @@ var _ = Describe("test GetReference", func() {
 			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "userpath/cnx-node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry, "userpath/eck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry, "userpath/operator"),
-			Entry("a CSR init image correctly", ComponentCSRInitContainer, CSRInitRegistry, "userpath/key-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoRegistry, "userpath/key-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraRegistry, "userpath/key-cert-provisioner"),
 		)
 	})
 	Context("registry and imagepath override", func() {
@@ -99,7 +104,8 @@ var _ = Describe("test GetReference", func() {
 			Entry("a tigera image correctly", ComponentTigeraNode, "userpath/cnx-node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, "userpath/eck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, "userpath/operator"),
-			Entry("a CSR init image correctly", ComponentCSRInitContainer, "userpath/key-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, "userpath/key-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, "userpath/key-cert-provisioner"),
 		)
 	})
 	Context("with an ImageSet", func() {
@@ -122,7 +128,7 @@ var _ = Describe("test GetReference", func() {
 			Entry("a tigera image correctly", ComponentTigeraNode, "userpath/cnx-node", "@sha256:tigeracnxnodehash"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, "userpath/eck-operator", "@sha256:eckeckoperatorhash"),
 			Entry("an operator init image correctly", ComponentOperatorInit, "userpath/operator", "@sha256:tigeraoperatorhash"),
-			Entry("a CSR init image correctly", ComponentCSRInitContainer, "userpath/key-cert-provisioner", "@sha256:tigerakeycertprovisionerhash"),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, "userpath/key-cert-provisioner", "@sha256:tigerakeycertprovisionerhash"),
 		)
 	})
 })

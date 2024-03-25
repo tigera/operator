@@ -50,8 +50,6 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 			fallthrough
 		case "LogStorage":
 			fallthrough
-		case "AmazonCloudIntegration":
-			fallthrough
 		case "Compliance":
 			fallthrough
 		case "IntrusionDetection":

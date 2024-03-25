@@ -1051,6 +1051,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},
 			corev1.VolumeMount{Name: auditPolicyVolumeName, MountPath: "/etc/tigera/audit"},
 		)
+	} else {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{Name: "cache-volume", MountPath: "/tmp"},
+		)
 	}
 
 	env := []corev1.EnvVar{
@@ -1073,9 +1077,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		ImagePullPolicy: ImagePullPolicy(),
 		Args:            c.startUpArgs(),
 		Env:             env,
-		// OpenShift apiserver needs privileged access to write audit logs to host path volume.
-		// Audit logs are owned by root on hosts so we need to be root user and group.
-		SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
 		VolumeMounts:    volumeMounts,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -1089,6 +1090,13 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			// A longer period is chosen to minimize load.
 			PeriodSeconds: 60,
 		},
+	}
+	// In case of OpenShift, apiserver needs privileged access to write audit logs to host path volume.
+	// Audit logs are owned by root on hosts so we need to be root user and group. Audit logs are supported only in Enterprise version.
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		apiServer.SecurityContext = securitycontext.NewRootContext(c.cfg.Openshift)
+	} else {
+		apiServer.SecurityContext = securitycontext.NewNonRootContext()
 	}
 
 	return apiServer
@@ -1208,6 +1216,14 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 		if c.cfg.TrustedBundle != nil {
 			volumes = append(volumes, c.cfg.TrustedBundle.Volume())
 		}
+	} else {
+		emptyDir := corev1.EmptyDirVolumeSource{}
+		volumes = append(volumes, corev1.Volume{
+			Name: "cache-volume",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &emptyDir,
+			},
+		})
 	}
 
 	return volumes

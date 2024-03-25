@@ -94,7 +94,7 @@ func CreateCSRInitContainer(
 func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.ImageSet) (string, error) {
 	if inst.Variant == operatorv1.TigeraSecureEnterprise {
 		return components.GetReference(
-			components.ComponentCSRInitContainerPrivate,
+			components.ComponentTigeraCSRInitContainer,
 			inst.Registry,
 			inst.ImagePath,
 			inst.ImagePrefix,
@@ -102,7 +102,7 @@ func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.Image
 		)
 	}
 	return components.GetReference(
-		components.ComponentCSRInitContainer,
+		components.ComponentCalicoCSRInitContainer,
 		inst.Registry,
 		inst.ImagePath,
 		inst.ImagePrefix,

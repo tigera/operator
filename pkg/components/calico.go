@@ -40,7 +40,7 @@ var (
 		Registry: "",
 	}
 
-	ComponentCSRInitContainer = component{
+	ComponentCalicoCSRInitContainer = component{
 		Version:  "master",
 		Image:    "calico/key-cert-provisioner",
 		Registry: "",
@@ -138,7 +138,7 @@ var (
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
 		ComponentCalicoCNIWindows,
-		ComponentCSRInitContainer,
+		ComponentCalicoCSRInitContainer,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,

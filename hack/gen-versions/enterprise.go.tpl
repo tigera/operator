@@ -61,13 +61,6 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "tigera/key-cert-provisioner" }}
-	ComponentCSRInitContainerPrivate = component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
 {{ with index .Components "deep-packet-inspection" }}
 	ComponentDeepPacketInspection = component{
 		Version:  "{{ .Version }}",
@@ -287,6 +280,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "tigera/key-cert-provisioner" }}
+	ComponentTigeraCSRInitContainer = component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "cnx-kube-controllers" }}
 	ComponentTigeraKubeControllers = component{
 		Version:  "{{ .Version }}",
@@ -380,7 +380,6 @@ var (
 		ComponentComplianceReporter,
 		ComponentComplianceServer,
 		ComponentComplianceSnapshotter,
-        ComponentCSRInitContainerPrivate,
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
@@ -405,6 +404,7 @@ var (
 		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
 		ComponentQueryServer,
+		ComponentTigeraCSRInitContainer,
 		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,

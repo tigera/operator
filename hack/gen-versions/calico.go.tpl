@@ -43,7 +43,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "calico/key-cert-provisioner" }}
-	ComponentCSRInitContainer = component{
+	ComponentCalicoCSRInitContainer = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -156,7 +156,7 @@ var (
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
 		ComponentCalicoCNIWindows,
-        ComponentCSRInitContainer,
+        ComponentCalicoCSRInitContainer,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,

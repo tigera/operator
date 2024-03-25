@@ -94,6 +94,50 @@ func ValidatePools(instance *operator.Installation) error {
 				}
 			}
 		}
+
+		// Check that the encapsulation mode on the IP pool is compatible with the CNI plugin that is in-use.
+		if instance.Spec.CNI.Type == operator.PluginCalico {
+			switch instance.Spec.CNI.IPAM.Type {
+			case operator.IPAMPluginCalico:
+				// Verify the specified encapsulation type is valid.
+				switch pool.Encapsulation {
+				case operator.EncapsulationIPIP, operator.EncapsulationIPIPCrossSubnet:
+					// IPIP currently requires BGP to be running in order to program routes.
+					if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operator.BGPDisabled {
+						return fmt.Errorf("IPIP encapsulation requires that BGP is enabled")
+					}
+				case operator.EncapsulationVXLAN, operator.EncapsulationVXLANCrossSubnet:
+				case operator.EncapsulationNone:
+					// Unencapsulated currently requires BGP to be running in order to program routes.
+					if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operator.BGPDisabled {
+						return fmt.Errorf("Unencapsulated IP pools require that BGP is enabled")
+					}
+				default:
+					return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
+						pool.Encapsulation, strings.Join(operator.EncapsulationTypesString, ","))
+				}
+			case operator.IPAMPluginHostLocal:
+				// The host-local IPAM plugin doesn't support VXLAN.
+				switch pool.Encapsulation {
+				case operator.EncapsulationVXLAN, operator.EncapsulationVXLANCrossSubnet:
+					return fmt.Errorf("%s is invalid for ipPool.encapsulation with %s CNI and %s IPAM",
+						pool.Encapsulation,
+						instance.Spec.CNI.Type,
+						instance.Spec.CNI.IPAM.Type)
+				}
+			}
+		} else {
+			// If not using Calico CNI, then the encapsulation must be None and BGP must be disabled.
+			switch pool.Encapsulation {
+			case operator.EncapsulationNone:
+			default:
+				return fmt.Errorf("%s is invalid for ipPool.encapsulation when using non-Calico CNI, should be None",
+					pool.Encapsulation)
+			}
+			if instance.Spec.CalicoNetwork.BGP != nil && *instance.Spec.CalicoNetwork.BGP == operator.BGPEnabled {
+				return fmt.Errorf("BGP is not supported when using non-Calico CNI")
+			}
+		}
 	}
 	return nil
 }

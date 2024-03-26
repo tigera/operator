@@ -612,6 +612,8 @@ var _ = Describe("fillDefaults()", func() {
 		}
 
 		// Fill defaults to make sure we pass other validation. Then remove the Encapsulation.
+		// Fill in prerequisite defaults.
+		fillPrerequisiteDefaults(instance)
 		Expect(fillDefaults(ctx, cli, instance, currentPools)).ToNot(HaveOccurred())
 		instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = ""
 

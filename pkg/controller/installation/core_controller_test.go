@@ -1510,7 +1510,6 @@ var _ = Describe("Testing core-controller installation", func() {
 				status:               mockStatus,
 				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
 				namespaceMigration:   &fakeNamespaceMigration{},
-				amazonCRDExists:      true,
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
 				clusterDomain:        dns.DefaultClusterDomain,

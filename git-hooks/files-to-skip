@@ -1,3 +1,2 @@
 api/v1/zz_generated.deepcopy.go
-api/v1beta1/zz_generated.deepcopy.go
 pkg/apis/crd.projectcalico.org/v1/zz_generated.deepcopy.go

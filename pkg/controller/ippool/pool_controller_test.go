@@ -600,6 +600,28 @@ var _ = Describe("fillDefaults()", func() {
 		ctx = context.Background()
 	})
 
+	It("should reject an IP pool with no Encapsulation", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{
+						{CIDR: "192.168.0.0/16"},
+					},
+				},
+			},
+		}
+
+		// Fill defaults to make sure we pass other validation. Then remove the Encapsulation.
+		// Fill in prerequisite defaults.
+		fillPrerequisiteDefaults(instance)
+		Expect(fillDefaults(ctx, cli, instance, currentPools)).ToNot(HaveOccurred())
+		instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = ""
+
+		err := ValidatePools(instance)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("is invalid for ipPool.encapsulation, should be one of"))
+	})
+
 	// This table verifies that kubernetes provider configuration is accounted for in defaulting. Specifically, it
 	// makes sure that defaulting takes OpenShift config.Network and the kubeadm configmap into account.
 	table.DescribeTable("incorporation of kubernetesProvider config",

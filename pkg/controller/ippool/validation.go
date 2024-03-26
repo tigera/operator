@@ -65,6 +65,16 @@ func ValidatePools(instance *operator.Installation) error {
 			}
 		}
 
+		// Verify the Encapsulation mode is valid.
+		switch pool.Encapsulation {
+		case operator.EncapsulationIPIP, operator.EncapsulationIPIPCrossSubnet:
+		case operator.EncapsulationVXLAN, operator.EncapsulationVXLANCrossSubnet:
+		case operator.EncapsulationNone:
+		default:
+			return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
+				pool.Encapsulation, strings.Join(operator.EncapsulationTypesString, ","))
+		}
+
 		// Verify per-address-family settings.
 		isIPv4 := !strings.Contains(pool.CIDR, ":")
 		if isIPv4 {

@@ -1774,21 +1774,6 @@ func getBirdTemplates(client client.Client) (map[string]string, error) {
 	return bt, nil
 }
 
-// isOpenshiftOnAws returns true if running on OpenShift on AWS, this is determined
-// by the KubernetesProvider on the installation and the infrastructure OpenShift
-// status.
-func isOpenshiftOnAws(install *operator.Installation, ctx context.Context, client client.Client) (bool, error) {
-	if install.Spec.KubernetesProvider != operator.ProviderOpenShift {
-		return false, nil
-	}
-	infra := configv1.Infrastructure{}
-	// If configured to run in openshift, then also fetch the openshift configuration API.
-	if err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, &infra); err != nil {
-		return false, fmt.Errorf("Unable to read OpenShift infrastructure configuration: %s", err.Error())
-	}
-	return (infra.Status.PlatformStatus.Type == "AWS"), nil
-}
-
 func updateInstallationForAWSNode(i *operator.Installation, ds *appsv1.DaemonSet) error {
 	if ds == nil {
 		return nil

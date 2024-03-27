@@ -101,13 +101,6 @@ func AddToManager(mgr ctrl.Manager, options options.AddOptions) error {
 	}).SetupWithManager(mgr, options); err != nil {
 		return fmt.Errorf("failed to create controller %s: %v", "ManagementClusterConnection", err)
 	}
-	if err := (&AmazonCloudIntegrationReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("AmazonCloudIntegration"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr, options); err != nil {
-		return fmt.Errorf("failed to create controller %s: %v", "AmazonCloudIntegration", err)
-	}
 	if err := (&AuthenticationReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("Authentication"),

@@ -75,7 +75,7 @@ func (f *fakeNamespaceMigration) NeedCleanup() bool {
 	return false
 }
 
-func (f *fakeNamespaceMigration) CleanupMigration(ctx context.Context) error {
+func (f *fakeNamespaceMigration) CleanupMigration(ctx context.Context, log logr.Logger) error {
 	return nil
 }
 

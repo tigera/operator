@@ -1077,15 +1077,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	openShiftOnAws := false
-	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
-		openShiftOnAws, err = isOpenshiftOnAws(instance, ctx, r.client)
-		if err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, "Error checking if OpenShift is on AWS", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
 	// Determine if we need to migrate resources from the kube-system namespace. If
 	// we do then we'll render the Calico components with additional node selectors to
 	// prevent scheduling, later we will run a migration that migrates nodes one by one
@@ -1205,23 +1196,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if newActiveCM != nil && !installationMarkedForDeletion {
 		log.Info("adding active configmap")
 		components = append(components, render.NewPassthrough(newActiveCM))
-	}
-
-	// If we're on OpenShift on AWS render a Job (and needed resources) to
-	// setup the security groups we need for IPIP, BGP, and Typha communication.
-	if openShiftOnAws {
-		awsSGSetupCfg := &render.AWSSGSetupConfiguration{
-			PullSecrets:  instance.Spec.ImagePullSecrets,
-			Installation: &instance.Spec,
-		}
-		awsSetup, err := render.AWSSecurityGroupSetup(awsSGSetupCfg)
-		if err != nil {
-			// If there is a problem rendering this do not degrade or stop rendering
-			// anything else.
-			log.Info(err.Error())
-		} else {
-			components = append(components, awsSetup)
-		}
 	}
 
 	if instance.Spec.KubernetesProvider == operator.ProviderGKE {

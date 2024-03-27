@@ -633,30 +633,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(crb.Subjects[0].Namespace).To(Equal("tigera-system"))
 	})
 
-	It("should set TIGERA_*_SECURITY_GROUP variables on queryserver when AmazonCloudIntegration is defined", func() {
-		component, err := render.APIServer(cfg)
-		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
-
-		deploymentResource := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
-		Expect(deploymentResource).ToNot(BeNil())
-
-		d := deploymentResource.(*appsv1.Deployment)
-
-		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
-		qc := d.Spec.Template.Spec.Containers[1]
-
-		// Assert on expected env vars.
-		expectedEnvVars := []corev1.EnvVar{
-			{Name: "TIGERA_DEFAULT_SECURITY_GROUPS", Value: "sg-nodeid,sg-masterid"},
-			{Name: "TIGERA_POD_SECURITY_GROUP", Value: "sg-podsgid"},
-		}
-		for _, v := range expectedEnvVars {
-			Expect(qc.Env).To(ContainElement(v))
-		}
-	})
-
 	It("should set KUBERENETES_SERVICE_... variables if host networked", func() {
 		cfg.K8SServiceEndpoint.Host = "k8shost"
 		cfg.K8SServiceEndpoint.Port = "1234"

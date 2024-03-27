@@ -9,8 +9,6 @@ def main():
     graph = Dot('Controller Dependency Graph')
 
     # controller node list
-    graph.add_node(Node('amazoncloudintegration',
-                   label='AmazonCloudIntegration', shape='box'))
     graph.add_node(Node('apiserver', label='APIServer', shape='box'))
     graph.add_node(Node('applicationlayer', label='ApplicationLayer', shape='box'))
     graph.add_node(Node('authentication', label='Authentication', shape='box'))
@@ -27,12 +25,8 @@ def main():
 
     # The controller dependencies are deduced from controller Reconcile() function.
     # This is still a manual process at the moment.
-    # [AmazonCloudIntegration] -> [Installation]
-    graph.add_edge(Edge('amazoncloudintegration', 'installation'))
-    # [APIServer] --> [AmazonCloudIntegration]
     # [APIServer] --> [ClusterConnection]
     # [APIServer] -> [Installation]
-    graph.add_edge(Edge('apiserver', 'amazoncloudintegration', label='amazonCRDExists', style='dashed'))
     graph.add_edge(Edge('apiserver', 'clusterconnection', label='TSEE', style='dashed'))
     graph.add_edge(Edge('apiserver', 'installation'))
     # [ApplicationLayer] -> [Installation]

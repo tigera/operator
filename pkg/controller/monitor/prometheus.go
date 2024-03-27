@@ -19,9 +19,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/utils/clock"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	"github.com/go-logr/logr"
@@ -157,25 +155,20 @@ func requiresPrometheusResources(client kubernetes.Interface) error {
 
 func waitToAddPrometheusWatch(c ctrlruntime.Controller, client kubernetes.Interface, log logr.Logger, readyFlag *utils.ReadyFlag) {
 	const (
-		initBackoff   = 30 * time.Second
-		maxBackoff    = 8 * time.Minute
-		resetDuration = time.Hour
-		backoffFactor = 2.0
-		jitter        = 0.1
+		initBackoff = 30 * time.Second
+		maxBackoff  = 8 * time.Minute
 	)
-	clock := &clock.RealClock{}
 
-	bf := wait.Backoff{
-		Duration: initBackoff,
-		Cap:      maxBackoff,
-		Factor:   backoffFactor,
-		Jitter:   jitter,
-	}.DelayWithReset(clock, resetDuration)
+	duration := initBackoff
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+	for range ticker.C {
+		duration = duration * 2
+		if duration >= maxBackoff {
+			duration = maxBackoff
+		}
+		ticker.Reset(duration)
 
-	timer := bf.Timer(clock)
-	defer timer.Stop()
-
-	for {
 		if err := requiresPrometheusResources(client); err != nil {
 			log.Info(fmt.Sprintf("%v. monitor-controller will retry.", err))
 		} else {
@@ -187,7 +180,5 @@ func waitToAddPrometheusWatch(c ctrlruntime.Controller, client kubernetes.Interf
 				return
 			}
 		}
-
-		<-timer.C()
 	}
 }

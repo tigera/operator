@@ -1097,17 +1097,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	var aci *operator.AmazonCloudIntegration
-	if r.amazonCRDExists {
-		aci, err = utils.GetAmazonCloudIntegration(ctx, r.client)
-		if apierrors.IsNotFound(err) {
-			aci = nil
-		} else if err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, "Error reading AmazonCloudIntegration", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
 	// Set any non-default FelixConfiguration values that we need.
 	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 		return r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger)
@@ -1264,14 +1253,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
-		K8sServiceEp:           k8sapi.Endpoint,
-		Installation:           &instance.Spec,
-		TLS:                    typhaNodeTLS,
-		AmazonCloudIntegration: aci,
-		MigrateNamespaces:      needNsMigration,
-		ClusterDomain:          r.clusterDomain,
-		FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
-		UsePSP:                 r.usePSP,
+		K8sServiceEp:      k8sapi.Endpoint,
+		Installation:      &instance.Spec,
+		TLS:               typhaNodeTLS,
+		MigrateNamespaces: needNsMigration,
+		ClusterDomain:     r.clusterDomain,
+		FelixHealthPort:   *felixConfiguration.Spec.HealthPort,
+		UsePSP:            r.usePSP,
 	}
 	components = append(components, render.Typha(&typhaCfg))
 

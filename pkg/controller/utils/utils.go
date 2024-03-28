@@ -438,18 +438,6 @@ func GetManagementClusterConnection(ctx context.Context, c client.Client) (*oper
 	return managementClusterConnection, nil
 }
 
-// GetAmazonCloudIntegration returns the tigera AmazonCloudIntegration instance.
-func GetAmazonCloudIntegration(ctx context.Context, client client.Client) (*operatorv1.AmazonCloudIntegration, error) {
-	// Fetch the Installation instance. We only support a single instance named "tsee-secure".
-	instance := &operatorv1.AmazonCloudIntegration{}
-	err := client.Get(ctx, DefaultTSEEInstanceKey, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	return instance, nil
-}
-
 // GetAuthentication finds the authentication CR in your cluster.
 func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Authentication, error) {
 	authentication := &operatorv1.Authentication{}

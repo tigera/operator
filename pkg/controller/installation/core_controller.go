@@ -188,7 +188,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		status:               statusManager,
 		typhaAutoscaler:      typhaScaler,
 		namespaceMigration:   nm,
-		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
@@ -240,15 +239,6 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 
 	if err = utils.AddConfigMapWatch(c, active.ActiveConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", active.ActiveConfigMapName, err)
-	}
-
-	// Only watch the AmazonCloudIntegration if the CRD is available
-	if r.amazonCRDExists {
-		err = c.WatchObject(&operator.AmazonCloudIntegration{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			log.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
-			return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %w", err)
-		}
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
@@ -980,21 +970,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	// The operator supports running without the AmazonCloudIntegration when it's CRD is not installed.
-	// If, when this controller was started, the CRD didn't exist, but it does now, then reboot.
-	if !r.amazonCRDExists {
-		amazonCRDRequired, err := utils.RequiresAmazonController(r.config)
-		if err != nil {
-			r.status.SetDegraded(operator.ResourceNotFound, "Error discovering AmazonCloudIntegration CRD", err, reqLogger)
-			reqLogger.Info("Scheduling a retry", "when", utils.StandardRetry)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-		}
-		if amazonCRDRequired {
-			log.Info("Rebooting to enable AWS controllers")
-			os.Exit(0)
-		}
-	}
-
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
 	if err != nil {
@@ -1326,7 +1301,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		K8sServiceEp:            k8sapi.Endpoint,
 		Installation:            &instance.Spec,
 		IPPools:                 crdPoolsToOperator(currentPools.Items),
-		AmazonCloudIntegration:  aci,
 		LogCollector:            logCollector,
 		BirdTemplates:           birdTemplates,
 		TLS:                     typhaNodeTLS,

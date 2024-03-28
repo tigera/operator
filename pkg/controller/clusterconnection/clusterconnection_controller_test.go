@@ -262,7 +262,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 
 				r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, notReady)
-				utils.ExpectWaitForTierWatch(ctx, r, mockStatus)
+				test.ExpectWaitForTierWatch(ctx, r, mockStatus)
 
 				policies := v3.NetworkPolicyList{}
 				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
@@ -311,7 +311,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 
 				r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, notReady)
-				utils.ExpectWaitForTierWatch(ctx, r, mockStatus)
+				test.ExpectWaitForTierWatch(ctx, r, mockStatus)
 
 				policies := v3.NetworkPolicyList{}
 				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())

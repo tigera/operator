@@ -110,6 +110,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 		tierWatchReady:  tierWatchReady,
 		clusterDomain:   opts.ClusterDomain,
 		usePSP:          opts.UsePSP,
+		multiTenant:     opts.MultiTenant,
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
@@ -188,6 +189,7 @@ type ReconcileMonitor struct {
 	tierWatchReady  *utils.ReadyFlag
 	clusterDomain   string
 	usePSP          bool
+	multiTenant     bool
 }
 
 func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor, error) {

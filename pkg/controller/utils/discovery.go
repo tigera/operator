@@ -50,8 +50,6 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 			fallthrough
 		case "LogStorage":
 			fallthrough
-		case "AmazonCloudIntegration":
-			fallthrough
 		case "Compliance":
 			fallthrough
 		case "IntrusionDetection":
@@ -65,27 +63,6 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 		case "EgressGateway":
 			fallthrough
 		case "ManagementClusterConnection":
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// RequiresAmazonController determines if the configuration requires we start the aws
-// controllers.
-func RequiresAmazonController(cfg *rest.Config) (bool, error) {
-	clientset, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return false, err
-	}
-
-	// Use the discovery client to determine if the amazoncloudintegration APIs exist.
-	resources, err := clientset.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
-	if err != nil {
-		return false, err
-	}
-	for _, r := range resources.APIResources {
-		if r.Kind == "AmazonCloudIntegration" {
 			return true, nil
 		}
 	}

@@ -6,7 +6,8 @@ components:
   typha:
     version: master
   calico/node:
-    version: master
+    image: caseydavenport/node
+    version: latest
   calico/cni:
     version: master
   calico/node-windows:

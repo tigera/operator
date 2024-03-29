@@ -59,14 +59,14 @@ var (
 	}
 
 	ComponentCalicoNode = component{
-		Version:  "master",
-		Image:    "calico/node",
+		Version:  "latest",
+		Image:    "caseydavenport/node",
 		Registry: "",
 	}
 
 	ComponentCalicoNodeFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/node",
+		Version:  "latest-fips",
+		Image:    "caseydavenport/node",
 		Registry: "",
 	}
 

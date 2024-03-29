@@ -166,6 +166,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		tierWatchReady:  tierWatchReady,
 		usePSP:          opts.UsePSP,
 		multiTenant:     opts.MultiTenant,
+		externalElastic: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -187,6 +188,7 @@ type ReconcileCompliance struct {
 	tierWatchReady  *utils.ReadyFlag
 	usePSP          bool
 	multiTenant     bool
+	externalElastic bool
 }
 
 func GetCompliance(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.Compliance, error) {
@@ -316,11 +318,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	secretsToWatch := []string{
-		render.ElasticsearchComplianceBenchmarkerUserSecret, render.ElasticsearchComplianceControllerUserSecret,
-		render.ElasticsearchComplianceReporterUserSecret, render.ElasticsearchComplianceSnapshotterUserSecret,
-	}
-
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
@@ -336,21 +333,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	if managementClusterConnection != nil && managementCluster != nil {
 		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// Compliance server is only for Standalone or Management clusters
-	if managementClusterConnection == nil {
-		secretsToWatch = append(secretsToWatch, render.ElasticsearchComplianceServerUserSecret)
-	}
-
-	esSecrets, err := utils.ElasticsearchSecrets(ctx, secretsToWatch, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch secrets are not available yet, waiting until they become available", err, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch credentials", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -392,7 +374,9 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	bundleMaker := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
 	trustedBundle := bundleMaker.(certificatemanagement.TrustedBundleRO)
 	if r.multiTenant {
-		trustedBundle, err = certificateManager.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())
+		// For multi-tenant systems, we load the pre-created bundle for this tenant instead of using the one we built here.
+		// Multi-tenant compliance need the bundle variant that includes system root certificates, in order to verify external auth providers.
+		trustedBundle, err = certificateManager.LoadMultiTenantTrustedBundleWithRootCertificates(ctx, r.client, helper.InstallNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting trusted bundle", err, reqLogger)
 			return reconcile.Result{}, err
@@ -461,7 +445,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	hasNoLicense := !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider == operatorv1.ProviderOpenShift
 	complianceCfg := &render.ComplianceConfiguration{
-		ESSecrets:                   esSecrets,
 		TrustedBundle:               trustedBundle,
 		Installation:                network,
 		ServerKeyPair:               complianceServerKeyPair,
@@ -480,6 +463,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		Namespace:                   helper.InstallNamespace(),
 		Tenant:                      tenant,
 		Compliance:                  instance,
+		ExternalElastic:             r.externalElastic,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

@@ -197,6 +197,49 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(BeEmpty())
 	})
 
+	Describe("AKS", func() {
+		It("should avoid virtual nodes", func() {
+			defaultInstance.KubernetesProvider = operatorv1.ProviderAKS
+
+			component := render.CSI(&cfg)
+			resources, _ := component.Objects()
+			dsResource := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
+				corev1.NodeSelectorTerm{
+					MatchExpressions: []corev1.NodeSelectorRequirement{{
+						Key:      "type",
+						Operator: corev1.NodeSelectorOpNotIn,
+						Values:   []string{"virtual-kubelet"},
+					}},
+				},
+			))
+		})
+	})
+	Describe("EKS", func() {
+		It("should avoid virtual fargate nodes", func() {
+			defaultInstance.KubernetesProvider = operatorv1.ProviderEKS
+
+			component := render.CSI(&cfg)
+			resources, _ := component.Objects()
+			dsResource := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
+			Expect(dsResource).ToNot(BeNil())
+			// The DaemonSet should have the correct configuration.
+			ds := dsResource.(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
+				corev1.NodeSelectorTerm{
+					MatchExpressions: []corev1.NodeSelectorRequirement{{
+						Key:      "eks.amazonaws.com/compute-type",
+						Operator: corev1.NodeSelectorOpNotIn,
+						Values:   []string{"fargate"},
+					}},
+				},
+			))
+		})
+	})
+
 	Context("With csi-node-driver DaemonSet overrides", func() {
 		It("should handle csiNodeDriverDaemonSet overrides", func() {
 			affinity := &corev1.Affinity{

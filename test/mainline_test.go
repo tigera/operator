@@ -323,7 +323,6 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 	err = controllers.AddToManager(mgr, options.AddOptions{
 		DetectedProvider:    operator.ProviderNone,
 		EnterpriseCRDExists: true,
-		AmazonCRDExists:     true,
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
 		UsePSP:              usePSP,

@@ -105,15 +105,6 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("tigera-windows-controller failed to watch ConfigMap %s: %w", active.ActiveConfigMapName, err)
 	}
 
-	// Only watch AmazonCloudIntegration if the CRD is available
-	if ri.amazonCRDExists {
-		err = c.WatchObject(&operatorv1.AmazonCloudIntegration{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			logw.V(5).Info("Failed to create AmazonCloudIntegration watch", "err", err)
-			return fmt.Errorf("amazoncloudintegration-controller failed to watch primary resource: %w", err)
-		}
-	}
-
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("tigera-windows-controller failed to watch ImageSet: %w", err)
 	}
@@ -192,7 +183,6 @@ type ReconcileWindows struct {
 	autoDetectedProvider operatorv1.Provider
 	status               status.StatusManager
 	enterpriseCRDsExist  bool
-	amazonCRDExists      bool
 	clusterDomain        string
 	ipamConfigWatchReady *utils.ReadyFlag
 }
@@ -208,7 +198,6 @@ func newWindowsReconciler(mgr manager.Manager, opts options.AddOptions) (*Reconc
 		watches:              make(map[runtime.Object]struct{}),
 		autoDetectedProvider: opts.DetectedProvider,
 		status:               statusManager,
-		amazonCRDExists:      opts.AmazonCRDExists,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
 		ipamConfigWatchReady: &utils.ReadyFlag{},
@@ -342,17 +331,6 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	var aci *operatorv1.AmazonCloudIntegration
-	if r.amazonCRDExists {
-		aci, err = utils.GetAmazonCloudIntegration(ctx, r.client)
-		if apierrors.IsNotFound(err) {
-			aci = nil
-		} else if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading AmazonCloudIntegration", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
 	// nodeReporterMetricsPort is a port used in Enterprise to host internal metrics.
 	// Operator is responsible for creating a service which maps to that port.
 	// Here, we'll check the default felixconfiguration to see if the user is specifying
@@ -408,7 +386,6 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		Installation:            &instance.Spec,
 		ClusterDomain:           r.clusterDomain,
 		TLS:                     typhaNodeTLS,
-		AmazonCloudIntegration:  aci,
 		PrometheusServerTLS:     nodePrometheusTLS,
 		NodeReporterMetricsPort: nodeReporterMetricsPort,
 		VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,

@@ -209,8 +209,23 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 				// There's an existing IP pool with the same CIDR - use that. This allows us to
 				// assume control of IP pools that are already in the cluster.
 				pool.Name = name
+			} else if len(instance.Spec.CalicoNetwork.IPPools) == 1 {
+				// First, attempt to use the standard "default-ipvX-ippool" name for the IP pool.
+				// This is to ensure backwards compatible name generation as a convenience when creating new clusters.
+				if addr.To4() == nil {
+					pool.Name = defaultV6PoolName
+				} else {
+					pool.Name = defaultPoolName
+				}
+			} else if len(instance.Spec.CalicoNetwork.IPPools) == 2 && isDualStack(instance) {
+				// Handle dual-stack in the same way.
+				if addr.To4() == nil {
+					pool.Name = defaultV6PoolName
+				} else {
+					pool.Name = defaultPoolName
+				}
 			} else {
-				// Use the CIDR to generate a name.
+				// For any subsequent IP pools, use the CIDR to generate a name programmatically.
 				pool.Name, err = cidrToName(pool.CIDR)
 				if err != nil {
 					return err
@@ -219,6 +234,24 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 		}
 	}
 	return nil
+}
+
+func isDualStack(i *operator.Installation) bool {
+	hasV4, hasV6 := false, false
+	for _, pool := range i.Spec.CalicoNetwork.IPPools {
+		addr, _, err := net.ParseCIDR(pool.CIDR)
+		if err != nil {
+			// No need to return this error because we perform CIDR validation prior to this.
+			log.Error(err, "Failed to parse IPPool CIDR")
+			continue
+		}
+		if addr.To4() != nil {
+			hasV4 = true
+		} else if addr.To16() != nil {
+			hasV6 = true
+		}
+	}
+	return hasV4 && hasV6
 }
 
 func updateInstallationForOpenshiftNetwork(i *operator.Installation, o *configv1.Network) error {

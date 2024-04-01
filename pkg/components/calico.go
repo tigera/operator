@@ -40,7 +40,7 @@ var (
 		Registry: "",
 	}
 
-	ComponentCSRInitContainer = component{
+	ComponentCalicoCSRInitContainer = component{
 		Version:  "master",
 		Image:    "calico/key-cert-provisioner",
 		Registry: "",
@@ -88,7 +88,7 @@ var (
 		Registry: "",
 	}
 
-	ComponentFlexVolume = component{
+	ComponentCalicoFlexVolume = component{
 		Version:  "release-v3.28",
 		Image:    "calico/pod2daemon-flexvol",
 		Registry: "",
@@ -138,7 +138,7 @@ var (
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
 		ComponentCalicoCNIWindows,
-		ComponentCSRInitContainer,
+		ComponentCalicoCSRInitContainer,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
@@ -146,7 +146,7 @@ var (
 		ComponentCalicoNodeWindows,
 		ComponentCalicoTypha,
 		ComponentCalicoTyphaFIPS,
-		ComponentFlexVolume,
+		ComponentCalicoFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
 		ComponentCalicoAPIServerFIPS,

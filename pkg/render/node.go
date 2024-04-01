@@ -165,9 +165,9 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
 		}
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
-		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolumePrivate, reg, path, prefix, is))
+		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentTigeraFlexVolume, reg, path, prefix, is))
 	} else {
-		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is))
+		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentCalicoFlexVolume, reg, path, prefix, is))
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIFIPS, reg, path, prefix, is))
 			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeFIPS, reg, path, prefix, is))

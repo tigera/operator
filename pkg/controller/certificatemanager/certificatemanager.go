@@ -26,6 +26,13 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/openshift/library-go/pkg/crypto"
+	corev1 "k8s.io/api/core/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -35,12 +42,6 @@ import (
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
-	corev1 "k8s.io/api/core/v1"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/sets"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 // OperatorCSRSignerName when this value is set as a signer on a CSR, the CSR controller will handle
@@ -177,7 +178,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 		// We instantiate csrImage regardless of whether certificate management is enabled; it may still be used.
 		if installation.Variant == operatorv1.TigeraSecureEnterprise {
 			csrImage, err = components.GetReference(
-				components.ComponentCSRInitContainerPrivate,
+				components.ComponentTigeraCSRInitContainer,
 				installation.Registry,
 				installation.ImagePath,
 				installation.ImagePrefix,
@@ -185,7 +186,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			)
 		} else {
 			csrImage, err = components.GetReference(
-				components.ComponentCSRInitContainer,
+				components.ComponentCalicoCSRInitContainer,
 				installation.Registry,
 				installation.ImagePath,
 				installation.ImagePrefix,

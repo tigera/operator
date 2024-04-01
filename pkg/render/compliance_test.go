@@ -1073,30 +1073,6 @@ var _ = Describe("compliance rendering tests", func() {
 
 			// Should render the correct resources
 			tenantAExpectedResources := []client.Object{
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.compliance-access", Namespace: tenantANamespace}},
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: tenantANamespace}},
-				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: tenantANamespace}},
-				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: tenantANamespace}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller"}},
-				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: tenantANamespace}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller"}},
-				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "compliance-controller", Namespace: tenantANamespace}},
-				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter", Namespace: tenantANamespace}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter"}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter"}},
-				&corev1.PodTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.report", Namespace: tenantANamespace}},
-				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter", Namespace: tenantANamespace}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter"}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter"}},
-				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "compliance-snapshotter", Namespace: tenantANamespace}},
-				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: tenantANamespace}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker"}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker"}},
-				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "compliance-benchmarker", Namespace: tenantANamespace}},
-				&v3.GlobalReportType{ObjectMeta: metav1.ObjectMeta{Name: "inventory"}},
-				&v3.GlobalReportType{ObjectMeta: metav1.ObjectMeta{Name: "network-access"}},
-				&v3.GlobalReportType{ObjectMeta: metav1.ObjectMeta{Name: "policy-audit"}},
-				&v3.GlobalReportType{ObjectMeta: metav1.ObjectMeta{Name: "cis-benchmark"}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server", Namespace: tenantANamespace}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"}},
 				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.compliance-server", Namespace: tenantANamespace}},
@@ -1112,7 +1088,7 @@ var _ = Describe("compliance rendering tests", func() {
 
 			rtest.ExpectResources(tenantAResources, tenantAExpectedResources)
 
-			for _, deploymentName := range []string{"compliance-controller", "compliance-snapshotter", "compliance-server"} {
+			for _, deploymentName := range []string{"compliance-server"} {
 				deployment := rtest.GetResource(tenantAResources, deploymentName, tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 				envs := deployment.Spec.Template.Spec.Containers[0].Env
 				Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: tenantANamespace}))
@@ -1135,30 +1111,6 @@ var _ = Describe("compliance rendering tests", func() {
 
 			// Should render the correct resources
 			tenantBExpectedResources := []client.Object{
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.compliance-access", Namespace: tenantBNamespace}},
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: tenantBNamespace}},
-				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: tenantBNamespace}},
-				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: tenantBNamespace}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller"}},
-				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller", Namespace: tenantBNamespace}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-controller"}},
-				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "compliance-controller", Namespace: tenantBNamespace}},
-				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter", Namespace: tenantBNamespace}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter"}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-reporter"}},
-				&corev1.PodTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.report", Namespace: tenantBNamespace}},
-				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter", Namespace: tenantBNamespace}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter"}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-snapshotter"}},
-				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "compliance-snapshotter", Namespace: tenantBNamespace}},
-				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker", Namespace: tenantBNamespace}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker"}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-benchmarker"}},
-				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "compliance-benchmarker", Namespace: tenantBNamespace}},
-				&v3.GlobalReportType{ObjectMeta: metav1.ObjectMeta{Name: "inventory"}},
-				&v3.GlobalReportType{ObjectMeta: metav1.ObjectMeta{Name: "network-access"}},
-				&v3.GlobalReportType{ObjectMeta: metav1.ObjectMeta{Name: "policy-audit"}},
-				&v3.GlobalReportType{ObjectMeta: metav1.ObjectMeta{Name: "cis-benchmark"}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server", Namespace: tenantBNamespace}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"}},
 				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.compliance-server", Namespace: tenantBNamespace}},
@@ -1174,12 +1126,33 @@ var _ = Describe("compliance rendering tests", func() {
 
 			rtest.ExpectResources(tenantBResources, tenantBExpectedResources)
 
-			for _, deploymentName := range []string{"compliance-controller", "compliance-snapshotter", "compliance-server"} {
+			for _, deploymentName := range []string{"compliance-server"} {
 				deployment := rtest.GetResource(tenantBResources, deploymentName, tenantBNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 				envs := deployment.Spec.Template.Spec.Containers[0].Env
 				Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TIGERA_COMPLIANCE_JOB_NAMESPACE", Value: tenantBNamespace}))
 			}
+		})
 
+		It("should render multi-tenant environment variables", func() {
+			cfg.Namespace = tenantANamespace
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tenantA",
+					Namespace: tenantANamespace,
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a-id",
+				},
+			}
+			tenantACompliance, err := render.Compliance(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			tenantAResources, _ := tenantACompliance.Objects()
+			d := rtest.GetResource(tenantAResources, render.ComplianceServerName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			envs := d.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", cfg.Tenant.Namespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", cfg.Tenant.Namespace)}))
 		})
 	})
 })

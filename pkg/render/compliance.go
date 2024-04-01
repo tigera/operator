@@ -94,7 +94,6 @@ func Compliance(cfg *ComplianceConfiguration) (Component, error) {
 
 // ComplianceConfiguration contains all the config information needed to render the component.
 type ComplianceConfiguration struct {
-	ESSecrets                   []*corev1.Secret
 	Installation                *operatorv1.InstallationSpec
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
@@ -120,8 +119,9 @@ type ComplianceConfiguration struct {
 	Namespace string
 
 	// Whether to run the rendered components in multi-tenant, single-tenant, or zero-tenant mode
-	Tenant     *operatorv1.Tenant
-	Compliance *operatorv1.Compliance
+	Tenant          *operatorv1.Tenant
+	ExternalElastic bool
+	Compliance      *operatorv1.Compliance
 }
 
 type complianceComponent struct {
@@ -176,44 +176,54 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
-	complianceObjs := []client.Object{
-		c.complianceAccessAllowTigeraNetworkPolicy(),
-		networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
+	var complianceObjs []client.Object
+	if c.cfg.Tenant.MultiTenant() {
+		complianceObjs = append(complianceObjs,
+			// We always need a sa and crb, whether a deployment of compliance-server is present or not.
+			// These two are used for rbac checks for managed clusters.
+			c.complianceServerServiceAccount(),
+			c.complianceServerClusterRoleBinding(),
+		)
+	} else {
+		complianceObjs = append(complianceObjs,
+			c.complianceAccessAllowTigeraNetworkPolicy(),
+			networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
+		)
+		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
+		complianceObjs = append(complianceObjs,
+			c.complianceControllerServiceAccount(),
+			c.complianceControllerRole(),
+			c.complianceControllerClusterRole(),
+			c.complianceControllerRoleBinding(),
+			c.complianceControllerClusterRoleBinding(),
+			c.complianceControllerDeployment(),
+
+			c.complianceReporterServiceAccount(),
+			c.complianceReporterClusterRole(),
+			c.complianceReporterClusterRoleBinding(),
+			c.complianceReporterPodTemplate(),
+
+			c.complianceSnapshotterServiceAccount(),
+			c.complianceSnapshotterClusterRole(),
+			c.complianceSnapshotterClusterRoleBinding(),
+			c.complianceSnapshotterDeployment(),
+
+			c.complianceBenchmarkerServiceAccount(),
+			c.complianceBenchmarkerClusterRole(),
+			c.complianceBenchmarkerClusterRoleBinding(),
+			c.complianceBenchmarkerDaemonSet(),
+
+			c.complianceGlobalReportInventory(),
+			c.complianceGlobalReportNetworkAccess(),
+			c.complianceGlobalReportPolicyAudit(),
+			c.complianceGlobalReportCISBenchmark(),
+
+			// We always need a sa and crb, whether a deployment of compliance-server is present or not.
+			// These two are used for rbac checks for managed clusters.
+			c.complianceServerServiceAccount(),
+			c.complianceServerClusterRoleBinding(),
+		)
 	}
-	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
-	complianceObjs = append(complianceObjs,
-		c.complianceControllerServiceAccount(),
-		c.complianceControllerRole(),
-		c.complianceControllerClusterRole(),
-		c.complianceControllerRoleBinding(),
-		c.complianceControllerClusterRoleBinding(),
-		c.complianceControllerDeployment(),
-
-		c.complianceReporterServiceAccount(),
-		c.complianceReporterClusterRole(),
-		c.complianceReporterClusterRoleBinding(),
-		c.complianceReporterPodTemplate(),
-
-		c.complianceSnapshotterServiceAccount(),
-		c.complianceSnapshotterClusterRole(),
-		c.complianceSnapshotterClusterRoleBinding(),
-		c.complianceSnapshotterDeployment(),
-
-		c.complianceBenchmarkerServiceAccount(),
-		c.complianceBenchmarkerClusterRole(),
-		c.complianceBenchmarkerClusterRoleBinding(),
-		c.complianceBenchmarkerDaemonSet(),
-
-		c.complianceGlobalReportInventory(),
-		c.complianceGlobalReportNetworkAccess(),
-		c.complianceGlobalReportPolicyAudit(),
-		c.complianceGlobalReportCISBenchmark(),
-
-		// We always need a sa and crb, whether a deployment of compliance-server is present or not.
-		// These two are used for rbac checks for managed clusters.
-		c.complianceServerServiceAccount(),
-		c.complianceServerClusterRoleBinding(),
-	)
 
 	if c.cfg.KeyValidatorConfig != nil {
 		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredSecrets(c.cfg.Namespace)...)...)
@@ -253,11 +263,9 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
 	// host path volumes requires cluster admin permissions.
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderDockerEE && !c.cfg.Tenant.MultiTenant() {
 		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
 	}
-
-	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.ESSecrets...)...)...)
 
 	if c.cfg.HasNoLicense {
 		return nil, complianceObjs
@@ -840,6 +848,17 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+	}
+	if c.cfg.Tenant != nil {
+		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
+		// Multi-tenant and single tenant with external elastic needs this variable set
+		if c.cfg.ExternalElastic {
+			envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		}
+		if c.cfg.Tenant.MultiTenant() {
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Tenant.Namespace)})
+			envVars = append(envVars, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: ManagerService(c.cfg.Tenant)})
+		}
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
@@ -1665,11 +1684,6 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
-		})
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		})
 	} else {
@@ -1698,6 +1712,7 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 
 // Allow internal communication to compliance-server from Manager.
 func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+	networkpolicyHelper := networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace)
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -1707,12 +1722,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
+			Destination: networkpolicyHelper.LinseedEntityRule(),
 		},
 	}
 
@@ -1728,7 +1738,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ManagerEntityRule(),
+			Destination: networkpolicyHelper.ManagerEntityRule(),
 		},
 	}...)
 
@@ -1736,7 +1746,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
-			Source:   networkpolicy.DefaultHelper().ManagerSourceEntityRule(),
+			Source:   networkpolicyHelper.ManagerSourceEntityRule(),
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(complianceServerPort),
 			},

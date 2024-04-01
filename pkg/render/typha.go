@@ -61,12 +61,11 @@ var (
 // TyphaConfiguration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/typha on a cluster.
 type TyphaConfiguration struct {
-	K8sServiceEp           k8sapi.ServiceEndpoint
-	Installation           *operatorv1.InstallationSpec
-	TLS                    *TyphaNodeTLS
-	AmazonCloudIntegration *operatorv1.AmazonCloudIntegration
-	MigrateNamespaces      bool
-	ClusterDomain          string
+	K8sServiceEp      k8sapi.ServiceEndpoint
+	Installation      *operatorv1.InstallationSpec
+	TLS               *TyphaNodeTLS
+	MigrateNamespaces bool
+	ClusterDomain     string
 
 	// The health port that Felix is bound to. We configure Typha to bind to the port
 	// that is one less.
@@ -586,7 +585,6 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		})
 	}
 
-	typhaEnv = append(typhaEnv, GetTigeraSecurityGroupEnvVariables(c.cfg.AmazonCloudIntegration)...)
 	typhaEnv = append(typhaEnv, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)
 
 	if c.cfg.Installation.TyphaMetricsPort != nil {

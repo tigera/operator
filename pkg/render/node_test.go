@@ -2930,31 +2930,6 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Annotations["container.apparmor.security.beta.kubernetes.io/calico-node"]).To(Equal(seccompProf))
 			})
 
-			It("should set TIGERA_*_SECURITY_GROUP variables when AmazonCloudIntegration is defined", func() {
-				cfg.AmazonCloudIntegration = &operatorv1.AmazonCloudIntegration{
-					Spec: operatorv1.AmazonCloudIntegrationSpec{
-						NodeSecurityGroupIDs: []string{"sg-nodeid", "sg-masterid"},
-						PodSecurityGroupID:   "sg-podsgid",
-					},
-				}
-				component := render.Node(&cfg)
-				Expect(component.ResolveImages(nil)).To(BeNil())
-				resources, _ := component.Objects()
-
-				dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
-				Expect(dsResource).ToNot(BeNil())
-
-				// Assert on expected env vars.
-				expectedEnvVars := []corev1.EnvVar{
-					{Name: "TIGERA_DEFAULT_SECURITY_GROUPS", Value: "sg-nodeid,sg-masterid"},
-					{Name: "TIGERA_POD_SECURITY_GROUP", Value: "sg-podsgid"},
-				}
-				ds := dsResource.(*appsv1.DaemonSet)
-				for _, v := range expectedEnvVars {
-					Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ContainElement(v))
-				}
-			})
-
 			It("should render resourcerequirements", func() {
 				rr := &corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{

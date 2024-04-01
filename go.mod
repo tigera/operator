@@ -3,7 +3,6 @@ module github.com/tigera/operator
 go 1.20
 
 require (
-	github.com/aws/aws-sdk-go v1.44.106
 	github.com/cloudflare/cfssl v1.6.4
 	github.com/containernetworking/cni v1.0.1
 	github.com/elastic/cloud-on-k8s/v2 v2.9.0
@@ -43,6 +42,7 @@ require (
 	github.com/BurntSushi/toml v1.0.0 // indirect
 	github.com/alessio/shellescape v1.4.1 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
+	github.com/aws/aws-sdk-go v1.51.9 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect

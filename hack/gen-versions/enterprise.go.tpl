@@ -62,7 +62,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "tigera/key-cert-provisioner" }}
-	ComponentCSRInitContainerPrivate = component{
+	ComponentTigeraCSRInitContainer = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -351,21 +351,21 @@ var (
 	}
 {{- end }}
 {{ with index .Components "flexvol" }}
-	ComponentFlexVolumePrivate = component{
+	ComponentTigeraFlexVolume = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "csi" }}
-	ComponentCSIPrivate = component{
+	ComponentTigeraCSI = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar" }}
-	ComponentCSINodeDriverRegistrarPrivate = component{
+	ComponentTigeraCSINodeDriverRegistrar = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -380,7 +380,7 @@ var (
 		ComponentComplianceReporter,
 		ComponentComplianceServer,
 		ComponentComplianceSnapshotter,
-		ComponentCSRInitContainerPrivate,
+		ComponentTigeraCSRInitContainerPrivate,
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
@@ -417,8 +417,8 @@ var (
 		ComponentESGateway,
 		ComponentLinseed,
 		ComponentDikastes,
-		ComponentFlexVolumePrivate,
-		ComponentCSIPrivate,
-		ComponentCSINodeDriverRegistrarPrivate,
+		ComponentTigeraFlexVolume,
+		ComponentTigeraCSI,
+		ComponentTigeraCSINodeDriverRegistrar,
 	}
 )

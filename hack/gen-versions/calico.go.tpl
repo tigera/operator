@@ -43,7 +43,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "calico/key-cert-provisioner" }}
-	ComponentCSRInitContainer = component{
+	ComponentCalicoCSRInitContainer = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -99,7 +99,7 @@ var (
 	}
 {{- end }}
 {{ with .Components.flexvol }}
-	ComponentFlexVolume = component{
+	ComponentCalicoFlexVolume = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -156,7 +156,7 @@ var (
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
 		ComponentCalicoCNIWindows,
-		ComponentCSRInitContainer,
+		ComponentCalicoCSRInitContainer,
 		ComponentCalicoKubeControllers,
 		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
@@ -164,7 +164,7 @@ var (
 		ComponentCalicoNodeWindows,
 		ComponentCalicoTypha,
 		ComponentCalicoTyphaFIPS,
-		ComponentFlexVolume,
+		ComponentCalicoFlexVolume,
 		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
 		ComponentCalicoAPIServerFIPS,

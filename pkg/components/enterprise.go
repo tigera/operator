@@ -56,7 +56,7 @@ var (
 		Registry: "",
 	}
 
-	ComponentCSRInitContainerPrivate = component{
+	ComponentTigeraCSRInitContainer = component{
 		Version:  "master",
 		Image:    "tigera/key-cert-provisioner",
 		Registry: "",
@@ -303,19 +303,19 @@ var (
 		Registry: "",
 	}
 
-	ComponentFlexVolumePrivate = component{
+	ComponentTigeraFlexVolume = component{
 		Version:  "master",
 		Image:    "tigera/pod2daemon-flexvol",
 		Registry: "",
 	}
 
-	ComponentCSIPrivate = component{
+	ComponentTigeraCSI = component{
 		Version:  "master",
 		Image:    "tigera/csi",
 		Registry: "",
 	}
 
-	ComponentCSINodeDriverRegistrarPrivate = component{
+	ComponentTigeraCSINodeDriverRegistrar = component{
 		Version:  "master",
 		Image:    "tigera/node-driver-registrar",
 		Registry: "",
@@ -329,7 +329,7 @@ var (
 		ComponentComplianceReporter,
 		ComponentComplianceServer,
 		ComponentComplianceSnapshotter,
-		ComponentCSRInitContainerPrivate,
+		ComponentTigeraCSRInitContainer,
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
@@ -366,8 +366,8 @@ var (
 		ComponentESGateway,
 		ComponentLinseed,
 		ComponentDikastes,
-		ComponentFlexVolumePrivate,
-		ComponentCSIPrivate,
-		ComponentCSINodeDriverRegistrarPrivate,
+		ComponentTigeraFlexVolume,
+		ComponentTigeraCSI,
+		ComponentTigeraCSINodeDriverRegistrar,
 	}
 )

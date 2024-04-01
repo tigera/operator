@@ -98,7 +98,6 @@ type NodeConfiguration struct {
 	ClusterDomain string
 
 	// Optional fields.
-	AmazonCloudIntegration  *operatorv1.AmazonCloudIntegration
 	LogCollector            *operatorv1.LogCollector
 	MigrateNamespaces       bool
 	NodeAppArmorProfile     string
@@ -1642,18 +1641,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 	if c.cfg.Installation.CNI.Type != operatorv1.PluginCalico {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"})
-	}
-
-	if c.cfg.AmazonCloudIntegration != nil {
-		nodeEnv = append(nodeEnv, GetTigeraSecurityGroupEnvVariables(c.cfg.AmazonCloudIntegration)...)
-		nodeEnv = append(nodeEnv, corev1.EnvVar{
-			Name:  "FELIX_FAILSAFEINBOUNDHOSTPORTS",
-			Value: "tcp:22,udp:68,tcp:179,tcp:443,tcp:5473,tcp:6443",
-		})
-		nodeEnv = append(nodeEnv, corev1.EnvVar{
-			Name:  "FELIX_FAILSAFEOUTBOUNDHOSTPORTS",
-			Value: "udp:53,udp:67,tcp:179,tcp:443,tcp:5473,tcp:6443",
-		})
 	}
 
 	nodeEnv = append(nodeEnv, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)

@@ -71,14 +71,14 @@ var _ = Describe("test GetReference", func() {
 	Context("image prefix override", func() {
 		DescribeTable("should render",
 			func(c component, image string) {
-				Expect(GetReference(c, "quay.io/", "", "pref/", nil)).To(Equal(fmt.Sprintf("quay.io/%s:%s", image, c.Version)))
+				Expect(GetReference(c, "quay.io/", "", "prefix-", nil)).To(Equal(fmt.Sprintf("quay.io/%s:%s", image, c.Version)))
 			},
-			Entry("a calico image correctly", ComponentCalicoNode, "calico/pref/node"),
-			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/pref/cnx-node"),
-			Entry("an ECK image correctly", ComponentElasticsearchOperator, "tigera/pref/eck-operator"),
-			Entry("an operator init image correctly", ComponentOperatorInit, "tigera/pref/operator"),
-			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, "calico/pref/key-cert-provisioner"),
-			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, "tigera/pref/key-cert-provisioner"),
+			Entry("a calico image correctly", ComponentCalicoNode, "calico/prefix-node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/prefix-cnx-node"),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, "tigera/prefix-eck-operator"),
+			Entry("an operator init image correctly", ComponentOperatorInit, "tigera/prefix-operator"),
+			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, "calico/prefix-key-cert-provisioner"),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, "tigera/prefix-key-cert-provisioner"),
 		)
 	})
 

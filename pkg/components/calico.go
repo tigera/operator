@@ -41,7 +41,7 @@ var (
 	}
 
 	ComponentCalicoCSRInitContainer = component{
-		Version:  "master",
+		Version:  "release-v3.28",
 		Image:    "calico/key-cert-provisioner",
 		Registry: "",
 	}

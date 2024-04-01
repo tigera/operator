@@ -57,7 +57,7 @@ var (
 	}
 
 	ComponentTigeraCSRInitContainer = component{
-		Version:  "master",
+		Version:  "release-calient-v3.19",
 		Image:    "tigera/key-cert-provisioner",
 		Registry: "",
 	}

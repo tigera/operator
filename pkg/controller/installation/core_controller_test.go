@@ -42,6 +42,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -273,8 +274,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentCSRInitContainer.Image,
-					components.ComponentCSRInitContainer.Version)))
+					components.ComponentTigeraCSRInitContainer.Image,
+					components.ComponentTigeraCSRInitContainer.Version)))
 
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -296,8 +297,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(fv).ToNot(BeNil())
 			Expect(fv.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentFlexVolumePrivate.Image,
-					components.ComponentFlexVolumePrivate.Version)))
+					components.ComponentTigeraFlexVolume.Image,
+					components.ComponentTigeraFlexVolume.Version)))
 			cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 			Expect(cni).ToNot(BeNil())
 			Expect(cni.Image).To(Equal(
@@ -308,14 +309,14 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentCSRInitContainer.Image,
-					components.ComponentCSRInitContainer.Version)))
+					components.ComponentTigeraCSRInitContainer.Image,
+					components.ComponentTigeraCSRInitContainer.Version)))
 			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 			Expect(csrinit2).ToNot(BeNil())
 			Expect(csrinit2.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentCSRInitContainer.Image,
-					components.ComponentCSRInitContainer.Version)))
+					components.ComponentTigeraCSRInitContainer.Image,
+					components.ComponentTigeraCSRInitContainer.Version)))
 		})
 
 		It("should use images from imageset", func() {
@@ -375,7 +376,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentCSRInitContainer.Image,
+					components.ComponentTigeraCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
 
 			ds := appsv1.DaemonSet{
@@ -398,7 +399,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(fv).ToNot(BeNil())
 			Expect(fv.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentFlexVolumePrivate.Image,
+					components.ComponentTigeraFlexVolume.Image,
 					"sha256:calicoflexvolhash")))
 			cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 			Expect(cni).ToNot(BeNil())
@@ -410,13 +411,13 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentCSRInitContainer.Image,
+					components.ComponentTigeraCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
 			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 			Expect(csrinit2).ToNot(BeNil())
 			Expect(csrinit2.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentCSRInitContainer.Image,
+					components.ComponentTigeraCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
 
 			inst := operator.Installation{

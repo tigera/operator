@@ -119,9 +119,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Watch the given secrets in each both the compliance and operator namespaces
 	for _, namespace := range watchNamespaces {
 		for _, secretName := range []string{
-			render.TigeraElasticsearchGatewaySecret, render.ElasticsearchComplianceBenchmarkerUserSecret,
-			render.ElasticsearchComplianceControllerUserSecret, render.ElasticsearchComplianceReporterUserSecret,
-			render.ElasticsearchComplianceSnapshotterUserSecret, render.ElasticsearchComplianceServerUserSecret,
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
 			render.TigeraLinseedSecret, render.VoltronLinseedTLS,
 			render.VoltronLinseedPublicCert,

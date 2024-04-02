@@ -56,7 +56,6 @@ type WindowsConfiguration struct {
 	TLS                     *TyphaNodeTLS
 	PrometheusServerTLS     certificatemanagement.KeyPairInterface
 	NodeReporterMetricsPort int
-	AmazonCloudIntegration  *operatorv1.AmazonCloudIntegration
 	VXLANVNI                int
 }
 
@@ -709,18 +708,6 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 
 	if c.cfg.Installation.CNI.Type != operatorv1.PluginCalico {
 		windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"})
-	}
-
-	if c.cfg.AmazonCloudIntegration != nil {
-		windowsEnv = append(windowsEnv, GetTigeraSecurityGroupEnvVariables(c.cfg.AmazonCloudIntegration)...)
-		windowsEnv = append(windowsEnv, corev1.EnvVar{
-			Name:  "FELIX_FAILSAFEINBOUNDHOSTPORTS",
-			Value: "tcp:22,udp:68,tcp:179,tcp:443,tcp:5473,tcp:6443",
-		})
-		windowsEnv = append(windowsEnv, corev1.EnvVar{
-			Name:  "FELIX_FAILSAFEOUTBOUNDHOSTPORTS",
-			Value: "udp:53,udp:67,tcp:179,tcp:443,tcp:5473,tcp:6443",
-		})
 	}
 
 	windowsEnv = append(windowsEnv, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)

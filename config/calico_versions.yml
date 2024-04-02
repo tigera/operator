@@ -23,5 +23,5 @@ components:
     version: release-v3.28
   csi-node-driver-registrar:
     version: release-v3.28
-  calico/key-cert-provisioner:
+  key-cert-provisioner:
     version: release-v3.28

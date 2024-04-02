@@ -285,12 +285,6 @@ var (
 		Registry: "",
 	}
 
-	ComponentCloudControllers = component{
-		Version:  "release-calient-v3.19",
-		Image:    "tigera/cloud-controllers",
-		Registry: "",
-	}
-
 	ComponentElasticsearchMetrics = component{
 		Version:  "release-calient-v3.19",
 		Image:    "tigera/elasticsearch-metrics",
@@ -354,7 +348,6 @@ var (
 		ComponentTigeraCNI,
 		ComponentTigeraCNIFIPS,
 		ComponentTigeraCNIWindows,
-		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentLinseed,

@@ -91,9 +91,6 @@ components:
   tigera-cni-windows:
     image: tigera/cni-windows
     version: master
-  cloud-controllers:
-    image: tigera/cloud-controllers
-    version: master
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
     version: master

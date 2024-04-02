@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strings"
 
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -45,15 +47,16 @@ import (
 )
 
 const (
-	ComplianceNamespace        = "tigera-compliance"
-	ComplianceServiceName      = "compliance"
-	ComplianceServerName       = "compliance-server"
-	ComplianceControllerName   = "compliance-controller"
-	ComplianceSnapshotterName  = "compliance-snapshotter"
-	ComplianceReporterName     = "compliance-reporter"
-	ComplianceBenchmarkerName  = "compliance-benchmarker"
-	ComplianceAccessPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "compliance-access"
-	ComplianceServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + ComplianceServerName
+	ComplianceNamespace                                       = "tigera-compliance"
+	ComplianceServiceName                                     = "compliance"
+	ComplianceServerName                                      = "compliance-server"
+	ComplianceControllerName                                  = "compliance-controller"
+	ComplianceSnapshotterName                                 = "compliance-snapshotter"
+	ComplianceReporterName                                    = "compliance-reporter"
+	ComplianceBenchmarkerName                                 = "compliance-benchmarker"
+	ComplianceAccessPolicyName                                = networkpolicy.TigeraComponentPolicyPrefix + "compliance-access"
+	ComplianceServerPolicyName                                = networkpolicy.TigeraComponentPolicyPrefix + ComplianceServerName
+	MultiTenantComplianceManagedClustersAccessClusterRoleName = "compliance-server-managed-cluster-access"
 
 	// ServiceAccount names.
 	ComplianceServerServiceAccount      = "tigera-compliance-server"
@@ -64,12 +67,7 @@ const (
 )
 
 const (
-	ElasticsearchComplianceBenchmarkerUserSecret = "tigera-ee-compliance-benchmarker-elasticsearch-access"
-	ElasticsearchComplianceControllerUserSecret  = "tigera-ee-compliance-controller-elasticsearch-access"
-	ElasticsearchComplianceReporterUserSecret    = "tigera-ee-compliance-reporter-elasticsearch-access"
-	ElasticsearchComplianceSnapshotterUserSecret = "tigera-ee-compliance-snapshotter-elasticsearch-access"
-	ElasticsearchComplianceServerUserSecret      = "tigera-ee-compliance-server-elasticsearch-access"
-	ElasticsearchCuratorUserSecret               = "tigera-ee-curator-elasticsearch-access"
+	ElasticsearchCuratorUserSecret = "tigera-ee-curator-elasticsearch-access"
 
 	ComplianceServerCertSecret  = "tigera-compliance-server-tls"
 	ComplianceSnapshotterSecret = "tigera-compliance-snapshotter-tls"
@@ -94,7 +92,6 @@ func Compliance(cfg *ComplianceConfiguration) (Component, error) {
 
 // ComplianceConfiguration contains all the config information needed to render the component.
 type ComplianceConfiguration struct {
-	ESSecrets                   []*corev1.Secret
 	Installation                *operatorv1.InstallationSpec
 	PullSecrets                 []*corev1.Secret
 	Openshift                   bool
@@ -120,8 +117,9 @@ type ComplianceConfiguration struct {
 	Namespace string
 
 	// Whether to run the rendered components in multi-tenant, single-tenant, or zero-tenant mode
-	Tenant     *operatorv1.Tenant
-	Compliance *operatorv1.Compliance
+	Tenant          *operatorv1.Tenant
+	ExternalElastic bool
+	Compliance      *operatorv1.Compliance
 }
 
 type complianceComponent struct {
@@ -176,44 +174,72 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
-	complianceObjs := []client.Object{
-		c.complianceAccessAllowTigeraNetworkPolicy(),
-		networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
+	var complianceObjs []client.Object
+	if c.cfg.Tenant.MultiTenant() {
+		complianceObjs = append(complianceObjs,
+			// We always need a sa and crb, whether a deployment of compliance-server is present or not.
+			// These two are used for rbac checks for managed clusters.
+			c.complianceServerServiceAccount(),
+			c.complianceServerClusterRoleBinding(),
+		)
+		complianceObjs = append(complianceObjs, c.multiTenantManagedClustersAccess()...)
+		// We need to bind compliance components that run inside the managed cluster
+		// to have the correct RBAC for linseed API
+		complianceObjs = append(complianceObjs,
+			c.complianceControllerClusterRole(),
+			c.complianceControllerClusterRoleBinding(),
+		)
+		complianceObjs = append(complianceObjs,
+			c.complianceReporterClusterRole(),
+			c.complianceReporterClusterRoleBinding(),
+		)
+		complianceObjs = append(complianceObjs,
+			c.complianceBenchmarkerClusterRole(),
+			c.complianceBenchmarkerClusterRoleBinding(),
+		)
+		complianceObjs = append(complianceObjs,
+			c.complianceSnapshotterClusterRole(),
+			c.complianceSnapshotterClusterRoleBinding())
+	} else {
+		complianceObjs = append(complianceObjs,
+			c.complianceAccessAllowTigeraNetworkPolicy(),
+			networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
+		)
+		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
+		complianceObjs = append(complianceObjs,
+			c.complianceControllerServiceAccount(),
+			c.complianceControllerRole(),
+			c.complianceControllerClusterRole(),
+			c.complianceControllerRoleBinding(),
+			c.complianceControllerClusterRoleBinding(),
+			c.complianceControllerDeployment(),
+
+			c.complianceReporterServiceAccount(),
+			c.complianceReporterClusterRole(),
+			c.complianceReporterClusterRoleBinding(),
+			c.complianceReporterPodTemplate(),
+
+			c.complianceSnapshotterServiceAccount(),
+			c.complianceSnapshotterClusterRole(),
+			c.complianceSnapshotterClusterRoleBinding(),
+			c.complianceSnapshotterDeployment(),
+
+			c.complianceBenchmarkerServiceAccount(),
+			c.complianceBenchmarkerClusterRole(),
+			c.complianceBenchmarkerClusterRoleBinding(),
+			c.complianceBenchmarkerDaemonSet(),
+
+			c.complianceGlobalReportInventory(),
+			c.complianceGlobalReportNetworkAccess(),
+			c.complianceGlobalReportPolicyAudit(),
+			c.complianceGlobalReportCISBenchmark(),
+
+			// We always need a sa and crb, whether a deployment of compliance-server is present or not.
+			// These two are used for rbac checks for managed clusters.
+			c.complianceServerServiceAccount(),
+			c.complianceServerClusterRoleBinding(),
+		)
 	}
-	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
-	complianceObjs = append(complianceObjs,
-		c.complianceControllerServiceAccount(),
-		c.complianceControllerRole(),
-		c.complianceControllerClusterRole(),
-		c.complianceControllerRoleBinding(),
-		c.complianceControllerClusterRoleBinding(),
-		c.complianceControllerDeployment(),
-
-		c.complianceReporterServiceAccount(),
-		c.complianceReporterClusterRole(),
-		c.complianceReporterClusterRoleBinding(),
-		c.complianceReporterPodTemplate(),
-
-		c.complianceSnapshotterServiceAccount(),
-		c.complianceSnapshotterClusterRole(),
-		c.complianceSnapshotterClusterRoleBinding(),
-		c.complianceSnapshotterDeployment(),
-
-		c.complianceBenchmarkerServiceAccount(),
-		c.complianceBenchmarkerClusterRole(),
-		c.complianceBenchmarkerClusterRoleBinding(),
-		c.complianceBenchmarkerDaemonSet(),
-
-		c.complianceGlobalReportInventory(),
-		c.complianceGlobalReportNetworkAccess(),
-		c.complianceGlobalReportPolicyAudit(),
-		c.complianceGlobalReportCISBenchmark(),
-
-		// We always need a sa and crb, whether a deployment of compliance-server is present or not.
-		// These two are used for rbac checks for managed clusters.
-		c.complianceServerServiceAccount(),
-		c.complianceServerClusterRoleBinding(),
-	)
 
 	if c.cfg.KeyValidatorConfig != nil {
 		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredSecrets(c.cfg.Namespace)...)...)
@@ -253,11 +279,9 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
 	// host path volumes requires cluster admin permissions.
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
+	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderDockerEE && !c.cfg.Tenant.MultiTenant() {
 		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
 	}
-
-	complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.ESSecrets...)...)...)
 
 	if c.cfg.HasNoLicense {
 		return nil, complianceObjs
@@ -316,10 +340,10 @@ func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 }
 
 func (c *complianceComponent) complianceControllerClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount},
-		Rules: []rbacv1.PolicyRule{
+	var rules []rbacv1.PolicyRule
+	if !c.cfg.Tenant.MultiTenant() {
+		// We want to include this RBAC for zero and single tenant
+		rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"globalreports"},
@@ -335,12 +359,21 @@ func (c *complianceComponent) complianceControllerClusterRole() *rbacv1.ClusterR
 				Resources: []string{"globalreports/finalizers"},
 				Verbs:     []string{"update"},
 			},
-			{
-				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{"compliancereports"},
-				Verbs:     []string{"create", "get"},
-			},
-		},
+		}
+	}
+
+	// We need to allow access on Linseed API inside the management cluster
+	// for all configurations or for standalone
+	rules = append(rules, rbacv1.PolicyRule{
+		APIGroups: []string{"linseed.tigera.io"},
+		Resources: []string{"compliancereports"},
+		Verbs:     []string{"create", "get"},
+	})
+
+	return &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount},
+		Rules:      rules,
 	}
 }
 
@@ -442,6 +475,13 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
+	if c.cfg.Tenant != nil {
+		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
+		// Multi-tenant and single tenant with external elastic needs this variable set
+		if c.cfg.ExternalElastic {
+			envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		}
+	}
 
 	var initContainers []corev1.Container
 	if c.cfg.ControllerKeyPair != nil && c.cfg.ControllerKeyPair.UseCertificateManagement() {
@@ -518,23 +558,41 @@ func (c *complianceComponent) complianceReporterServiceAccount() *corev1.Service
 }
 
 func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRole {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"globalreporttypes", "globalreports"},
-			Verbs:     []string{"get"},
-		},
-		{
+	var rules []rbacv1.PolicyRule
+	if !c.cfg.Tenant.MultiTenant() {
+		// We want to include this RBAC for zero and single tenant
+		rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"globalreporttypes", "globalreports"},
+				Verbs:     []string{"get"},
+			},
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"snapshots", "benchmarks", "auditlogs", "flows"},
+				Verbs:     []string{"get"},
+			},
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"compliancereports"},
+				Verbs:     []string{"create"},
+			},
+		}
+	}
+
+	// We need to allow access on Linseed API inside the management cluster
+	// for all configurations or for standalone
+	rules = append(rules,
+		rbacv1.PolicyRule{
 			APIGroups: []string{"linseed.tigera.io"},
 			Resources: []string{"snapshots", "benchmarks", "auditlogs", "flows"},
 			Verbs:     []string{"get"},
 		},
-		{
+		rbacv1.PolicyRule{
 			APIGroups: []string{"linseed.tigera.io"},
 			Resources: []string{"compliancereports"},
 			Verbs:     []string{"create"},
-		},
-	}
+		})
 
 	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
@@ -586,6 +644,13 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+	}
+	if c.cfg.Tenant != nil {
+		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
+		// Multi-tenant and single tenant with external elastic needs this variable set
+		if c.cfg.ExternalElastic {
+			envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		}
 	}
 
 	volumes := []corev1.Volume{
@@ -766,6 +831,30 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 		})
 	}
 
+	if c.cfg.Tenant.MultiTenant() {
+		// These rules are used by tigera-compliance-server in a management cluster serving multiple tenants in order to appear to managed
+		// clusters as the expected serviceaccount. They're only needed when there are multiple tenants sharing the same
+		// management cluster.
+		clusterRole.Rules = append(clusterRole.Rules, []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts"},
+				Verbs:         []string{"impersonate"},
+				ResourceNames: []string{ComplianceServerServiceAccount},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+				ResourceNames: []string{
+					serviceaccount.AllServiceAccountsGroup,
+					"system:authenticated",
+					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, ComplianceNamespace),
+				},
+			},
+		}...)
+	}
+
 	return clusterRole
 }
 
@@ -841,6 +930,19 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
 	}
+	if c.cfg.Tenant != nil {
+		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
+		// Multi-tenant and single tenant with external elastic needs this variable set
+		if c.cfg.ExternalElastic {
+			envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		}
+		if c.cfg.Tenant.MultiTenant() {
+			envVars = append(envVars, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Tenant.Namespace)})
+			envVars = append(envVars, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: ManagerService(c.cfg.Tenant)})
+		}
+	}
+
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
 	}
@@ -950,34 +1052,41 @@ func (c *complianceComponent) complianceSnapshotterServiceAccount() *corev1.Serv
 }
 
 func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.ClusterRole {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{"networking.k8s.io", "authentication.k8s.io", ""},
-			Resources: []string{
-				"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
-				"endpoints", "services",
+	var rules []rbacv1.PolicyRule
+	if !c.cfg.Tenant.MultiTenant() {
+		// We want to include this RBAC for zero and single tenant
+		rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"networking.k8s.io", "authentication.k8s.io", ""},
+				Resources: []string{
+					"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
+					"endpoints", "services",
+				},
+				Verbs: []string{"get", "list"},
 			},
-			Verbs: []string{"get", "list"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{
-				"globalnetworkpolicies", "tier.globalnetworkpolicies",
-				"stagedglobalnetworkpolicies", "tier.stagedglobalnetworkpolicies",
-				"networkpolicies", "tier.networkpolicies",
-				"stagednetworkpolicies", "tier.stagednetworkpolicies",
-				"stagedkubernetesnetworkpolicies",
-				"tiers", "hostendpoints",
-				"globalnetworksets", "networksets",
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"globalnetworkpolicies", "tier.globalnetworkpolicies",
+					"stagedglobalnetworkpolicies", "tier.stagedglobalnetworkpolicies",
+					"networkpolicies", "tier.networkpolicies",
+					"stagednetworkpolicies", "tier.stagednetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
+					"tiers", "hostendpoints",
+					"globalnetworksets", "networksets",
+				},
+				Verbs: []string{"get", "list"},
 			},
-			Verbs: []string{"get", "list"},
-		},
-		{
-			APIGroups: []string{"linseed.tigera.io"},
-			Resources: []string{"snapshots"},
-			Verbs:     []string{"get", "create"},
-		},
+		}
 	}
+
+	// We need to allow access on Linseed API inside the management cluster
+	// for all configurations or for standalone
+	rules = append(rules, rbacv1.PolicyRule{
+		APIGroups: []string{"linseed.tigera.io"},
+		Resources: []string{"snapshots"},
+		Verbs:     []string{"get", "create"},
+	})
 
 	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
@@ -1029,6 +1138,13 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+	}
+	if c.cfg.Tenant != nil {
+		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
+		// Multi-tenant and single tenant with external elastic needs this variable set
+		if c.cfg.ExternalElastic {
+			envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		}
 	}
 
 	volumes := []corev1.Volume{
@@ -1127,23 +1243,29 @@ func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.Serv
 }
 
 func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.ClusterRole {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"pods"},
-			Verbs:     []string{"list"},
-		},
-		{
-			APIGroups: []string{""},
-			Resources: []string{"nodes"},
-			Verbs:     []string{"get"},
-		},
-		{
-			APIGroups: []string{"linseed.tigera.io"},
-			Resources: []string{"benchmarks"},
-			Verbs:     []string{"get", "create"},
-		},
+	var rules []rbacv1.PolicyRule
+	if !c.cfg.Tenant.MultiTenant() {
+		// We want to include this RBAC for zero and single tenant
+		rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"nodes"},
+				Verbs:     []string{"get"},
+			},
+		}
 	}
+
+	// We need to allow access on Linseed API inside the management cluster
+	// for all configurations or for standalone
+	rules = append(rules, rbacv1.PolicyRule{
+		APIGroups: []string{"linseed.tigera.io"},
+		Resources: []string{"benchmarks"},
+		Verbs:     []string{"get", "create"}})
 
 	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
@@ -1193,6 +1315,14 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+	}
+
+	if c.cfg.Tenant != nil {
+		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
+		// Multi-tenant and single tenant with external elastic needs this variable set
+		if c.cfg.ExternalElastic {
+			envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		}
 	}
 
 	volMounts := []corev1.VolumeMount{
@@ -1665,11 +1795,6 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
-		})
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
 		})
 	} else {
@@ -1698,6 +1823,7 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 
 // Allow internal communication to compliance-server from Manager.
 func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+	networkpolicyHelper := networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace)
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -1707,12 +1833,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
+			Destination: networkpolicyHelper.LinseedEntityRule(),
 		},
 	}
 
@@ -1728,7 +1849,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ManagerEntityRule(),
+			Destination: networkpolicyHelper.ManagerEntityRule(),
 		},
 	}...)
 
@@ -1736,7 +1857,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
-			Source:   networkpolicy.DefaultHelper().ManagerSourceEntityRule(),
+			Source:   networkpolicyHelper.ManagerSourceEntityRule(),
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(complianceServerPort),
 			},
@@ -1758,4 +1879,50 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 			Egress:   egressRules,
 		},
 	}
+}
+
+func (c *complianceComponent) multiTenantManagedClustersAccess() []client.Object {
+	var objects []client.Object
+	objects = append(objects, &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantComplianceManagedClustersAccessClusterRoleName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs: []string{
+					// The Authentication Proxy in Voltron checks if Compliance (either using impersonation
+					// headers for tigera-compliance-server service account in tigera-compliance namespace or
+					// the actual account in a single tenant setup) can get a managed clusters before sending the
+					// request down the tunnel
+					"get",
+				},
+			},
+		},
+	})
+
+	// In a single tenant setup we want to create a cluster role that binds using service account
+	// tigera-compliance-server from tigera-compliance namespace. In a multi-tenant setup
+	// Compliance server from the tenant's namespace impersonates service tigera-compliance-server
+	// from tigera-compliance namespace
+	objects = append(objects, &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantComplianceManagedClustersAccessClusterRoleName},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     MultiTenantComplianceManagedClustersAccessClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			// requests for compliance to managed clusters are done using service account tigera-compliance-server
+			// from tigera-compliance namespace regardless of tenancy mode (single tenant or multi-tenant)
+			{
+				Kind:      "ServiceAccount",
+				Name:      ComplianceServerServiceAccount,
+				Namespace: ComplianceNamespace,
+			},
+		},
+	})
+
+	return objects
 }

@@ -185,10 +185,21 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		complianceObjs = append(complianceObjs, c.multiTenantManagedClustersAccess()...)
 		// We need to bind compliance components that run inside the managed cluster
 		// to have the correct RBAC for linseed API
-		complianceObjs = append(complianceObjs, c.multiTenantComplianceControllerAccess()...)
-		complianceObjs = append(complianceObjs, c.multiTenantComplianceBenchmarkerAccess()...)
-		complianceObjs = append(complianceObjs, c.multiTenantComplianceReporterAccess()...)
-		complianceObjs = append(complianceObjs, c.multiTenantComplianceSnapshotterAccess()...)
+		complianceObjs = append(complianceObjs,
+			c.complianceControllerClusterRole(),
+			c.complianceControllerClusterRoleBinding(),
+		)
+		complianceObjs = append(complianceObjs,
+			c.complianceReporterClusterRole(),
+			c.complianceReporterClusterRoleBinding(),
+		)
+		complianceObjs = append(complianceObjs,
+			c.complianceBenchmarkerClusterRole(),
+			c.complianceBenchmarkerClusterRoleBinding(),
+		)
+		complianceObjs = append(complianceObjs,
+			c.complianceSnapshotterClusterRole(),
+			c.complianceSnapshotterClusterRoleBinding())
 	} else {
 		complianceObjs = append(complianceObjs,
 			c.complianceAccessAllowTigeraNetworkPolicy(),
@@ -329,10 +340,10 @@ func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 }
 
 func (c *complianceComponent) complianceControllerClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount},
-		Rules: []rbacv1.PolicyRule{
+	var rules []rbacv1.PolicyRule
+	if !c.cfg.Tenant.MultiTenant() {
+		// We want to include this RBAC for zero and single tenant
+		rules = []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"globalreports"},
@@ -348,12 +359,21 @@ func (c *complianceComponent) complianceControllerClusterRole() *rbacv1.ClusterR
 				Resources: []string{"globalreports/finalizers"},
 				Verbs:     []string{"update"},
 			},
-			{
-				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{"compliancereports"},
-				Verbs:     []string{"create", "get"},
-			},
-		},
+		}
+	}
+
+	// We need to allow access on Linseed API inside the management cluster
+	// for all configurations or for standalone
+	rules = append(rules, rbacv1.PolicyRule{
+		APIGroups: []string{"linseed.tigera.io"},
+		Resources: []string{"compliancereports"},
+		Verbs:     []string{"create", "get"},
+	})
+
+	return &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount},
+		Rules:      rules,
 	}
 }
 
@@ -538,23 +558,41 @@ func (c *complianceComponent) complianceReporterServiceAccount() *corev1.Service
 }
 
 func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRole {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"globalreporttypes", "globalreports"},
-			Verbs:     []string{"get"},
-		},
-		{
+	var rules []rbacv1.PolicyRule
+	if !c.cfg.Tenant.MultiTenant() {
+		// We want to include this RBAC for zero and single tenant
+		rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"globalreporttypes", "globalreports"},
+				Verbs:     []string{"get"},
+			},
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"snapshots", "benchmarks", "auditlogs", "flows"},
+				Verbs:     []string{"get"},
+			},
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"compliancereports"},
+				Verbs:     []string{"create"},
+			},
+		}
+	}
+
+	// We need to allow access on Linseed API inside the management cluster
+	// for all configurations or for standalone
+	rules = append(rules,
+		rbacv1.PolicyRule{
 			APIGroups: []string{"linseed.tigera.io"},
 			Resources: []string{"snapshots", "benchmarks", "auditlogs", "flows"},
 			Verbs:     []string{"get"},
 		},
-		{
+		rbacv1.PolicyRule{
 			APIGroups: []string{"linseed.tigera.io"},
 			Resources: []string{"compliancereports"},
 			Verbs:     []string{"create"},
-		},
-	}
+		})
 
 	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
@@ -1014,34 +1052,41 @@ func (c *complianceComponent) complianceSnapshotterServiceAccount() *corev1.Serv
 }
 
 func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.ClusterRole {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{"networking.k8s.io", "authentication.k8s.io", ""},
-			Resources: []string{
-				"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
-				"endpoints", "services",
+	var rules []rbacv1.PolicyRule
+	if !c.cfg.Tenant.MultiTenant() {
+		// We want to include this RBAC for zero and single tenant
+		rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"networking.k8s.io", "authentication.k8s.io", ""},
+				Resources: []string{
+					"networkpolicies", "nodes", "namespaces", "pods", "serviceaccounts",
+					"endpoints", "services",
+				},
+				Verbs: []string{"get", "list"},
 			},
-			Verbs: []string{"get", "list"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{
-				"globalnetworkpolicies", "tier.globalnetworkpolicies",
-				"stagedglobalnetworkpolicies", "tier.stagedglobalnetworkpolicies",
-				"networkpolicies", "tier.networkpolicies",
-				"stagednetworkpolicies", "tier.stagednetworkpolicies",
-				"stagedkubernetesnetworkpolicies",
-				"tiers", "hostendpoints",
-				"globalnetworksets", "networksets",
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"globalnetworkpolicies", "tier.globalnetworkpolicies",
+					"stagedglobalnetworkpolicies", "tier.stagedglobalnetworkpolicies",
+					"networkpolicies", "tier.networkpolicies",
+					"stagednetworkpolicies", "tier.stagednetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
+					"tiers", "hostendpoints",
+					"globalnetworksets", "networksets",
+				},
+				Verbs: []string{"get", "list"},
 			},
-			Verbs: []string{"get", "list"},
-		},
-		{
-			APIGroups: []string{"linseed.tigera.io"},
-			Resources: []string{"snapshots"},
-			Verbs:     []string{"get", "create"},
-		},
+		}
 	}
+
+	// We need to allow access on Linseed API inside the management cluster
+	// for all configurations or for standalone
+	rules = append(rules, rbacv1.PolicyRule{
+		APIGroups: []string{"linseed.tigera.io"},
+		Resources: []string{"snapshots"},
+		Verbs:     []string{"get", "create"},
+	})
 
 	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
@@ -1198,23 +1243,29 @@ func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.Serv
 }
 
 func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.ClusterRole {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"pods"},
-			Verbs:     []string{"list"},
-		},
-		{
-			APIGroups: []string{""},
-			Resources: []string{"nodes"},
-			Verbs:     []string{"get"},
-		},
-		{
-			APIGroups: []string{"linseed.tigera.io"},
-			Resources: []string{"benchmarks"},
-			Verbs:     []string{"get", "create"},
-		},
+	var rules []rbacv1.PolicyRule
+	if !c.cfg.Tenant.MultiTenant() {
+		// We want to include this RBAC for zero and single tenant
+		rules = []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"nodes"},
+				Verbs:     []string{"get"},
+			},
+		}
 	}
+
+	// We need to allow access on Linseed API inside the management cluster
+	// for all configurations or for standalone
+	rules = append(rules, rbacv1.PolicyRule{
+		APIGroups: []string{"linseed.tigera.io"},
+		Resources: []string{"benchmarks"},
+		Verbs:     []string{"get", "create"}})
 
 	if c.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
@@ -1863,7 +1914,7 @@ func (c *complianceComponent) multiTenantManagedClustersAccess() []client.Object
 			Name:     MultiTenantComplianceManagedClustersAccessClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
-			// requests for policy recommendation to managed clusters are done using service account tigera-compliance-server
+			// requests for compliance to managed clusters are done using service account tigera-compliance-server
 			// from tigera-compliance namespace regardless of tenancy mode (single tenant or multi-tenant)
 			{
 				Kind:      "ServiceAccount",
@@ -1872,82 +1923,6 @@ func (c *complianceComponent) multiTenantManagedClustersAccess() []client.Object
 			},
 		},
 	})
-
-	return objects
-}
-
-func (c *complianceComponent) multiTenantComplianceSnapshotterAccess() []client.Object {
-	var objects []client.Object
-	objects = append(objects, &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceSnapshotterServiceAccount},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{"snapshots"},
-				Verbs:     []string{"get", "create"},
-			},
-		},
-	})
-
-	objects = append(objects, c.complianceSnapshotterClusterRoleBinding())
-
-	return objects
-}
-
-func (c *complianceComponent) multiTenantComplianceBenchmarkerAccess() []client.Object {
-	var objects []client.Object
-	objects = append(objects, &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceBenchmarkerServiceAccount},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{"benchmarks"},
-				Verbs:     []string{"get", "create"},
-			},
-		},
-	})
-
-	objects = append(objects, c.complianceBenchmarkerClusterRoleBinding())
-
-	return objects
-}
-
-func (c *complianceComponent) multiTenantComplianceControllerAccess() []client.Object {
-	var objects []client.Object
-	objects = append(objects, &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{"compliancereports"},
-				Verbs:     []string{"create", "get"},
-			},
-		},
-	})
-
-	objects = append(objects, c.complianceControllerClusterRoleBinding())
-
-	return objects
-}
-
-func (c *complianceComponent) multiTenantComplianceReporterAccess() []client.Object {
-	var objects []client.Object
-	objects = append(objects, &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceReporterServiceAccount},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{"compliancereports"},
-				Verbs:     []string{"create"},
-			},
-		},
-	})
-
-	objects = append(objects, c.complianceReporterClusterRoleBinding())
 
 	return objects
 }

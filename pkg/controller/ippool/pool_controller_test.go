@@ -508,7 +508,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		&operator.CalicoNetworkSpec{
 			IPPools: []operator.IPPool{
 				{
-					Name:          "10.0.0.0-24",
+					Name:          "default-ipv4-ippool",
 					CIDR:          "10.0.0.0/24",
 					Encapsulation: "VXLAN",
 					NATOutgoing:   "Disabled",

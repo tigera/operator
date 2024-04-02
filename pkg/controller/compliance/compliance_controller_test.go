@@ -127,13 +127,6 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{common.ComplianceFeature}}})).NotTo(HaveOccurred())
 
-		// Create a bunch of empty secrets, such that the reconcile loop will make it to the render functionality.
-		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceBenchmarkerUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceControllerUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceReporterUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceSnapshotterUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchComplianceServerUserSecret, Namespace: "tigera-operator"}})).NotTo(HaveOccurred())
-
 		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -894,7 +887,9 @@ var _ = Describe("Compliance controller tests", func() {
 			certificateManagerTenantA, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
-			Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
+			trustedBundleWithSystemCAsTenantA, err := certificateManagerTenantA.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, trustedBundleWithSystemCAsTenantA.ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
 
 			linseedTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantANamespace, []string{render.TigeraLinseedSecret})
 			Expect(err).NotTo(HaveOccurred())
@@ -903,7 +898,9 @@ var _ = Describe("Compliance controller tests", func() {
 			certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantB))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManagerTenantB.KeyPair().Secret(tenantBNamespace)))
-			Expect(c.Create(ctx, certificateManagerTenantB.CreateTrustedBundle().ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())
+			trustedBundleWithSystemCAsTenantB, err := certificateManagerTenantB.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, trustedBundleWithSystemCAsTenantB.ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())
 
 			linseedTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantBNamespace, []string{render.TigeraLinseedSecret})
 			Expect(err).NotTo(HaveOccurred())
@@ -930,12 +927,12 @@ var _ = Describe("Compliance controller tests", func() {
 			// We check for correct rendering of all resources in compliance_test.go, so use the SA
 			// merely as a proxy here that the creation of our Compliance went smoothly
 			tenantAServiceAccount := corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ComplianceControllerServiceAccount,
+				Name:      render.ComplianceServerServiceAccount,
 				Namespace: tenantANamespace,
 			}}
 
 			tenantBServiceAccount := corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ComplianceControllerServiceAccount,
+				Name:      render.ComplianceServerServiceAccount,
 				Namespace: tenantBNamespace,
 			}}
 

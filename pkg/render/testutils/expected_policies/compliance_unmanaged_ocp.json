@@ -48,17 +48,6 @@
       {
         "action": "Allow",
         "protocol": "TCP",
-        "destination": {
-          "selector": "k8s-app == 'tigera-secure-es-gateway'",
-          "namespaceSelector": "projectcalico.org/name == 'tigera-elasticsearch'",
-          "ports": [
-            5554
-          ]
-        }
-      },
-      {
-        "action": "Allow",
-        "protocol": "TCP",
         "source": {
         },
         "destination": {

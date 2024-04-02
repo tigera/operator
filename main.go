@@ -143,7 +143,6 @@ func main() {
 		if strings.ToLower(printImages) == "list" {
 			cmpnts := components.CalicoImages
 			cmpnts = append(cmpnts, components.EnterpriseImages...)
-			cmpnts = append(cmpnts, components.CommonImages...)
 
 			for _, x := range cmpnts {
 				ref, _ := components.GetReference(x, "", "", "", nil)

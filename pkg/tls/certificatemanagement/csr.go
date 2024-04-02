@@ -92,8 +92,17 @@ func CreateCSRInitContainer(
 
 // ResolveCsrInitImage resolves the image needed for the CSR init image taking into account the specified ImageSet
 func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.ImageSet) (string, error) {
+	if inst.Variant == operatorv1.TigeraSecureEnterprise {
+		return components.GetReference(
+			components.ComponentTigeraCSRInitContainer,
+			inst.Registry,
+			inst.ImagePath,
+			inst.ImagePrefix,
+			is,
+		)
+	}
 	return components.GetReference(
-		components.ComponentCSRInitContainer,
+		components.ComponentCalicoCSRInitContainer,
 		inst.Registry,
 		inst.ImagePath,
 		inst.ImagePrefix,

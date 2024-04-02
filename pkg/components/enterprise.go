@@ -56,6 +56,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentTigeraCSRInitContainer = component{
+		Version:  "release-calient-v3.19",
+		Image:    "tigera/key-cert-provisioner",
+		Registry: "",
+	}
+
 	ComponentDeepPacketInspection = component{
 		Version:  "release-calient-v3.19",
 		Image:    "tigera/deep-packet-inspection",
@@ -297,19 +303,19 @@ var (
 		Registry: "",
 	}
 
-	ComponentFlexVolumePrivate = component{
+	ComponentTigeraFlexVolume = component{
 		Version:  "release-calient-v3.19",
 		Image:    "tigera/pod2daemon-flexvol",
 		Registry: "",
 	}
 
-	ComponentCSIPrivate = component{
+	ComponentTigeraCSI = component{
 		Version:  "release-calient-v3.19",
 		Image:    "tigera/csi",
 		Registry: "",
 	}
 
-	ComponentCSINodeDriverRegistrarPrivate = component{
+	ComponentTigeraCSINodeDriverRegistrar = component{
 		Version:  "release-calient-v3.19",
 		Image:    "tigera/node-driver-registrar",
 		Registry: "",
@@ -323,6 +329,7 @@ var (
 		ComponentComplianceReporter,
 		ComponentComplianceServer,
 		ComponentComplianceSnapshotter,
+		ComponentTigeraCSRInitContainer,
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
@@ -359,8 +366,8 @@ var (
 		ComponentESGateway,
 		ComponentLinseed,
 		ComponentDikastes,
-		ComponentFlexVolumePrivate,
-		ComponentCSIPrivate,
-		ComponentCSINodeDriverRegistrarPrivate,
+		ComponentTigeraFlexVolume,
+		ComponentTigeraCSI,
+		ComponentTigeraCSINodeDriverRegistrar,
 	}
 )

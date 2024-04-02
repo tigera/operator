@@ -42,7 +42,7 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "calico/key-cert-provisioner" }}
+{{ with index .Components "key-cert-provisioner" }}
 	ComponentCalicoCSRInitContainer = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",

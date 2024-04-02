@@ -61,7 +61,7 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "tigera/key-cert-provisioner" }}
+{{ with index .Components "key-cert-provisioner" }}
 	ComponentTigeraCSRInitContainer = component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",

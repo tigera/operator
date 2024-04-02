@@ -407,5 +407,9 @@ func v1ToV3(v1pool *crdv1.IPPool) (*v3.IPPool, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// We need to clear the UID field, as the v1 UID is not valid in the v3 API.
+	v3pool.UID = ""
+
 	return &v3pool, nil
 }

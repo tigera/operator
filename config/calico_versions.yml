@@ -23,5 +23,5 @@ components:
     version: master
   csi-node-driver-registrar:
     version: master
-  calico/key-cert-provisioner:
+  key-cert-provisioner:
     version: master

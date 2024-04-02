@@ -153,3 +153,4 @@ components:
     version: release-calient-v3.19
   tigera/key-cert-provisioner:
     version: release-calient-v3.19
+

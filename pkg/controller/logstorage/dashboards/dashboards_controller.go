@@ -262,7 +262,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 
 	// Determine where to access Kibana.
 	kibanaHost := "tigera-secure-kb-http.tigera-kibana.svc"
-	kibanaPort := "5601"
+	kibanaPort := uint16(5601)
 	kibanaScheme := "https"
 
 	var externalKibanaSecret *corev1.Secret
@@ -293,8 +293,13 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 			return reconcile.Result{}, nil
 		}
 		kibanaScheme = url.Scheme
-		kibanaHost = url.Hostname()
-		kibanaPort = url.Port()
+		kibanaHost = strings.TrimSuffix(url.Hostname(), "/")
+		kibanaPort, err = parsePort(url.Port())
+		if err != nil {
+			reqLogger.Error(err, "Failed to extract domain or unit16 port for Kibana")
+			d.status.SetDegraded(operatorv1.ResourceValidationError, "Failed to parse kibana domain or port", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
 
 		if tenant.ElasticMTLS() {
 			// If mTLS is enabled, get the secret containing the CA and client certificate.
@@ -306,13 +311,6 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 				return reconcile.Result{}, err
 			}
 		}
-	}
-
-	kibanaDomain, kibanaPortAsInt, err := parseDomainAndPort(kibanaHost, kibanaPort)
-	if err != nil {
-		reqLogger.Error(err, "Failed to extract domain or unit16 port for Kibana")
-		d.status.SetDegraded(operatorv1.ResourceValidationError, "Failed to parse kibana domain or port", err, reqLogger)
-		return reconcile.Result{}, nil
 	}
 
 	// Query the username and password this Dashboards Installer instance should use to authenticate with Elasticsearch.
@@ -357,8 +355,6 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		KibanaHost:                 kibanaHost,
 		KibanaScheme:               kibanaScheme,
 		KibanaPort:                 kibanaPort,
-		KibanaDomain:               kibanaDomain,
-		KibanaPortAsInt:            kibanaPortAsInt,
 		ExternalKibanaClientSecret: externalKibanaSecret,
 		Credentials:                []*corev1.Secret{&credentials},
 	}
@@ -387,14 +383,13 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	return reconcile.Result{}, nil
 }
 
-func parseDomainAndPort(host string, port string) (string, uint16, error) {
-	kibanaDomain := strings.TrimSuffix(host, "/")
+func parsePort(port string) (uint16, error) {
 	kibanaPort, err := strconv.ParseUint(port, 10, 16)
 	if err != nil {
-		return "", 0, err
+		return 0, err
 	}
 	if kibanaPort > math.MaxInt16 {
-		return "", 0, fmt.Errorf(fmt.Sprintf("Kibana port is larger them max %d", math.MaxInt16))
+		return 0, fmt.Errorf(fmt.Sprintf("Kibana port is larger them max %d", math.MaxInt16))
 	}
-	return kibanaDomain, uint16(kibanaPort), nil
+	return uint16(kibanaPort), nil
 }

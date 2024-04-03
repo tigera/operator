@@ -89,11 +89,9 @@ type Config struct {
 	ExternalKibanaClientSecret *corev1.Secret
 
 	// Kibana service definition
-	KibanaHost      string
-	KibanaPort      string
-	KibanaScheme    string
-	KibanaDomain    string
-	KibanaPortAsInt uint16
+	KibanaHost   string
+	KibanaPort   uint16
+	KibanaScheme string
 
 	// Credentials are used to provide annotations for elastic search users
 	Credentials []*corev1.Secret
@@ -157,8 +155,8 @@ func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				Ports:   []numorstring.Port{{MinPort: d.cfg.KibanaPortAsInt, MaxPort: d.cfg.KibanaPortAsInt}},
-				Domains: []string{d.cfg.KibanaDomain},
+				Ports:   []numorstring.Port{{MinPort: d.cfg.KibanaPort, MaxPort: d.cfg.KibanaPort}},
+				Domains: []string{d.cfg.KibanaHost},
 			},
 		})
 	} else {
@@ -206,7 +204,7 @@ func (d *dashboards) Job() *batchv1.Job {
 		},
 		{
 			Name:  "KIBANA_PORT",
-			Value: d.cfg.KibanaPort,
+			Value: fmt.Sprintf("%d", d.cfg.KibanaPort),
 		},
 		{
 			Name:  "KIBANA_SCHEME",

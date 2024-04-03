@@ -16,6 +16,7 @@ package dashboards
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -152,16 +153,23 @@ func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, d.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
 	if d.cfg.ExternalKibanaClientSecret != nil {
-		issuerDomain := strings.TrimPrefix(d.cfg.KibanaHost, "https://")
-		issuerDomain = strings.TrimSuffix(issuerDomain, "/")
-		kibanaPort, _ := strconv.Atoi(d.cfg.KibanaPort)
+		const defaultKibanaPort uint64 = 443
+		kibanaDomain := strings.TrimPrefix(d.cfg.KibanaHost, "https://")
+		kibanaDomain = strings.TrimSuffix(kibanaDomain, "/")
+		kibanaPort, err := strconv.ParseUint(d.cfg.KibanaPort, 10, 16)
+		if err != nil {
+			kibanaPort = defaultKibanaPort
+		}
+		if kibanaPort > math.MaxInt16 {
+			kibanaPort = defaultKibanaPort
+		}
 
 		egressRules = append(egressRules, v3.Rule{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
 				Ports:   []numorstring.Port{{MinPort: uint16(kibanaPort), MaxPort: uint16(kibanaPort)}},
-				Domains: []string{issuerDomain},
+				Domains: []string{kibanaDomain},
 			},
 		})
 	} else {

@@ -16,7 +16,11 @@ package dashboards
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
+
+	"github.com/tigera/api/pkg/lib/numorstring"
 
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 
@@ -148,11 +152,33 @@ func (d *dashboards) resources() []client.Object {
 func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, d.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
-	egressRules = append(egressRules, v3.Rule{
-		Action:      v3.Allow,
-		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: render.KibanaEntityRule,
-	})
+	if d.cfg.ExternalKibanaClientSecret != nil {
+		const defaultKibanaPort uint64 = 443
+		kibanaDomain := strings.TrimPrefix(d.cfg.KibanaHost, "https://")
+		kibanaDomain = strings.TrimSuffix(kibanaDomain, "/")
+		kibanaPort, err := strconv.ParseUint(d.cfg.KibanaPort, 10, 16)
+		if err != nil {
+			kibanaPort = defaultKibanaPort
+		}
+		if kibanaPort > math.MaxInt16 {
+			kibanaPort = defaultKibanaPort
+		}
+
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports:   []numorstring.Port{{MinPort: uint16(kibanaPort), MaxPort: uint16(kibanaPort)}},
+				Domains: []string{kibanaDomain},
+			},
+		})
+	} else {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.KibanaEntityRule,
+		})
+	}
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},

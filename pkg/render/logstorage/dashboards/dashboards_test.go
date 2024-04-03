@@ -92,12 +92,14 @@ var _ = Describe("Dashboards rendering tests", func() {
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				TrustedBundle: bundle,
-				UsePSP:        true,
-				Namespace:     render.ElasticsearchNamespace,
-				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.svc",
-				KibanaScheme:  "https",
-				KibanaPort:    "5601",
+				TrustedBundle:   bundle,
+				UsePSP:          true,
+				Namespace:       render.ElasticsearchNamespace,
+				KibanaHost:      "tigera-secure-kb-http.tigera-kibana.svc",
+				KibanaScheme:    "https",
+				KibanaPort:      "5601",
+				KibanaDomain:    "tigera-secure-kb-http.tigera-kibana.svc",
+				KibanaPortAsInt: 5601,
 			}
 		})
 
@@ -192,11 +194,13 @@ var _ = Describe("Dashboards rendering tests", func() {
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				TrustedBundle: bundle,
-				Namespace:     render.ElasticsearchNamespace,
-				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.tigera-kibana.svc",
-				KibanaScheme:  "htpps",
-				KibanaPort:    "5601",
+				TrustedBundle:   bundle,
+				Namespace:       render.ElasticsearchNamespace,
+				KibanaHost:      "tigera-secure-kb-http.tigera-kibana.tigera-kibana.svc",
+				KibanaScheme:    "htpps",
+				KibanaPort:      "5601",
+				KibanaDomain:    "tigera-secure-kb-http.tigera-kibana.svc",
+				KibanaPortAsInt: 5601,
 			})
 
 			resources, _ := component.Objects()
@@ -237,12 +241,14 @@ var _ = Describe("Dashboards rendering tests", func() {
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				TrustedBundle: bundle,
-				Namespace:     "tenant-test-tenant",
-				Tenant:        tenant,
-				KibanaHost:    "external-kibana",
-				KibanaScheme:  "https",
-				KibanaPort:    "443",
+				TrustedBundle:   bundle,
+				Namespace:       "tenant-test-tenant",
+				Tenant:          tenant,
+				KibanaHost:      "external-kibana",
+				KibanaScheme:    "https",
+				KibanaPort:      "443",
+				KibanaDomain:    "external-kibana",
+				KibanaPortAsInt: 443,
 			}
 		})
 
@@ -379,12 +385,14 @@ var _ = Describe("Dashboards rendering tests", func() {
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				TrustedBundle: bundle,
-				Namespace:     render.ElasticsearchNamespace,
-				Tenant:        tenant,
-				KibanaHost:    "external-kibana",
-				KibanaScheme:  "https",
-				KibanaPort:    "443",
+				TrustedBundle:   bundle,
+				Namespace:       render.ElasticsearchNamespace,
+				Tenant:          tenant,
+				KibanaHost:      "external-kibana",
+				KibanaScheme:    "https",
+				KibanaPort:      "443",
+				KibanaDomain:    "external-kibana",
+				KibanaPortAsInt: 443,
 			}
 		})
 
@@ -494,12 +502,14 @@ var _ = Describe("Dashboards rendering tests", func() {
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				TrustedBundle: bundle,
-				Namespace:     render.ElasticsearchNamespace,
-				Tenant:        tenant,
-				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.svc",
-				KibanaScheme:  "https",
-				KibanaPort:    "5601",
+				TrustedBundle:   bundle,
+				Namespace:       render.ElasticsearchNamespace,
+				Tenant:          tenant,
+				KibanaHost:      "tigera-secure-kb-http.tigera-kibana.svc",
+				KibanaScheme:    "https",
+				KibanaPort:      "5601",
+				KibanaDomain:    "external-kibana",
+				KibanaPortAsInt: 443,
 			}
 		})
 

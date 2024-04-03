@@ -16,8 +16,6 @@ package dashboards
 
 import (
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
 
 	"github.com/tigera/api/pkg/lib/numorstring"
@@ -91,9 +89,11 @@ type Config struct {
 	ExternalKibanaClientSecret *corev1.Secret
 
 	// Kibana service definition
-	KibanaHost   string
-	KibanaPort   string
-	KibanaScheme string
+	KibanaHost      string
+	KibanaPort      string
+	KibanaScheme    string
+	KibanaDomain    string
+	KibanaPortAsInt uint16
 
 	// Credentials are used to provide annotations for elastic search users
 	Credentials []*corev1.Secret
@@ -153,23 +153,12 @@ func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, d.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
 	if d.cfg.ExternalKibanaClientSecret != nil {
-		const defaultKibanaPort uint64 = 443
-		kibanaDomain := strings.TrimPrefix(d.cfg.KibanaHost, "https://")
-		kibanaDomain = strings.TrimSuffix(kibanaDomain, "/")
-		kibanaPort, err := strconv.ParseUint(d.cfg.KibanaPort, 10, 16)
-		if err != nil {
-			kibanaPort = defaultKibanaPort
-		}
-		if kibanaPort > math.MaxInt16 {
-			kibanaPort = defaultKibanaPort
-		}
-
 		egressRules = append(egressRules, v3.Rule{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				Ports:   []numorstring.Port{{MinPort: uint16(kibanaPort), MaxPort: uint16(kibanaPort)}},
-				Domains: []string{kibanaDomain},
+				Ports:   []numorstring.Port{{MinPort: d.cfg.KibanaPortAsInt, MaxPort: d.cfg.KibanaPortAsInt}},
+				Domains: []string{d.cfg.KibanaDomain},
 			},
 		})
 	} else {

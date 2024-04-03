@@ -151,3 +151,7 @@ components:
   egress-gateway:
     image: tigera/egress-gateway
     version: release-calient-v3.19
+  key-cert-provisioner:
+    image: tigera/key-cert-provisioner
+    version: release-calient-v3.19
+

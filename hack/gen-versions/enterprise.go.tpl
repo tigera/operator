@@ -405,7 +405,6 @@ var (
 		ComponentTigeraCNI,
 		ComponentTigeraCNIFIPS,
 		ComponentTigeraCNIWindows,
-		ComponentCloudControllers,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentLinseed,

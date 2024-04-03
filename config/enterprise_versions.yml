@@ -91,9 +91,6 @@ components:
   tigera-cni-windows:
     image: tigera/cni-windows
     version: release-calient-v3.19
-  cloud-controllers:
-    image: tigera/cloud-controllers
-    version: release-calient-v3.19
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
     version: release-calient-v3.19

@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/api/pkg/lib/numorstring"
+
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -88,7 +90,7 @@ type Config struct {
 
 	// Kibana service definition
 	KibanaHost   string
-	KibanaPort   string
+	KibanaPort   uint16
 	KibanaScheme string
 
 	// Credentials are used to provide annotations for elastic search users
@@ -148,11 +150,22 @@ func (d *dashboards) resources() []client.Object {
 func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, d.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
-	egressRules = append(egressRules, v3.Rule{
-		Action:      v3.Allow,
-		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: render.KibanaEntityRule,
-	})
+	if d.cfg.ExternalKibanaClientSecret != nil {
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports:   []numorstring.Port{{MinPort: d.cfg.KibanaPort, MaxPort: d.cfg.KibanaPort}},
+				Domains: []string{d.cfg.KibanaHost},
+			},
+		})
+	} else {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.KibanaEntityRule,
+		})
+	}
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
@@ -191,7 +204,7 @@ func (d *dashboards) Job() *batchv1.Job {
 		},
 		{
 			Name:  "KIBANA_PORT",
-			Value: d.cfg.KibanaPort,
+			Value: fmt.Sprintf("%d", d.cfg.KibanaPort),
 		},
 		{
 			Name:  "KIBANA_SCHEME",

@@ -42,6 +42,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -134,7 +135,7 @@ const (
 	ElasticsearchTLSHashAnnotation = "hash.operator.tigera.io/es-secrets"
 
 	TimeFilter         = "_g=(time:(from:now-24h,to:now))"
-	FlowsDashboardName = "Tigera Secure EE Flow Logs"
+	FlowsDashboardName = "Calico Enterprise Flow Logs"
 )
 
 const (

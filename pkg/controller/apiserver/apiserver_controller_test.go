@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -193,8 +194,8 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentCSRInitContainer.Image,
-					components.ComponentCSRInitContainer.Version)))
+					components.ComponentTigeraCSRInitContainer.Image,
+					components.ComponentTigeraCSRInitContainer.Version)))
 
 			pcDeployment := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
@@ -227,8 +228,8 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(csrinitContainer).ToNot(BeNil())
 			Expect(csrinitContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentCSRInitContainer.Image,
-					components.ComponentCSRInitContainer.Version)))
+					components.ComponentTigeraCSRInitContainer.Image,
+					components.ComponentTigeraCSRInitContainer.Version)))
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
@@ -291,7 +292,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentCSRInitContainer.Image,
+					components.ComponentTigeraCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
 
 			pcDeployment := appsv1.Deployment{
@@ -313,7 +314,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(csrinitContainer).ToNot(BeNil())
 			Expect(csrinitContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentCSRInitContainer.Image,
+					components.ComponentTigeraCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},

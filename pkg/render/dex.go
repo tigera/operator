@@ -358,6 +358,12 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 			"tlsKey":                  c.cfg.TLSKeyPair.VolumeMountKeyFilePath(),
 			"allowedOrigins":          []string{"*"},
 			"discoveryAllowedOrigins": []string{"*"},
+			"headers": map[string]string{
+				"X-Content-Type-Options":    "nosniff",
+				"X-XSS-Protection":          "1; mode=block",
+				"X-Frame-Options":           "DENY",
+				"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+			},
 		},
 		"connectors": []map[string]interface{}{c.connector},
 		"oauth2": map[string]interface{}{

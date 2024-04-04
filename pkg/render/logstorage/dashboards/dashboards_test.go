@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/api/pkg/lib/numorstring"
+
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/google/go-cmp/cmp"
@@ -95,7 +97,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 				Namespace:     render.ElasticsearchNamespace,
 				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.svc",
 				KibanaScheme:  "https",
-				KibanaPort:    "5601",
+				KibanaPort:    5601,
 			}
 		})
 
@@ -194,7 +196,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 				Namespace:     render.ElasticsearchNamespace,
 				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.tigera-kibana.svc",
 				KibanaScheme:  "htpps",
-				KibanaPort:    "5601",
+				KibanaPort:    5601,
 			})
 
 			resources, _ := component.Objects()
@@ -240,7 +242,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 				Tenant:        tenant,
 				KibanaHost:    "external-kibana",
 				KibanaScheme:  "https",
-				KibanaPort:    "443",
+				KibanaPort:    443,
 			}
 		})
 
@@ -382,7 +384,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 				Tenant:        tenant,
 				KibanaHost:    "external-kibana",
 				KibanaScheme:  "https",
-				KibanaPort:    "443",
+				KibanaPort:    443,
 			}
 		})
 
@@ -429,6 +431,13 @@ var _ = Describe("Dashboards rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
 				Name: "KIBANA_MTLS_ENABLED", Value: "true",
 			}))
+			netPol := rtest.GetResource(createResources, fmt.Sprintf("allow-tigera.%s", Name), render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+			Expect(netPol).NotTo(BeNil())
+			Expect(netPol.Spec.Egress).To(HaveLen(2))
+			Expect(netPol.Spec.Egress[1].Destination).To(Equal(v3.EntityRule{
+				Ports:   []numorstring.Port{{MinPort: 443, MaxPort: 443}},
+				Domains: []string{"external-kibana"},
+			}))
 		})
 
 		It("should render resources in the elasticsearch namespace", func() {
@@ -441,6 +450,8 @@ var _ = Describe("Dashboards rendering tests", func() {
 			Expect(sa).NotTo(BeNil())
 			netPol := rtest.GetResource(resources, fmt.Sprintf("allow-tigera.%s", Name), render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
 			Expect(netPol).NotTo(BeNil())
+			Expect(netPol.Spec.Egress).To(HaveLen(2))
+			Expect(netPol.Spec.Egress[1].Destination).To(Equal(render.KibanaEntityRule))
 		})
 
 		It("should render single-tenant environment variables", func() {
@@ -488,7 +499,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 				Tenant:        tenant,
 				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.svc",
 				KibanaScheme:  "https",
-				KibanaPort:    "5601",
+				KibanaPort:    5601,
 			}
 		})
 

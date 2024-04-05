@@ -167,10 +167,14 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		Expect(dep.Spec.Template.Spec.ServiceAccountName).To(Equal("egress-test"))
 		initContainer := dep.Spec.Template.Spec.InitContainers[0]
 		egwContainer := dep.Spec.Template.Spec.Containers[0]
+		egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
+		egressPodIps := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIPs"}}
 		expectedInitEnvVars := []corev1.EnvVar{
 			{Name: "EGRESS_VXLAN_VNI", Value: "4097"},
 			{Name: "EGRESS_VXLAN_PORT", Value: "4790"},
 			{Name: "IPTABLES_BACKEND", Value: "nft"},
+			{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp},
+			{Name: "EGRESS_POD_IPS", ValueFrom: egressPodIps},
 		}
 		for _, elem := range expectedInitEnvVars {
 			Expect(initContainer.Env).To(ContainElement(elem))
@@ -198,6 +202,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			{Name: "ICMP_PROBE_TIMEOUT", Value: "40s"},
 			{Name: "HTTP_PROBE_INTERVAL", Value: "20s"},
 			{Name: "HTTP_PROBE_TIMEOUT", Value: "40s"},
+			{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp},
+			{Name: "EGRESS_POD_IPS", ValueFrom: egressPodIps},
 		}
 		for _, elem := range expectedEnvVars {
 			Expect(egwContainer.Env).To(ContainElement(elem))

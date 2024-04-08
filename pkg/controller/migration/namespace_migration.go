@@ -672,13 +672,14 @@ func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated(ctx context.Context,
 			}
 		}
 
-		// if the cluster has only 1 node then once the ensureTyphaRoom() function runs, it scales down the kube-system/calico-typha pod.
-		// then it can happen that kube-system/calico-node goes down to CrashLoopBackOff due that.
-		// When that happens, the below calculation does not work for 1 node clusters. Handle this special case. Assumptions:
+		// In case of a single node cluster, the ensureTyphaRoom() function scales down the kube-system/calico-typha pod to zero,
+		// and it can cause that kube-system/calico-node goes down to CrashLoopBackOff. It can block namespace migration and the below
+		// calculation fails as there will be no ready calico-node pods. Handle this special case.
+		// Assumptions:
 		// - all the nodes are labeled with projectcalico.org/operator-node-migration (pre-operator value)
 		// - kube-system/calico-node and calico-system/calico-node daemonsets are using the above nodeSelector
 		if ksD == 1 && csD == 0 {
-			ksR = 1
+			return true, nil
 		}
 		// Check that ready pods plus maxUnavailable is MORE than the desired pods so when we migrate
 		// one more node we won't go over the maxUnavailable with unready pods.

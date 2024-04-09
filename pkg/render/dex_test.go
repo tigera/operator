@@ -261,6 +261,24 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(cm.Data["config.yaml"]).To(ContainSubstring("idTokens: 15m"))
 		})
 
+		It("should render config Map with the HSTS headers", func() {
+			component := render.Dex(cfg)
+			resources, _ := component.Objects()
+
+			d := rtest.GetResource(resources, "tigera-dex", "tigera-dex", "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts).To(BeEquivalentTo(expectedVolumeMounts))
+			Expect(d.Spec.Template.Spec.Volumes).To(BeEquivalentTo(expectedVolumes))
+
+			cm, ok := rtest.GetResource(resources, "tigera-dex", "tigera-dex", "", "v1", "ConfigMap").(*corev1.ConfigMap)
+			Expect(ok).To(BeTrue())
+			Expect(cm.Data["config.yaml"]).To(ContainSubstring("X-Content-Type-Options: nosniff"))
+			Expect(cm.Data["config.yaml"]).To(ContainSubstring("X-XSS-Protection: 1; mode=block"))
+			Expect(cm.Data["config.yaml"]).To(ContainSubstring("X-Frame-Options: DENY"))
+			Expect(cm.Data["config.yaml"]).To(ContainSubstring("Strict-Transport-Security: max-age=31536000; includeSubDomains"))
+		})
+
 		DescribeTable("should render the cluster name properly in the validator", func(clusterDomain string) {
 			validatorConfig := render.NewDexKeyValidatorConfig(authentication, idpSecret, clusterDomain)
 			validatorEnv := validatorConfig.RequiredEnv("")

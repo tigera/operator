@@ -183,7 +183,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}
 			})
 
-			It("should render an elasticsearchComponent", func() {
+			It("should render an elasticsearchComponent and a kibanaComponent", func() {
 				expectedCreateResources := []client.Object{
 					// ECK Resources
 					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.ECKOperatorNamespace}},
@@ -462,6 +462,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						ResourceNames: []string{"elastic-operator"},
 					},
 				}))
+
+				resultKB := rtest.GetResource(createResources, render.KibanaName, render.KibanaNamespace,
+					"kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
+				Expect(resultKB.Spec.Config.Data["xpack.security.session.lifespan"]).To(Equal("8h"))
+				Expect(resultKB.Spec.Config.Data["xpack.security.session.idleTimeout"]).To(Equal("30m"))
 			})
 
 			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService as well as Curator components", func() {

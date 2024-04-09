@@ -445,6 +445,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		ExternalElastic:                r.externalElastic,
 		TrustedBundle:                  trustedBundleRO,
 		PolicyRecommendationCertSecret: policyRecommendationKeyPair,
+		PolicyRecommendation:           policyRecommendation,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

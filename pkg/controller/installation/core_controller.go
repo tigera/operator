@@ -1713,7 +1713,7 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Co
 		if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
 			err := setBPFEnabledOnFelixConfiguration(fc, bpfEnabledOnInstall)
 			if err != nil {
-				reqLogger.Error(err, "Unable to enable eBPF data plane")
+				reqLogger.Error(err, "Unable to disable eBPF data plane")
 				return false, err
 			} else {
 				updated = true

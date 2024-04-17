@@ -17,6 +17,7 @@ package manager
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -31,11 +32,11 @@ const (
 	configMapFolder = "/config_maps"
 	secretsFolder   = "/secrets"
 
-	uiTLSTerminatedRoutesKey              = "uiTLSTerminatedRoutes.json"
-	upstreamTunnelTLSTerminatedRoutesKey  = "upstreamTunnelTLSTerminatedRoutes.json"
-	upstreamTunnelTLSPassThroughRoutesKey = "upstreamTunnelTLSPassThroughRoutes.json"
+	uiTLSTerminatedRoutesKey              = "uiTLSTermRoutes.json"
+	upstreamTunnelTLSTerminatedRoutesKey  = "upTunTLSTermRoutes.json"
+	upstreamTunnelTLSPassThroughRoutesKey = "upTunTLSPTRoutes.json"
 
-	routesAnnotationPrefix = "hash.operator.tigera.io/route-configuration"
+	routesAnnotationPrefix = "hash.operator.tigera.io/routeconf"
 )
 
 // tlsTerminatedRoute is need for the json translation from the TLSTerminatedRoute CR to the json voltron expects to
@@ -293,7 +294,7 @@ func (builder *voltronRouteConfigBuilder) mountConfigMapReference(name, key stri
 		// Use mapToSortedArray to ensure the ordering is the same and the annotation value isn't changed because of
 		// map ordering differences.
 		for k, value := range configMap.Data {
-			builder.annotations[fmt.Sprintf("%s/configmap-%s-%s", routesAnnotationPrefix, configMap.Name, k)] = rmeta.AnnotationHash(value)
+			builder.annotations[fmt.Sprintf("%s-cm-%s-%s", routesAnnotationPrefix, configMap.Name, strings.ToLower(k))] = rmeta.AnnotationHash(value)
 		}
 
 		builder.mountedConfigMaps[name] = struct{}{}
@@ -335,7 +336,7 @@ func (builder *voltronRouteConfigBuilder) mountSecretReference(name, key string)
 		// Use mapToSortedArray to ensure the ordering is the same and the annotation value isn't changed because of
 		// map ordering differences.
 		for k, value := range secret.Data {
-			builder.annotations[fmt.Sprintf("%s/secret-%s-%s", routesAnnotationPrefix, secret.Name, k)] = rmeta.AnnotationHash(value)
+			builder.annotations[fmt.Sprintf("%s-s-%s-%s", routesAnnotationPrefix, secret.Name, strings.ToLower(k))] = rmeta.AnnotationHash(value)
 		}
 
 		builder.mountedSecrets[name] = struct{}{}

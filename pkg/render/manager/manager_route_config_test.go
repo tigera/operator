@@ -17,7 +17,6 @@ package manager_test
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -177,7 +176,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 		})
 
 		When("the CABundle is set and the config map was added to the builder", func() {
-			DescribeTable("successfully builds the config", func(target operatorv1.TargetType, fileName string) {
+			DescribeTable("successfully builds the config", func(target operatorv1.TargetType, fileName string, routeCMKey string) {
 				route.Spec.Target = target
 				route.Spec.CABundle = &corev1.ConfigMapKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -194,8 +193,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(config.Annotations()).Should(Equal(map[string]string{
-					"hash.operator.tigera.io/route-configuration/configmap-ca-bundle-bundle":                         "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
-					fmt.Sprintf("hash.operator.tigera.io/route-configuration/configmap-voltron-routes-%s", fileName): "ca2304ee9ca1739c7efdb1b2fc30a348041576c7",
+					"hash.operator.tigera.io/routeconf-cm-ca-bundle-bundle": "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
+					routeCMKey: "ca2304ee9ca1739c7efdb1b2fc30a348041576c7",
 				}))
 				Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{caBundleVolumeMount, routesConfigMapVolumeMount}))
 
@@ -207,8 +206,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				routesConfigMap.Data[fileName] = `[{"destination":"","path":"/foobar","caBundlePath":"/config_maps/ca-bundle/ca.bundle","pathRegexp":"^/foobar$","pathReplace":"/"}]`
 				Expect(cm).Should(Equal(routesConfigMap))
 			},
-				Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTerminatedRoutes.json"),
-				Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upstreamTunnelTLSTerminatedRoutes.json"),
+				Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTermRoutes.json", "hash.operator.tigera.io/routeconf-cm-voltron-routes-uit-9a915"),
+				Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upTunTLSTermRoutes.json", "hash.operator.tigera.io/routeconf-cm-voltron-routes-upt-9cbe8"),
 			)
 		})
 
@@ -239,7 +238,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				Expect(err).Should(HaveOccurred())
 			})
 
-			DescribeTable("succeeds if the MTLS key is specified", func(target operatorv1.TargetType, fileName string) {
+			DescribeTable("succeeds if the MTLS key is specified", func(target operatorv1.TargetType, fileName string, routeCMKey string) {
 				route.Spec.Target = target
 				route.Spec.ForwardingMTLSCert = &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -263,10 +262,10 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(config.Annotations()).Should(Equal(map[string]string{
-					"hash.operator.tigera.io/route-configuration/configmap-ca-bundle-bundle":                         "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
-					"hash.operator.tigera.io/route-configuration/secret-mtls-cert-cert.pem":                          "e50bc7ce05be499174194858aaf077b556de4d4a",
-					"hash.operator.tigera.io/route-configuration/secret-mtls-key-key.pem":                            "6b519c7eea53167b5fe03c86b7650ada4e7a4784",
-					fmt.Sprintf("hash.operator.tigera.io/route-configuration/configmap-voltron-routes-%s", fileName): "907bc0d66a81235ae423c36bda0ed50fa73f7f51",
+					"hash.operator.tigera.io/routeconf-cm-ca-bundle-bundle":  "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
+					"hash.operator.tigera.io/routeconf-s-mtls-cert-cert.pem": "e50bc7ce05be499174194858aaf077b556de4d4a",
+					"hash.operator.tigera.io/routeconf-s-mtls-key-key.pem":   "6b519c7eea53167b5fe03c86b7650ada4e7a4784",
+					routeCMKey: "907bc0d66a81235ae423c36bda0ed50fa73f7f51",
 				}))
 				Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{caBundleVolumeMount, mtlsCertVolumeMount, mtlsKeyVolumeMount, routesConfigMapVolumeMount}))
 
@@ -278,8 +277,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				routesConfigMap.Data[fileName] = `[{"destination":"","path":"/foobar","caBundlePath":"/config_maps/ca-bundle/ca.bundle","pathRegexp":"^/foobar$","pathReplace":"/","clientCertPath":"/config_maps/mtls-cert/cert.pem","clientKeyPath":"/config_maps/mtls-key/key.pem"}]`
 				Expect(cm).Should(Equal(routesConfigMap))
 			},
-				Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTerminatedRoutes.json"),
-				Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upstreamTunnelTLSTerminatedRoutes.json"),
+				Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTermRoutes.json", "hash.operator.tigera.io/routeconf-cm-voltron-routes-uit-9a915"),
+				Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upTunTLSTermRoutes.json", "hash.operator.tigera.io/routeconf-cm-voltron-routes-upt-9cbe8"),
 			)
 		})
 	})
@@ -287,6 +286,6 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 
 func compactJSONString(jsonStr string) string {
 	buffer := new(bytes.Buffer)
-	Expect(json.Compact(buffer, []byte(jsonStr))).ShouldNot(HaveOccurred())
+	ExpectWithOffset(1, json.Compact(buffer, []byte(jsonStr))).ShouldNot(HaveOccurred())
 	return buffer.String()
 }

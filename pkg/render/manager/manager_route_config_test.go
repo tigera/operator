@@ -176,8 +176,84 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 			})
 		})
 
+		When("two configmap entries result in the same annotation value", func() {
+			It("resolves the conflict by creating a different annotation key for the second conflicting value", func() {
+				mtlsCert = &corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "verylongnametoforceconflictlogic",
+						Namespace: "tigera-manager",
+					},
+					Data: map[string][]byte{},
+				}
+
+				// Add enough routes with different keys from the same config map to force the conflict to go above 10,
+				// so we can test that we don't go over the 63 char limit when the number of digits increase for the suffix.
+				for i := 0; i < 6; i++ {
+					mtlsCert.Data[fmt.Sprintf("%s%d", "cert.pem", i)] = []byte("bytes")
+					mtlsCert.Data[fmt.Sprintf("%s%d", "key.pem", i)] = []byte("bytes")
+					route := operatorv1.TLSTerminatedRoute{
+						ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%d-test-route", i), Namespace: "tigera-manager"},
+						Spec: operatorv1.TLSTerminatedRouteSpec{
+							PathMatch: &operatorv1.PathMatch{
+								Path:        "/foobar",
+								PathRegexp:  ptr.ToPtr("^/foobar$"),
+								PathReplace: ptr.ToPtr("/"),
+							},
+						},
+					}
+
+					route.Spec.CABundle = &corev1.ConfigMapKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: "ca-bundle",
+						},
+						Key: "ca.bundle",
+					}
+
+					route.Spec.Target = operatorv1.TargetTypeUI
+					route.Spec.ForwardingMTLSCert = &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: mtlsCert.Name,
+						},
+						Key: fmt.Sprintf("%s%d", "cert.pem", i),
+					}
+					route.Spec.ForwardingMTLSKey = &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: mtlsCert.Name,
+						},
+						Key: fmt.Sprintf("%s%d", "key.pem", i),
+					}
+
+					builder.AddTLSTerminatedRoute(route)
+				}
+
+				builder.AddConfigMap(caBundle)
+				builder.AddSecret(mtlsCert)
+				builder.AddSecret(mtlsKey)
+
+				config, err := builder.Build()
+				Expect(err).ShouldNot(HaveOccurred())
+
+				Expect(config.Annotations()).Should(Equal(map[string]string{
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconflict": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconflic1": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconflic2": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconflic3": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconflic4": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconflic5": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconflic6": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconflic7": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconflic8": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconflic9": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconfli10": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconfli11": "b64f683d0e588b7b03b62f62460efd553df9491e",
+					"hash.operator.tigera.io/routeconf-cm-ca-bundle-bundle":           "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
+					"hash.operator.tigera.io/routeconf-cm-voltron-routes-uitlstermro": "50ba4f0e0df0bec537299c44127daea5e7e8031d",
+				}))
+			})
+		})
+
 		When("the CABundle is set and the config map was added to the builder", func() {
-			DescribeTable("successfully builds the config", func(target operatorv1.TargetType, fileName string) {
+			DescribeTable("successfully builds the config", func(target operatorv1.TargetType, fileName string, routeCMKey string) {
 				route.Spec.Target = target
 				route.Spec.CABundle = &corev1.ConfigMapKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -194,8 +270,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(config.Annotations()).Should(Equal(map[string]string{
-					"hash.operator.tigera.io/route-configuration/configmap-ca-bundle-bundle":                         "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
-					fmt.Sprintf("hash.operator.tigera.io/route-configuration/configmap-voltron-routes-%s", fileName): "ca2304ee9ca1739c7efdb1b2fc30a348041576c7",
+					"hash.operator.tigera.io/routeconf-cm-ca-bundle-bundle": "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
+					routeCMKey: "ca2304ee9ca1739c7efdb1b2fc30a348041576c7",
 				}))
 				Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{caBundleVolumeMount, routesConfigMapVolumeMount}))
 
@@ -207,8 +283,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				routesConfigMap.Data[fileName] = `[{"destination":"","path":"/foobar","caBundlePath":"/config_maps/ca-bundle/ca.bundle","pathRegexp":"^/foobar$","pathReplace":"/"}]`
 				Expect(cm).Should(Equal(routesConfigMap))
 			},
-				Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTerminatedRoutes.json"),
-				Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upstreamTunnelTLSTerminatedRoutes.json"),
+				Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTermRoutes.json", "hash.operator.tigera.io/routeconf-cm-voltron-routes-uitlstermro"),
+				Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upTunTLSTermRoutes.json", "hash.operator.tigera.io/routeconf-cm-voltron-routes-uptuntlster"),
 			)
 		})
 
@@ -239,7 +315,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				Expect(err).Should(HaveOccurred())
 			})
 
-			DescribeTable("succeeds if the MTLS key is specified", func(target operatorv1.TargetType, fileName string) {
+			DescribeTable("succeeds if the MTLS key is specified", func(target operatorv1.TargetType, fileName string, routeCMKey string) {
 				route.Spec.Target = target
 				route.Spec.ForwardingMTLSCert = &corev1.SecretKeySelector{
 					LocalObjectReference: corev1.LocalObjectReference{
@@ -263,10 +339,10 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 
 				Expect(config.Annotations()).Should(Equal(map[string]string{
-					"hash.operator.tigera.io/route-configuration/configmap-ca-bundle-bundle":                         "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
-					"hash.operator.tigera.io/route-configuration/secret-mtls-cert-cert.pem":                          "e50bc7ce05be499174194858aaf077b556de4d4a",
-					"hash.operator.tigera.io/route-configuration/secret-mtls-key-key.pem":                            "6b519c7eea53167b5fe03c86b7650ada4e7a4784",
-					fmt.Sprintf("hash.operator.tigera.io/route-configuration/configmap-voltron-routes-%s", fileName): "907bc0d66a81235ae423c36bda0ed50fa73f7f51",
+					"hash.operator.tigera.io/routeconf-cm-ca-bundle-bundle":  "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
+					"hash.operator.tigera.io/routeconf-s-mtls-cert-cert.pem": "e50bc7ce05be499174194858aaf077b556de4d4a",
+					"hash.operator.tigera.io/routeconf-s-mtls-key-key.pem":   "6b519c7eea53167b5fe03c86b7650ada4e7a4784",
+					routeCMKey: "907bc0d66a81235ae423c36bda0ed50fa73f7f51",
 				}))
 				Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{caBundleVolumeMount, mtlsCertVolumeMount, mtlsKeyVolumeMount, routesConfigMapVolumeMount}))
 
@@ -278,8 +354,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 				routesConfigMap.Data[fileName] = `[{"destination":"","path":"/foobar","caBundlePath":"/config_maps/ca-bundle/ca.bundle","pathRegexp":"^/foobar$","pathReplace":"/","clientCertPath":"/config_maps/mtls-cert/cert.pem","clientKeyPath":"/config_maps/mtls-key/key.pem"}]`
 				Expect(cm).Should(Equal(routesConfigMap))
 			},
-				Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTerminatedRoutes.json"),
-				Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upstreamTunnelTLSTerminatedRoutes.json"),
+				Entry("UI target", operatorv1.TargetTypeUI, "uiTLSTermRoutes.json", "hash.operator.tigera.io/routeconf-cm-voltron-routes-uitlstermro"),
+				Entry("Upstream tunnel target", operatorv1.TargetTypeUpstreamTunnel, "upTunTLSTermRoutes.json", "hash.operator.tigera.io/routeconf-cm-voltron-routes-uptuntlster"),
 			)
 		})
 	})
@@ -287,6 +363,6 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 
 func compactJSONString(jsonStr string) string {
 	buffer := new(bytes.Buffer)
-	Expect(json.Compact(buffer, []byte(jsonStr))).ShouldNot(HaveOccurred())
+	ExpectWithOffset(1, json.Compact(buffer, []byte(jsonStr))).ShouldNot(HaveOccurred())
 	return buffer.String()
 }

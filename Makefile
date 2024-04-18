@@ -722,7 +722,7 @@ help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383
 #####################################
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
-CONTROLLER_GEN_VERSION ?= v0.11.3
+CONTROLLER_GEN_VERSION ?= v0.14.0
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests

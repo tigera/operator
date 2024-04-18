@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.11.3
+    controller-gen.kubebuilder.io/version: v0.14.0
   name: authentications.operator.tigera.io
 spec:
   group: operator.tigera.io
@@ -19,14 +19,19 @@ spec:
         description: Authentication is the Schema for the authentications API
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -47,47 +52,42 @@ spec:
                             description: Spec is the Dex Deployment's PodSpec.
                             properties:
                               containers:
-                                description: Containers is a list of Dex containers.
-                                  If specified, this overrides the specified Dex Deployment
-                                  containers. If omitted, the Dex Deployment will
-                                  use its default values for its containers.
+                                description: |-
+                                  Containers is a list of Dex containers.
+                                  If specified, this overrides the specified Dex Deployment containers.
+                                  If omitted, the Dex Deployment will use its default values for its containers.
                                 items:
                                   description: DexDeploymentContainer is a Dex Deployment
                                     container.
                                   properties:
                                     name:
-                                      description: 'Name is an enum which identifies
-                                        the Dex Deployment container by name. Supported
-                                        values are: tigera-dex'
+                                      description: |-
+                                        Name is an enum which identifies the Dex Deployment container by name.
+                                        Supported values are: tigera-dex
                                       enum:
                                       - tigera-dex
                                       type: string
                                     resources:
-                                      description: Resources allows customization
-                                        of limits and requests for compute resources
-                                        such as cpu and memory. If specified, this
-                                        overrides the named Dex Deployment container's
-                                        resources. If omitted, the Dex Deployment
-                                        will use its default value for this container's
-                                        resources.
+                                      description: |-
+                                        Resources allows customization of limits and requests for compute resources such as cpu and memory.
+                                        If specified, this overrides the named Dex Deployment container's resources.
+                                        If omitted, the Dex Deployment will use its default value for this container's resources.
                                       properties:
                                         claims:
-                                          description: "Claims lists the names of
-                                            resources, defined in spec.resourceClaims,
-                                            that are used by this container. \n This
-                                            is an alpha field and requires enabling
-                                            the DynamicResourceAllocation feature
-                                            gate. \n This field is immutable. It can
-                                            only be set for containers."
+                                          description: |-
+                                            Claims lists the names of resources, defined in spec.resourceClaims,
+                                            that are used by this container.
+                                            This is an alpha field and requires enabling the
+                                            DynamicResourceAllocation feature gate.
+                                            This field is immutable. It can only be set for containers.
                                           items:
                                             description: ResourceClaim references
                                               one entry in PodSpec.ResourceClaims.
                                             properties:
                                               name:
-                                                description: Name must match the name
-                                                  of one entry in pod.spec.resourceClaims
-                                                  of the Pod where this field is used.
-                                                  It makes that resource available
+                                                description: |-
+                                                  Name must match the name of one entry in pod.spec.resourceClaims of
+                                                  the Pod where this field is used. It makes that resource available
                                                   inside a container.
                                                 type: string
                                             required:
@@ -104,9 +104,9 @@ spec:
                                             - type: string
                                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                                             x-kubernetes-int-or-string: true
-                                          description: 'Limits describes the maximum
-                                            amount of compute resources allowed. More
-                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          description: |-
+                                            Limits describes the maximum amount of compute resources allowed.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                                           type: object
                                         requests:
                                           additionalProperties:
@@ -115,13 +115,11 @@ spec:
                                             - type: string
                                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                                             x-kubernetes-int-or-string: true
-                                          description: 'Requests describes the minimum
-                                            amount of compute resources required.
-                                            If Requests is omitted for a container,
-                                            it defaults to Limits if that is explicitly
-                                            specified, otherwise to an implementation-defined
-                                            value. Requests cannot exceed Limits.
-                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          description: |-
+                                            Requests describes the minimum amount of compute resources required.
+                                            If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                            otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                                           type: object
                                       type: object
                                   required:
@@ -129,48 +127,42 @@ spec:
                                   type: object
                                 type: array
                               initContainers:
-                                description: InitContainers is a list of Dex init
-                                  containers. If specified, this overrides the specified
-                                  Dex Deployment init containers. If omitted, the
-                                  Dex Deployment will use its default values for its
-                                  init containers.
+                                description: |-
+                                  InitContainers is a list of Dex init containers.
+                                  If specified, this overrides the specified Dex Deployment init containers.
+                                  If omitted, the Dex Deployment will use its default values for its init containers.
                                 items:
                                   description: DexDeploymentInitContainer is a Dex
                                     Deployment init container.
                                   properties:
                                     name:
-                                      description: 'Name is an enum which identifies
-                                        the Dex Deployment init container by name.
-                                        Supported values are: tigera-dex-tls-key-cert-provisioner'
+                                      description: |-
+                                        Name is an enum which identifies the Dex Deployment init container by name.
+                                        Supported values are: tigera-dex-tls-key-cert-provisioner
                                       enum:
                                       - tigera-dex-tls-key-cert-provisioner
                                       type: string
                                     resources:
-                                      description: Resources allows customization
-                                        of limits and requests for compute resources
-                                        such as cpu and memory. If specified, this
-                                        overrides the named Dex Deployment init container's
-                                        resources. If omitted, the Dex Deployment
-                                        will use its default value for this init container's
-                                        resources.
+                                      description: |-
+                                        Resources allows customization of limits and requests for compute resources such as cpu and memory.
+                                        If specified, this overrides the named Dex Deployment init container's resources.
+                                        If omitted, the Dex Deployment will use its default value for this init container's resources.
                                       properties:
                                         claims:
-                                          description: "Claims lists the names of
-                                            resources, defined in spec.resourceClaims,
-                                            that are used by this container. \n This
-                                            is an alpha field and requires enabling
-                                            the DynamicResourceAllocation feature
-                                            gate. \n This field is immutable. It can
-                                            only be set for containers."
+                                          description: |-
+                                            Claims lists the names of resources, defined in spec.resourceClaims,
+                                            that are used by this container.
+                                            This is an alpha field and requires enabling the
+                                            DynamicResourceAllocation feature gate.
+                                            This field is immutable. It can only be set for containers.
                                           items:
                                             description: ResourceClaim references
                                               one entry in PodSpec.ResourceClaims.
                                             properties:
                                               name:
-                                                description: Name must match the name
-                                                  of one entry in pod.spec.resourceClaims
-                                                  of the Pod where this field is used.
-                                                  It makes that resource available
+                                                description: |-
+                                                  Name must match the name of one entry in pod.spec.resourceClaims of
+                                                  the Pod where this field is used. It makes that resource available
                                                   inside a container.
                                                 type: string
                                             required:
@@ -187,9 +179,9 @@ spec:
                                             - type: string
                                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                                             x-kubernetes-int-or-string: true
-                                          description: 'Limits describes the maximum
-                                            amount of compute resources allowed. More
-                                            info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          description: |-
+                                            Limits describes the maximum amount of compute resources allowed.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                                           type: object
                                         requests:
                                           additionalProperties:
@@ -198,13 +190,11 @@ spec:
                                             - type: string
                                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                                             x-kubernetes-int-or-string: true
-                                          description: 'Requests describes the minimum
-                                            amount of compute resources required.
-                                            If Requests is omitted for a container,
-                                            it defaults to Limits if that is explicitly
-                                            specified, otherwise to an implementation-defined
-                                            value. Requests cannot exceed Limits.
-                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                                          description: |-
+                                            Requests describes the minimum amount of compute resources required.
+                                            If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                            otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                                           type: object
                                       type: object
                                   required:
@@ -216,10 +206,10 @@ spec:
                     type: object
                 type: object
               groupsPrefix:
-                description: If specified, GroupsPrefix is prepended to each group
-                  obtained from the identity provider. Note that Kibana does not support
-                  a groups prefix, so this prefix is removed from Kubernetes Groups
-                  when translating log access ClusterRoleBindings into Elastic.
+                description: |-
+                  If specified, GroupsPrefix is prepended to each group obtained from the identity provider. Note that
+                  Kibana does not support a groups prefix, so this prefix is removed from Kubernetes Groups when translating log access
+                  ClusterRoleBindings into Elastic.
                 type: string
               ldap:
                 description: LDAP contains the configuration needed to setup LDAP
@@ -234,7 +224,8 @@ spec:
                           "cn=groups,dc=example,dc=com"
                         type: string
                       filter:
-                        description: Optional filter to apply when searching the directory.
+                        description: |-
+                          Optional filter to apply when searching the directory.
                           For example "(objectClass=posixGroup)"
                         type: string
                       nameAttribute:
@@ -243,10 +234,10 @@ spec:
                           group.
                         type: string
                       userMatchers:
-                        description: Following list contains field pairs that are
-                          used to match a user to a group. It adds an additional requirement
-                          to the filter that an attribute in the group must match
-                          the user's attribute value.
+                        description: |-
+                          Following list contains field pairs that are used to match a user to a group. It adds an additional
+                          requirement to the filter that an attribute in the group must match the user's
+                          attribute value.
                         items:
                           description: UserMatch when the value of a UserAttribute
                             and a GroupAttribute match, a user belongs to the group.
@@ -273,10 +264,10 @@ spec:
                     description: 'The host and port of the LDAP server. Example: ad.example.com:636'
                     type: string
                   startTLS:
-                    description: StartTLS whether to enable the startTLS feature for
-                      establishing TLS on an existing LDAP session. If true, the ldap://
-                      protocol is used and then issues a StartTLS command, otherwise,
-                      connections will use the ldaps:// protocol.
+                    description: |-
+                      StartTLS whether to enable the startTLS feature for establishing TLS on an existing LDAP session.
+                      If true, the ldap:// protocol is used and then issues a StartTLS command, otherwise, connections will use
+                      the ldaps:// protocol.
                     type: boolean
                   userSearch:
                     description: User entry search configuration to match the credentials
@@ -291,9 +282,9 @@ spec:
                           For example "(objectClass=person)"
                         type: string
                       nameAttribute:
-                        description: 'A mapping of the attribute that is used as the
-                          username. This attribute can be used to apply RBAC to a
-                          user. Default: uid'
+                        description: |-
+                          A mapping of the attribute that is used as the username. This attribute can be used to apply RBAC to a user.
+                          Default: uid
                         type: string
                     required:
                     - baseDN
@@ -310,11 +301,11 @@ spec:
                   authentication.
                 properties:
                   emailVerification:
-                    description: 'Some providers do not include the claim "email_verified"
-                      when there is no verification in the user enrollment process
-                      or if they are acting as a proxy for another identity provider.
-                      By default those tokens are deemed invalid. To skip this check,
-                      set the value to "InsecureSkip". Default: Verify'
+                    description: |-
+                      Some providers do not include the claim "email_verified" when there is no verification in the user enrollment
+                      process or if they are acting as a proxy for another identity provider. By default those tokens are deemed invalid.
+                      To skip this check, set the value to "InsecureSkip".
+                      Default: Verify
                     enum:
                     - Verify
                     - InsecureSkip
@@ -331,15 +322,16 @@ spec:
                     description: IssuerURL is the URL to the OIDC provider.
                     type: string
                   promptTypes:
-                    description: 'PromptTypes is an optional list of string values
-                      that specifies whether the identity provider prompts the end
-                      user for re-authentication and consent. See the RFC for more
-                      information on prompt types: https://openid.net/specs/openid-connect-core-1_0.html.
-                      Default: "Consent"'
+                    description: |-
+                      PromptTypes is an optional list of string values that specifies whether the identity provider prompts the end user
+                      for re-authentication and consent. See the RFC for more information on prompt types:
+                      https://openid.net/specs/openid-connect-core-1_0.html.
+                      Default: "Consent"
                     items:
-                      description: 'PromptType is a value that specifies whether the
-                        identity provider prompts the end user for re-authentication
-                        and consent. One of: None, Login, Consent, SelectAccount.'
+                      description: |-
+                        PromptType is a value that specifies whether the identity provider prompts the end user for re-authentication and
+                        consent.
+                        One of: None, Login, Consent, SelectAccount.
                       enum:
                       - None
                       - Login
@@ -348,9 +340,9 @@ spec:
                       type: string
                     type: array
                   requestedScopes:
-                    description: 'RequestedScopes is a list of scopes to request from
-                      the OIDC provider. If not provided, the following scopes are
-                      requested: ["openid", "email", "profile", "groups", "offline_access"].'
+                    description: |-
+                      RequestedScopes is a list of scopes to request from the OIDC provider. If not provided, the following scopes are
+                      requested: ["openid", "email", "profile", "groups", "offline_access"].
                     items:
                       type: string
                     type: array
@@ -384,57 +376,57 @@ spec:
                 - issuerURL
                 type: object
               usernamePrefix:
-                description: If specified, UsernamePrefix is prepended to each user
-                  obtained from the identity provider. Note that Kibana does not support
-                  a user prefix, so this prefix is removed from Kubernetes User when
-                  translating log access ClusterRoleBindings into Elastic.
+                description: |-
+                  If specified, UsernamePrefix is prepended to each user obtained from the identity provider. Note that
+                  Kibana does not support a user prefix, so this prefix is removed from Kubernetes User when translating log access
+                  ClusterRoleBindings into Elastic.
                 type: string
             type: object
           status:
             description: AuthenticationStatus defines the observed state of Authentication
             properties:
               conditions:
-                description: Conditions represents the latest observed set of conditions
-                  for the component. A component may be one or more of Ready, Progressing,
-                  Degraded or other customer types.
+                description: |-
+                  Conditions represents the latest observed set of conditions for the component. A component may be one or more of
+                  Ready, Progressing, Degraded or other customer types.
                 items:
                   description: "Condition contains details for one aspect of the current
-                    state of this API Resource. --- This struct is intended for direct
-                    use as an array at the field path .status.conditions.  For example,
-                    \n type FooStatus struct{ // Represents the observations of a
-                    foo's current state. // Known .status.conditions.type are: \"Available\",
-                    \"Progressing\", and \"Degraded\" // +patchMergeKey=type // +patchStrategy=merge
-                    // +listType=map // +listMapKey=type Conditions []metav1.Condition
-                    `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\"
-                    protobuf:\"bytes,1,rep,name=conditions\"` \n // other fields }"
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
                   properties:
                     lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition
-                        transitioned from one status to another. This should be when
-                        the underlying condition changed.  If that is not known, then
-                        using the time when the API field changed is acceptable.
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
                       format: date-time
                       type: string
                     message:
-                      description: message is a human readable message indicating
-                        details about the transition. This may be an empty string.
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
                       maxLength: 32768
                       type: string
                     observedGeneration:
-                      description: observedGeneration represents the .metadata.generation
-                        that the condition was set based upon. For instance, if .metadata.generation
-                        is currently 12, but the .status.conditions[x].observedGeneration
-                        is 9, the condition is out of date with respect to the current
-                        state of the instance.
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
                       format: int64
                       minimum: 0
                       type: integer
                     reason:
-                      description: reason contains a programmatic identifier indicating
-                        the reason for the condition's last transition. Producers
-                        of specific condition types may define expected values and
-                        meanings for this field, and whether the values are considered
-                        a guaranteed API. The value should be a CamelCase string.
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
                         This field may not be empty.
                       maxLength: 1024
                       minLength: 1
@@ -448,11 +440,12 @@ spec:
                       - Unknown
                       type: string
                     type:
-                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                        --- Many .condition.type values are consistent across resources
-                        like Available, but because arbitrary conditions can be useful
-                        (see .node.status.conditions), the ability to deconflict is
-                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
                       maxLength: 316
                       pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                       type: string

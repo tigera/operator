@@ -17,6 +17,7 @@ package manager
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -31,11 +32,11 @@ const (
 	configMapFolder = "/config_maps"
 	secretsFolder   = "/secrets"
 
-	uiTLSTerminatedRoutesKey              = "uiTLSTerminatedRoutes.json"
-	upstreamTunnelTLSTerminatedRoutesKey  = "upstreamTunnelTLSTerminatedRoutes.json"
-	upstreamTunnelTLSPassThroughRoutesKey = "upstreamTunnelTLSPassThroughRoutes.json"
+	uiTLSTerminatedRoutesKey              = "uiTLSTermRoutes.json"
+	upstreamTunnelTLSTerminatedRoutesKey  = "upTunTLSTermRoutes.json"
+	upstreamTunnelTLSPassThroughRoutesKey = "upTunTLSPTRoutes.json"
 
-	routesAnnotationPrefix = "hash.operator.tigera.io/route-configuration"
+	routesAnnotationPrefix = "hash.operator.tigera.io/routeconf"
 )
 
 // tlsTerminatedRoute is need for the json translation from the TLSTerminatedRoute CR to the json voltron expects to
@@ -293,13 +294,26 @@ func (builder *voltronRouteConfigBuilder) mountConfigMapReference(name, key stri
 		// Use mapToSortedArray to ensure the ordering is the same and the annotation value isn't changed because of
 		// map ordering differences.
 		for k, value := range configMap.Data {
-			builder.annotations[fmt.Sprintf("%s/configmap-%s-%s", routesAnnotationPrefix, configMap.Name, k)] = rmeta.AnnotationHash(value)
+			builder.addAnnotation(fmt.Sprintf("cm-%s-%s", configMap.Name, strings.ToLower(k)), value)
 		}
 
 		builder.mountedConfigMaps[name] = struct{}{}
 	}
 
 	return fmt.Sprintf("%s/%s/%s", configMapFolder, name, key), nil
+}
+
+// addAnnotation adds the key and value to the annotation map. It ensures the key is lower case, and if it's length is
+// greater than 55 characters it takes the first 55 characters and appends the first 6 characters of a hash of the key.
+// This ensures that we're below the 63 character limit, but keys that have the same first 63 characters won't conflict
+// with annotation keys.
+func (builder *voltronRouteConfigBuilder) addAnnotation(key string, value string) {
+	key = fmt.Sprintf("%s-%s", routesAnnotationPrefix, strings.ToLower(key))
+	if len(key) > 55 {
+		hash := rmeta.AnnotationHash(key)
+		key = fmt.Sprintf("%s-%s", key[0:55], hash[0:5])
+	}
+	builder.annotations[key] = rmeta.AnnotationHash(value)
 }
 
 func (builder *voltronRouteConfigBuilder) mountSecretReference(name, key string) (string, error) {
@@ -335,7 +349,7 @@ func (builder *voltronRouteConfigBuilder) mountSecretReference(name, key string)
 		// Use mapToSortedArray to ensure the ordering is the same and the annotation value isn't changed because of
 		// map ordering differences.
 		for k, value := range secret.Data {
-			builder.annotations[fmt.Sprintf("%s/secret-%s-%s", routesAnnotationPrefix, secret.Name, k)] = rmeta.AnnotationHash(value)
+			builder.addAnnotation(fmt.Sprintf("s-%s-%s", secret.Name, strings.ToLower(k)), string(value))
 		}
 
 		builder.mountedSecrets[name] = struct{}{}

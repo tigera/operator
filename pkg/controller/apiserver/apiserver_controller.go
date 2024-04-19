@@ -175,6 +175,13 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch apiserver Tigerastatus: %w", err)
 	}
+
+	// Watch for changes to packet capture.
+	err = c.WatchObject(&operatorv1.PacketCapture{}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
+	}
+
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
 }
@@ -439,6 +446,13 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 		trustedBundle := certificateManager.CreateTrustedBundle(certificates...)
 
+		//Fetch the packet capture spec. If it exists, we utilize it to configure packet capture resource requirements.
+		packetcapture, err := utils.GetPacketCapture(ctx, r.client)
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying PacketCapture", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
 		packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
 			PullSecrets:                 pullSecrets,
 			Openshift:                   r.provider == operatorv1.ProviderOpenShift,
@@ -449,6 +463,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			ManagementClusterConnection: managementClusterConnection,
 			TrustedBundle:               trustedBundle,
 			UsePSP:                      r.usePSP,
+			PacketCapture:               packetcapture,
 		}
 		pc := render.PacketCaptureAPI(packetCaptureApiCfg)
 		pcPolicy = render.PacketCaptureAPIPolicy(packetCaptureApiCfg)

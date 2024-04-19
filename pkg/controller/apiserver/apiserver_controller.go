@@ -175,6 +175,13 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch apiserver Tigerastatus: %w", err)
 	}
+
+	// Watch for changes to packet capture.
+	err = c.WatchObject(&operatorv1.PacketCapture{}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
+	}
+
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
 }

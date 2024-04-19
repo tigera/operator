@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.11.3
+    controller-gen.kubebuilder.io/version: v0.14.0
   name: tlsterminatedroutes.operator.tigera.io
 spec:
   group: operator.tigera.io
@@ -18,29 +18,37 @@ spec:
       openAPIV3Schema:
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
           spec:
             properties:
               caBundle:
-                description: CABundle is where we read the CA bundle from to authenticate
-                  the destination (if non-empty)
+                description: |-
+                  CABundle is where we read the CA bundle from to authenticate the
+                  destination (if non-empty)
                 properties:
                   key:
                     description: The key to select.
                     type: string
                   name:
-                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      TODO: Add other useful fields. apiVersion, kind, uid?'
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      TODO: Add other useful fields. apiVersion, kind, uid?
                     type: string
                   optional:
                     description: Specify whether the ConfigMap or its key must be
@@ -55,17 +63,19 @@ spec:
                   is routed to.
                 type: string
               mtlsCert:
-                description: ForwardingMTLSCert is the certificate used for mTLS between
-                  voltron and the destination. Either both ForwardingMTLSCert and
-                  ForwardingMTLSKey must be specified, or neither can be specified.
+                description: |-
+                  ForwardingMTLSCert is the certificate used for mTLS between voltron and the destination. Either both ForwardingMTLSCert
+                  and ForwardingMTLSKey must be specified, or neither can be specified.
                 properties:
                   key:
                     description: The key of the secret to select from.  Must be a
                       valid secret key.
                     type: string
                   name:
-                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      TODO: Add other useful fields. apiVersion, kind, uid?'
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      TODO: Add other useful fields. apiVersion, kind, uid?
                     type: string
                   optional:
                     description: Specify whether the Secret or its key must be defined
@@ -75,17 +85,19 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               mtlsKey:
-                description: ForwardingMTLSKey is the key used for mTLS between voltron
-                  and the destination. Either both ForwardingMTLSCert and ForwardingMTLSKey
-                  must be specified, or neither can be specified.
+                description: |-
+                  ForwardingMTLSKey is the key used for mTLS between voltron and the destination. Either both ForwardingMTLSCert
+                  and ForwardingMTLSKey must be specified, or neither can be specified.
                 properties:
                   key:
                     description: The key of the secret to select from.  Must be a
                       valid secret key.
                     type: string
                   name:
-                    description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                      TODO: Add other useful fields. apiVersion, kind, uid?'
+                    description: |-
+                      Name of the referent.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                      TODO: Add other useful fields. apiVersion, kind, uid?
                     type: string
                   optional:
                     description: Specify whether the Secret or its key must be defined
@@ -95,9 +107,9 @@ spec:
                 type: object
                 x-kubernetes-map-type: atomic
               pathMatch:
-                description: PathMatch is used to match requests based on what's in
-                  the path. Matching requests will be proxied to the Destination defined
-                  in this structure.
+                description: |-
+                  PathMatch is used to match requests based on what's in the path. Matching requests will be proxied to the Destination
+                  defined in this structure.
                 properties:
                   path:
                     description: Path is the path portion of the URL based on which
@@ -120,8 +132,9 @@ spec:
                 - UI
                 type: string
               unauthenticated:
-                description: Unauthenticated says whether the request should go through
-                  authentication. This is only applicable if the Target is UI.
+                description: |-
+                  Unauthenticated says whether the request should go through authentication. This is only applicable if the Target
+                  is UI.
                 type: boolean
             required:
             - destination

@@ -439,6 +439,13 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 		trustedBundle := certificateManager.CreateTrustedBundle(certificates...)
 
+		//Fetch the packet capture spec. If it exists, we utilize it to configure packet capture resource requirements.
+		packetcapture, err := utils.GetPacketCapture(ctx, r.client)
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying PacketCapture", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
 		packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
 			PullSecrets:                 pullSecrets,
 			Openshift:                   r.provider == operatorv1.ProviderOpenShift,
@@ -449,6 +456,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			ManagementClusterConnection: managementClusterConnection,
 			TrustedBundle:               trustedBundle,
 			UsePSP:                      r.usePSP,
+			PacketCapture:               packetcapture,
 		}
 		pc := render.PacketCaptureAPI(packetCaptureApiCfg)
 		pcPolicy = render.PacketCaptureAPIPolicy(packetCaptureApiCfg)

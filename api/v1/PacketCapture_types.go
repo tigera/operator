@@ -19,7 +19,16 @@ package v1
 import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// PacketCaptureSpec defines configuration for the Packet Capture.
+type PacketCaptureSpec struct {
+
+	// PacketCaptureDeployment configures the PacketCapture Deployment.
+	// +optional
+	PacketCaptureDeployment *PacketCaptureDeployment `json:"packetCaptureDeployment,omitempty"`
+}
 
 // PacketCaptureDeployment is the configuration for the PacketCapture Deployment.
 type PacketCaptureDeployment struct {
@@ -86,6 +95,42 @@ type PacketCaptureDeploymentInitContainer struct {
 	// If omitted, the PacketCapture Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
+
+// PacketCapture is used to configure the resource requirement for PacketCapture deployment. It must be named "tigera-secure".
+type PacketCapture struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// Specification of the desired state for the PacketCapture.
+	Spec PacketCaptureSpec `json:"spec,omitempty"`
+	// Most recently observed state for the PacketCapture.
+	Status PacketCaptureStatus `json:"status,omitempty"`
+}
+
+// PacketCaptureStatus defines the observed state of the Packet Capture.
+type PacketCaptureStatus struct {
+
+	// State provides user-readable status.
+	State string `json:"state,omitempty"`
+
+	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
+	// Ready, Progressing, Degraded or other customer types.
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// PacketCaptureList contains a list of PacketCapture
+type PacketCaptureList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []PacketCapture `json:"items"`
 }
 
 func (c *PacketCaptureDeployment) GetMetadata() *Metadata {
@@ -173,4 +218,8 @@ func (c *PacketCaptureDeployment) GetDeploymentStrategy() *appsv1.DeploymentStra
 
 func (c *PacketCaptureDeployment) GetPriorityClassName() string {
 	return ""
+}
+
+func init() {
+	SchemeBuilder.Register(&PacketCapture{}, &PacketCaptureList{})
 }

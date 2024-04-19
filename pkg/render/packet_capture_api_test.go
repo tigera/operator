@@ -17,6 +17,9 @@ package render_test
 import (
 	"fmt"
 
+	"github.com/tigera/operator/test"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -24,7 +27,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -46,7 +48,6 @@ import (
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Rendering tests for PacketCapture API component", func() {
@@ -477,8 +478,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				},
 			}
 
-			apiServerCfg := &operatorv1.APIServer{
-				Spec: operatorv1.APIServerSpec{
+			packetCaptureCfg := &operatorv1.PacketCapture{
+				Spec: operatorv1.PacketCaptureSpec{
 					PacketCaptureDeployment: &operatorv1.PacketCaptureDeployment{
 						Spec: &operatorv1.PacketCaptureDeploymentSpec{
 							Template: &operatorv1.PacketCaptureDeploymentPodTemplateSpec{
@@ -494,7 +495,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				},
 			}
 
-			cfg.APIServer = apiServerCfg
+			cfg.PacketCapture = packetCaptureCfg
 			component := render.PacketCaptureAPI(cfg)
 			resources, _ := component.Objects()
 

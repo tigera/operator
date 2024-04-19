@@ -15,6 +15,7 @@
 package render
 
 import (
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -70,7 +71,8 @@ type PacketCaptureApiConfiguration struct {
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 
 	// Whether the cluster supports pod security policies.
-	UsePSP bool
+	UsePSP    bool
+	APIServer *operatorv1.APIServer
 }
 
 type packetCaptureApiComponent struct {
@@ -236,7 +238,7 @@ func (pc *packetCaptureApiComponent) podSecurityPolicy() *policyv1beta1.PodSecur
 }
 
 func (pc *packetCaptureApiComponent) deployment() *appsv1.Deployment {
-	return &appsv1.Deployment{
+	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PacketCaptureDeploymentName,
@@ -265,6 +267,14 @@ func (pc *packetCaptureApiComponent) deployment() *appsv1.Deployment {
 			},
 		},
 	}
+
+	if pc.cfg.APIServer != nil {
+		if overrides := pc.cfg.APIServer.Spec.PacketCaptureDeployment; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(d, overrides)
+		}
+	}
+
+	return d
 }
 
 func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {

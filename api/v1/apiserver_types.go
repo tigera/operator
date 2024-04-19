@@ -30,6 +30,10 @@ type APIServerSpec struct {
 	// used in conjunction with ControlPlaneNodeSelector or ControlPlaneTolerations, then these overrides
 	// take precedence.
 	APIServerDeployment *APIServerDeployment `json:"apiServerDeployment,omitempty"`
+
+	// PacketCaptureDeployment configures the PacketCapture Deployment.
+	// +optional
+	PacketCaptureDeployment *PacketCaptureDeployment `json:"packetCaptureDeployment,omitempty"`
 }
 
 // APIServerStatus defines the observed state of Tigera API server.

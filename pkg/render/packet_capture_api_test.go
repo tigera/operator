@@ -24,6 +24,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -45,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Rendering tests for PacketCapture API component", func() {
@@ -441,5 +443,82 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
 		)
+	})
+
+	Context("reconcile resource requirements", func() {
+		It("should override container's resource request and render init container with default values", func() {
+			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+			installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
+
+			certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+
+			secret, err = certificateManager.GetOrCreateKeyPair(cli, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+
+			cfg := &render.PacketCaptureApiConfiguration{
+				PullSecrets:      pullSecrets,
+				Installation:     &installation,
+				ServerCertSecret: secret,
+				UsePSP:           true,
+			}
+
+			pcResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+
+			packetCaptureCfg := &operatorv1.PacketCapture{
+				Spec: operatorv1.PacketCaptureSpec{
+					PacketCaptureDeployment: &operatorv1.PacketCaptureDeployment{
+						Spec: &operatorv1.PacketCaptureDeploymentSpec{
+							Template: &operatorv1.PacketCaptureDeploymentPodTemplateSpec{
+								Spec: &operatorv1.PacketCaptureDeploymentPodSpec{
+									Containers: []operatorv1.PacketCaptureDeploymentContainer{{
+										Name:      "tigera-packetcapture-server",
+										Resources: &pcResources,
+									}},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			cfg.PacketCapture = packetCaptureCfg
+			component := render.PacketCaptureAPI(cfg)
+			resources, _ := component.Objects()
+
+			d, ok := rtest.GetResource(resources, "tigera-packetcapture", render.PacketCaptureNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+			container := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-packetcapture-server")
+			Expect(container).NotTo(BeNil())
+			Expect(container.Resources).To(Equal(pcResources))
+
+			initContainer := test.GetContainer(d.Spec.Template.Spec.InitContainers, "tigera-packetcapture-server-tls-key-cert-provisioner")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":    resource.MustParse("10m"),
+					"memory": resource.MustParse("50Mi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":    resource.MustParse("10m"),
+					"memory": resource.MustParse("50Mi"),
+				},
+			}))
+		})
 	})
 })

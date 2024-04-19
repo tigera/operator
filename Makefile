@@ -91,7 +91,7 @@ endif
 
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.90
+GO_BUILD_VER?=v0.91
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -410,7 +410,7 @@ cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
 .PHONY: static-checks
 ## Perform static checks on the code.
 static-checks:
-	$(CONTAINERIZED) $(CALICO_BUILD) golangci-lint run --deadline 5m
+	$(CONTAINERIZED) $(CALICO_BUILD) golangci-lint run --timeout 5m
 
 .PHONY: fix
 ## Fix static checks
@@ -722,7 +722,7 @@ help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383
 #####################################
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
-CONTROLLER_GEN_VERSION ?= v0.11.3
+CONTROLLER_GEN_VERSION ?= v0.14.0
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests

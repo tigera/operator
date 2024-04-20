@@ -548,6 +548,17 @@ func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APISer
 	return instance, "", nil
 }
 
+// GetPacketCapture finds the PacketCapture CR in your cluster.
+func GetPacketCapture(ctx context.Context, cli client.Client) (*operatorv1.PacketCapture, error) {
+	pc := &operatorv1.PacketCapture{}
+	err := cli.Get(ctx, DefaultTSEEInstanceKey, pc)
+	if err != nil {
+		return nil, err
+	}
+
+	return pc, nil
+}
+
 // GetElasticLicenseType returns the license type from elastic-licensing ConfigMap that ECK operator keeps updated.
 func GetElasticLicenseType(ctx context.Context, cli client.Client, logger logr.Logger) (render.ElasticsearchLicenseType, error) {
 	cm := &corev1.ConfigMap{}

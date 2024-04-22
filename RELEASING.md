@@ -2,10 +2,50 @@
 
 ## Preparing a new release branch
 
-For a major or minor release, you will need to create a new
-`release-vX.Y` branch based on the target minor version.
+For a major or minor release, you will need to create:
 
-Create the next minor release's first milestone at https://github.com/tigera/operator/milestones.
+- A new `release-vX.Y` branch based on the target minor version.  We always do releases from a release 
+  branch, not from master.
+- An empty commit on the master branch, tagged with the "dev" version for the next minor release.
+  This ensures that `git describe --tags` (which is used to generate versions for CI builds) will
+  produce a version that "makes sense" for master commits after the release branch is created.
+- A new GitHub milestone for the next minor release.  This ensures that new PRs get auto-added to 
+  the correct milestone.
+
+To create a new release branch:
+
+1. If needed, fetch the latest changes from the repository with `git fetch <remote>`
+2. Create a new branch based on the target minor version:
+
+   ```sh
+   git checkout <remote>/master -b release-vX.Y
+   ```
+   
+3. Push the new branch to the repository:
+
+   ```sh
+   git push <remote> release-vX.Y
+   ```
+   
+To create an empty commit and tag on master; run the following commands.  This will push directly to master,
+bypassing the normal PR process.  This is important to make sure that the tag is directly on the master branch.
+We create an empty commit because, when the release branch is created, it shares its commit history with master.
+So, if we tagged the tip of master, we'd also be tagging the tip of the release branch, which would give 
+incorrect results for `git describe --tags` on the release branch.
+
+   ```sh
+   git checkout <remote>/master
+   git commit --allow-empty -m "Start development on vX.Y"  # Where vX.Y is the next minor version
+   git tag vX.Y.0-0.dev
+   git push <remote> HEAD:master   # Note: if someone updates master before you push, delete the tag and start over from the new tip of master.
+   git push <remote> vX.Y.0-0.dev
+   ```
+
+*Note* that the tag should have the exact format `vX.Y.0-0.dev` where `X.Y` is the next minor version.  
+The `-0.dev` suffix was chosen to produce a semver-compliant version that is less than the 
+first release version for the new minor version.
+
+Finally, create the next minor release's first milestone at https://github.com/tigera/operator/milestones.
 This would mean if the branch release-v1.30 is being created, then the milestone v1.31.0 should be created too.
 This ensures that new PRs against master will be automatically given the correct tag.
 

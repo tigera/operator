@@ -114,12 +114,6 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 	}
 
-	// Watch for changes to packet capture.
-	err = c.WatchObject(&operatorv1.PacketCapture{}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
-	}
-
 	if err = utils.AddInstallationWatch(c); err != nil {
 		log.V(5).Info("Failed to create network watch", "err", err)
 		return fmt.Errorf("apiserver-controller failed to watch Tigera network resource: %v", err)
@@ -152,6 +146,12 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 
 		// Watch for changes to authentication
 		err = c.WatchObject(&operatorv1.Authentication{}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
+		}
+
+		// Watch for changes to packet capture.
+		err = c.WatchObject(&operatorv1.PacketCapture{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
 		}

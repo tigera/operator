@@ -468,7 +468,6 @@ func buildILMPolicy(totalEsStorage int64, totalDiskPercentage float64, percentOf
 				},
 				"warm": map[string]interface{}{
 					"actions": map[string]interface{}{
-						"readonly": map[string]interface{}{},
 						"set_priority": map[string]interface{}{
 							"priority": 50,
 						},

@@ -1,11 +1,9 @@
-#!/usr/bin/env python
-import github
+#!/usr/bin/env python3
 from github import Github  # https://github.com/PyGithub/PyGithub
 import yaml
 import os
 import re
 import io
-import string
 import datetime
 
 # First create a Github instance. Create a token through Github website - provide "repo" auth.

@@ -1066,9 +1066,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		ImagePullPolicy: ImagePullPolicy(),
 		Args:            c.startUpArgs(),
 		Env:             env,
-		// OpenShift apiserver needs privileged access to write audit logs to host path volume.
-		// Audit logs are owned by root on hosts so we need to be root user and group.
-		SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
 		VolumeMounts:    volumeMounts,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -1093,6 +1090,13 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			InitialDelaySeconds: 5,
 			TimeoutSeconds:      10,
 		},
+	}
+	// In case of OpenShift, apiserver needs privileged access to write audit logs to host path volume.
+	// Audit logs are owned by root on hosts so we need to be root user and group. Audit logs are supported only in Enterprise version.
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		apiServer.SecurityContext = securitycontext.NewRootContext(c.cfg.Openshift)
+	} else {
+		apiServer.SecurityContext = securitycontext.NewNonRootContext()
 	}
 
 	return apiServer

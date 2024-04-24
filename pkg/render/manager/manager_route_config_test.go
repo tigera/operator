@@ -188,14 +188,15 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 
 				// Add enough routes with different keys from the same config map to force the conflict to go above 10,
 				// so we can test that we don't go over the 63 char limit when the number of digits increase for the suffix.
-				for i := 0; i < 6; i++ {
+				num := 6
+				for i := 0; i < num; i++ {
 					mtlsCert.Data[fmt.Sprintf("%s%d", "cert.pem", i)] = []byte("bytes")
 					mtlsCert.Data[fmt.Sprintf("%s%d", "key.pem", i)] = []byte("bytes")
 					route := operatorv1.TLSTerminatedRoute{
 						ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%d-test-route", i), Namespace: "tigera-manager"},
 						Spec: operatorv1.TLSTerminatedRouteSpec{
 							PathMatch: &operatorv1.PathMatch{
-								Path:        "/foobar",
+								Path:        fmt.Sprintf("/foobar-%d", num-1-i),
 								PathRegexp:  ptr.ToPtr("^/foobar$"),
 								PathReplace: ptr.ToPtr("/"),
 							},
@@ -247,7 +248,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconfli10": "b64f683d0e588b7b03b62f62460efd553df9491e",
 					"hash.operator.tigera.io/routeconf-s-verylongnametoforceconfli11": "b64f683d0e588b7b03b62f62460efd553df9491e",
 					"hash.operator.tigera.io/routeconf-cm-ca-bundle-bundle":           "ed2e97c745074a9d7ed51a99ea4dfb8b337a3109",
-					"hash.operator.tigera.io/routeconf-cm-voltron-routes-uitlstermro": "50ba4f0e0df0bec537299c44127daea5e7e8031d",
+					"hash.operator.tigera.io/routeconf-cm-voltron-routes-uitlstermro": "b23457c4614fa00a609dc47aaa630bb8ea54b078",
 				}))
 			})
 		})

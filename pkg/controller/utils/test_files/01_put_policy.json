@@ -20,7 +20,6 @@
       },
       "warm" : {
         "actions" : {
-          "readonly" : { },
           "set_priority" : {
             "priority" : 50
           }

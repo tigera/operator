@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import github
 from github import Github  # https://github.com/PyGithub/PyGithub
 import yaml

@@ -477,11 +477,7 @@ func buildILMPolicy(totalEsStorage int64, totalDiskPercentage float64, percentOf
 					},
 				},
 				"warm": map[string]interface{}{
-					"actions": map[string]interface{}{
-						"set_priority": map[string]interface{}{
-							"priority": 50,
-						},
-					},
+					"actions": warmActions,
 				},
 				"delete": map[string]interface{}{
 					"min_age": pd.deleteAge,

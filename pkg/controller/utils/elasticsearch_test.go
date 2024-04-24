@@ -85,7 +85,7 @@ var _ = Describe("Elasticsearch tests", func() {
 		It("update existing lifecycle policy", func() {
 			newPolicies = false
 			totalDiskSize := resource.MustParse("100Gi")
-			pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5, true)
+			pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5, false)
 			err := eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
 				indexName: pd,
 			})

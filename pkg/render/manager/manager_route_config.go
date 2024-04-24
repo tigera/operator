@@ -65,6 +65,20 @@ type tlsTerminatedRoute struct {
 	Unauthenticated bool `json:"unauthenticated,omitempty"`
 }
 
+type tlsTerminatedRouteList []*tlsTerminatedRoute
+
+func (r tlsTerminatedRouteList) Len() int {
+	return len(r)
+}
+
+func (r tlsTerminatedRouteList) Less(i, j int) bool {
+	return r[i].Path < r[j].Path
+}
+
+func (r tlsTerminatedRouteList) Swap(i, j int) {
+	swap(r, i, j)
+}
+
 // tlsPassThroughRoute is need for the json translation from the TLSPassThroughRoute CR to the json voltron expects to
 // see for a route.
 type tlsPassThroughRoute struct {
@@ -73,6 +87,26 @@ type tlsPassThroughRoute struct {
 
 	// ServerName
 	ServerName string `json:"serverName"`
+}
+
+type tlsPassThroughRouteList []*tlsPassThroughRoute
+
+func (r tlsPassThroughRouteList) Len() int {
+	return len(r)
+}
+
+func (r tlsPassThroughRouteList) Less(i, j int) bool {
+	return (r)[i].ServerName < (r)[j].ServerName
+}
+
+func (r tlsPassThroughRouteList) Swap(i, j int) {
+	swap(r, i, j)
+}
+
+func swap[R any](list []R, i, j int) {
+	tmp := list[i]
+	list[i] = list[j]
+	list[j] = tmp
 }
 
 // VoltronRouteConfigBuilder is an interface that provides methods to build a VoltronRouteConfig.
@@ -149,9 +183,9 @@ func (builder *voltronRouteConfigBuilder) AddTLSPassThroughRoute(route operatorv
 }
 
 func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
-	var uiTLSTerminatedRoutes []*tlsTerminatedRoute
-	var tunnelTLSTerminatedRoutes []*tlsTerminatedRoute
-	var tunnelTLSPassThroughRoutes []*tlsPassThroughRoute
+	var uiTLSTerminatedRoutes tlsTerminatedRouteList
+	var tunnelTLSTerminatedRoutes tlsTerminatedRouteList
+	var tunnelTLSPassThroughRoutes tlsPassThroughRouteList
 
 	for _, route := range builder.tlsTerminatedRoutes {
 		if route.Spec.CABundle == nil {
@@ -218,7 +252,7 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 	routesData := map[string]string{}
 
 	if len(uiTLSTerminatedRoutes) > 0 {
-		jsonBytes, err := json.MarshalIndent(uiTLSTerminatedRoutes, "", "\t")
+		jsonBytes, err := marshalRouteList(uiTLSTerminatedRoutes)
 		if err != nil {
 			return nil, err
 		}
@@ -227,7 +261,7 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 	}
 
 	if len(tunnelTLSTerminatedRoutes) > 0 {
-		jsonBytes, err := json.MarshalIndent(tunnelTLSTerminatedRoutes, "", "\t")
+		jsonBytes, err := marshalRouteList(tunnelTLSTerminatedRoutes)
 		if err != nil {
 			return nil, err
 		}
@@ -236,7 +270,7 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 	}
 
 	if len(tunnelTLSPassThroughRoutes) > 0 {
-		jsonBytes, err := json.MarshalIndent(tunnelTLSPassThroughRoutes, "", "\t")
+		jsonBytes, err := marshalRouteList(tunnelTLSPassThroughRoutes)
 		if err != nil {
 			return nil, err
 		}
@@ -262,6 +296,17 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 		volumes:      builder.volumes,
 		annotations:  builder.generateAnnotations(),
 	}, nil
+}
+
+func marshalRouteList[R sort.Interface](list R) ([]byte, error) {
+	sort.Sort(list)
+
+	jsonBytes, err := json.MarshalIndent(list, "", "\t")
+	if err != nil {
+		return nil, err
+	}
+
+	return jsonBytes, nil
 }
 
 func (builder *voltronRouteConfigBuilder) mountConfigMapReference(name, key string) (string, error) {
@@ -293,10 +338,14 @@ func (builder *voltronRouteConfigBuilder) mountConfigMapReference(name, key stri
 		builder.volumeMounts = append(builder.volumeMounts, volumeMount)
 		builder.volumes = append(builder.volumes, volume)
 
-		// Use mapToSortedArray to ensure the ordering is the same and the annotation value isn't changed because of
-		// map ordering differences.
-		for k, value := range configMap.Data {
-			builder.addAnnotation(fmt.Sprintf("cm-%s-%s", configMap.Name, strings.ToLower(k)), value)
+		var keys []string
+		for k, _ := range configMap.Data {
+			keys = append(keys, k)
+		}
+
+		sort.Strings(keys)
+		for _, k := range keys {
+			builder.addAnnotation(fmt.Sprintf("cm-%s-%s", configMap.Name, strings.ToLower(k)), configMap.Data[k])
 		}
 
 		builder.mountedConfigMaps[name] = struct{}{}
@@ -381,10 +430,14 @@ func (builder *voltronRouteConfigBuilder) mountSecretReference(name, key string)
 		builder.volumeMounts = append(builder.volumeMounts, volumeMount)
 		builder.volumes = append(builder.volumes, volume)
 
-		// Use mapToSortedArray to ensure the ordering is the same and the annotation value isn't changed because of
-		// map ordering differences.
-		for k, value := range secret.Data {
-			builder.addAnnotation(fmt.Sprintf("s-%s-%s", secret.Name, k), string(value))
+		var keys []string
+		for k, _ := range secret.Data {
+			keys = append(keys, k)
+		}
+
+		sort.Strings(keys)
+		for _, k := range keys {
+			builder.addAnnotation(fmt.Sprintf("s-%s-%s", secret.Name, k), string(secret.Data[k]))
 		}
 
 		builder.mountedSecrets[name] = struct{}{}

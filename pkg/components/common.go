@@ -16,7 +16,7 @@ package components
 
 var (
 	ComponentCSRInitContainer = component{
-		Version:  "v1.1.20",
+		Version:  "v1.1.21",
 		Image:    "tigera/key-cert-provisioner",
 		Registry: "",
 	}

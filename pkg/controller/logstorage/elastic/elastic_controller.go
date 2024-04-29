@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
+
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -86,9 +88,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}
-	if opts.ElasticExternal {
-		// This controller installs the Elastic operator and an Elasticsearch instance, which is not
-		// needed when using an external Elastic cluster.
+	if opts.ElasticExternal && !opts.MultiTenant {
+		// This controller installs the Elastic operator, an Elasticsearch instance and Kibana, which is not
+		// needed when using a single tenant with external Elastic cluster.
 		return nil
 	}
 
@@ -144,11 +146,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
 		{Name: render.ElasticsearchPolicyName, Namespace: render.ElasticsearchNamespace},
-		{Name: render.KibanaPolicyName, Namespace: render.KibanaNamespace},
+		{Name: kibana.PolicyName, Namespace: kibana.Namespace},
 		{Name: render.ECKOperatorPolicyName, Namespace: render.ECKOperatorNamespace},
 		{Name: render.ElasticsearchInternalPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ElasticsearchNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.KibanaNamespace},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: kibana.Namespace},
 	})
 
 	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
@@ -168,7 +170,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch Elasticsearch resource: %w", err)
 	}
 	if err = c.WatchObject(&kbv1.Kibana{
-		ObjectMeta: metav1.ObjectMeta{Namespace: render.KibanaNamespace, Name: render.KibanaName},
+		ObjectMeta: metav1.ObjectMeta{Namespace: kibana.Namespace, Name: kibana.Name},
 	}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch Kibana resource: %w", err)
 	}
@@ -181,7 +183,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Establish watches for secrets in the tigera-operator namespace.
 	for _, secretName := range []string{
 		render.TigeraElasticsearchGatewaySecret,
-		render.TigeraKibanaCertSecret,
+		kibana.TigeraKibanaCertSecret,
 		render.OIDCSecretName,
 		render.DexObjectName,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
@@ -361,8 +363,8 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, log)
 		return reconcile.Result{}, err
 	}
-	kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
-	kibanaKeyPair, err := cm.GetKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
+	kbDNSNames := dns.GetServiceDNSNames(kibana.ServiceName, kibana.Namespace, r.clusterDomain)
+	kibanaKeyPair, err := cm.GetKeyPair(r.client, kibana.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
 	if err != nil {
 		log.Error(err, err.Error())
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)
@@ -450,9 +452,9 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	var kibana *kbv1.Kibana
+	var kibanaCR *kbv1.Kibana
 	if kibanaEnabled {
-		kibana, err = r.getKibana(ctx)
+		kibanaCR, err = r.getKibana(ctx)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Kibana", err, reqLogger)
 			return reconcile.Result{}, err
@@ -524,15 +526,12 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		Installation:            install,
 		ManagementCluster:       managementCluster,
 		Elasticsearch:           elasticsearch,
-		Kibana:                  kibana,
 		ClusterConfig:           clusterConfig,
 		ElasticsearchUserSecret: esAdminUserSecret,
 		ElasticsearchKeyPair:    elasticKeyPair,
-		KibanaKeyPair:           kibanaKeyPair,
 		PullSecrets:             pullSecrets,
 		Provider:                r.provider,
 		ESService:               esService,
-		KbService:               kbService,
 		ClusterDomain:           r.clusterDomain,
 		BaseURL:                 baseURL,
 		ElasticLicenseType:      esLicenseType,
@@ -541,18 +540,39 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		UsePSP:                  r.usePSP,
 		ApplyTrial:              applyTrial,
 		KeyStoreSecret:          keyStoreSecret,
-		KibanaEnabled:           kibanaEnabled,
 	}
 
-	component := render.LogStorage(logStorageCfg)
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	logStorageComponent := render.LogStorage(logStorageCfg)
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, logStorageComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+	kibanaComponent := kibana.Kibana(&kibana.Configuration{
+		LogStorage:      ls,
+		Installation:    install,
+		Kibana:          kibanaCR,
+		KibanaKeyPair:   kibanaKeyPair,
+		PullSecrets:     pullSecrets,
+		Provider:        r.provider,
+		KbService:       kbService,
+		ClusterDomain:   r.clusterDomain,
+		BaseURL:         baseURL,
+		TrustedBundle:   trustedBundle,
+		UnusedTLSSecret: unusedTLSSecret,
+		UsePSP:          r.usePSP,
+		KibanaEnabled:   kibanaEnabled,
+	})
+	if err = imageset.ApplyImageSet(ctx, r.client, variant, kibanaComponent); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	for _, component := range []render.Component{logStorageComponent, kibanaComponent} {
+		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
@@ -560,10 +580,10 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	}
 
-	if kibanaEnabled && kibana == nil {
+	if kibanaEnabled && kibanaCR == nil {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana cluster to be created", nil, reqLogger)
 		return reconcile.Result{}, nil
-	} else if kibanaEnabled && kibana.Status.AssociationStatus != cmnv1.AssociationEstablished {
+	} else if kibanaEnabled && kibanaCR.Status.AssociationStatus != cmnv1.AssociationEstablished {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Kibana association to be established", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -612,7 +632,7 @@ func (r *ElasticSubController) handleLogStorageFinalizer(ctx context.Context, ls
 			return err
 		}
 		kibana := &kbv1.Kibana{}
-		err = r.client.Get(ctx, client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}, kibana)
+		err = r.client.Get(ctx, client.ObjectKey{Name: kibana.Name, Namespace: kibana.Namespace}, kibana)
 		if errors.IsNotFound(err) {
 			kibana = nil
 		} else if err != nil {
@@ -685,7 +705,7 @@ func (r *ElasticSubController) getElasticsearchService(ctx context.Context) (*co
 
 func (r *ElasticSubController) getKibana(ctx context.Context) (*kbv1.Kibana, error) {
 	kb := kbv1.Kibana{}
-	err := r.client.Get(ctx, client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}, &kb)
+	err := r.client.Get(ctx, client.ObjectKey{Name: kibana.Name, Namespace: kibana.Namespace}, &kb)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
@@ -697,7 +717,7 @@ func (r *ElasticSubController) getKibana(ctx context.Context) (*kbv1.Kibana, err
 
 func (r *ElasticSubController) getKibanaService(ctx context.Context) (*corev1.Service, error) {
 	svc := corev1.Service{}
-	err := r.client.Get(ctx, client.ObjectKey{Name: render.KibanaServiceName, Namespace: render.KibanaNamespace}, &svc)
+	err := r.client.Get(ctx, client.ObjectKey{Name: kibana.ServiceName, Namespace: kibana.Namespace}, &svc)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
+
 	"github.com/tigera/api/pkg/lib/numorstring"
 
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -451,7 +453,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			netPol := rtest.GetResource(resources, fmt.Sprintf("allow-tigera.%s", Name), render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
 			Expect(netPol).NotTo(BeNil())
 			Expect(netPol.Spec.Egress).To(HaveLen(2))
-			Expect(netPol.Spec.Egress[1].Destination).To(Equal(render.KibanaEntityRule))
+			Expect(netPol.Spec.Egress[1].Destination).To(Equal(kibana.EntityRule))
 		})
 
 		It("should render single-tenant environment variables", func() {

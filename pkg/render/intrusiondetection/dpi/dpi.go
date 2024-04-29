@@ -38,14 +38,17 @@ import (
 )
 
 const (
-	DeepPacketInspectionNamespace       = "tigera-dpi"
-	DeepPacketInspectionName            = "tigera-dpi"
-	DeepPacketInspectionPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
-	DefaultMemoryLimit                  = "1Gi"
-	DefaultMemoryRequest                = "100Mi"
-	DefaultCPULimit                     = "1"
-	DefaultCPURequest                   = "100m"
-	DeepPacketInspectionLinseedRBACName = "tigera-dpi-linseed-permissions"
+	DeepPacketInspectionNamespace                      = "tigera-dpi"
+	DeepPacketInspectionName                           = "tigera-dpi"
+	DeepPacketInspectionPolicyName                     = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
+	DefaultMemoryLimit                                 = "1Gi"
+	DefaultMemoryRequest                               = "100Mi"
+	DefaultCPULimit                                    = "1"
+	DefaultCPURequest                                  = "100m"
+	DeepPacketInspectionLinseedRBACName                = "tigera-dpi-linseed-permissions"
+	DeepPacketInspectionSnortRulesCmName               = "snort-rules"
+	DeepPacketInspectionSnortRulesVolumeName           = "snort-rules"
+	DeepPacketInspectionCustomSnortRulesHashAnnotation = "hash.operator.tigera.io/" + DeepPacketInspectionSnortRulesCmName
 )
 
 type DPIConfig struct {
@@ -60,6 +63,7 @@ type DPIConfig struct {
 	HasNoDPIResource   bool
 	ClusterDomain      string
 	DPICertSecret      certificatemanagement.KeyPairInterface
+	CustomSnortRules   *corev1.ConfigMap
 }
 
 func DPI(cfg *DPIConfig) render.Component {
@@ -108,6 +112,9 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiClusterRoleBinding(),
 			d.dpiDaemonset(),
 		)
+		if d.cfg.CustomSnortRules != nil {
+			toDelete = append(toCreate, d.customSnortRulesCm())
+		}
 	} else {
 		toCreate = append(toCreate, d.dpiAllowTigeraPolicy())
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace)...)...)
@@ -118,6 +125,9 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiClusterRoleBinding(),
 			d.dpiDaemonset(),
 		)
+		if d.cfg.CustomSnortRules != nil {
+			toCreate = append(toCreate, d.customSnortRulesCm())
+		}
 	}
 	if d.cfg.ManagementCluster {
 		// We always want to create these permissions when a management
@@ -247,6 +257,22 @@ func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 			})
 	}
 
+	if d.cfg.CustomSnortRules != nil {
+		volumes = append(
+			volumes,
+			corev1.Volume{
+				Name: DeepPacketInspectionSnortRulesVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: DeepPacketInspectionSnortRulesCmName,
+						},
+					},
+				},
+			},
+		)
+	}
+
 	return volumes
 }
 
@@ -285,6 +311,7 @@ func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 		d.cfg.TyphaNodeTLS.TrustedBundle.VolumeMounts(d.SupportedOSType()),
 		d.cfg.TyphaNodeTLS.NodeSecret.VolumeMount(d.SupportedOSType()),
 		corev1.VolumeMount{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
+		corev1.VolumeMount{MountPath: "/usr/etc/snort/rules", Name: DeepPacketInspectionSnortRulesVolumeName},
 		d.cfg.DPICertSecret.VolumeMount(d.SupportedOSType()),
 	)
 	if d.cfg.ManagedCluster {
@@ -434,7 +461,23 @@ func (d *dpiComponent) dpiAnnotations() map[string]string {
 	annotations := d.cfg.TyphaNodeTLS.TrustedBundle.HashAnnotations()
 	annotations[d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationKey()] = d.cfg.TyphaNodeTLS.NodeSecret.HashAnnotationValue()
 	annotations[d.cfg.DPICertSecret.HashAnnotationKey()] = d.cfg.DPICertSecret.HashAnnotationValue()
+	if d.cfg.CustomSnortRules != nil {
+		annotations[DeepPacketInspectionCustomSnortRulesHashAnnotation] = meta.AnnotationHash(d.cfg.CustomSnortRules.Data)
+	}
 	return annotations
+}
+
+func (c *dpiComponent) customSnortRulesCm() *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DeepPacketInspectionSnortRulesCmName,
+			Namespace: DeepPacketInspectionNamespace,
+			Labels:    map[string]string{},
+		},
+		Data:       c.cfg.CustomSnortRules.Data,
+		BinaryData: c.cfg.CustomSnortRules.BinaryData,
+	}
 }
 
 func (c *dpiComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {

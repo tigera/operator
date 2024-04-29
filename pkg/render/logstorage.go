@@ -19,15 +19,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
-	"net/url"
 	"strings"
 
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
-	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
-
 	"gopkg.in/inf.v0"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -36,7 +33,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -51,7 +47,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
@@ -87,9 +82,6 @@ const (
 	// TigeraElasticsearchInternalCertSecret is the TLS key pair that is mounted by the Elasticsearch pods.
 	TigeraElasticsearchInternalCertSecret = "tigera-secure-internal-elasticsearch-cert"
 
-	// TigeraKibanaCertSecret is the TLS key pair that is mounted by the Kibana pods.
-	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
-
 	// Linseed vars.
 	LinseedServiceName = "tigera-linseed"
 
@@ -103,14 +95,7 @@ const (
 	ElasticsearchPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-access"
 	ElasticsearchInternalPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-internal"
 
-	KibanaName         = "tigera-secure"
-	KibanaObjectName   = "tigera-kibana"
-	KibanaNamespace    = KibanaObjectName
-	KibanaBasePath     = KibanaObjectName
-	KibanaServiceName  = "tigera-secure-kb-http"
-	KibanaDefaultRoute = "/app/kibana#/dashboards?%s&title=%s"
-	KibanaPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "kibana-access"
-	KibanaPort         = 5601
+	KibanaBasePath = "tigera-kibana"
 
 	DefaultElasticsearchClusterName = "cluster"
 	DefaultElasticsearchReplicas    = 0
@@ -131,11 +116,7 @@ const (
 	EsManagerRole        = "es-manager"
 	EsManagerRoleBinding = "es-manager"
 
-	KibanaTLSAnnotationHash        = "hash.operator.tigera.io/kb-secrets"
 	ElasticsearchTLSHashAnnotation = "hash.operator.tigera.io/es-secrets"
-
-	TimeFilter         = "_g=(time:(from:now-24h,to:now))"
-	FlowsDashboardName = "Calico Enterprise Flow Logs"
 )
 
 const (
@@ -151,11 +132,11 @@ const (
 // Certificate management constants.
 const (
 	// Volume that is added by ECK and is overridden if certificate management is used.
-	csrVolumeNameHTTP = "elastic-internal-http-certificates"
+	CSRVolumeNameHTTP = "elastic-internal-http-certificates"
 	// Volume that is added by ECK and is overridden if certificate management is used.
-	csrVolumeNameTransport = "elastic-internal-transport-certificates"
+	CSRVolumeNameTransport = "elastic-internal-transport-certificates"
 	// Volume name that is added by ECK for the purpose of mounting certs.
-	caVolumeName = "elasticsearch-certs"
+	CAVolumeName = "elasticsearch-certs"
 )
 
 var (
@@ -174,8 +155,7 @@ var InternalElasticsearchEntityRule = v3.EntityRule{
 }
 
 var (
-	KibanaEntityRule            = networkpolicy.CreateEntityRule(KibanaNamespace, KibanaName, KibanaPort)
-	KibanaSourceEntityRule      = networkpolicy.CreateSourceEntityRule(KibanaNamespace, KibanaName)
+	SourceKibanaEntityRule      = networkpolicy.CreateSourceEntityRule("tigera-kibana", "tigera-secure")
 	ECKOperatorSourceEntityRule = networkpolicy.CreateSourceEntityRule(ECKOperatorNamespace, ECKOperatorName)
 )
 
@@ -183,11 +163,6 @@ var log = logf.Log.WithName("render")
 
 // LogStorage renders the components necessary for kibana and elasticsearch
 func LogStorage(cfg *ElasticsearchConfiguration) Component {
-	if cfg.KibanaEnabled && operatorv1.IsFIPSModeEnabled(cfg.Installation.FIPSMode) {
-		// This branch should only be hit if there is a coding bug in the controller, as KibanaEnabled
-		// should already take into account FIPS.
-		panic("BUG: Kibana is not supported in FIPS mode")
-	}
 	return &elasticsearchComponent{
 		cfg: cfg,
 	}
@@ -199,24 +174,19 @@ type ElasticsearchConfiguration struct {
 	Installation            *operatorv1.InstallationSpec
 	ManagementCluster       *operatorv1.ManagementCluster
 	Elasticsearch           *esv1.Elasticsearch
-	Kibana                  *kbv1.Kibana
 	ClusterConfig           *relasticsearch.ClusterConfig
 	ElasticsearchUserSecret *corev1.Secret
 	ElasticsearchKeyPair    certificatemanagement.KeyPairInterface
-	KibanaKeyPair           certificatemanagement.KeyPairInterface
 	PullSecrets             []*corev1.Secret
 	Provider                operatorv1.Provider
 	CuratorSecrets          []*corev1.Secret
 	ESService               *corev1.Service
-	KbService               *corev1.Service
 	ClusterDomain           string
-	BaseURL                 string // BaseUrl is where the manager is reachable, for setting Kibana publicBaseUrl
 	ElasticLicenseType      ElasticsearchLicenseType
 	TrustedBundle           certificatemanagement.TrustedBundleRO
 	UnusedTLSSecret         *corev1.Secret
 	ApplyTrial              bool
 	KeyStoreSecret          *corev1.Secret
-	KibanaEnabled           bool
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -224,10 +194,8 @@ type ElasticsearchConfiguration struct {
 
 type elasticsearchComponent struct {
 	cfg             *ElasticsearchConfiguration
-	kibanaSecrets   []*corev1.Secret
 	esImage         string
 	esOperatorImage string
-	kibanaImage     string
 	csrImage        string
 }
 
@@ -247,11 +215,6 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	es.esOperatorImage, err = components.GetReference(components.ComponentElasticsearchOperator, reg, path, prefix, is)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	es.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -286,12 +249,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			}
 		}
 
-		if es.cfg.Kibana != nil {
-			if es.cfg.Kibana.DeletionTimestamp == nil {
-				toDelete = append(toDelete, es.cfg.Kibana)
-			}
-		}
-
 		return toCreate, toDelete
 	}
 
@@ -321,13 +278,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 			es.eckOperatorPodSecurityPolicy(),
 			es.elasticsearchPodSecurityPolicy(),
 		)
-		if es.cfg.KibanaEnabled {
-			toCreate = append(toCreate,
-				es.kibanaClusterRoleBinding(),
-				es.kibanaClusterRole(),
-				es.kibanaPodSecurityPolicy(),
-			)
-		}
 	}
 
 	if es.cfg.ApplyTrial {
@@ -354,37 +304,13 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 	toCreate = append(toCreate, es.elasticsearchCluster())
 
-	if es.cfg.KibanaEnabled {
-		// Kibana CRs
-		// In order to use restricted, we need to change elastic-internal-init-config:
-		// - securityContext.allowPrivilegeEscalation=false
-		// - securityContext.capabilities.drop=["ALL"]
-		// - securityContext.runAsNonRoot=true
-		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline))
-		toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
-		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace))
-		toCreate = append(toCreate, es.kibanaServiceAccount())
-
-		if len(es.cfg.PullSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(KibanaNamespace, es.cfg.PullSecrets...)...)...)
+	if es.cfg.KeyStoreSecret != nil {
+		if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
+			es.cfg.KeyStoreSecret.Data["ES_JAVA_OPTS"] = []byte(es.javaOpts())
 		}
 
-		if len(es.kibanaSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(es.kibanaSecrets...)...)
-		}
-
-		toCreate = append(toCreate, es.kibanaCR())
-	} else {
-		if es.cfg.KeyStoreSecret != nil {
-			if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-				es.cfg.KeyStoreSecret.Data["ES_JAVA_OPTS"] = []byte(es.javaOpts())
-			}
-
-			toCreate = append(toCreate, es.cfg.KeyStoreSecret)
-			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.KeyStoreSecret)...)...)
-		}
-		toDelete = append(toDelete, es.kibanaCR())
+		toCreate = append(toCreate, es.cfg.KeyStoreSecret)
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.KeyStoreSecret)...)...)
 	}
 
 	// Curator is no longer supported in ElasticSearch beyond version 8 so remove its resources here unconditionally so
@@ -400,23 +326,12 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toDelete = append(toDelete, es.cfg.ESService)
 	}
 
-	if es.cfg.KbService != nil && es.cfg.KbService.Spec.Type == corev1.ServiceTypeExternalName {
-		toDelete = append(toDelete, es.cfg.KbService)
-	}
-
 	if es.cfg.Installation.CertificateManagement != nil {
 		toCreate = append(toCreate, es.cfg.UnusedTLSSecret)
 		if es.cfg.ElasticsearchKeyPair.UseCertificateManagement() {
 			// We need to render a secret. It won't ever be used by Elasticsearch for TLS, but is needed to pass ECK's checks.
 			// If the secret changes / gets reconciled, it will not trigger a re-render of Kibana.
 			unusedSecret := es.cfg.ElasticsearchKeyPair.Secret(ElasticsearchNamespace)
-			unusedSecret.Data = es.cfg.UnusedTLSSecret.Data
-			toCreate = append(toCreate, unusedSecret)
-		}
-		if es.cfg.KibanaKeyPair != nil && es.cfg.KibanaKeyPair.UseCertificateManagement() {
-			// We need to render a secret. It won't ever be used by Kibana for TLS, but is needed to pass ECK's checks.
-			// If the secret changes / gets reconciled, it will not trigger a re-render of Kibana.
-			unusedSecret := es.cfg.KibanaKeyPair.Secret(KibanaNamespace)
 			unusedSecret.Data = es.cfg.UnusedTLSSecret.Data
 			toCreate = append(toCreate, unusedSecret)
 		}
@@ -650,7 +565,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			VolumeMounts: []corev1.VolumeMount{
 				// Create transport mount, such that ECK will not auto-fill this with a secret volume.
 				{
-					Name:      csrVolumeNameTransport,
+					Name:      CSRVolumeNameTransport,
 					MountPath: "/csr",
 					ReadOnly:  false,
 				},
@@ -659,16 +574,16 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 		csrInitContainerHTTP := es.cfg.ElasticsearchKeyPair.InitContainer(ElasticsearchNamespace)
 		csrInitContainerHTTP.Name = "key-cert-elastic"
-		csrInitContainerHTTP.VolumeMounts[0].Name = csrVolumeNameHTTP
+		csrInitContainerHTTP.VolumeMounts[0].Name = CSRVolumeNameHTTP
 		httpVolumemount := es.cfg.ElasticsearchKeyPair.VolumeMount(es.SupportedOSType())
-		httpVolumemount.Name = csrVolumeNameHTTP
+		httpVolumemount.Name = CSRVolumeNameHTTP
 
 		// Add the init container that will issue a CSR for transport and mount it in an emptyDir.
 		csrInitContainerTransport := certificatemanagement.CreateCSRInitContainer(
 			es.cfg.Installation.CertificateManagement,
-			csrVolumeNameTransport,
+			CSRVolumeNameTransport,
 			es.csrImage,
-			csrVolumeNameTransport,
+			CSRVolumeNameTransport,
 			ElasticsearchServiceName,
 			"transport.tls.key",
 			"transport.tls.crt",
@@ -684,13 +599,13 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 		volumes = append(volumes,
 			corev1.Volume{
-				Name: csrVolumeNameHTTP,
+				Name: CSRVolumeNameHTTP,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
 			},
 			corev1.Volume{
-				Name: csrVolumeNameTransport,
+				Name: CSRVolumeNameTransport,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
@@ -708,9 +623,9 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		})
 		esContainer.VolumeMounts = append(esContainer.VolumeMounts,
 			httpVolumemount,
-			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/http-certs", Name: csrVolumeNameHTTP, ReadOnly: false},
-			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/transport-certs", Name: csrVolumeNameTransport, ReadOnly: false},
-			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/node-transport-cert", Name: csrVolumeNameTransport, ReadOnly: false},
+			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/http-certs", Name: CSRVolumeNameHTTP, ReadOnly: false},
+			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/transport-certs", Name: CSRVolumeNameTransport, ReadOnly: false},
+			corev1.VolumeMount{MountPath: "/usr/share/elasticsearch/config/node-transport-cert", Name: CSRVolumeNameTransport, ReadOnly: false},
 		)
 	}
 
@@ -1243,164 +1158,6 @@ func (es elasticsearchComponent) eckOperatorPodSecurityPolicy() *policyv1beta1.P
 	return podsecuritypolicy.NewBasePolicy(ECKOperatorName)
 }
 
-func (es elasticsearchComponent) kibanaServiceAccount() *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      KibanaObjectName,
-			Namespace: KibanaNamespace,
-		},
-	}
-}
-
-func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
-	server := map[string]interface{}{
-		"basePath":        fmt.Sprintf("/%s", KibanaBasePath),
-		"rewriteBasePath": true,
-		"defaultRoute":    fmt.Sprintf(KibanaDefaultRoute, TimeFilter, url.PathEscape(FlowsDashboardName)),
-	}
-
-	if es.cfg.BaseURL != "" {
-		server["publicBaseUrl"] = fmt.Sprintf("%s/%s", es.cfg.BaseURL, KibanaBasePath)
-	}
-
-	config := map[string]interface{}{
-		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
-		"server":                             server,
-		"xpack.security.session.lifespan":    "8h",
-		"xpack.security.session.idleTimeout": "30m",
-		"tigera": map[string]interface{}{
-			"enabled":        true,
-			"licenseEdition": "enterpriseEdition",
-		},
-		// Telemetry is unwanted for the majority of our customers and if enabled can cause blocked flows. This flag
-		// can still be overwritten in the Kibana Settings if the user desires it.
-		"telemetry.optIn": false,
-	}
-
-	var initContainers []corev1.Container
-	var volumes []corev1.Volume
-	var automountToken bool
-	var volumeMounts []corev1.VolumeMount
-	if es.cfg.Installation.CertificateManagement != nil {
-		config["elasticsearch.ssl.certificateAuthorities"] = []string{"/mnt/elastic-internal/http-certs/ca.crt"}
-		automountToken = true
-		csrInitContainer := certificatemanagement.CreateCSRInitContainer(
-			es.cfg.Installation.CertificateManagement,
-			csrVolumeNameHTTP,
-			es.csrImage,
-			csrVolumeNameHTTP,
-			ElasticsearchServiceName,
-			corev1.TLSPrivateKeyKey,
-			corev1.TLSCertKey,
-			dns.GetServiceDNSNames(KibanaServiceName, KibanaNamespace, es.cfg.ClusterDomain),
-			KibanaNamespace)
-
-		initContainers = append(initContainers, csrInitContainer)
-		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      csrVolumeNameHTTP,
-			MountPath: "/mnt/elastic-internal/http-certs/",
-		})
-		volumes = append(volumes,
-			corev1.Volume{
-				Name: csrVolumeNameHTTP,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-			// Volume where we place the ca cert.
-			corev1.Volume{
-				Name: caVolumeName,
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			})
-	}
-
-	count := int32(1)
-	if es.cfg.Installation.ControlPlaneReplicas != nil {
-		count = *es.cfg.Installation.ControlPlaneReplicas
-	}
-
-	kibana := &kbv1.Kibana{
-		TypeMeta: metav1.TypeMeta{Kind: "Kibana", APIVersion: "kibana.k8s.elastic.co/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      KibanaName,
-			Namespace: KibanaNamespace,
-			Labels: map[string]string{
-				"k8s-app": KibanaName,
-			},
-		},
-		Spec: kbv1.KibanaSpec{
-			Version: components.ComponentEckKibana.Version,
-			Image:   es.kibanaImage,
-			Config: &cmnv1.Config{
-				Data: config,
-			},
-			Count: count,
-			HTTP: cmnv1.HTTPConfig{
-				TLS: cmnv1.TLSOptions{
-					Certificate: cmnv1.SecretRef{
-						SecretName: TigeraKibanaCertSecret,
-					},
-				},
-			},
-			ElasticsearchRef: cmnv1.ObjectSelector{
-				Name:      ElasticsearchName,
-				Namespace: ElasticsearchNamespace,
-			},
-			PodTemplate: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Namespace: KibanaNamespace,
-					Annotations: map[string]string{
-						KibanaTLSAnnotationHash: rmeta.SecretsAnnotationHash(es.kibanaSecrets...),
-					},
-					Labels: map[string]string{
-						"name":    KibanaName,
-						"k8s-app": KibanaName,
-					},
-				},
-				Spec: corev1.PodSpec{
-					ImagePullSecrets:             secret.GetReferenceList(es.cfg.PullSecrets),
-					ServiceAccountName:           KibanaObjectName,
-					NodeSelector:                 es.cfg.Installation.ControlPlaneNodeSelector,
-					Tolerations:                  es.cfg.Installation.ControlPlaneTolerations,
-					InitContainers:               initContainers,
-					AutomountServiceAccountToken: &automountToken,
-					Containers: []corev1.Container{{
-						Name: "kibana",
-						ReadinessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{
-									Path: fmt.Sprintf("/%s/login", KibanaBasePath),
-									Port: intstr.IntOrString{
-										IntVal: KibanaPort,
-									},
-									Scheme: corev1.URISchemeHTTPS,
-								},
-							},
-						},
-						SecurityContext: securitycontext.NewNonRootContext(),
-						VolumeMounts:    volumeMounts,
-					}},
-					Volumes: volumes,
-				},
-			},
-		},
-	}
-
-	if es.cfg.Installation.ControlPlaneReplicas != nil && *es.cfg.Installation.ControlPlaneReplicas > 1 {
-		kibana.Spec.PodTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(KibanaName, KibanaNamespace)
-	}
-
-	if es.cfg.LogStorage != nil {
-		if overrides := es.cfg.LogStorage.Spec.Kibana; overrides != nil {
-			rcomponents.ApplyKibanaOverrides(kibana, overrides)
-		}
-	}
-
-	return kibana
-}
-
 // This is a list of components that belong to Curator which has been decommissioned since it is no longer supported
 // in Elasticsearch beyond version 8. We want to be able to clean up these resources if they exist in the cluster on upgrade.
 func (es elasticsearchComponent) curatorDecommissionedResources() []client.Object {
@@ -1518,47 +1275,6 @@ func (es elasticsearchComponent) elasticsearchPodSecurityPolicy() *policyv1beta1
 	}
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	return psp
-}
-
-func (es elasticsearchComponent) kibanaClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: KibanaObjectName,
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{KibanaObjectName},
-			},
-		},
-	}
-}
-
-func (es elasticsearchComponent) kibanaClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: KibanaObjectName,
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     KibanaObjectName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      KibanaObjectName,
-				Namespace: KibanaNamespace,
-			},
-		},
-	}
-}
-
-func (es elasticsearchComponent) kibanaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(KibanaObjectName)
 }
 
 func (es elasticsearchComponent) oidcUserRole() client.Object {
@@ -1685,7 +1401,7 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      KibanaSourceEntityRule,
+					Source:      SourceKibanaEntityRule,
 					Destination: elasticSearchIngressDestinationEntityRule,
 				},
 				{
@@ -1750,87 +1466,6 @@ func (es *elasticsearchComponent) elasticsearchInternalAllowTigeraPolicy() *v3.N
 					Destination: InternalElasticsearchEntityRule,
 				},
 			},
-		},
-	}
-}
-
-// Allow access to Kibana
-func (es *elasticsearchComponent) kibanaAllowTigeraPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      v3.EntityRule{},
-			Destination: ElasticsearchEntityRule,
-		},
-	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, es.cfg.Provider == operatorv1.ProviderOpenShift)
-	egressRules = append(egressRules, []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
-		},
-	}...)
-
-	kibanaPortIngressDestination := v3.EntityRule{
-		Ports: networkpolicy.Ports(KibanaPort),
-	}
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      KibanaPolicyName,
-			Namespace: KibanaNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(KibanaName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source: v3.EntityRule{
-						// This policy allows access to Kibana from anywhere.
-						Nets: []string{"0.0.0.0/0"},
-					},
-					Destination: kibanaPortIngressDestination,
-				},
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source: v3.EntityRule{
-						// This policy allows access to Kibana from anywhere.
-						Nets: []string{"::/0"},
-					},
-					Destination: kibanaPortIngressDestination,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
-					Destination: kibanaPortIngressDestination,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.DefaultHelper().DashboardInstallerSourceEntityRule(),
-					Destination: kibanaPortIngressDestination,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      ECKOperatorSourceEntityRule,
-					Destination: kibanaPortIngressDestination,
-				},
-			},
-			Egress: egressRules,
 		},
 	}
 }

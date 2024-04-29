@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
+
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
@@ -142,7 +144,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Catch if something modifies the resources that this controller consumes.
-	if err := utils.AddServiceWatch(c, render.KibanaServiceName, helper.InstallNamespace()); err != nil {
+	if err := utils.AddServiceWatch(c, kibana.ServiceName, helper.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-dashboards-controller failed to watch the Service resource: %w", err)
 	}
 	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {

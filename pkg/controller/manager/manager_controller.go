@@ -159,7 +159,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		for _, secretName := range []string{
 			// We need to watch for es-gateway certificate because es-proxy still creates a
 			// client to talk to elastic via es-gateway
-			render.ManagerTLSSecretName, render.ElasticsearchManagerUserSecret, relasticsearch.PublicCertSecret,
+			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
 			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 		} {
@@ -504,21 +504,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	var esSecrets []*corev1.Secret
-	if !r.multiTenant {
-		// Get secrets used by the manager to authenticate with Elasticsearch. This is used for Kibana login, and isn't
-		// needed for multi-tenant installations since currently Kibana is not supported in that mode.
-		esSecrets, err = utils.ElasticsearchSecrets(ctx, []string{render.ElasticsearchManagerUserSecret}, r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch secrets are not available yet, waiting until they become available", err, logc)
-				return reconcile.Result{}, nil
-			}
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch credentials", err, logc)
-			return reconcile.Result{}, err
-		}
-	}
-
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, logc)
@@ -670,7 +655,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	managerCfg := &render.ManagerConfiguration{
 		VoltronRouteConfig:      routeConfig,
 		KeyValidatorConfig:      keyValidatorConfig,
-		ESSecrets:               esSecrets,
 		TrustedCertBundle:       trustedBundle,
 		ClusterConfig:           clusterConfig,
 		TLSKeyPair:              tlsSecret,

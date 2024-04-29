@@ -231,12 +231,12 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, internalKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ElasticsearchManagerUserSecret,
-					Namespace: "tigera-operator",
-				},
-			})).NotTo(HaveOccurred())
+			//Expect(c.Create(ctx, &corev1.Secret{
+			//	ObjectMeta: metav1.ObjectMeta{
+			//		Name:      render.ElasticsearchManagerUserSecret,
+			//		Namespace: "tigera-operator",
+			//	},
+			//})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.ECKLicenseConfigMapName,
@@ -536,13 +536,6 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(c.Create(ctx, internalCertKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-
-			Expect(c.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ElasticsearchManagerUserSecret,
-					Namespace: "tigera-operator",
-				},
-			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{

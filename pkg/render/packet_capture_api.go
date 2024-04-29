@@ -71,8 +71,8 @@ type PacketCaptureApiConfiguration struct {
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 
 	// Whether the cluster supports pod security policies.
-	UsePSP        bool
-	PacketCapture *operatorv1.PacketCapture
+	UsePSP           bool
+	PacketCaptureAPI *operatorv1.PacketCaptureAPI
 }
 
 type packetCaptureApiComponent struct {
@@ -268,8 +268,8 @@ func (pc *packetCaptureApiComponent) deployment() *appsv1.Deployment {
 		},
 	}
 
-	if pc.cfg.PacketCapture != nil {
-		if overrides := pc.cfg.PacketCapture.Spec.PacketCaptureDeployment; overrides != nil {
+	if pc.cfg.PacketCaptureAPI != nil {
+		if overrides := pc.cfg.PacketCaptureAPI.Spec.PacketCaptureAPIDeployment; overrides != nil {
 			rcomponents.ApplyDeploymentOverrides(d, overrides)
 		}
 	}

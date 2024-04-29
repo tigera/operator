@@ -150,8 +150,8 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 			return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
 		}
 
-		// Watch for changes to packet capture.
-		err = c.WatchObject(&operatorv1.PacketCapture{}, &handler.EnqueueRequestForObject{})
+		// Watch for changes to packet capture api.
+		err = c.WatchObject(&operatorv1.PacketCaptureAPI{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
 		}
@@ -446,8 +446,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 		trustedBundle := certificateManager.CreateTrustedBundle(certificates...)
 
-		//Fetch the packet capture spec. If it exists, we utilize it to configure packet capture resource requirements.
-		packetcapture, err := utils.GetPacketCapture(ctx, r.client)
+		//Fetch the packet capture api spec. If it exists, we utilize it to configure packet capture resource requirements.
+		packetcaptureapi, err := utils.GetPacketCaptureAPI(ctx, r.client)
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying PacketCapture", err, reqLogger)
 			return reconcile.Result{}, err
@@ -463,7 +463,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			ManagementClusterConnection: managementClusterConnection,
 			TrustedBundle:               trustedBundle,
 			UsePSP:                      r.usePSP,
-			PacketCapture:               packetcapture,
+			PacketCaptureAPI:            packetcaptureapi,
 		}
 		pc := render.PacketCaptureAPI(packetCaptureApiCfg)
 		pcPolicy = render.PacketCaptureAPIPolicy(packetCaptureApiCfg)

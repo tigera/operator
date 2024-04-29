@@ -50,7 +50,6 @@ import (
 	"github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
-	"github.com/tigera/operator/pkg/url"
 )
 
 const (
@@ -620,18 +619,6 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(!KibanaEnabled(c.cfg.Tenant, c.cfg.Installation))},
 		{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", c.cfg.Namespace)},
-	}
-
-	if KibanaEnabled(c.cfg.Tenant, c.cfg.Installation) {
-		esScheme, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace))
-		env = append(env,
-			relasticsearch.ElasticCAEnvVar(c.SupportedOSType()),
-			relasticsearch.ElasticSchemeEnvVar(esScheme),
-			relasticsearch.ElasticHostEnvVar(esHost),
-			relasticsearch.ElasticPortEnvVar(esPort),
-			relasticsearch.ElasticUserEnvVar(ElasticsearchManagerUserSecret),
-			relasticsearch.ElasticPasswordEnvVar(ElasticsearchManagerUserSecret),
-			relasticsearch.ElasticIndexSuffixEnvVar(c.cfg.ClusterConfig.ClusterName()))
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,

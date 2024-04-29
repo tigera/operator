@@ -36,7 +36,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
@@ -138,13 +137,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{Name: "LINSEED_CLIENT_KEY", Value: "/internal-manager-tls/tls.key"},
 			{Name: "ELASTIC_KIBANA_DISABLED", Value: "false"},
 			{Name: "VOLTRON_URL", Value: "https://tigera-manager.tigera-manager.svc:9443"},
-			{Name: "ELASTIC_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
-			{Name: "ELASTIC_SCHEME", Value: "https"},
-			{Name: "ELASTIC_HOST", Value: "tigera-secure-es-gateway-http.tigera-elasticsearch.svc"},
-			{Name: "ELASTIC_PORT", Value: "9200"},
-			{Name: "ELASTIC_USER", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchManagerUserSecret, "username", false)},
-			{Name: "ELASTIC_PASSWORD", ValueFrom: secret.GetEnvVarSource(render.ElasticsearchManagerUserSecret, "password", false)},
-			{Name: "ELASTIC_INDEX_SUFFIX", Value: "clusterTestName"},
 		}
 		Expect(esProxy.Env).To(Equal(esProxyExpectedEnvVars))
 

@@ -549,8 +549,8 @@ func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APISer
 }
 
 // GetPacketCapture finds the PacketCapture CR in your cluster.
-func GetPacketCapture(ctx context.Context, cli client.Client) (*operatorv1.PacketCapture, error) {
-	pc := &operatorv1.PacketCapture{}
+func GetPacketCaptureAPI(ctx context.Context, cli client.Client) (*operatorv1.PacketCaptureAPI, error) {
+	pc := &operatorv1.PacketCaptureAPI{}
 	err := cli.Get(ctx, DefaultTSEEInstanceKey, pc)
 	if err != nil {
 		return nil, err

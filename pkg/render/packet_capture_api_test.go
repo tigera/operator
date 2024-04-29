@@ -477,13 +477,13 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				},
 			}
 
-			packetCaptureCfg := &operatorv1.PacketCapture{
-				Spec: operatorv1.PacketCaptureSpec{
-					PacketCaptureDeployment: &operatorv1.PacketCaptureDeployment{
-						Spec: &operatorv1.PacketCaptureDeploymentSpec{
-							Template: &operatorv1.PacketCaptureDeploymentPodTemplateSpec{
-								Spec: &operatorv1.PacketCaptureDeploymentPodSpec{
-									Containers: []operatorv1.PacketCaptureDeploymentContainer{{
+			packetCaptureAPICfg := &operatorv1.PacketCaptureAPI{
+				Spec: operatorv1.PacketCaptureAPISpec{
+					PacketCaptureAPIDeployment: &operatorv1.PacketCaptureAPIDeployment{
+						Spec: &operatorv1.PacketCaptureAPIDeploymentSpec{
+							Template: &operatorv1.PacketCaptureAPIDeploymentPodTemplateSpec{
+								Spec: &operatorv1.PacketCaptureAPIDeploymentPodSpec{
+									Containers: []operatorv1.PacketCaptureAPIDeploymentContainer{{
 										Name:      "tigera-packetcapture-server",
 										Resources: &pcResources,
 									}},
@@ -494,7 +494,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				},
 			}
 
-			cfg.PacketCapture = packetCaptureCfg
+			cfg.PacketCaptureAPI = packetCaptureAPICfg
 			component := render.PacketCaptureAPI(cfg)
 			resources, _ := component.Objects()
 

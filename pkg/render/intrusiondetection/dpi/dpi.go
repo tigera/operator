@@ -113,7 +113,7 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiDaemonset(),
 		)
 		if d.cfg.CustomSnortRules != nil {
-			toDelete = append(toCreate, d.customSnortRulesCm())
+			toDelete = append(toDelete, d.customSnortRulesCm())
 		}
 	} else {
 		toCreate = append(toCreate, d.dpiAllowTigeraPolicy())

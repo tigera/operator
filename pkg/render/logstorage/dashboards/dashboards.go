@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
+
 	"github.com/tigera/api/pkg/lib/numorstring"
 
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -163,7 +165,7 @@ func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.KibanaEntityRule,
+			Destination: kibana.EntityRule,
 		})
 	}
 

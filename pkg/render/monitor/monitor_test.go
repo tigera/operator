@@ -204,7 +204,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(ok).To(BeTrue())
 		promOperClusterRoleObj, ok := rtest.GetResource(toCreate, "calico-prometheus-operator", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(ok).To(BeTrue())
-		Expect(promOperClusterRoleObj.Rules).To(HaveLen(10))
+		Expect(promOperClusterRoleObj.Rules).To(HaveLen(12))
 		Expect(promOperClusterRoleObj.Rules[0]).To(Equal(rbacv1.PolicyRule{
 			APIGroups: []string{"monitoring.coreos.com"},
 			Resources: []string{
@@ -291,13 +291,30 @@ var _ = Describe("monitor rendering tests", func() {
 			},
 		}))
 		Expect(promOperClusterRoleObj.Rules[8]).To(Equal(rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"events"},
+			Verbs: []string{
+				"patch",
+				"create",
+			},
+		}))
+		Expect(promOperClusterRoleObj.Rules[9]).To(Equal(rbacv1.PolicyRule{
+			APIGroups: []string{"networking.k8s.io"},
+			Resources: []string{"ingresses"},
+			Verbs: []string{
+				"get",
+				"list",
+				"watch",
+			},
+		}))
+		Expect(promOperClusterRoleObj.Rules[10]).To(Equal(rbacv1.PolicyRule{
 			APIGroups: []string{"storage.k8s.io"},
 			Resources: []string{"storageclasses"},
 			Verbs: []string{
 				"get",
 			},
 		}))
-		Expect(promOperClusterRoleObj.Rules[9]).To(Equal(rbacv1.PolicyRule{
+		Expect(promOperClusterRoleObj.Rules[11]).To(Equal(rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},

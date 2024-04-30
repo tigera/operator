@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
+
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -593,8 +595,8 @@ func (c *elasticKeyPairCollection) internalESComponent() render.Component {
 
 func (c *elasticKeyPairCollection) internalKibanaComponent(bundle certificatemanagement.TrustedBundle) render.Component {
 	return rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-		Namespace:       render.KibanaNamespace,
-		ServiceAccounts: []string{render.KibanaObjectName},
+		Namespace:       kibana.Namespace,
+		ServiceAccounts: []string{kibana.ObjectName},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			// We do not want to delete the secret from the tigera-elasticsearch when CertificateManagement is
 			// enabled. Instead, it will be replaced with a TLS secret that serves merely to pass ECK's validation

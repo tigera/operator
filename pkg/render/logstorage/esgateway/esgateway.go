@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
+
 	"github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	"github.com/tigera/operator/pkg/ptr"
@@ -328,7 +330,7 @@ func (e *esGateway) esGatewayService() *corev1.Service {
 				},
 				{
 					Name:       KibanaPortName,
-					Port:       int32(render.KibanaPort),
+					Port:       int32(kibana.Port),
 					TargetPort: intstr.FromInt(Port),
 					Protocol:   corev1.ProtocolTCP,
 				},
@@ -360,7 +362,7 @@ func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.KibanaEntityRule,
+			Destination: kibana.EntityRule,
 		},
 	}...)
 

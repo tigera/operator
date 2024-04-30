@@ -160,6 +160,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
 	}
 
+	if err = utils.AddConfigMapWatch(c, dpi.DeepPacketInspectionSnortRulesCmName, common.OperatorNamespace(), eventHandler); err != nil {
+		return fmt.Errorf("intrusiondetection-controller failed to watch the ConfigMap resource: %v", err)
+	}
+
 	return nil
 }
 
@@ -518,6 +522,25 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			return reconcile.Result{}, err
 		}
 
+		customSnortRulesCm := new(corev1.ConfigMap)
+		err = r.client.Get(
+			ctx,
+			types.NamespacedName{
+				Name:      dpi.DeepPacketInspectionSnortRulesCmName,
+				Namespace: common.OperatorNamespace(),
+			},
+			customSnortRulesCm,
+		)
+		switch {
+		case err == nil:
+			break
+		case errors.IsNotFound(err):
+			customSnortRulesCm = nil
+		default:
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error retrieving custom Snort rules CM", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
 		dpiComponent := dpi.DPI(&dpi.DPIConfig{
 			IntrusionDetection: instance,
 			Installation:       network,
@@ -530,6 +553,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			HasNoDPIResource:   hasNoDPIResource,
 			ClusterDomain:      r.clusterDomain,
 			DPICertSecret:      dpiKeyPair,
+			CustomSnortRules:   customSnortRulesCm,
 		})
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, dpiComponent); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)

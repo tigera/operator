@@ -37,16 +37,19 @@ const (
 )
 
 var newPolicies bool
+var updateToReadonly bool
 var _ = Describe("Elasticsearch tests", func() {
 	Context("ILM", func() {
 		var (
 			eClient     *esClient
 			ctx         context.Context
 			rolloverMax = resource.MustParse(fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
+			trt         *testRoundTripper
 		)
 		BeforeEach(func() {
+			trt = &testRoundTripper{}
 			client := &http.Client{
-				Transport: http.RoundTripper(&testRoundTripper{}),
+				Transport: http.RoundTripper(trt),
 			}
 			eClient = mockElasticClient(client, baseURI)
 			ctx = context.Background()
@@ -90,12 +93,34 @@ var _ = Describe("Elasticsearch tests", func() {
 				indexName: pd,
 			})
 			Expect(err).To(BeNil())
+			Expect(trt.hasUpdatedPolicy).To(BeTrue())
+
+			// Applying the same policy has no effect (since there is no change)
+			trt.hasUpdatedPolicy = false
+			trt.getPolicyOverride = "test_files/02_get_policy.json"
+			pd = buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5, false)
+			err = eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+				indexName: pd,
+			})
+			Expect(err).To(BeNil())
+			Expect(trt.hasUpdatedPolicy).To(BeFalse())
+
+			// Applying an updated policy (warm index writable) triggers an update (since there is a change)
+			updateToReadonly = true
+			pd = buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5, true)
+			err = eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+				indexName: pd,
+			})
+			Expect(err).To(BeNil())
+			Expect(trt.hasUpdatedPolicy).To(BeTrue())
 		})
 	})
 })
 
 type testRoundTripper struct {
-	e error
+	e                 error
+	hasUpdatedPolicy  bool
+	getPolicyOverride string
 }
 
 func (t *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -121,10 +146,14 @@ func (t *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 					Request:    req,
 				}, nil
 			}
+			getPolicyFile := "test_files/01_get_policy.json"
+			if len(t.getPolicyOverride) > 0 {
+				getPolicyFile = t.getPolicyOverride
+			}
 			return &http.Response{
 				StatusCode: 200,
 				Request:    req,
-				Body:       mustOpen("test_files/02_get_policy.json"),
+				Body:       mustOpen(getPolicyFile),
 			}, nil
 		}
 	case "POST":
@@ -151,11 +180,15 @@ func (t *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 			Expect(err).To(BeNil())
 
 			jsonFile, err := os.Open("test_files/02_put_policy.json")
+			if updateToReadonly {
+				jsonFile, err = os.Open("test_files/02_put_policy_readonly.json")
+			}
 			Expect(err).To(BeNil())
 			defer jsonFile.Close()
 			expectedBody, _ := io.ReadAll(jsonFile)
 			Expect(actualBody).To(MatchJSON(expectedBody))
 
+			t.hasUpdatedPolicy = true
 			return &http.Response{
 				StatusCode: 200,
 				Request:    req,

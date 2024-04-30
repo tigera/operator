@@ -55,6 +55,11 @@ type Policy struct {
 				}
 			}
 		}
+		Warm struct {
+			Actions struct {
+				Readonly *struct{} `json:"readonly,omitempty"`
+			}
+		}
 		Delete struct {
 			MinAge string `json:"min_age"`
 		}
@@ -62,10 +67,11 @@ type Policy struct {
 }
 
 type policyDetail struct {
-	rolloverAge  string
-	rolloverSize string
-	deleteAge    string
-	policy       map[string]interface{}
+	rolloverAge           string
+	rolloverSize          string
+	deleteAge             string
+	readOnlyAfterRollover bool
+	policy                map[string]interface{}
 }
 
 type logrWrappedESLogger struct{}
@@ -433,13 +439,14 @@ func (es *esClient) createOrUpdatePolicies(ctx context.Context, listPolicy map[s
 		}
 
 		// If policy exists, check if it needs to be updated
-		currentMaxAge, currentMaxSize, currentMinAge, err := extractPolicyDetails(res[policyName].Policy)
+		currentMaxAge, currentMaxSize, currentMinAge, readOnlyAfterRollover, err := extractPolicyDetails(res[policyName].Policy)
 		if err != nil {
 			return err
 		}
 		if currentMaxAge != pd.rolloverAge ||
 			currentMaxSize != pd.rolloverSize ||
-			currentMinAge != pd.deleteAge {
+			currentMinAge != pd.deleteAge ||
+			readOnlyAfterRollover != pd.readOnlyAfterRollover {
 			return applyILMPolicy(ctx, es.client, indexName, pd.policy)
 		}
 	}
@@ -451,6 +458,7 @@ func buildILMPolicy(totalEsStorage int64, totalDiskPercentage float64, percentOf
 	pd.rolloverSize = calculateRolloverSize(totalEsStorage, totalDiskPercentage, percentOfDiskForLogType)
 	pd.rolloverAge = calculateRolloverAge(retention)
 	pd.deleteAge = fmt.Sprintf("%dd", retention)
+	pd.readOnlyAfterRollover = readOnlyAfterRollover
 
 	warmActions := map[string]interface{}{
 		"set_priority": map[string]interface{}{
@@ -588,20 +596,21 @@ func getESRoots(ctx context.Context, client client.Client) (*x509.CertPool, erro
 	return roots, nil
 }
 
-func extractPolicyDetails(policy map[string]interface{}) (string, string, string, error) {
+func extractPolicyDetails(policy map[string]interface{}) (string, string, string, bool, error) {
 	jsonPolicy, err := json.Marshal(policy)
 	if err != nil {
-		return "", "", "", err
+		return "", "", "", true, err
 	}
 	existingPolicy := Policy{}
 	if err = json.Unmarshal(jsonPolicy, &existingPolicy); err != nil {
-		return "", "", "", err
+		return "", "", "", true, err
 	}
 
 	currentMaxAge := existingPolicy.Phases.Hot.Actions.Rollover.MaxAge
 	currentMaxSize := existingPolicy.Phases.Hot.Actions.Rollover.MaxSize
 	currentMinAge := existingPolicy.Phases.Delete.MinAge
-	return currentMaxAge, currentMaxSize, currentMinAge, nil
+	readOnlyAfterRollover := existingPolicy.Phases.Warm.Actions.Readonly != nil
+	return currentMaxAge, currentMaxSize, currentMinAge, readOnlyAfterRollover, nil
 }
 
 func getTotalEsDisk(ls *operatorv1.LogStorage) int64 {

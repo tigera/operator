@@ -35,6 +35,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 
@@ -190,6 +191,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operator.ResourceReadError, "error querying IP pools", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+	for i := range currentPools.Items {
+		if err := restoreV3Metadata(&currentPools.Items[i]); err != nil {
+			r.status.SetDegraded(operator.ResourceValidationError, "error obtaining v3 IPPool metadata", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Write default IP pool configuration back to the Installation object using patch.
@@ -412,4 +419,21 @@ func v1ToV3(v1pool *crdv1.IPPool) (*v3.IPPool, error) {
 	v3pool.UID = ""
 
 	return &v3pool, nil
+}
+
+func restoreV3Metadata(v1pool *crdv1.IPPool) error {
+	// v1 IP pools store v3 metadata in an annotation. Extract it and use it to restore the v3 metadata.
+	if v3metaJSON, ok := v1pool.Annotations["projectcalico.org/metadata"]; ok {
+		v3meta := metav1.ObjectMeta{}
+		err := json.Unmarshal([]byte(v3metaJSON), &v3meta)
+		if err != nil {
+			return err
+		}
+
+		// Restore the v3 metadata we care about.
+		v1pool.Labels = v3meta.Labels
+		v1pool.Annotations = v3meta.Annotations
+		log.V(1).Info("Restored v3 resource metadata", "labels", v1pool.Labels, "annotations", v1pool.Annotations)
+	}
+	return nil
 }

@@ -22,8 +22,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tigera/operator/pkg/render/logstorage/eck"
-
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 
@@ -56,6 +54,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
 )
 
 const (

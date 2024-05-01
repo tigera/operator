@@ -172,7 +172,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch Elasticsearch resource: %w", err)
 	}
 	if err = c.WatchObject(&kbv1.Kibana{
-		ObjectMeta: metav1.ObjectMeta{Namespace: kibana.Namespace, Name: kibana.Name},
+		ObjectMeta: metav1.ObjectMeta{Namespace: kibana.Namespace, Name: kibana.CRName},
 	}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch Kibana resource: %w", err)
 	}
@@ -713,7 +713,7 @@ func (r *ElasticSubController) getElasticsearchService(ctx context.Context) (*co
 
 func (r *ElasticSubController) getKibana(ctx context.Context) (*kbv1.Kibana, error) {
 	kb := kbv1.Kibana{}
-	err := r.client.Get(ctx, client.ObjectKey{Name: kibana.Name, Namespace: kibana.Namespace}, &kb)
+	err := r.client.Get(ctx, client.ObjectKey{Name: kibana.CRName, Namespace: kibana.Namespace}, &kb)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil

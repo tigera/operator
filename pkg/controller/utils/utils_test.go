@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tigera/operator/pkg/render/logstorage/eck"
-
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"github.com/go-logr/logr"
@@ -50,6 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
 )
 
 var _ = Describe("Utils elasticsearch license type tests", func() {

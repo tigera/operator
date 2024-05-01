@@ -17,15 +17,19 @@ package kibana_test
 import (
 	"context"
 
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/test"
-	"k8s.io/apimachinery/pkg/api/resource"
-
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -33,18 +37,14 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Kibana rendering tests", func() {
@@ -64,7 +64,7 @@ var _ = Describe("Kibana rendering tests", func() {
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: kibana.Namespace}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-kibana", Namespace: kibana.Namespace}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: kibana.Namespace}},
-			&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.Name, Namespace: kibana.Namespace}},
+			&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.CRName, Namespace: kibana.Namespace}},
 		}
 
 		BeforeEach(func() {
@@ -136,7 +136,7 @@ var _ = Describe("Kibana rendering tests", func() {
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				}))
 
-			resultKB := rtest.GetResource(createResources, kibana.Name, kibana.Namespace,
+			resultKB := rtest.GetResource(createResources, kibana.CRName, kibana.Namespace,
 				"kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.lifespan"]).To(Equal("8h"))
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.idleTimeout"]).To(Equal("30m"))
@@ -165,7 +165,7 @@ var _ = Describe("Kibana rendering tests", func() {
 			component := kibana.Kibana(cfg)
 
 			createResources, _ := component.Objects()
-			kb := rtest.GetResource(createResources, kibana.Name, kibana.Namespace, "kibana.k8s.elastic.co", "v1", "Kibana")
+			kb := rtest.GetResource(createResources, kibana.CRName, kibana.Namespace, "kibana.k8s.elastic.co", "v1", "Kibana")
 			Expect(kb).ShouldNot(BeNil())
 			kibana := kb.(*kbv1.Kibana)
 			x := kibana.Spec.Config.Data["server"].(map[string]interface{})
@@ -246,12 +246,11 @@ var _ = Describe("Kibana rendering tests", func() {
 
 		It("Should not install Kibana when instructed so", func() {
 			cfg.Enabled = false
-			//cfg.Kibana = &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.Name, Namespace: kibana.Namespace}}
 			component := kibana.Kibana(cfg)
 
 			createdResources, deletedResources := component.Objects()
 			expectedDeletedResources := []client.Object{
-				&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.Name, Namespace: kibana.Namespace}},
+				&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.CRName, Namespace: kibana.Namespace}},
 			}
 			rtest.ExpectResources(deletedResources, expectedDeletedResources)
 			Expect(createdResources).To(BeEmpty())
@@ -259,11 +258,11 @@ var _ = Describe("Kibana rendering tests", func() {
 
 		Context("Deleting LogStorage", func() {
 			expectedDeletedResources := []client.Object{
-				&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.Name, Namespace: kibana.Namespace}},
+				&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.CRName, Namespace: kibana.Namespace}},
 			}
 
 			BeforeEach(func() {
-				cfg.Kibana = &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.Name, Namespace: kibana.Namespace}}
+				cfg.Kibana = &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.CRName, Namespace: kibana.Namespace}}
 				t := metav1.Now()
 				cfg.LogStorage = &operatorv1.LogStorage{
 					ObjectMeta: metav1.ObjectMeta{

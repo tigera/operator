@@ -68,7 +68,7 @@ import (
 var (
 	eckOperatorObjKey = client.ObjectKey{Name: eck.OperatorName, Namespace: eck.OperatorNamespace}
 	esObjKey          = client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}
-	kbObjKey          = client.ObjectKey{Name: kibana.Name, Namespace: kibana.Namespace}
+	kbObjKey          = client.ObjectKey{Name: kibana.CRName, Namespace: kibana.Namespace}
 
 	esCertSecretOperKey = client.ObjectKey{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}
 
@@ -689,7 +689,7 @@ var _ = Describe("LogStorage controller", func() {
 					},
 					&kbv1.Kibana{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      kibana.Name,
+							Name:      kibana.CRName,
 							Namespace: kibana.Namespace,
 						},
 						Status: kbv1.KibanaStatus{
@@ -810,7 +810,7 @@ var _ = Describe("LogStorage controller", func() {
 						},
 						&kbv1.Kibana{
 							ObjectMeta: metav1.ObjectMeta{
-								Name:      kibana.Name,
+								Name:      kibana.CRName,
 								Namespace: kibana.Namespace,
 							},
 							Status: kbv1.KibanaStatus{
@@ -871,7 +871,7 @@ var _ = Describe("LogStorage controller", func() {
 
 					kb := kbv1.Kibana{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      kibana.Name,
+							Name:      kibana.CRName,
 							Namespace: kibana.Namespace,
 						},
 					}
@@ -955,7 +955,7 @@ var _ = Describe("LogStorage controller", func() {
 
 					kb := kbv1.Kibana{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      kibana.Name,
+							Name:      kibana.CRName,
 							Namespace: kibana.Namespace,
 						},
 					}
@@ -1108,11 +1108,11 @@ var _ = Describe("LogStorage controller", func() {
 
 				// However, the Kibana and ES instances should have been created.
 				Expect(cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &esv1.Elasticsearch{})).ShouldNot(HaveOccurred())
-				Expect(cli.Get(ctx, client.ObjectKey{Name: kibana.Name, Namespace: kibana.Namespace}, &kbv1.Kibana{})).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: kibana.CRName, Namespace: kibana.Namespace}, &kbv1.Kibana{})).ShouldNot(HaveOccurred())
 
 				// Update the Kibana instance to be considered ready.
 				kb := &kbv1.Kibana{}
-				Expect(cli.Get(ctx, client.ObjectKey{Name: kibana.Name, Namespace: kibana.Namespace}, kb)).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: kibana.CRName, Namespace: kibana.Namespace}, kb)).ShouldNot(HaveOccurred())
 				kb.Status.AssociationStatus = cmnv1.AssociationEstablished
 				Expect(cli.Status().Update(ctx, kb)).ShouldNot(HaveOccurred())
 

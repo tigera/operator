@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/render/logstorage/kibana"
-
 	"github.com/go-logr/logr"
 
 	corev1 "k8s.io/api/core/v1"
@@ -39,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 )
 
 var log = logf.Log.WithName("controller_logstorage")

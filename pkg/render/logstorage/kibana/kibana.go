@@ -21,6 +21,13 @@ import (
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+	corev1 "k8s.io/api/core/v1"
+	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -34,12 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -47,7 +48,7 @@ const (
 	// TigeraKibanaCertSecret is the TLS key pair that is mounted by the Kibana pods.
 	TigeraKibanaCertSecret = "tigera-secure-kibana-cert"
 
-	Name         = "tigera-secure"
+	CRName       = "tigera-secure"
 	ObjectName   = "tigera-kibana"
 	Namespace    = ObjectName
 	BasePath     = ObjectName
@@ -63,8 +64,7 @@ const (
 )
 
 var (
-	EntityRule = networkpolicy.CreateEntityRule(Namespace, Name, Port)
-	//SourceKibanaEntityRule = networkpolicy.CreateSourceEntityRule(Namespace, Name)
+	EntityRule = networkpolicy.CreateEntityRule(Namespace, CRName, Port)
 )
 
 // Kibana renders the components necessary for kibana and elasticsearch
@@ -141,8 +141,7 @@ func (k *kibana) SupportedOSType() rmeta.OSType {
 func (k *kibana) Objects() ([]client.Object, []client.Object) {
 	var toCreate, toDelete []client.Object
 
-	// Doesn't matter what the cluster type is, if LogStorage exists and the DeletionTimestamp is set finalized the
-	// deletion
+	// Delete a previous Kibana CR if LogStorage is in the process of being deleted
 	if k.cfg.LogStorage != nil && k.cfg.LogStorage.DeletionTimestamp != nil {
 		if k.cfg.Kibana != nil {
 			if k.cfg.Kibana.DeletionTimestamp == nil {
@@ -291,10 +290,10 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	kibana := &kbv1.Kibana{
 		TypeMeta: metav1.TypeMeta{Kind: "Kibana", APIVersion: "kibana.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      Name,
+			Name:      CRName,
 			Namespace: Namespace,
 			Labels: map[string]string{
-				"k8s-app": Name,
+				"k8s-app": CRName,
 			},
 		},
 		Spec: kbv1.KibanaSpec{
@@ -322,8 +321,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 						TLSAnnotationHash: rmeta.SecretsAnnotationHash(k.kibanaSecrets...),
 					},
 					Labels: map[string]string{
-						"name":    Name,
-						"k8s-app": Name,
+						"name":    CRName,
+						"k8s-app": CRName,
 					},
 				},
 				Spec: corev1.PodSpec{
@@ -356,7 +355,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	}
 
 	if k.cfg.Installation.ControlPlaneReplicas != nil && *k.cfg.Installation.ControlPlaneReplicas > 1 {
-		kibana.Spec.PodTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(Name, Namespace)
+		kibana.Spec.PodTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(CRName, Namespace)
 	}
 
 	if k.cfg.LogStorage != nil {
@@ -445,7 +444,7 @@ func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(Name),
+			Selector: networkpolicy.KubernetesAppSelector(CRName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
 				{

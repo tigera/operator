@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/tigera/operator/pkg/render/logstorage/kibana"
-
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -38,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"

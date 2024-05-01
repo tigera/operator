@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
@@ -172,8 +174,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchPerformanceHotspotsUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ECKLicenseConfigMapName,
-				Namespace: render.ECKOperatorNamespace,
+				Name:      eck.LicenseConfigMapName,
+				Namespace: eck.OperatorNamespace,
 			},
 			Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 		})).NotTo(HaveOccurred())

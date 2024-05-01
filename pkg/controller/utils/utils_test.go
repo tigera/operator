@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"github.com/go-logr/logr"
@@ -75,7 +77,7 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 
 	It("Returns license type from elastic-licensing", func() {
 		Expect(c.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+			ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 			Data:       map[string]string{"eck_license_level": "enterprise"},
 		})).ShouldNot(HaveOccurred())
 		license, err := GetElasticLicenseType(ctx, c, log)
@@ -91,7 +93,7 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 
 	It("Return error if license type if missing", func() {
 		Expect(c.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+			ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 		})).ShouldNot(HaveOccurred())
 		_, err := GetElasticLicenseType(ctx, c, log)
 		Expect(err).Should(HaveOccurred())

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 
 	. "github.com/onsi/ginkgo"
@@ -300,7 +302,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		})
 
 		Expect(cli.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+			ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 			Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 		})).ShouldNot(HaveOccurred())
 
@@ -520,7 +522,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		})
 
 		Expect(cli.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+			ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 			Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 		})).ShouldNot(HaveOccurred())
 

@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -182,7 +184,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	if !opts.ElasticExternal {
-		if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, eventHandler); err != nil {
+		if err = utils.AddConfigMapWatch(c, eck.LicenseConfigMapName, eck.OperatorNamespace, eventHandler); err != nil {
 			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
 		}
 	}

@@ -188,7 +188,7 @@ var _ = Describe("Kibana rendering tests", func() {
 			rtest.ExpectResources(deleteResources, expectedDeletedResources)
 		})
 
-		It("should render an elasticsearchComponent with certificate management enabled", func() {
+		It("should render kibana with certificate management enabled", func() {
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{
 				CACert:             cfg.KibanaKeyPair.GetCertificatePEM(),
 				SignerName:         "my signer name",

@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+
 	"k8s.io/apimachinery/pkg/types"
 
 	. "github.com/onsi/ginkgo"
@@ -147,8 +149,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ECKLicenseConfigMapName,
-				Namespace: render.ECKOperatorNamespace,
+				Name:      eck.LicenseConfigMapName,
+				Namespace: eck.OperatorNamespace,
 			},
 			Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 		})).NotTo(HaveOccurred())

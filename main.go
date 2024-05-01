@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+
 	"github.com/cloudflare/cfssl/log"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -406,7 +408,7 @@ func main() {
 		render.ComplianceNamespace,
 		render.IntrusionDetectionNamespace,
 		dpi.DeepPacketInspectionNamespace,
-		render.ECKOperatorNamespace,
+		eck.OperatorNamespace,
 		render.LogCollectorNamespace,
 		render.CSIDaemonSetNamespace,
 		render.ManagerNamespace,

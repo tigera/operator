@@ -21,12 +21,9 @@ import (
 	"hash/fnv"
 	"strings"
 
-	rcomponents "github.com/tigera/operator/pkg/render/common/components"
-
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"gopkg.in/inf.v0"
-	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -56,12 +53,6 @@ import (
 type ElasticsearchLicenseType string
 
 const (
-	ECKOperatorName         = "elastic-operator"
-	ECKOperatorNamespace    = "tigera-eck-operator"
-	ECKLicenseConfigMapName = "elastic-licensing"
-	ECKOperatorPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "elastic-operator-access"
-	ECKEnterpriseTrial      = "eck-trial-license"
-
 	ElasticsearchObjectName = "tigera-elasticsearch"
 	ElasticsearchNamespace  = ElasticsearchObjectName
 
@@ -156,7 +147,7 @@ var InternalElasticsearchEntityRule = v3.EntityRule{
 
 var (
 	SourceKibanaEntityRule      = networkpolicy.CreateSourceEntityRule("tigera-kibana", "tigera-secure")
-	ECKOperatorSourceEntityRule = networkpolicy.CreateSourceEntityRule(ECKOperatorNamespace, ECKOperatorName)
+	ECKOperatorSourceEntityRule = networkpolicy.CreateSourceEntityRule("tigera-eck-operator", "elastic-operator")
 )
 
 var log = logf.Log.WithName("render")
@@ -193,10 +184,9 @@ type ElasticsearchConfiguration struct {
 }
 
 type elasticsearchComponent struct {
-	cfg             *ElasticsearchConfiguration
-	esImage         string
-	esOperatorImage string
-	csrImage        string
+	cfg      *ElasticsearchConfiguration
+	esImage  string
+	csrImage string
 }
 
 func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -210,11 +200,6 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
 	}
 	errMsgs := make([]string, 0)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	es.esOperatorImage, err = components.GetReference(components.ComponentElasticsearchOperator, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -252,38 +237,13 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		return toCreate, toDelete
 	}
 
-	// ECK operator
-	toCreate = append(toCreate,
-		CreateNamespace(ECKOperatorNamespace, es.cfg.Installation.KubernetesProvider, PSSRestricted),
-		es.eckOperatorAllowTigeraPolicy(),
-	)
-
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.cfg.PullSecrets...)...)...)
-
-	toCreate = append(toCreate,
-		es.eckOperatorClusterRole(),
-		es.eckOperatorClusterRoleBinding(),
-		es.eckOperatorServiceAccount(),
-	)
-	// This is needed for the operator to be able to set privileged mode for pods.
-	// https://docs.docker.com/ee/ucp/authorization/#secure-kubernetes-defaults
-	if es.cfg.Provider == operatorv1.ProviderDockerEE {
-		toCreate = append(toCreate, es.eckOperatorClusterAdminClusterRoleBinding())
-	}
-
 	if es.cfg.UsePSP {
 		toCreate = append(toCreate,
 			es.elasticsearchClusterRoleBinding(),
 			es.elasticsearchClusterRole(),
-			es.eckOperatorPodSecurityPolicy(),
 			es.elasticsearchPodSecurityPolicy(),
 		)
 	}
-
-	if es.cfg.ApplyTrial {
-		toCreate = append(toCreate, es.elasticEnterpriseTrial())
-	}
-	toCreate = append(toCreate, es.eckOperatorStatefulSet())
 
 	// Elasticsearch CRs
 	toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged))
@@ -889,275 +849,6 @@ func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim) string {
 	return hex.EncodeToString(pvcTemplateHash.Sum(nil))
 }
 
-func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{"authorization.k8s.io"},
-			Resources: []string{"subjectaccessreviews"},
-			Verbs:     []string{"create"},
-		},
-		{
-			APIGroups: []string{"coordination.k8s.io"},
-			Resources: []string{"leases"},
-			Verbs:     []string{"create"},
-		},
-		{
-			APIGroups:     []string{"coordination.k8s.io"},
-			Resources:     []string{"leases"},
-			ResourceNames: []string{"elastic-operator-leader"},
-			Verbs:         []string{"get", "watch", "update"},
-		},
-		{
-			APIGroups: []string{""},
-			Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps", "serviceaccounts"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"apps"},
-			Resources: []string{"deployments", "statefulsets", "daemonsets"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"batch"},
-			Resources: []string{"cronjobs"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"policy"},
-			Resources: []string{"poddisruptionbudgets"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"elasticsearch.k8s.elastic.co"},
-			Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers", "enterpriselicenses", "enterpriselicenses/status"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"autoscaling.k8s.elastic.co"},
-			Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"kibana.k8s.elastic.co"},
-			Resources: []string{"kibanas", "kibanas/status", "kibanas/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"apm.k8s.elastic.co"},
-			Resources: []string{"apmservers", "apmservers/status", "apmservers/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"enterprisesearch.k8s.elastic.co"},
-			Resources: []string{"enterprisesearches", "enterprisesearches/status", "enterprisesearches/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"beat.k8s.elastic.co"},
-			Resources: []string{"beats", "beats/status", "beats/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"agent.k8s.elastic.co"},
-			Resources: []string{"agents", "agents/status", "agents/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"maps.k8s.elastic.co"},
-			Resources: []string{"elasticmapsservers", "elasticmapsservers/status", "elasticmapsservers/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"stackconfigpolicy.k8s.elastic.co"},
-			Resources: []string{"stackconfigpolicies", "stackconfigpolicies/status", "stackconfigpolicies/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"associations.k8s.elastic.co"},
-			Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"autoscaling.k8s.elastic.co"},
-			Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-	}
-
-	if es.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{ECKOperatorName},
-		})
-	}
-
-	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "elastic-operator",
-		},
-		Rules: rules,
-	}
-}
-
-func (es elasticsearchComponent) eckOperatorClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ECKOperatorName,
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     ECKOperatorName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      "elastic-operator",
-				Namespace: ECKOperatorNamespace,
-			},
-		},
-	}
-}
-
-func (es elasticsearchComponent) eckOperatorClusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "elastic-operator-docker-enterprise",
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "cluster-admin",
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      "elastic-operator",
-				Namespace: ECKOperatorNamespace,
-			},
-		},
-	}
-}
-
-func (es elasticsearchComponent) eckOperatorServiceAccount() *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ECKOperatorName,
-			Namespace: ECKOperatorNamespace,
-		},
-	}
-}
-
-func (es elasticsearchComponent) eckOperatorStatefulSet() *appsv1.StatefulSet {
-	gracePeriod := int64(10)
-	memoryLimit := resource.Quantity{}
-	memoryRequest := resource.Quantity{}
-	for _, c := range es.cfg.LogStorage.Spec.ComponentResources {
-		if c.ComponentName == operatorv1.ComponentNameECKOperator {
-			memoryLimit = c.ResourceRequirements.Limits[corev1.ResourceMemory]
-			memoryRequest = c.ResourceRequirements.Requests[corev1.ResourceMemory]
-		}
-	}
-	s := &appsv1.StatefulSet{
-		TypeMeta: metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ECKOperatorName,
-			Namespace: ECKOperatorNamespace,
-			Labels: map[string]string{
-				"control-plane": "elastic-operator",
-				"k8s-app":       "elastic-operator",
-			},
-		},
-		Spec: appsv1.StatefulSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"control-plane": "elastic-operator",
-					"k8s-app":       "elastic-operator",
-				},
-			},
-			ServiceName: ECKOperatorName,
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"control-plane": "elastic-operator",
-						"k8s-app":       "elastic-operator",
-					},
-					Annotations: map[string]string{
-						// Rename the fields "error" to "error.message" and "source" to "event.source"
-						// This is to avoid a conflict with the ECS "error" and "source" documents.
-						"co.elastic.logs/raw": "[{\"type\":\"container\",\"json.keys_under_root\":true,\"paths\":[\"/var/log/containers/*${data.kubernetes.container.id}.log\"],\"processors\":[{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"error\",\"to\":\"_error\"}]}},{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"_error\",\"to\":\"error.message\"}]}},{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"source\",\"to\":\"_source\"}]}},{\"convert\":{\"mode\":\"rename\",\"ignore_missing\":true,\"fields\":[{\"from\":\"_source\",\"to\":\"event.source\"}]}}]}]",
-					},
-				},
-				Spec: corev1.PodSpec{
-					DNSPolicy:          corev1.DNSClusterFirst,
-					ServiceAccountName: "elastic-operator",
-					ImagePullSecrets:   secret.GetReferenceList(es.cfg.PullSecrets),
-					HostNetwork:        false,
-					NodeSelector:       es.cfg.Installation.ControlPlaneNodeSelector,
-					Tolerations:        es.cfg.Installation.ControlPlaneTolerations,
-					Containers: []corev1.Container{{
-						Image:           es.esOperatorImage,
-						ImagePullPolicy: ImagePullPolicy(),
-						Name:            "manager",
-						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
-						Args: []string{
-							"manager",
-							"--namespaces=tigera-elasticsearch,tigera-kibana",
-							"--log-verbosity=0",
-							"--metrics-port=0",
-							"--container-registry=" + es.cfg.Installation.Registry,
-							"--max-concurrent-reconciles=3",
-							"--ca-cert-validity=8760h",
-							"--ca-cert-rotate-before=24h",
-							"--cert-validity=8760h",
-							"--cert-rotate-before=24h",
-							"--enable-webhook=false",
-							"--manage-webhook-certs=false",
-						},
-						Env: []corev1.EnvVar{
-							{
-								Name: "OPERATOR_NAMESPACE",
-								ValueFrom: &corev1.EnvVarSource{
-									FieldRef: &corev1.ObjectFieldSelector{
-										FieldPath: "metadata.namespace",
-									},
-								},
-							},
-							{Name: "OPERATOR_IMAGE", Value: es.esOperatorImage},
-						},
-						Resources: corev1.ResourceRequirements{
-							Limits: corev1.ResourceList{
-								"cpu":    resource.MustParse("1"),
-								"memory": memoryLimit,
-							},
-							Requests: corev1.ResourceList{
-								"cpu":    resource.MustParse("100m"),
-								"memory": memoryRequest,
-							},
-						},
-						SecurityContext: securitycontext.NewNonRootContext(),
-					}},
-					TerminationGracePeriodSeconds: &gracePeriod,
-				},
-			},
-		},
-	}
-	if es.cfg.LogStorage != nil {
-		if overrides := es.cfg.LogStorage.Spec.ECKOperatorStatefulSet; overrides != nil {
-			rcomponents.ApplyStatefulSetOverrides(s, overrides)
-		}
-	}
-	return s
-}
-
-func (es elasticsearchComponent) eckOperatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(ECKOperatorName)
-}
-
 // This is a list of components that belong to Curator which has been decommissioned since it is no longer supported
 // in Elasticsearch beyond version 8. We want to be able to clean up these resources if they exist in the cluster on upgrade.
 func (es elasticsearchComponent) curatorDecommissionedResources() []client.Object {
@@ -1208,22 +899,6 @@ func (es elasticsearchComponent) curatorDecommissionedResources() []client.Objec
 	}
 
 	return resources
-}
-
-// Applying this in the eck namespace will start a trial license for enterprise features.
-func (es elasticsearchComponent) elasticEnterpriseTrial() *corev1.Secret {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ECKEnterpriseTrial,
-			Namespace: ECKOperatorNamespace,
-			Labels: map[string]string{
-				"license.k8s.elastic.co/type": "enterprise-trial",
-			},
-			Annotations: map[string]string{
-				"elastic.co/eula": "accepted",
-			},
-		},
-	}
 }
 
 func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {
@@ -1319,39 +994,6 @@ func (es elasticsearchComponent) oidcUserRoleBinding() client.Object {
 				Name:      ManagerServiceAccount,
 				Namespace: ManagerNamespace,
 			},
-		},
-	}
-}
-
-// Allow the elastic-operator to communicate with API server, DNS and elastic search.
-func (es *elasticsearchComponent) eckOperatorAllowTigeraPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, es.cfg.Provider == operatorv1.ProviderOpenShift)
-	egressRules = append(egressRules, []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: ElasticsearchEntityRule,
-		},
-	}...)
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ECKOperatorPolicyName,
-			Namespace: ECKOperatorNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(ECKOperatorName),
-			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
-			Egress:   egressRules,
 		},
 	}
 }

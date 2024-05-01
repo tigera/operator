@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
@@ -147,7 +149,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
 		{Name: render.ElasticsearchPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: kibana.PolicyName, Namespace: kibana.Namespace},
-		{Name: render.ECKOperatorPolicyName, Namespace: render.ECKOperatorNamespace},
+		{Name: eck.OperatorPolicyName, Namespace: eck.OperatorNamespace},
 		{Name: render.ElasticsearchInternalPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: kibana.Namespace},
@@ -160,7 +162,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	if err = c.WatchObject(&apps.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKOperatorName},
+		ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.OperatorName},
 	}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch StatefulSet resource: %w", err)
 	}
@@ -229,7 +231,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
 	}
 
-	if err = utils.AddConfigMapWatch(c, render.ECKLicenseConfigMapName, render.ECKOperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = utils.AddConfigMapWatch(c, eck.LicenseConfigMapName, eck.OperatorNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-elastic-controller failed to watch ConfigMap resource: %w", err)
 	}
 
@@ -437,9 +439,9 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 
 	esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
 	if err != nil {
-		// If ECKLicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
+		// If LicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
 		if errors.IsNotFound(err) {
-			reqLogger.Info("ConfigMap not found yet", "name", render.ECKLicenseConfigMapName)
+			reqLogger.Info("ConfigMap not found yet", "name", eck.LicenseConfigMapName)
 		} else {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get elastic license", err, reqLogger)
 			return reconcile.Result{}, err
@@ -521,53 +523,60 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 
-	logStorageCfg := &render.ElasticsearchConfiguration{
-		LogStorage:              ls,
-		Installation:            install,
-		ManagementCluster:       managementCluster,
-		Elasticsearch:           elasticsearch,
-		ClusterConfig:           clusterConfig,
-		ElasticsearchUserSecret: esAdminUserSecret,
-		ElasticsearchKeyPair:    elasticKeyPair,
-		PullSecrets:             pullSecrets,
-		Provider:                r.provider,
-		ESService:               esService,
-		ClusterDomain:           r.clusterDomain,
-		ElasticLicenseType:      esLicenseType,
-		TrustedBundle:           trustedBundle,
-		UnusedTLSSecret:         unusedTLSSecret,
-		UsePSP:                  r.usePSP,
-		ApplyTrial:              applyTrial,
-		KeyStoreSecret:          keyStoreSecret,
+	components := []render.Component{
+		eck.ECK(&eck.Configuration{
+			LogStorage:         ls,
+			Installation:       install,
+			ManagementCluster:  managementCluster,
+			PullSecrets:        pullSecrets,
+			Provider:           r.provider,
+			ElasticLicenseType: esLicenseType,
+			UsePSP:             r.usePSP,
+			ApplyTrial:         applyTrial,
+		}),
+		render.LogStorage(&render.ElasticsearchConfiguration{
+			LogStorage:              ls,
+			Installation:            install,
+			ManagementCluster:       managementCluster,
+			Elasticsearch:           elasticsearch,
+			ClusterConfig:           clusterConfig,
+			ElasticsearchUserSecret: esAdminUserSecret,
+			ElasticsearchKeyPair:    elasticKeyPair,
+			PullSecrets:             pullSecrets,
+			Provider:                r.provider,
+			ESService:               esService,
+			ClusterDomain:           r.clusterDomain,
+			ElasticLicenseType:      esLicenseType,
+			TrustedBundle:           trustedBundle,
+			UnusedTLSSecret:         unusedTLSSecret,
+			UsePSP:                  r.usePSP,
+			KeyStoreSecret:          keyStoreSecret,
+		}),
+		kibana.Kibana(&kibana.Configuration{
+			LogStorage:      ls,
+			Installation:    install,
+			Kibana:          kibanaCR,
+			KibanaKeyPair:   kibanaKeyPair,
+			PullSecrets:     pullSecrets,
+			Provider:        r.provider,
+			KbService:       kbService,
+			ClusterDomain:   r.clusterDomain,
+			BaseURL:         baseURL,
+			TrustedBundle:   trustedBundle,
+			UnusedTLSSecret: unusedTLSSecret,
+			UsePSP:          r.usePSP,
+			Enabled:         kibanaEnabled,
+		}),
 	}
 
-	logStorageComponent := render.LogStorage(logStorageCfg)
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, logStorageComponent); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
-		return reconcile.Result{}, err
+	for _, component := range components {
+		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
-	kibanaComponent := kibana.Kibana(&kibana.Configuration{
-		LogStorage:      ls,
-		Installation:    install,
-		Kibana:          kibanaCR,
-		KibanaKeyPair:   kibanaKeyPair,
-		PullSecrets:     pullSecrets,
-		Provider:        r.provider,
-		KbService:       kbService,
-		ClusterDomain:   r.clusterDomain,
-		BaseURL:         baseURL,
-		TrustedBundle:   trustedBundle,
-		UnusedTLSSecret: unusedTLSSecret,
-		UsePSP:          r.usePSP,
-		Enabled:         kibanaEnabled,
-	})
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, kibanaComponent); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	for _, component := range []render.Component{logStorageComponent, kibanaComponent} {
+	for _, component := range components {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
@@ -734,7 +743,7 @@ func (r *ElasticSubController) applyElasticTrialSecret(ctx context.Context, inst
 		return false, nil
 	}
 	// FIPS mode is a licensed feature for Elasticsearch.
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.ECKEnterpriseTrial, Namespace: render.ECKOperatorNamespace}, &corev1.Secret{}); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: eck.EnterpriseTrial, Namespace: eck.OperatorNamespace}, &corev1.Secret{}); err != nil {
 		if errors.IsNotFound(err) {
 			return true, nil
 		} else {

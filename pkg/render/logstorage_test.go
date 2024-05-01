@@ -26,7 +26,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -62,11 +61,9 @@ type resourceTestObj struct {
 var _ = Describe("Elasticsearch rendering tests", func() {
 	// Setup shared policies utilities that require Ginkgo context.
 	var (
-		expectedOperatorPolicy             = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elastic-operator.json")
-		expectedOperatorPolicyForOpenshift = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elastic-operator_ocp.json")
-		expectedESPolicy                   = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elasticsearch.json")
-		expectedESPolicyForOpenshift       = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elasticsearch_ocp.json")
-		expectedESInternalPolicy           = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elasticsearch-internal.json")
+		expectedESPolicy             = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elasticsearch.json")
+		expectedESPolicyForOpenshift = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elasticsearch_ocp.json")
+		expectedESInternalPolicy     = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elasticsearch-internal.json")
 	)
 	getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 		if scenario.ManagedCluster {
@@ -76,9 +73,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		switch policyName.Name {
 		case "allow-tigera.elasticsearch-access":
 			return testutils.SelectPolicyByProvider(scenario, expectedESPolicy, expectedESPolicyForOpenshift)
-
-		case "allow-tigera.elastic-operator-access":
-			return testutils.SelectPolicyByProvider(scenario, expectedOperatorPolicy, expectedOperatorPolicyForOpenshift)
 
 		case "allow-tigera.elasticsearch-internal":
 			return expectedESInternalPolicy
@@ -175,21 +169,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 			It("should render an elasticsearchComponent", func() {
 				expectedCreateResources := []client.Object{
-					// ECK Resources
-					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.ECKOperatorNamespace}},
-					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.ECKOperatorPolicyName, Namespace: render.ECKOperatorNamespace}},
-					&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: render.ECKOperatorNamespace}},
-					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator"}},
-					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator"}},
-					&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator", Namespace: render.ECKOperatorNamespace}},
+					// ES resources
 					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
 					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
 					&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
-					&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.ECKOperatorName}},
-
-					&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: render.ECKOperatorName, Namespace: render.ECKOperatorNamespace}},
-
-					// ES resources
 					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchNamespace}},
 					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPolicyName, Namespace: render.ElasticsearchNamespace}},
 					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchInternalPolicyName, Namespace: render.ElasticsearchNamespace}},
@@ -215,12 +198,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.ESCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 				})
 
-				// Check the namespaces.
-				namespace := rtest.GetResource(createResources, "tigera-eck-operator", "", "", "v1", "Namespace").(*corev1.Namespace)
-				Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
-				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
-
-				namespace = rtest.GetResource(createResources, "tigera-elasticsearch", "", "", "v1", "Namespace").(*corev1.Namespace)
+				namespace := rtest.GetResource(createResources, "tigera-elasticsearch", "", "", "v1", "Namespace").(*corev1.Namespace)
 				Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
 				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
@@ -287,153 +265,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"cluster.max_shards_per_node":     10000,
 					"ingest.geoip.downloader.enabled": false,
 				}))
-				resultECK := rtest.GetResource(createResources, render.ECKOperatorName, render.ECKOperatorNamespace,
-					"apps", "v1", "StatefulSet").(*appsv1.StatefulSet)
-				Expect(resultECK.Spec.Template.Spec.Containers).To(HaveLen(1))
-				Expect(resultECK.Spec.Template.Spec.Containers[0].Args).To(ConsistOf([]string{
-					"manager",
-					"--namespaces=tigera-elasticsearch,tigera-kibana",
-					"--log-verbosity=0",
-					"--metrics-port=0",
-					"--container-registry=testregistry.com/",
-					"--max-concurrent-reconciles=3",
-					"--ca-cert-validity=8760h",
-					"--ca-cert-rotate-before=24h",
-					"--cert-validity=8760h",
-					"--cert-rotate-before=24h",
-					"--enable-webhook=false",
-					"--manage-webhook-certs=false",
-				}))
-				Expect(*resultECK.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
-				Expect(*resultECK.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeFalse())
-				Expect(*resultECK.Spec.Template.Spec.Containers[0].SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
-				Expect(*resultECK.Spec.Template.Spec.Containers[0].SecurityContext.RunAsNonRoot).To(BeTrue())
-				Expect(*resultECK.Spec.Template.Spec.Containers[0].SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
-				Expect(resultECK.Spec.Template.Spec.Containers[0].SecurityContext.Capabilities).To(Equal(
-					&corev1.Capabilities{
-						Drop: []corev1.Capability{"ALL"},
-					},
-				))
-				Expect(resultECK.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
-					&corev1.SeccompProfile{
-						Type: corev1.SeccompProfileTypeRuntimeDefault,
-					}))
-
-				eckRole := rtest.GetResource(createResources, "elastic-operator", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-				Expect(eckRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
-					{
-						APIGroups: []string{"authorization.k8s.io"},
-						Resources: []string{"subjectaccessreviews"},
-						Verbs:     []string{"create"},
-					},
-					{
-						APIGroups: []string{"coordination.k8s.io"},
-						Resources: []string{"leases"},
-						Verbs:     []string{"create"},
-					},
-					{
-						APIGroups:     []string{"coordination.k8s.io"},
-						Resources:     []string{"leases"},
-						ResourceNames: []string{"elastic-operator-leader"},
-						Verbs:         []string{"get", "watch", "update"},
-					},
-					{
-						APIGroups: []string{""},
-						Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps", "serviceaccounts"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"apps"},
-						Resources: []string{"deployments", "statefulsets", "daemonsets"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"batch"},
-						Resources: []string{"cronjobs"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"policy"},
-						Resources: []string{"poddisruptionbudgets"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"elasticsearch.k8s.elastic.co"},
-						Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers", "enterpriselicenses", "enterpriselicenses/status"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"autoscaling.k8s.elastic.co"},
-						Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"kibana.k8s.elastic.co"},
-						Resources: []string{"kibanas", "kibanas/status", "kibanas/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"apm.k8s.elastic.co"},
-						Resources: []string{"apmservers", "apmservers/status", "apmservers/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"enterprisesearch.k8s.elastic.co"},
-						Resources: []string{"enterprisesearches", "enterprisesearches/status", "enterprisesearches/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"beat.k8s.elastic.co"},
-						Resources: []string{"beats", "beats/status", "beats/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"agent.k8s.elastic.co"},
-						Resources: []string{"agents", "agents/status", "agents/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"maps.k8s.elastic.co"},
-						Resources: []string{"elasticmapsservers", "elasticmapsservers/status", "elasticmapsservers/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"stackconfigpolicy.k8s.elastic.co"},
-						Resources: []string{"stackconfigpolicies", "stackconfigpolicies/status", "stackconfigpolicies/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"associations.k8s.elastic.co"},
-						Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"autoscaling.k8s.elastic.co"},
-						Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups:     []string{"policy"},
-						Resources:     []string{"podsecuritypolicies"},
-						Verbs:         []string{"use"},
-						ResourceNames: []string{"elastic-operator"},
-					},
-				}))
 			})
 
-			It("should render an elasticsearchComponent and delete the Elasticsearch and Kibana ExternalService as well as Curator components", func() {
+			It("should render an elasticsearch Component and delete the Elasticsearch ExternalService as well as Curator components", func() {
 				expectedCreateResources := []resourceTestObj{
-					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
-					{render.ECKOperatorPolicyName, render.ECKOperatorNamespace, &v3.NetworkPolicy{}, nil},
-					{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
-					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
-					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
-					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{render.ElasticsearchPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ElasticsearchInternalPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
@@ -482,17 +320,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				cfg.ElasticsearchKeyPair, cfg.TrustedBundle = getTLS(cfg.Installation)
 
 				expectedCreateResources := []resourceTestObj{
-					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
-					{render.ECKOperatorPolicyName, render.ECKOperatorNamespace, &v3.NetworkPolicy{}, nil},
-					{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
-					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
-					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
-					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{render.ElasticsearchPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ElasticsearchInternalPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
@@ -552,24 +382,16 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 		})
 
-		Context("Elasticsearch  ready", func() {
+		Context("Elasticsearch with a default cluster domain", func() {
 			BeforeEach(func() {
 				cfg.ClusterDomain = dns.DefaultClusterDomain
 			})
 
 			It("should render correctly", func() {
 				expectedCreateResources := []resourceTestObj{
-					{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
-					{render.ECKOperatorPolicyName, render.ECKOperatorNamespace, &v3.NetworkPolicy{}, nil},
-					{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
-					{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
-					{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
-					{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 					{render.ElasticsearchPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ElasticsearchInternalPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
@@ -601,8 +423,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Context("allow-tigera rendering", func() {
 				policyNames := []types.NamespacedName{
 					{Name: "allow-tigera.elasticsearch-access", Namespace: "tigera-elasticsearch"},
-					{Name: "allow-tigera.kibana-access", Namespace: "tigera-kibana"},
-					{Name: "allow-tigera.elastic-operator-access", Namespace: "tigera-eck-operator"},
 					{Name: "allow-tigera.elasticsearch-internal", Namespace: "tigera-elasticsearch"},
 				}
 
@@ -698,49 +518,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(nodeSelectors["k2"]).To(Equal("v2"))
 		})
 
-		Context("ECKOperator memory requests/limits", func() {
-			When("LogStorage Spec contains an entry for ECKOperator in ComponentResources", func() {
-				It("should set matching memory requests/limits in the elastic-operator StatefulSet.Spec manager container", func() {
-					limits := corev1.ResourceList{}
-					requests := corev1.ResourceList{}
-					limits[corev1.ResourceMemory] = resource.MustParse("512Mi")
-					requests[corev1.ResourceMemory] = resource.MustParse("512Mi")
-					cfg.LogStorage.Spec.ComponentResources = []operatorv1.LogStorageComponentResource{
-						{
-							ComponentName: operatorv1.ComponentNameECKOperator,
-							ResourceRequirements: &corev1.ResourceRequirements{
-								Limits:   limits,
-								Requests: requests,
-							},
-						},
-					}
-
-					limits[corev1.ResourceCPU] = resource.MustParse("1")
-					requests[corev1.ResourceCPU] = resource.MustParse("100m")
-					expectedResourcesRequirements := corev1.ResourceRequirements{
-						Limits:   limits,
-						Requests: requests,
-					}
-
-					component := render.LogStorage(cfg)
-
-					createResources, _ := component.Objects()
-
-					statefulSet := rtest.GetResource(createResources, render.ECKOperatorName, render.ECKOperatorNamespace, "apps", "v1", "StatefulSet").(*appsv1.StatefulSet)
-					Expect(statefulSet).Should(Not(BeNil()))
-					Expect(statefulSet.Spec.Template.Spec.Containers).ToNot(BeEmpty())
-					for _, container := range statefulSet.Spec.Template.Spec.Containers {
-						if container.Name == "manager" {
-							Expect(container).NotTo(BeNil())
-							Expect(container.Resources).To(Equal(expectedResourcesRequirements))
-							break
-						}
-					}
-				})
-			})
-		})
-
-		It("should render elastic components with the correct JAVA options", func() {
+		It("should render elastic with the correct JAVA options for FIPS", func() {
 			fipsEnabled := operatorv1.FIPSModeEnabled
 			cfg.Installation.FIPSMode = &fipsEnabled
 			cfg.LogStorage.Spec.Nodes.ResourceRequirements = &corev1.ResourceRequirements{
@@ -759,18 +537,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			cfg.KeyStoreSecret = render.CreateElasticsearchKeystoreSecret()
 			cfg.KeyStoreSecret.Data[render.ElasticsearchKeystoreEnvName] = []byte("12345")
 			expectedCreateResources := []resourceTestObj{
-				{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
-				{render.ECKOperatorPolicyName, render.ECKOperatorNamespace, &v3.NetworkPolicy{}, nil},
-				{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
-				{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
-				{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
-				{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
 				{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
 				{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-				{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 				{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
-				{render.ECKEnterpriseTrial, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
-				{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
 				{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
 				{render.ElasticsearchPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 				{render.ElasticsearchInternalPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
@@ -1518,7 +1287,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 				UsePSP:             true,
 			}
 		})
-		It("returns Elasticsearch and Kibana CR's to delete and keeps the finalizers on the LogStorage CR", func() {
+		It("returns Elasticsearch CR's to delete and keeps the finalizers on the LogStorage CR", func() {
 			expectedCreateResources := []resourceTestObj{}
 
 			expectedDeleteResources := []resourceTestObj{
@@ -1532,7 +1301,7 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 			compareResources(createResources, expectedCreateResources)
 			compareResources(deleteResources, expectedDeleteResources)
 		})
-		It("doesn't return anything to delete when Elasticsearch and Kibana have their deletion times stamps set and the LogStorage finalizers are still set", func() {
+		It("doesn't return anything to delete when Elasticsearch have their deletion times stamps set and the LogStorage finalizers are still set", func() {
 			expectedCreateResources := []resourceTestObj{}
 
 			t := metav1.Now()

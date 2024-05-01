@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 
 	. "github.com/onsi/ginkgo"
@@ -64,7 +66,7 @@ import (
 )
 
 var (
-	eckOperatorObjKey = client.ObjectKey{Name: render.ECKOperatorName, Namespace: render.ECKOperatorNamespace}
+	eckOperatorObjKey = client.ObjectKey{Name: eck.OperatorName, Namespace: eck.OperatorNamespace}
 	esObjKey          = client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}
 	kbObjKey          = client.ObjectKey{Name: kibana.Name, Namespace: kibana.Namespace}
 
@@ -344,7 +346,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				Expect(cli.Create(ctx, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 				})).ShouldNot(HaveOccurred())
 
@@ -467,7 +469,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				Expect(cli.Create(ctx, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeBasic)},
 				})).ShouldNot(HaveOccurred())
 
@@ -590,7 +592,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				Expect(cli.Create(ctx, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 				})).ShouldNot(HaveOccurred())
 
@@ -695,7 +697,7 @@ var _ = Describe("LogStorage controller", func() {
 						},
 					},
 					&corev1.ConfigMap{
-						ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+						ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 					},
 					&corev1.Secret{
@@ -757,7 +759,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				Expect(cli.Create(ctx, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 				})).ShouldNot(HaveOccurred())
 
@@ -817,7 +819,7 @@ var _ = Describe("LogStorage controller", func() {
 						},
 						&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						&corev1.ConfigMap{
-							ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+							ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 							Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 						},
 					}
@@ -882,8 +884,8 @@ var _ = Describe("LogStorage controller", func() {
 					ss := appsv1.StatefulSet{
 						TypeMeta: metav1.TypeMeta{Kind: "StatefuleSet", APIVersion: "apps/v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.ECKOperatorName,
-							Namespace: render.ECKOperatorNamespace,
+							Name:      eck.OperatorName,
+							Namespace: eck.OperatorNamespace,
 						},
 					}
 					Expect(test.GetResource(cli, &ss)).To(BeNil())
@@ -966,8 +968,8 @@ var _ = Describe("LogStorage controller", func() {
 					ss := appsv1.StatefulSet{
 						TypeMeta: metav1.TypeMeta{Kind: "StatefuleSet", APIVersion: "apps/v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.ECKOperatorName,
-							Namespace: render.ECKOperatorNamespace,
+							Name:      eck.OperatorName,
+							Namespace: eck.OperatorNamespace,
 						},
 					}
 					Expect(test.GetResource(cli, &ss)).To(BeNil())
@@ -1006,7 +1008,7 @@ var _ = Describe("LogStorage controller", func() {
 					})
 
 					Expect(cli.Create(ctx, &corev1.ConfigMap{
-						ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+						ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 					})).ShouldNot(HaveOccurred())
 

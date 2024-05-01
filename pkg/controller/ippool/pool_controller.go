@@ -123,7 +123,7 @@ type Reconciler struct {
 const (
 	// This label is used to track which IP pools are managed by this controller. Any IP pool
 	// with this label key/value pair is assumed to be solely managed and reconciled by this controller.
-	managedByLabel = "app.kubernetes.io/managed-by"
+	managedByLabel = "operator.tigera.io/managed-by"
 	managedByValue = "tigera-operator"
 )
 

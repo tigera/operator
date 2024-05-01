@@ -348,6 +348,14 @@ func (mc *monitorComponent) prometheusOperatorClusterRole() *rbacv1.ClusterRole 
 			},
 		},
 		{
+			APIGroups: []string{""},
+			Resources: []string{"events"},
+			Verbs: []string{
+				"patch",
+				"create",
+			},
+		},
+		{
 			APIGroups: []string{"networking.k8s.io"},
 			Resources: []string{"ingresses"},
 			Verbs: []string{

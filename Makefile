@@ -476,6 +476,10 @@ endif
 maybe-build-release:
 	./hack/maybe-build-release.sh
 
+release-notes: var-require-all-VERSION-GITHUB_TOKEN clean
+	@python3 -m pip install PyYAML PyGithub==2.3.0 && \
+		GITHUB_TOKEN=$(GITHUB_TOKEN) VERSION=$(VERSION) ./generate-release-notes.py
+
 ## Tags and builds a release from start to finish.
 release: release-prereqs
 ifneq ($(VERSION), $(GIT_VERSION))

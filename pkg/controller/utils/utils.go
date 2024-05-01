@@ -54,6 +54,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
 )
 
 const (
@@ -562,7 +563,7 @@ func GetPacketCaptureAPI(ctx context.Context, cli client.Client) (*operatorv1.Pa
 // GetElasticLicenseType returns the license type from elastic-licensing ConfigMap that ECK operator keeps updated.
 func GetElasticLicenseType(ctx context.Context, cli client.Client, logger logr.Logger) (render.ElasticsearchLicenseType, error) {
 	cm := &corev1.ConfigMap{}
-	err := cli.Get(ctx, client.ObjectKey{Name: render.ECKLicenseConfigMapName, Namespace: render.ECKOperatorNamespace}, cm)
+	err := cli.Get(ctx, client.ObjectKey{Name: eck.LicenseConfigMapName, Namespace: eck.OperatorNamespace}, cm)
 	if err != nil {
 		return render.ElasticsearchLicenseTypeUnknown, err
 	}

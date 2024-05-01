@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/test"
 )
 
@@ -147,8 +148,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ECKLicenseConfigMapName,
-				Namespace: render.ECKOperatorNamespace,
+				Name:      eck.LicenseConfigMapName,
+				Namespace: eck.OperatorNamespace,
 			},
 			Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 		})).NotTo(HaveOccurred())

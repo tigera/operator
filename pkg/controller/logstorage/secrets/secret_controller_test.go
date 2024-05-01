@@ -49,8 +49,10 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/logstorage"
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
@@ -60,12 +62,12 @@ var (
 	esCertSecretKey     = client.ObjectKey{Name: render.TigeraElasticsearchGatewaySecret, Namespace: render.ElasticsearchNamespace}
 	esCertSecretOperKey = client.ObjectKey{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}
 
-	kbCertSecretKey     = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace}
-	kbCertSecretOperKey = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}
+	kbCertSecretKey     = client.ObjectKey{Name: kibana.TigeraKibanaCertSecret, Namespace: kibana.Namespace}
+	kbCertSecretOperKey = client.ObjectKey{Name: kibana.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}
 
 	esDNSNames       = dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
 	esGatewayDNSNmes = dns.GetServiceDNSNames(esgateway.ServiceName, render.ElasticsearchNamespace, dns.DefaultClusterDomain)
-	kbDNSNames       = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
+	kbDNSNames       = dns.GetServiceDNSNames(kibana.ServiceName, kibana.Namespace, dns.DefaultClusterDomain)
 
 	successResult = reconcile.Result{}
 )
@@ -223,8 +225,8 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			{Name: render.TigeraElasticsearchInternalCertSecret, Namespace: common.OperatorNamespace()},
 			{Name: render.TigeraElasticsearchInternalCertSecret, Namespace: render.ElasticsearchNamespace},
 
-			{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()},
-			{Name: render.TigeraKibanaCertSecret, Namespace: render.KibanaNamespace},
+			{Name: kibana.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()},
+			{Name: kibana.TigeraKibanaCertSecret, Namespace: kibana.Namespace},
 
 			{Name: esmetrics.ElasticsearchMetricsServerTLSSecret, Namespace: common.OperatorNamespace()},
 			{Name: esmetrics.ElasticsearchMetricsServerTLSSecret, Namespace: render.ElasticsearchNamespace},
@@ -248,7 +250,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		rtest.ExpectBundleContents(bundle, types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()})
 
 		bundleKibana := &corev1.ConfigMap{}
-		bundleKey = types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: render.KibanaNamespace}
+		bundleKey = types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: kibana.Namespace}
 		Expect(cli.Get(ctx, bundleKey, bundleKibana)).ShouldNot(HaveOccurred())
 
 		// For this test, we only expect the tigera-operator CA to be included in the bundle as we haven't created any of the
@@ -272,7 +274,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		kbDNSNames = []string{"kb.example.com", "192.168.10.11"}
 		kbSecret, err := secret.CreateTLSSecret(
 			testCA,
-			render.TigeraKibanaCertSecret,
+			kibana.TigeraKibanaCertSecret,
 			common.OperatorNamespace(),
 			"tls.key",
 			"tls.crt",
@@ -298,7 +300,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		})
 
 		Expect(cli.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+			ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 			Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 		})).ShouldNot(HaveOccurred())
 
@@ -325,7 +327,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		expectedCerts := []types.NamespacedName{
 			{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()},
 			{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()},
-			{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()},
+			{Name: kibana.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()},
 		}
 		rtest.ExpectBundleContents(bundle, expectedCerts...)
 	})
@@ -354,7 +356,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		By("deleting the existing ES and KB secrets")
 		kbSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.TigeraKibanaCertSecret,
+				Name:      kibana.TigeraKibanaCertSecret,
 				Namespace: common.OperatorNamespace(),
 			},
 		}
@@ -363,7 +365,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		By("creating new ES and KB secrets with an old invalid DNS name")
 		_, err = secret.CreateTLSSecret(
 			nil,
-			render.TigeraKibanaCertSecret,
+			kibana.TigeraKibanaCertSecret,
 			common.OperatorNamespace(),
 			"tls.key",
 			"tls.crt",
@@ -387,7 +389,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		Expect(cli.Get(ctx, esCertSecretOperKey, secret)).ShouldNot(HaveOccurred())
 		test.VerifyCert(secret, combinedDNSNames...)
 
-		kbDNSNames = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
+		kbDNSNames = dns.GetServiceDNSNames(kibana.ServiceName, kibana.Namespace, r.clusterDomain)
 		By("confirming kibana certs were updated and have the expected DNS names")
 		Expect(cli.Get(ctx, kbCertSecretKey, secret)).ShouldNot(HaveOccurred())
 		test.VerifyCert(secret, kbDNSNames...)
@@ -437,7 +439,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		testCA := test.MakeTestCA("logstorage-test")
 		kbSecret, err := secret.CreateTLSSecret(
 			testCA,
-			render.TigeraKibanaCertSecret,
+			kibana.TigeraKibanaCertSecret,
 			common.OperatorNamespace(),
 			"tls.key",
 			"tls.crt",
@@ -518,7 +520,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		})
 
 		Expect(cli.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+			ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 			Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 		})).ShouldNot(HaveOccurred())
 

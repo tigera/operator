@@ -21,6 +21,9 @@ import (
 	"net"
 	"strings"
 
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
+
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -191,9 +194,9 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		render.ElasticsearchNamespace,
 		render.LogCollectorNamespace,
 		render.IntrusionDetectionNamespace,
-		render.KibanaNamespace,
+		kibana.Namespace,
 		render.ManagerNamespace,
-		render.ECKOperatorNamespace,
+		eck.OperatorNamespace,
 		render.PacketCaptureNamespace,
 		render.PolicyRecommendationNamespace,
 		common.TigeraPrometheusNamespace,

@@ -17,6 +17,8 @@ package elastic
 import (
 	"context"
 
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/tls"
@@ -81,8 +83,8 @@ var _ = Describe("External ES Controller", func() {
 		esKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), []string{render.TigeraElasticsearchInternalCertSecret})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, esKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-		dnsNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
-		kbKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraKibanaCertSecret, common.OperatorNamespace(), dnsNames)
+		dnsNames := dns.GetServiceDNSNames(kibana.ServiceName, kibana.Namespace, dns.DefaultClusterDomain)
+		kbKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, kibana.TigeraKibanaCertSecret, common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, kbKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 

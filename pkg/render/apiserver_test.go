@@ -1342,7 +1342,7 @@ var (
 		},
 		{
 			APIGroups: []string{"operator.tigera.io"},
-			Resources: []string{"applicationlayers"},
+			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get"},
 		},
 		{
@@ -1470,7 +1470,7 @@ var (
 		},
 		{
 			APIGroups: []string{"operator.tigera.io"},
-			Resources: []string{"applicationlayers"},
+			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
 		{

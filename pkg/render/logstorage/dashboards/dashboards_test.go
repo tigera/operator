@@ -49,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -451,7 +452,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			netPol := rtest.GetResource(resources, fmt.Sprintf("allow-tigera.%s", Name), render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
 			Expect(netPol).NotTo(BeNil())
 			Expect(netPol.Spec.Egress).To(HaveLen(2))
-			Expect(netPol.Spec.Egress[1].Destination).To(Equal(render.KibanaEntityRule))
+			Expect(netPol.Spec.Egress[1].Destination).To(Equal(kibana.EntityRule))
 		})
 
 		It("should render single-tenant environment variables", func() {

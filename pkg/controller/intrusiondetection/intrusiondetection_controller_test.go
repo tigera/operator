@@ -19,42 +19,37 @@ import (
 	"fmt"
 	"time"
 
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-
-	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
-
-	"github.com/tigera/operator/pkg/apis"
-
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/types"
-
-	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/test"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("IntrusionDetection controller tests", func() {
@@ -172,8 +167,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		Expect(c.Create(ctx, rtest.CreateCertSecret(render.ElasticsearchPerformanceHotspotsUserSecret, common.OperatorNamespace(), render.GuardianSecretName)))
 		Expect(c.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ECKLicenseConfigMapName,
-				Namespace: render.ECKOperatorNamespace,
+				Name:      eck.LicenseConfigMapName,
+				Namespace: eck.OperatorNamespace,
 			},
 			Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 		})).NotTo(HaveOccurred())

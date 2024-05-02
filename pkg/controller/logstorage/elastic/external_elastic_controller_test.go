@@ -48,6 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/render/monitor"
 )
 
@@ -81,8 +82,8 @@ var _ = Describe("External ES Controller", func() {
 		esKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraElasticsearchInternalCertSecret, common.OperatorNamespace(), []string{render.TigeraElasticsearchInternalCertSecret})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, esKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-		dnsNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
-		kbKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraKibanaCertSecret, common.OperatorNamespace(), dnsNames)
+		dnsNames := dns.GetServiceDNSNames(kibana.ServiceName, kibana.Namespace, dns.DefaultClusterDomain)
+		kbKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, kibana.TigeraKibanaCertSecret, common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, kbKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 

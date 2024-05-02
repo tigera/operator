@@ -18,10 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/render/logstorage/eck"
-
-	"github.com/tigera/operator/pkg/render/logstorage/kibana"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -60,6 +56,8 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"

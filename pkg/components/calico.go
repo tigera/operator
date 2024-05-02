@@ -59,13 +59,13 @@ var (
 	}
 
 	ComponentCalicoNode = component{
-		Version:  "latest",
+		Version:  "nft",
 		Image:    "caseydavenport/node",
 		Registry: "",
 	}
 
 	ComponentCalicoNodeFIPS = component{
-		Version:  "latest-fips",
+		Version:  "nft-fips",
 		Image:    "caseydavenport/node",
 		Registry: "",
 	}

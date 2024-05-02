@@ -132,8 +132,18 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 				Resources: []string{"endpoints"},
 				Verbs:     []string{"create", "update", "delete"},
 			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"namespaces"},
+				Verbs:     []string{"get"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"usage.tigera.io"},
+				Resources: []string{"licenseusagereports"},
+				Verbs:     []string{"create", "update", "delete", "watch", "list", "get"},
+			},
 		)
-		enabledControllers = append(enabledControllers, "service", "federatedservices")
+		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
 	}
 
 	return &kubeControllersComponent{

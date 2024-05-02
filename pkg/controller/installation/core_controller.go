@@ -1610,6 +1610,12 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
 	updated := false
 
+	if fc.Spec.NFTablesEnabled == nil {
+		nftablesEnabled := true
+		fc.Spec.NFTablesEnabled = &nftablesEnabled
+		updated = true
+	}
+
 	switch install.Spec.CNI.Type {
 	// If we're using the AWS CNI plugin we need to ensure the route tables that calico-node
 	// uses do not conflict with the ones the AWS CNI plugin uses so default them

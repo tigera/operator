@@ -304,6 +304,8 @@ type FelixConfigurationSpec struct {
 	// iptables. [Default: false]
 	GenericXDPEnabled *bool `json:"genericXDPEnabled,omitempty" confignamev1:"GenericXDPEnabled"`
 
+	NFTablesEnabled *bool `json:"nftablesEnabled,omitempty" validate:"omitempty"`
+
 	// BPFEnabled, if enabled Felix will use the BPF dataplane. [Default: false]
 	BPFEnabled *bool `json:"bpfEnabled,omitempty" validate:"omitempty"`
 	// BPFDisableUnprivileged, if enabled, Felix sets the kernel.unprivileged_bpf_disabled sysctl to disable

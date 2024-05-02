@@ -7,7 +7,7 @@ components:
     version: master
   calico/node:
     image: caseydavenport/node
-    version: latest
+    version: nft
   calico/cni:
     version: master
   calico/node-windows:

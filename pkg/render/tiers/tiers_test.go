@@ -24,6 +24,8 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/render/tiers"
 	"k8s.io/apimachinery/pkg/types"
@@ -75,9 +77,9 @@ var _ = Describe("Tiers rendering tests", func() {
 				render.ElasticsearchNamespace,
 				render.LogCollectorNamespace,
 				render.IntrusionDetectionNamespace,
-				render.KibanaNamespace,
+				kibana.Namespace,
 				render.ManagerNamespace,
-				render.ECKOperatorNamespace,
+				eck.OperatorNamespace,
 				render.PacketCaptureNamespace,
 				render.PolicyRecommendationNamespace,
 				common.TigeraPrometheusNamespace,

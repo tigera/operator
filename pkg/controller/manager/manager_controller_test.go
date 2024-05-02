@@ -21,6 +21,8 @@ import (
 	"encoding/pem"
 	"fmt"
 
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 
@@ -239,8 +241,8 @@ var _ = Describe("Manager controller tests", func() {
 			})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ECKLicenseConfigMapName,
-					Namespace: render.ECKOperatorNamespace,
+					Name:      eck.LicenseConfigMapName,
+					Namespace: eck.OperatorNamespace,
 				},
 				Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 			})).NotTo(HaveOccurred())
@@ -546,8 +548,8 @@ var _ = Describe("Manager controller tests", func() {
 
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ECKLicenseConfigMapName,
-					Namespace: render.ECKOperatorNamespace,
+					Name:      eck.LicenseConfigMapName,
+					Namespace: eck.OperatorNamespace,
 				},
 				Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 			})).NotTo(HaveOccurred())

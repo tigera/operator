@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/logstorage"
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/version"
 
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
@@ -406,7 +407,7 @@ func main() {
 		render.ComplianceNamespace,
 		render.IntrusionDetectionNamespace,
 		dpi.DeepPacketInspectionNamespace,
-		render.ECKOperatorNamespace,
+		eck.OperatorNamespace,
 		render.LogCollectorNamespace,
 		render.CSIDaemonSetNamespace,
 		render.ManagerNamespace,

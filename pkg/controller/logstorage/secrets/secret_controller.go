@@ -36,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -133,7 +134,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = utils.AddSecretsWatch(c, render.TigeraElasticsearchGatewaySecret, helper.TruthNamespace()); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
 	}
-	if err = utils.AddSecretsWatch(c, render.TigeraKibanaCertSecret, helper.TruthNamespace()); err != nil {
+	if err = utils.AddSecretsWatch(c, kibana.TigeraKibanaCertSecret, helper.TruthNamespace()); err != nil {
 		return fmt.Errorf("log-storage-secrets-controller failed to watch Secret: %w", err)
 	}
 	if err = utils.AddSecretsWatch(c, render.TigeraLinseedSecret, helper.TruthNamespace()); err != nil {
@@ -335,7 +336,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 
 // generateInternalElasticSecrets generates key pairs for the internal ES cluster and Kibana managed by tigera-operator via ECK
 // when configured to use an internal ES.
-func (r *SecretSubController) generateInternalElasticSecrets(log logr.Logger, kibana bool, cm certificatemanager.CertificateManager) (*elasticKeyPairCollection, error) {
+func (r *SecretSubController) generateInternalElasticSecrets(log logr.Logger, kibanaEnabled bool, cm certificatemanager.CertificateManager) (*elasticKeyPairCollection, error) {
 	collection := elasticKeyPairCollection{log: log}
 
 	// Generate a keypair for elasticsearch.
@@ -352,13 +353,13 @@ func (r *SecretSubController) generateInternalElasticSecrets(log logr.Logger, ki
 	}
 	collection.elastic = elasticKeyPair
 
-	if kibana {
+	if kibanaEnabled {
 		// Generate a keypair for Kibana.
 		//
 		// This fetches the existing key pair from the tigera-operator namespace if it exists, or generates a new one in-memory otherwise.
 		// It will be provisioned into the cluster in the render stage later on.
-		kbDNSNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, r.clusterDomain)
-		kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
+		kbDNSNames := dns.GetServiceDNSNames(kibana.ServiceName, kibana.Namespace, r.clusterDomain)
+		kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, kibana.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
 		if err != nil {
 			log.Error(err, err.Error())
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, log)
@@ -506,7 +507,7 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 		// For internal ES, the operator creates a keypair for ES and Kibana itself earlier in the execution of this controller.
 		// Include these in the trusted bundle as well, so that Linseed and es-gateway can trust them.
 		certs[render.TigeraElasticsearchInternalCertSecret] = common.OperatorNamespace()
-		certs[render.TigeraKibanaCertSecret] = common.OperatorNamespace()
+		certs[kibana.TigeraKibanaCertSecret] = common.OperatorNamespace()
 	}
 
 	// Sort the keys then add them to the upstreamCerts in that order so the keys are always in the same order
@@ -593,8 +594,8 @@ func (c *elasticKeyPairCollection) internalESComponent() render.Component {
 
 func (c *elasticKeyPairCollection) internalKibanaComponent(bundle certificatemanagement.TrustedBundle) render.Component {
 	return rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-		Namespace:       render.KibanaNamespace,
-		ServiceAccounts: []string{render.KibanaObjectName},
+		Namespace:       kibana.Namespace,
+		ServiceAccounts: []string{kibana.ObjectName},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			// We do not want to delete the secret from the tigera-elasticsearch when CertificateManagement is
 			// enabled. Instead, it will be replaced with a TLS secret that serves merely to pass ECK's validation

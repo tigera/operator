@@ -33,8 +33,8 @@ type PacketCaptureReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=packetcapture,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=packetcapture/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=packetcaptureapi,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=packetcaptureapi/status,verbs=get;update;patch
 
 func (pr *PacketCaptureReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
 	return packetcapture.Add(mgr, opts)

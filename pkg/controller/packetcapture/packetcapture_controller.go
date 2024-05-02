@@ -78,8 +78,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, licenseAPIReady)
-	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, r.tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
 	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
 		{Name: render.PacketCapturePolicyName, Namespace: render.PacketCaptureNamespace},
@@ -98,9 +97,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("packetcapture-controller failed to watch ImageSet: %w", err)
 	}
 
-	// Watch for changes to TigeraStatus.
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
-		return fmt.Errorf("packetcapture-controller failed to watch packetcapture Tigerastatus: %w", err)
+		return fmt.Errorf("packetcapture-controller failed to watch packetcapture TigeraStatus: %w", err)
 	}
 
 	log.V(5).Info("Controller created and Watches setup")
@@ -109,8 +107,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions,
-	licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) *ReconcilePacketCapture {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) *ReconcilePacketCapture {
 	r := &ReconcilePacketCapture{
 		client:              mgr.GetClient(),
 		scheme:              mgr.GetScheme(),
@@ -127,13 +124,11 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions,
 	return r
 }
 
-// blank assignment to verify that ReconcileAPIServer implements reconcile.Reconciler
+// blank assignment to verify that ReconcilePacketCapture implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcilePacketCapture{}
 
-// ReconcileAPIServer reconciles a APIServer object
+// ReconcilePacketCapture reconciles a PackerCaptureAPI object
 type ReconcilePacketCapture struct {
-	// This client, initialized using mgr.Client() above, is a split client
-	// that reads objects from the cache and writes to the apiserver
 	client              client.Client
 	scheme              *runtime.Scheme
 	provider            operatorv1.Provider
@@ -155,7 +150,6 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling PacketCapture")
 
-	// Query for the installation object.
 	variant, installationSpec, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -190,7 +184,6 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	r.status.OnCRFound()
 	reqLogger.V(2).Info("Loaded config", "config", packetcaptureapi)
 
-	// SetMetaData in the TigeraStatus such as observedGenerations.
 	defer r.status.SetMetaData(&packetcaptureapi.ObjectMeta)
 
 	if !utils.IsAPIServerReady(r.client, reqLogger) {
@@ -341,7 +334,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	// Everything is available - update the CRD status.
+	// Everything is available - update the CR status.
 	packetcaptureapi.Status.State = operatorv1.TigeraStatusReady
 	if err = r.client.Status().Update(ctx, packetcaptureapi); err != nil {
 		return reconcile.Result{}, err

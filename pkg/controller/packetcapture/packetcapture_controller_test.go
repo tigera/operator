@@ -62,7 +62,6 @@ var _ = Describe("packet capture controller tests", func() {
 		r                     ReconcilePacketCapture
 	)
 
-	//notReady := &utils.ReadyFlag{}
 	ready := &utils.ReadyFlag{}
 	ready.MarkAsReady()
 
@@ -164,7 +163,7 @@ var _ = Describe("packet capture controller tests", func() {
 		}
 
 		// Apply the packetcapture CR to the fake cluster.
-		Expect(cli.Create(ctx, &operatorv1.PacketCapture{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, &operatorv1.PacketCaptureAPI{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
 	})
 
 	Context("verify reconciliation", func() {
@@ -342,7 +341,7 @@ var _ = Describe("packet capture controller tests", func() {
 		})
 		It("should reconcile with creating new status condition with one item", func() {
 			ts := &operatorv1.TigeraStatus{
-				ObjectMeta: metav1.ObjectMeta{Name: "packetcapture"},
+				ObjectMeta: metav1.ObjectMeta{Name: "packet-capture"},
 				Spec:       operatorv1.TigeraStatusSpec{},
 				Status: operatorv1.TigeraStatusStatus{
 					Conditions: []operatorv1.TigeraStatusCondition{
@@ -359,11 +358,11 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-				Name:      "packetcapture",
+				Name:      "packet-capture",
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetPacketCapture(ctx, r.client)
+			instance, err := utils.GetPacketCaptureAPI(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(1))
 
@@ -375,24 +374,24 @@ var _ = Describe("packet capture controller tests", func() {
 		})
 		It("should reconcile with empty tigerastatus conditions ", func() {
 			ts := &operatorv1.TigeraStatus{
-				ObjectMeta: metav1.ObjectMeta{Name: "packetcapture"},
+				ObjectMeta: metav1.ObjectMeta{Name: "packet-capture"},
 				Spec:       operatorv1.TigeraStatusSpec{},
 				Status:     operatorv1.TigeraStatusStatus{},
 			}
 
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-				Name:      "packetcapture",
+				Name:      "packet-capture",
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetPacketCapture(ctx, r.client)
+			instance, err := utils.GetPacketCaptureAPI(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(0))
 		})
 		It("should reconcile with creating new status condition  with multiple conditions as true", func() {
 			ts := &operatorv1.TigeraStatus{
-				ObjectMeta: metav1.ObjectMeta{Name: "packetcapture"},
+				ObjectMeta: metav1.ObjectMeta{Name: "packet-capture"},
 				Spec:       operatorv1.TigeraStatusSpec{},
 				Status: operatorv1.TigeraStatusStatus{
 					Conditions: []operatorv1.TigeraStatusCondition{
@@ -423,11 +422,11 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-				Name:      "packetcapture",
+				Name:      "packet-capture",
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetPacketCapture(ctx, r.client)
+			instance, err := utils.GetPacketCaptureAPI(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(3))
 
@@ -451,7 +450,7 @@ var _ = Describe("packet capture controller tests", func() {
 		})
 		It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
 			ts := &operatorv1.TigeraStatus{
-				ObjectMeta: metav1.ObjectMeta{Name: "packetcapture"},
+				ObjectMeta: metav1.ObjectMeta{Name: "packet-capture"},
 				Spec:       operatorv1.TigeraStatusSpec{},
 				Status: operatorv1.TigeraStatusStatus{
 					Conditions: []operatorv1.TigeraStatusCondition{
@@ -505,11 +504,11 @@ var _ = Describe("packet capture controller tests", func() {
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-				Name:      "packetcapture",
+				Name:      "packet-capture",
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetPacketCapture(ctx, r.client)
+			instance, err := utils.GetPacketCaptureAPI(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(3))
 

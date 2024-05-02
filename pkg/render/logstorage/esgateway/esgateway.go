@@ -18,10 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tigera/operator/pkg/render/common/elasticsearch"
-
-	"github.com/tigera/operator/pkg/ptr"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -33,7 +29,9 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -41,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -328,7 +327,7 @@ func (e *esGateway) esGatewayService() *corev1.Service {
 				},
 				{
 					Name:       KibanaPortName,
-					Port:       int32(render.KibanaPort),
+					Port:       int32(kibana.Port),
 					TargetPort: intstr.FromInt(Port),
 					Protocol:   corev1.ProtocolTCP,
 				},
@@ -360,7 +359,7 @@ func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.KibanaEntityRule,
+			Destination: kibana.EntityRule,
 		},
 	}...)
 

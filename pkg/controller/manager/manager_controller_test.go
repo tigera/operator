@@ -21,7 +21,6 @@ import (
 	"encoding/pem"
 	"fmt"
 
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 
 	. "github.com/onsi/ginkgo"
@@ -51,8 +50,10 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/monitor"
 	tigeratls "github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
@@ -239,8 +240,8 @@ var _ = Describe("Manager controller tests", func() {
 			})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ECKLicenseConfigMapName,
-					Namespace: render.ECKOperatorNamespace,
+					Name:      eck.LicenseConfigMapName,
+					Namespace: eck.OperatorNamespace,
 				},
 				Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 			})).NotTo(HaveOccurred())
@@ -546,8 +547,8 @@ var _ = Describe("Manager controller tests", func() {
 
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.ECKLicenseConfigMapName,
-					Namespace: render.ECKOperatorNamespace,
+					Name:      eck.LicenseConfigMapName,
+					Namespace: eck.OperatorNamespace,
 				},
 				Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 			})).NotTo(HaveOccurred())

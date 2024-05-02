@@ -56,22 +56,24 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 )
 
 var (
-	eckOperatorObjKey = client.ObjectKey{Name: render.ECKOperatorName, Namespace: render.ECKOperatorNamespace}
+	eckOperatorObjKey = client.ObjectKey{Name: eck.OperatorName, Namespace: eck.OperatorNamespace}
 	esObjKey          = client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}
-	kbObjKey          = client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}
+	kbObjKey          = client.ObjectKey{Name: kibana.CRName, Namespace: kibana.Namespace}
 
 	esCertSecretOperKey = client.ObjectKey{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()}
 
-	kbCertSecretOperKey = client.ObjectKey{Name: render.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}
+	kbCertSecretOperKey = client.ObjectKey{Name: kibana.TigeraKibanaCertSecret, Namespace: common.OperatorNamespace()}
 
 	storageClassName = "test-storage-class"
-	kbDNSNames       = dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
+	kbDNSNames       = dns.GetServiceDNSNames(kibana.ServiceName, kibana.Namespace, dns.DefaultClusterDomain)
 
 	successResult = reconcile.Result{}
 )
@@ -144,8 +146,8 @@ var _ = Describe("LogStorage controller", func() {
 		Expect(cli.Create(ctx, elasticKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		// Create Kibana KeyPair. This is normally created out of band by the secret controller.
-		dnsNames := dns.GetServiceDNSNames(render.KibanaServiceName, render.KibanaNamespace, dns.DefaultClusterDomain)
-		kbKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraKibanaCertSecret, common.OperatorNamespace(), dnsNames)
+		dnsNames := dns.GetServiceDNSNames(kibana.ServiceName, kibana.Namespace, dns.DefaultClusterDomain)
+		kbKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, kibana.TigeraKibanaCertSecret, common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, kbKeyPair.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
@@ -342,7 +344,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				Expect(cli.Create(ctx, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 				})).ShouldNot(HaveOccurred())
 
@@ -390,9 +392,9 @@ var _ = Describe("LogStorage controller", func() {
 				Expect(cli.Update(ctx, kb)).ShouldNot(HaveOccurred())
 
 				// Create public KB secret. This is created by the secret controller in a real cluster.
-				kibanaKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
+				kibanaKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, kibana.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(cli.Create(ctx, kibanaKeyPair.Secret(render.KibanaNamespace))).ShouldNot(HaveOccurred())
+				Expect(cli.Create(ctx, kibanaKeyPair.Secret(kibana.Namespace))).ShouldNot(HaveOccurred())
 
 				esAdminUserSecret := &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
@@ -465,7 +467,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				Expect(cli.Create(ctx, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeBasic)},
 				})).ShouldNot(HaveOccurred())
 
@@ -507,9 +509,9 @@ var _ = Describe("LogStorage controller", func() {
 				Expect(cli.Update(ctx, kb)).ShouldNot(HaveOccurred())
 
 				// Create public KB secret. This is created by the secret controller in a real cluster.
-				kibanaKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
+				kibanaKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, kibana.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
 				Expect(err).ShouldNot(HaveOccurred())
-				Expect(cli.Create(ctx, kibanaKeyPair.Secret(render.KibanaNamespace))).ShouldNot(HaveOccurred())
+				Expect(cli.Create(ctx, kibanaKeyPair.Secret(kibana.Namespace))).ShouldNot(HaveOccurred())
 
 				esAdminUserSecret := &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
@@ -561,7 +563,7 @@ var _ = Describe("LogStorage controller", func() {
 
 				kbDNSNames = []string{"kb.example.com", "192.168.10.11"}
 				kbSecret, err := secret.CreateTLSSecret(testCA,
-					render.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt", tls.DefaultCertificateDuration, nil, kbDNSNames...,
+					kibana.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt", tls.DefaultCertificateDuration, nil, kbDNSNames...,
 				)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(cli.Update(ctx, kbSecret)).ShouldNot(HaveOccurred())
@@ -588,7 +590,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				Expect(cli.Create(ctx, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 				})).ShouldNot(HaveOccurred())
 
@@ -630,7 +632,7 @@ var _ = Describe("LogStorage controller", func() {
 
 				testCA := test.MakeTestCA("logstorage-test")
 				kbSecret, err := secret.CreateTLSSecret(testCA,
-					render.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt",
+					kibana.TigeraKibanaCertSecret, common.OperatorNamespace(), "tls.key", "tls.crt",
 					tls.DefaultCertificateDuration, nil, "tigera-secure-kb-http.tigera-elasticsearch.svc",
 				)
 				Expect(err).ShouldNot(HaveOccurred())
@@ -685,15 +687,15 @@ var _ = Describe("LogStorage controller", func() {
 					},
 					&kbv1.Kibana{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.KibanaName,
-							Namespace: render.KibanaNamespace,
+							Name:      kibana.CRName,
+							Namespace: kibana.Namespace,
 						},
 						Status: kbv1.KibanaStatus{
 							AssociationStatus: cmnv1.AssociationEstablished,
 						},
 					},
 					&corev1.ConfigMap{
-						ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+						ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 					},
 					&corev1.Secret{
@@ -755,7 +757,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 
 				Expect(cli.Create(ctx, &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+					ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 				})).ShouldNot(HaveOccurred())
 
@@ -806,8 +808,8 @@ var _ = Describe("LogStorage controller", func() {
 						},
 						&kbv1.Kibana{
 							ObjectMeta: metav1.ObjectMeta{
-								Name:      render.KibanaName,
-								Namespace: render.KibanaNamespace,
+								Name:      kibana.CRName,
+								Namespace: kibana.Namespace,
 							},
 							Status: kbv1.KibanaStatus{
 								AssociationStatus: cmnv1.AssociationEstablished,
@@ -815,7 +817,7 @@ var _ = Describe("LogStorage controller", func() {
 						},
 						&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 						&corev1.ConfigMap{
-							ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+							ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 							Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 						},
 					}
@@ -867,8 +869,8 @@ var _ = Describe("LogStorage controller", func() {
 
 					kb := kbv1.Kibana{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.KibanaName,
-							Namespace: render.KibanaNamespace,
+							Name:      kibana.CRName,
+							Namespace: kibana.Namespace,
 						},
 					}
 					Expect(test.GetResource(cli, &kb)).To(BeNil())
@@ -880,8 +882,8 @@ var _ = Describe("LogStorage controller", func() {
 					ss := appsv1.StatefulSet{
 						TypeMeta: metav1.TypeMeta{Kind: "StatefuleSet", APIVersion: "apps/v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.ECKOperatorName,
-							Namespace: render.ECKOperatorNamespace,
+							Name:      eck.OperatorName,
+							Namespace: eck.OperatorNamespace,
 						},
 					}
 					Expect(test.GetResource(cli, &ss)).To(BeNil())
@@ -951,8 +953,8 @@ var _ = Describe("LogStorage controller", func() {
 
 					kb := kbv1.Kibana{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.KibanaName,
-							Namespace: render.KibanaNamespace,
+							Name:      kibana.CRName,
+							Namespace: kibana.Namespace,
 						},
 					}
 					Expect(test.GetResource(cli, &kb)).To(BeNil())
@@ -964,8 +966,8 @@ var _ = Describe("LogStorage controller", func() {
 					ss := appsv1.StatefulSet{
 						TypeMeta: metav1.TypeMeta{Kind: "StatefuleSet", APIVersion: "apps/v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.ECKOperatorName,
-							Namespace: render.ECKOperatorNamespace,
+							Name:      eck.OperatorName,
+							Namespace: eck.OperatorNamespace,
 						},
 					}
 					Expect(test.GetResource(cli, &ss)).To(BeNil())
@@ -1004,7 +1006,7 @@ var _ = Describe("LogStorage controller", func() {
 					})
 
 					Expect(cli.Create(ctx, &corev1.ConfigMap{
-						ObjectMeta: metav1.ObjectMeta{Namespace: render.ECKOperatorNamespace, Name: render.ECKLicenseConfigMapName},
+						ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
 						Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 					})).ShouldNot(HaveOccurred())
 
@@ -1104,11 +1106,11 @@ var _ = Describe("LogStorage controller", func() {
 
 				// However, the Kibana and ES instances should have been created.
 				Expect(cli.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &esv1.Elasticsearch{})).ShouldNot(HaveOccurred())
-				Expect(cli.Get(ctx, client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}, &kbv1.Kibana{})).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: kibana.CRName, Namespace: kibana.Namespace}, &kbv1.Kibana{})).ShouldNot(HaveOccurred())
 
 				// Update the Kibana instance to be considered ready.
 				kb := &kbv1.Kibana{}
-				Expect(cli.Get(ctx, client.ObjectKey{Name: render.KibanaName, Namespace: render.KibanaNamespace}, kb)).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: kibana.CRName, Namespace: kibana.Namespace}, kb)).ShouldNot(HaveOccurred())
 				kb.Status.AssociationStatus = cmnv1.AssociationEstablished
 				Expect(cli.Status().Update(ctx, kb)).ShouldNot(HaveOccurred())
 
@@ -1212,7 +1214,6 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			Registry:             "testregistry.com/",
 		},
 		Elasticsearch:        &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
-		Kibana:               &kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaName, Namespace: render.KibanaNamespace}},
 		ClusterConfig:        relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
 		ElasticsearchKeyPair: esKeyPair,
 		TrustedBundle:        trustedBundle,

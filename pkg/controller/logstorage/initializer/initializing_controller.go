@@ -37,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 )
 
 var log = logf.Log.WithName("controller_logstorage")
@@ -249,7 +250,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	}
 	if kibanaEnabled {
 		// Create the Namespace.
-		kbNamespace := render.CreateNamespace(render.KibanaNamespace, install.KubernetesProvider, render.PSSBaseline)
+		kbNamespace := render.CreateNamespace(kibana.Namespace, install.KubernetesProvider, render.PSSBaseline)
 		if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(kbNamespace), r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err

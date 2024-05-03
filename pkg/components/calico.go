@@ -77,14 +77,14 @@ var (
 	}
 
 	ComponentCalicoTypha = component{
-		Version:  "master",
-		Image:    "calico/typha",
+		Version:  "nft",
+		Image:    "caseydavenport/typha",
 		Registry: "",
 	}
 
 	ComponentCalicoTyphaFIPS = component{
-		Version:  "master-fips",
-		Image:    "calico/typha",
+		Version:  "nft-fips",
+		Image:    "caseydavenport/typha",
 		Registry: "",
 	}
 

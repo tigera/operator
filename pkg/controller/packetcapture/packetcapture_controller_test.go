@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in policy recommendation with the License.
@@ -23,7 +23,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -34,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -134,15 +134,10 @@ var _ = Describe("packet capture controller tests", func() {
 
 		// Set up a mock status
 		mockStatus = &status.MockStatus{}
-		mockStatus.On("AddDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddDeployments", mock.Anything).Return()
-		mockStatus.On("AddStatefulSets", mock.Anything).Return()
-		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
-		mockStatus.On("AddCertificateSigningRequests", mock.Anything)
-		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
@@ -545,16 +540,6 @@ var _ = Describe("packet capture controller tests", func() {
 					},
 				}
 				Expect(cli.Create(ctx, managementCluster)).NotTo(HaveOccurred())
-
-				// Create the APIServer CR needed to jumpstart the reconciliation
-				// for the api server
-				err := cli.Create(ctx, &operatorv1.APIServer{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-secure",
-						Namespace: common.OperatorNamespace(),
-					},
-				})
-				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("Should reconcile and not create packet capture resources for a management cluster in multi tenant mode", func() {

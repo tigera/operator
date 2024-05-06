@@ -113,7 +113,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("logstorage-dashboards-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.WatchObject(&operatorv1.Tenant{}, eventHandler); err != nil {
 			return fmt.Errorf("log-storage-dashboards-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -122,6 +122,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// For single-tenant, everything is installed in the tigera-manager namespace.
 	// Make a helper for determining which namespaces to use based on tenancy mode.
 	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
+	kibanaHelper := utils.NewNamespaceHelper(opts.MultiTenant, kibana.Namespace, "")
 
 	// Watch secrets this controller cares about.
 	secretsToWatch := []string{
@@ -142,10 +143,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Catch if something modifies the resources that this controller consumes.
-	if err := utils.AddServiceWatch(c, kibana.ServiceName, helper.InstallNamespace()); err != nil {
+	if err := utils.AddServiceWatch(c, kibana.ServiceName, kibanaHelper.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-dashboards-controller failed to watch the Service resource: %w", err)
 	}
-	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), eventHandler); err != nil {
 		return fmt.Errorf("log-storage-dashboards-controller failed to watch the Service resource: %w", err)
 	}
 
@@ -267,6 +268,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 
 	var externalKibanaSecret *corev1.Secret
 	if !d.elasticExternal {
+		// This is the configuration for zero tenant or single tenant with internal elastic
 		// Wait for Elasticsearch to be installed and available.
 		elasticsearch, err := utils.GetElasticsearch(ctx, d.client)
 		if err != nil {
@@ -277,7 +279,8 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 			d.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
-	} else {
+	} else if !d.multiTenant {
+		// This is the configuration for single tenant with external elastic
 		// If we're using an external ES and Kibana, the Tenant resource must specify the Kibana endpoint.
 		if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.KibanaURL == "" {
 			reqLogger.Error(nil, "Kibana URL must be specified for this tenant")
@@ -311,6 +314,10 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 				return reconcile.Result{}, err
 			}
 		}
+	} else {
+		// This is the configuration for multi-tenant
+		// We connect to a kibana service deployed in the tenant namespace
+		kibanaHost = fmt.Sprintf("tigera-secure-kb-http.%s.svc", helper.InstallNamespace())
 	}
 
 	// Query the username and password this Dashboards Installer instance should use to authenticate with Elasticsearch.

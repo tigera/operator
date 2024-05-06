@@ -429,6 +429,7 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 func KibanaEnabled(tenant *operatorv1.Tenant, installation *operatorv1.InstallationSpec) bool {
 	enableKibana := !operatorv1.IsFIPSModeEnabled(installation.FIPSMode)
 	if tenant.MultiTenant() {
+		// TODO: Alina Extract from CR
 		enableKibana = false
 	}
 	return enableKibana
@@ -613,6 +614,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	env := []corev1.EnvVar{
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
+		// TODO: ALINA - For multi-tenancy this needs to be in the tenant namespace
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},

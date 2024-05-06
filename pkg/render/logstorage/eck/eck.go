@@ -62,6 +62,7 @@ type Configuration struct {
 	Provider           operatorv1.Provider
 	ElasticLicenseType render.ElasticsearchLicenseType
 	ApplyTrial         bool
+	Tenant             *operatorv1.Tenant
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -309,6 +310,10 @@ func (e *eck) operatorStatefulSet() *appsv1.StatefulSet {
 			memoryRequest = c.ResourceRequirements.Requests[corev1.ResourceMemory]
 		}
 	}
+	var namespacesToWatch string
+	if e.cfg.Tenant.MultiTenant() {
+		namespacesToWatch = "tigera-elasticsearch,tigera-kibana"
+	}
 	s := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -353,7 +358,7 @@ func (e *eck) operatorStatefulSet() *appsv1.StatefulSet {
 						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
 						Args: []string{
 							"manager",
-							"--namespaces=tigera-elasticsearch,tigera-kibana",
+							fmt.Sprintf("--namespaces=%s", namespacesToWatch),
 							"--log-verbosity=0",
 							"--metrics-port=0",
 							"--container-registry=" + e.cfg.Installation.Registry,

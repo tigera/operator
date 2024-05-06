@@ -150,7 +150,12 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	reqLogger.Info("Reconciling PacketCapture")
 
 	packetcaptureapi, err := utils.GetPacketCaptureAPI(ctx, r.client)
-	if err != nil && !errors.IsNotFound(err) {
+	if err != nil {
+		if errors.IsNotFound(err) {
+			reqLogger.V(3).Info("PacketCaptureAPI CR not found", "err", err)
+			r.status.OnCRNotFound()
+			return reconcile.Result{}, nil
+		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying PacketCapture", err, reqLogger)
 		return reconcile.Result{}, err
 	}

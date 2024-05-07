@@ -60,7 +60,7 @@ type KibanaPodSpec struct {
 type KibanaContainer struct {
 	// Name is an enum which identifies the Kibana Deployment container by name.
 	// Supported values are: kibana
-	// +kubebuilder:validation:Enum=kibana
+	// +kubebuilder:validation:Enum=kibana,challenger
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

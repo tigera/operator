@@ -37,8 +37,6 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/applicationlayer"
-	"github.com/tigera/operator/pkg/render/applicationlayer/embed"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
@@ -210,11 +208,13 @@ var _ = Describe("DPI rendering tests", func() {
 		dpiCertSecret, err = certificateManager.GetOrCreateKeyPair(cli, render.DPITLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 
-		snortRules, err := embed.AsConfigMap(
-			applicationlayer.ModSecurityRulesetConfigMapName,
-			common.OperatorNamespace(),
-		)
-		Expect(err).To(BeNil())
+		snortRules := &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dpi.DeepPacketInspectionSnortRulesCmName,
+				Namespace: common.OperatorNamespace(),
+			},
+		}
 
 		trustedBundle := certificateManager.CreateTrustedBundle(nodeKeyPair, typhaKeyPair, dpiCertSecret)
 		typhaNodeTLS = &render.TyphaNodeTLS{

@@ -385,7 +385,13 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 				}
 			}
 
-			// TODO: Alina - Copy user to tenant namespace
+			elasticChallengerUser := &corev1.Secret{}
+			err = r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchAdminUserSecret, Namespace: common.OperatorNamespace()}, challengerClientCertificate)
+			if err != nil {
+				reqLogger.Error(err, "Failed to read external user secret")
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for external Elasticsearch user to be available", err, reqLogger)
+				return reconcile.Result{}, err
+			}
 
 			multiTenantComponents = append(multiTenantComponents,
 				rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -415,6 +421,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 					Namespace:                   kibanaHelper.InstallNamespace(),
 					ChallengerClientCertificate: challengerClientCertificate,
 					ExternalElasticEndpoint:     elasticURL.String(),
+					ElasticChallengerUser:       elasticChallengerUser,
 				}),
 			)
 		}

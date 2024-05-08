@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -98,7 +99,6 @@ type Configuration struct {
 
 	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
 	// mTLS is used between Challenger and the external Elastic cluster.
-	// TODO: Alina Mount volume
 	ChallengerClientCertificate *corev1.Secret
 	ElasticChallengerUser       *corev1.Secret
 	ExternalElasticEndpoint     string
@@ -206,7 +206,10 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 			// If using External ES, we need to copy the client certificates into the tenant namespace to be mounted.
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(k.cfg.Namespace, k.cfg.ChallengerClientCertificate)...)...)
 		}
-
+		if k.cfg.ElasticChallengerUser != nil {
+			// If using External ES, we need to copy the elastic user into the tenant namespace
+			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(k.cfg.Namespace, k.cfg.ElasticChallengerUser)...)...)
+		}
 	} else {
 		toDelete = append(toDelete, k.kibanaCR())
 	}
@@ -340,6 +343,24 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 
 	if k.cfg.Tenant.MultiTenant() {
 		volumes = append(volumes, k.cfg.TrustedBundle.Volume())
+		volumeMounts = k.cfg.TrustedBundle.VolumeMounts(k.SupportedOSType())
+		if k.cfg.ChallengerClientCertificate != nil {
+			// Add a volume for the required client certificate and key.
+			volumes = append(volumes, corev1.Volume{
+				Name: logstorage.ExternalCertsVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: logstorage.ExternalCertsSecret,
+					},
+				},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      logstorage.ExternalCertsVolumeName,
+				MountPath: "/certs/elasticsearch",
+				ReadOnly:  true,
+			})
+		}
+
 		containers = append(containers, corev1.Container{
 			Name: "challenger",
 			Env: []corev1.EnvVar{
@@ -355,17 +376,20 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 					Name:  "ES_GATEWAY_ELASTIC_ENDPOINT",
 					Value: k.cfg.ExternalElasticEndpoint,
 				},
+				{
+					Name:  "ES_GATEWAY_ELASTIC_CA_PATH",
+					Value: k.cfg.TrustedBundle.MountPath(),
+				},
 				{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: "elastic"},
 				{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
-							// TODO: Alina change user
 							Name: render.ElasticsearchAdminUserSecret,
 						},
-						Key: "elastic",
+						// TODO: ALINA - IS THIS THE correct user or do we need to create a new one ?
+						Key: "tigera-mgmt",
 					},
 				}},
-				{Name: "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH", Value: k.cfg.TrustedBundle.MountPath()},
 			},
 			Command: []string{
 				"/usr/bin/es-gateway", "-run-as-challenger",

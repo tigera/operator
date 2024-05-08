@@ -576,8 +576,6 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			// Create the external ES and Kibana public certificates, used for external ES.
 			externalESSecret := rtest.CreateCertSecret(logstorage.ExternalESPublicCertName, common.OperatorNamespace(), "external.es.com")
 			Expect(cli.Create(ctx, externalESSecret)).ShouldNot(HaveOccurred())
-			externalKibanaSecret := rtest.CreateCertSecret(logstorage.ExternalKBPublicCertName, common.OperatorNamespace(), "external.kb.com")
-			Expect(cli.Create(ctx, externalKibanaSecret)).ShouldNot(HaveOccurred())
 
 			// Create a per-tenant CA secret for the test, and create its KeyPair.
 			cm, err := certificatemanager.Create(cli,
@@ -609,7 +607,6 @@ var _ = Describe("LogStorage Secrets controller", func() {
 				{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()},
 				{Name: certificatemanagement.TenantCASecretName, Namespace: tenantNS},
 				{Name: logstorage.ExternalESPublicCertName, Namespace: common.OperatorNamespace()},
-				{Name: logstorage.ExternalKBPublicCertName, Namespace: common.OperatorNamespace()},
 
 				// These are created by the controller.
 				{Name: render.TigeraLinseedSecret, Namespace: tenantNS},

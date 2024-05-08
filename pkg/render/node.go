@@ -1056,7 +1056,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	} else {
 		volumes = append(volumes,
 			c.varRunCalicoVolume(),
-			corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico"}}},
+			corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico", Type: &dirOrCreate}}},
 		)
 	}
 
@@ -1082,7 +1082,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// Determine directories to use for CNI artifacts based on the provider.
 		cniNetDir, cniBinDir, cniLogDir := c.cniDirectories()
-		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniBinDir}}})
+		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniBinDir, Type: &dirOrCreate}}})
 		volumes = append(volumes, corev1.Volume{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniNetDir}}})
 		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniLogDir}}})
 	}
@@ -1141,7 +1141,13 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 }
 
 func (c *nodeComponent) varRunCalicoVolume() corev1.Volume {
-	return corev1.Volume{Name: "var-run-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico"}}}
+	dirOrCreate := corev1.HostPathDirectoryOrCreate
+	return corev1.Volume{
+		Name: "var-run-calico",
+		VolumeSource: corev1.VolumeSource{
+			HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/calico", Type: &dirOrCreate},
+		},
+	}
 }
 
 func (c *nodeComponent) vppDataplaneEnabled() bool {

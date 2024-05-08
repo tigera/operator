@@ -70,7 +70,7 @@ type DashboardsSubController struct {
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists || opts.MultiTenant {
+	if !opts.EnterpriseCRDExists {
 		return nil
 	}
 
@@ -113,7 +113,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("logstorage-dashboards-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.WatchObject(&operatorv1.Tenant{}, eventHandler); err != nil {
 			return fmt.Errorf("log-storage-dashboards-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -122,6 +122,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// For single-tenant, everything is installed in the tigera-manager namespace.
 	// Make a helper for determining which namespaces to use based on tenancy mode.
 	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
+	kibanaHelper := utils.NewNamespaceHelper(opts.MultiTenant, kibana.Namespace, "")
 
 	// Watch secrets this controller cares about.
 	secretsToWatch := []string{
@@ -142,10 +143,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Catch if something modifies the resources that this controller consumes.
-	if err := utils.AddServiceWatch(c, kibana.ServiceName, helper.InstallNamespace()); err != nil {
+	if err := utils.AddServiceWatch(c, kibana.ServiceName, kibanaHelper.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-dashboards-controller failed to watch the Service resource: %w", err)
 	}
-	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, helper.InstallNamespace(), eventHandler); err != nil {
 		return fmt.Errorf("log-storage-dashboards-controller failed to watch the Service resource: %w", err)
 	}
 
@@ -260,6 +261,11 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 
 	d.status.OnCRFound()
 
+	if !render.KibanaEnabled(tenant, install) {
+		reqLogger.Info("Kibana is not enabled. Will skip installing dashboards job")
+		return reconcile.Result{}, nil
+	}
+
 	// Determine where to access Kibana.
 	kibanaHost := "tigera-secure-kb-http.tigera-kibana.svc"
 	kibanaPort := uint16(5601)
@@ -267,6 +273,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 
 	var externalKibanaSecret *corev1.Secret
 	if !d.elasticExternal {
+		// This is the configuration for zero tenant or single tenant with internal elastic
 		// Wait for Elasticsearch to be installed and available.
 		elasticsearch, err := utils.GetElasticsearch(ctx, d.client)
 		if err != nil {
@@ -278,15 +285,12 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 	} else {
-		// If we're using an external ES and Kibana, the Tenant resource must specify the Kibana endpoint.
-		if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.KibanaURL == "" {
-			reqLogger.Error(nil, "Kibana URL must be specified for this tenant")
-			d.status.SetDegraded(operatorv1.ResourceValidationError, "Kibana URL must be specified for this tenant", nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
-
+		// This is the configuration for multi-tenant and single tenant with external elastic
+		// The Tenant resource must specify the Kibana endpoint in both cases. For multi-tenant
+		// it should be the service inside the tenant namespace. For single tenant it should be the
+		// an URL that points to external Kibana
 		// Determine the host and port from the URL.
-		url, err := url.Parse(tenant.Spec.Elastic.KibanaURL)
+		url, err := url.Parse(tenant.Spec.Kibana.URL)
 		if err != nil {
 			reqLogger.Error(err, "Kibana URL is invalid")
 			d.status.SetDegraded(operatorv1.ResourceValidationError, "Kibana URL is invalid", err, reqLogger)
@@ -301,7 +305,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 			return reconcile.Result{}, nil
 		}
 
-		if tenant.ElasticMTLS() {
+		if tenant.KibanaMTLS() {
 			// If mTLS is enabled, get the secret containing the CA and client certificate.
 			externalKibanaSecret = &corev1.Secret{}
 			err = d.client.Get(ctx, client.ObjectKey{Name: logstorage.ExternalCertsSecret, Namespace: common.OperatorNamespace()}, externalKibanaSecret)

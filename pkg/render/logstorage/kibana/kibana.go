@@ -93,16 +93,26 @@ type Configuration struct {
 	TrustedBundle   certificatemanagement.TrustedBundleRO
 	UnusedTLSSecret *corev1.Secret
 	Enabled         bool
+	Tenant          *operatorv1.Tenant
+	Namespace       string
+
+	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
+	// mTLS is used between Challenger and the external Elastic cluster.
+	// TODO: Alina Mount volume
+	ChallengerClientCertificate *corev1.Secret
+	ElasticChallengerUser       *corev1.Secret
+	ExternalElasticEndpoint     string
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
 }
 
 type kibana struct {
-	cfg           *Configuration
-	kibanaSecrets []*corev1.Secret
-	kibanaImage   string
-	csrImage      string
+	cfg             *Configuration
+	kibanaSecrets   []*corev1.Secret
+	kibanaImage     string
+	challengerImage string
+	csrImage        string
 }
 
 func (k *kibana) ResolveImages(is *operatorv1.ImageSet) error {
@@ -119,6 +129,13 @@ func (k *kibana) ResolveImages(is *operatorv1.ImageSet) error {
 	k.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if k.cfg.Tenant.MultiTenant() {
+		k.challengerImage, err = components.GetReference(components.ComponentESGateway, reg, path, prefix, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
 	}
 
 	if k.cfg.Installation.CertificateManagement != nil {
@@ -168,20 +185,28 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 		// - securityContext.capabilities.drop=["ALL"]
 		// - securityContext.runAsNonRoot=true
 		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-		toCreate = append(toCreate, render.CreateNamespace(Namespace, k.cfg.Installation.KubernetesProvider, render.PSSBaseline))
-		toCreate = append(toCreate, k.allowTigeraPolicy())
-		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(Namespace))
-		toCreate = append(toCreate, k.serviceAccount())
-
-		if len(k.cfg.PullSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(Namespace, k.cfg.PullSecrets...)...)...)
+		// We only create the certain objects in a zero tenant or single tenant installation
+		// For example, tigera-kibana namespace, pull secrets and default deny
+		// For multi-tenancy, these are already created by other renderers
+		if !k.cfg.Tenant.MultiTenant() {
+			toCreate = append(toCreate, render.CreateNamespace(Namespace, k.cfg.Installation.KubernetesProvider, render.PSSBaseline))
+			if len(k.cfg.PullSecrets) > 0 {
+				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(Namespace, k.cfg.PullSecrets...)...)...)
+			}
+			toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(Namespace))
 		}
-
+		toCreate = append(toCreate, k.allowTigeraPolicy())
+		toCreate = append(toCreate, k.serviceAccount())
 		if len(k.kibanaSecrets) > 0 {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(k.kibanaSecrets...)...)
 		}
-
 		toCreate = append(toCreate, k.kibanaCR())
+		// TODO: ALINA: I think we do the same in Linseed
+		if k.cfg.ChallengerClientCertificate != nil {
+			// If using External ES, we need to copy the client certificates into the tenant namespace to be mounted.
+			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(k.cfg.Namespace, k.cfg.ChallengerClientCertificate)...)...)
+		}
+
 	} else {
 		toDelete = append(toDelete, k.kibanaCR())
 	}
@@ -194,7 +219,7 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 		if k.cfg.KibanaKeyPair != nil && k.cfg.KibanaKeyPair.UseCertificateManagement() {
 			// We need to render a secret. It won't ever be used by Kibana for TLS, but is needed to pass ECK's checks.
 			// If the secret changes / gets reconciled, it will not trigger a re-render of Kibana.
-			unusedSecret := k.cfg.KibanaKeyPair.Secret(Namespace)
+			unusedSecret := k.cfg.KibanaKeyPair.Secret(k.cfg.Namespace)
 			unusedSecret.Data = k.cfg.UnusedTLSSecret.Data
 			toCreate = append(toCreate, unusedSecret)
 		}
@@ -213,7 +238,7 @@ func (k *kibana) serviceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ObjectName,
-			Namespace: Namespace,
+			Namespace: k.cfg.Namespace,
 		},
 	}
 }
@@ -230,7 +255,6 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	}
 
 	config := map[string]interface{}{
-		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
 		"server":                             server,
 		"xpack.security.session.lifespan":    "8h",
 		"xpack.security.session.idleTimeout": "30m",
@@ -241,6 +265,13 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		// Telemetry is unwanted for the majority of our customers and if enabled can cause blocked flows. This flag
 		// can still be overwritten in the Kibana Settings if the user desires it.
 		"telemetry.optIn": false,
+	}
+
+	if k.cfg.Tenant.MultiTenant() {
+		config["elasticsearch.host"] = "http://localhost:8080"
+		config["elasticsearch.ssl.verificationMode"] = "none"
+	} else {
+		config["elasticsearch.ssl.certificateAuthorities"] = []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"}
 	}
 
 	var initContainers []corev1.Container
@@ -279,7 +310,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
-			})
+			},
+		)
 	}
 
 	count := int32(1)
@@ -287,11 +319,68 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		count = *k.cfg.Installation.ControlPlaneReplicas
 	}
 
+	containers := []corev1.Container{
+		{
+			Name: "kibana",
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: fmt.Sprintf("/%s/login", BasePath),
+						Port: intstr.IntOrString{
+							IntVal: Port,
+						},
+						Scheme: corev1.URISchemeHTTPS,
+					},
+				},
+			},
+			SecurityContext: securitycontext.NewNonRootContext(),
+			VolumeMounts:    volumeMounts,
+		},
+	}
+
+	if k.cfg.Tenant.MultiTenant() {
+		volumes = append(volumes, k.cfg.TrustedBundle.Volume())
+		containers = append(containers, corev1.Container{
+			Name: "challenger",
+			Env: []corev1.EnvVar{
+				{
+					Name:  "ES_GATEWAY_LOG_LEVEL",
+					Value: "INFO",
+				},
+				{
+					Name:  "ES_GATEWAY_KIBANA_CATCH_ALL_ROUTE",
+					Value: "/",
+				},
+				{
+					Name:  "ES_GATEWAY_ELASTIC_ENDPOINT",
+					Value: k.cfg.ExternalElasticEndpoint,
+				},
+				{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: "elastic"},
+				{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							// TODO: Alina change user
+							Name: render.ElasticsearchAdminUserSecret,
+						},
+						Key: "elastic",
+					},
+				}},
+				{Name: "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH", Value: k.cfg.TrustedBundle.MountPath()},
+			},
+			Command: []string{
+				"/usr/bin/es-gateway", "-run-as-challenger",
+			},
+			Image:           k.challengerImage,
+			SecurityContext: securitycontext.NewNonRootContext(),
+			VolumeMounts:    k.cfg.TrustedBundle.VolumeMounts(k.SupportedOSType()),
+		})
+	}
+
 	kibana := &kbv1.Kibana{
 		TypeMeta: metav1.TypeMeta{Kind: "Kibana", APIVersion: "kibana.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CRName,
-			Namespace: Namespace,
+			Namespace: k.cfg.Namespace,
 			Labels: map[string]string{
 				"k8s-app": CRName,
 			},
@@ -310,13 +399,9 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 					},
 				},
 			},
-			ElasticsearchRef: cmnv1.ObjectSelector{
-				Name:      render.ElasticsearchName,
-				Namespace: render.ElasticsearchNamespace,
-			},
 			PodTemplate: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: Namespace,
+					Namespace: k.cfg.Namespace,
 					Annotations: map[string]string{
 						TLSAnnotationHash: rmeta.SecretsAnnotationHash(k.kibanaSecrets...),
 					},
@@ -332,26 +417,18 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 					Tolerations:                  k.cfg.Installation.ControlPlaneTolerations,
 					InitContainers:               initContainers,
 					AutomountServiceAccountToken: &automountToken,
-					Containers: []corev1.Container{{
-						Name: "kibana",
-						ReadinessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{
-									Path: fmt.Sprintf("/%s/login", BasePath),
-									Port: intstr.IntOrString{
-										IntVal: Port,
-									},
-									Scheme: corev1.URISchemeHTTPS,
-								},
-							},
-						},
-						SecurityContext: securitycontext.NewNonRootContext(),
-						VolumeMounts:    volumeMounts,
-					}},
-					Volumes: volumes,
+					Containers:                   containers,
+					Volumes:                      volumes,
 				},
 			},
 		},
+	}
+
+	if !k.cfg.Tenant.MultiTenant() {
+		kibana.Spec.ElasticsearchRef = cmnv1.ObjectSelector{
+			Name:      render.ElasticsearchName,
+			Namespace: render.ElasticsearchNamespace,
+		}
 	}
 
 	if k.cfg.Installation.ControlPlaneReplicas != nil && *k.cfg.Installation.ControlPlaneReplicas > 1 {
@@ -398,7 +475,7 @@ func (k *kibana) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      ObjectName,
-				Namespace: Namespace,
+				Namespace: k.cfg.Namespace,
 			},
 		},
 	}
@@ -410,6 +487,7 @@ func (k *kibana) kibanaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 
 // Allow access to Kibana
 func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
+	networkPolicyHelper := networkpolicy.Helper(k.cfg.Tenant.MultiTenant(), k.cfg.Namespace)
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -425,6 +503,7 @@ func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
+		// TODO: ALINA - DO WE NEED TO REMOVE EGRESS GATEWAY FOR MULTI-TENANT
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
@@ -439,7 +518,7 @@ func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PolicyName,
-			Namespace: Namespace,
+			Namespace: k.cfg.Namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
@@ -465,6 +544,7 @@ func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
 					},
 					Destination: kibanaPortIngressDestination,
 				},
+				// TODO: ALINA - DO WE NEED TO REMOVE EGRESS GATEWAY FOR MULTI-TENANT
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
@@ -474,9 +554,10 @@ func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.DefaultHelper().DashboardInstallerSourceEntityRule(),
+					Source:      networkPolicyHelper.DashboardInstallerSourceEntityRule(),
 					Destination: kibanaPortIngressDestination,
 				},
+				// TODO: ALINA - DO WE NEED TO ADD MANAGER?
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,

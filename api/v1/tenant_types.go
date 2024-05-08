@@ -76,9 +76,13 @@ type TenantSpec struct {
 	// Indices defines the how to store a tenant's data
 	Indices []Index `json:"indices"`
 
-	// Elastic configures per-tenant ElasticSearch and Kibana parameters.
+	// Elastic configures per-tenant ElasticSearch parameters.
 	// This field is required for clusters using external ES.
 	Elastic *TenantElasticSpec `json:"elastic,omitempty"`
+
+	// Kibana configures per-tenant Kibana parameters
+	// This field will enable or disable Kibana
+	Kibana *TenantKibanaSpec `json:"kibana,omitempty"`
 
 	// ControlPlaneReplicas defines how many replicas of the control plane core components will be deployed
 	// in the Tenant's namespace. Defaults to the controlPlaneReplicas in Installation CR
@@ -103,9 +107,14 @@ type Index struct {
 	DataType DataType `json:"dataType"`
 }
 
+type TenantKibanaSpec struct {
+	URL       string `json:"url,omitempty"`
+	MutualTLS bool   `json:"mutualTLS"`
+	BaseURL   string `json:"baseURL,omitempty"`
+}
+
 type TenantElasticSpec struct {
 	URL       string `json:"url"`
-	KibanaURL string `json:"kibanaURL,omitempty"`
 	MutualTLS bool   `json:"mutualTLS"`
 }
 
@@ -125,6 +134,22 @@ type Tenant struct {
 
 func (t *Tenant) ElasticMTLS() bool {
 	return t != nil && t.Spec.Elastic != nil && t.Spec.Elastic.MutualTLS
+}
+
+func (t *Tenant) KibanaMTLS() bool {
+	return t != nil && t.Spec.Kibana != nil && t.Spec.Kibana.MutualTLS
+}
+
+func (t *Tenant) IsKibanaEnabled() bool {
+	return t != nil && t.Spec.Kibana != nil
+}
+
+func (t *Tenant) KibanaBaseURL() string {
+	if t != nil && t.Spec.Kibana != nil {
+		return t.Spec.Kibana.BaseURL
+	}
+
+	return ""
 }
 
 // MultiTenant returns true if this management cluster is configured to support multiple tenants, and false otherwise.

@@ -430,28 +430,25 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	flowShards := logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
 	clusterConfig := relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
-	// In standard installs, the LogStorage owns the external elastic. For multi-tenant, it's owned by the Tenant instance.
-	var hdler utils.ComponentHandler
-	if r.multiTenant {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
-	} else {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
-	}
-
+	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets)
 	if err := hdler.CreateOrUpdateOrDelete(ctx, externalElasticsearch, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	for _, component := range multiTenantComponents {
-		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-			return reconcile.Result{}, err
+	// In standard installs, the LogStorage owns the external elastic. For multi-tenant, it's owned by the Tenant instance.
+	if r.multiTenant {
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
+		for _, component := range multiTenantComponents {
+			if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+				return reconcile.Result{}, err
+			}
 		}
 	}
 

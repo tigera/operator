@@ -168,7 +168,7 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 		toCreate = append(toCreate, l.linseedPodSecurityPolicy())
 	}
 	if l.cfg.ElasticClientSecret != nil {
-		// If using External ES, we need to copy the client certificates into Linseed's naespace to be mounted.
+		// If using External ES, we need to copy the client certificates into Linseed's namespace to be mounted.
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(l.cfg.Namespace, l.cfg.ElasticClientSecret)...)...)
 	}
 	return toCreate, toDelete
@@ -690,14 +690,4 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 			Egress:   egressRules,
 		},
 	}
-}
-
-// LinseedNamespace determine the namespace in which Linseed is running.
-// For management and standalone clusters, this is always the tigera-elasticsearch
-// namespace. For multi-tenant management clusters, this is the tenant namespace
-func LinseedNamespace(tenant *operatorv1.Tenant) string {
-	if tenant.MultiTenant() {
-		return tenant.Namespace
-	}
-	return "tigera-elasticsearch"
 }

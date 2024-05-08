@@ -137,11 +137,9 @@ spec:
                 type: object
               elastic:
                 description: |-
-                  Elastic configures per-tenant ElasticSearch and Kibana parameters.
+                  Elastic configures per-tenant ElasticSearch parameters.
                   This field is required for clusters using external ES.
                 properties:
-                  kibanaURL:
-                    type: string
                   mutualTLS:
                     type: boolean
                   url:
@@ -187,6 +185,20 @@ spec:
                   - dataType
                   type: object
                 type: array
+              kibana:
+                description: |-
+                  Kibana configures per-tenant Kibana parameters
+                  This field will enable or disable Kibana
+                properties:
+                  baseURL:
+                    type: string
+                  mutualTLS:
+                    type: boolean
+                  url:
+                    type: string
+                required:
+                - mutualTLS
+                type: object
               linseedDeployment:
                 description: LinseedDeployment configures the linseed Deployment.
                 properties:

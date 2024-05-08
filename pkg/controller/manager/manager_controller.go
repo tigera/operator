@@ -105,17 +105,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	})
 
 	// Watch for changes to primary resource Manager
-	err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.Manager{}, eventHandler)
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
-	err = c.WatchObject(&operatorv1.TLSTerminatedRoute{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.TLSTerminatedRoute{}, eventHandler)
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch TLSTerminatedRoutes: %w", err)
 	}
 
-	err = c.WatchObject(&operatorv1.TLSPassThroughRoute{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.TLSPassThroughRoute{}, eventHandler)
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch TLSPassThroughRoutes: %w", err)
 	}
@@ -146,7 +146,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("manager-controller failed to watch ImageSet: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.WatchObject(&operatorv1.Tenant{}, eventHandler); err != nil {
 			return fmt.Errorf("manager-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -159,7 +159,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	for _, namespace := range namespacesToWatch {
 		for _, secretName := range []string{
 			// We need to watch for es-gateway certificate because es-proxy still creates a
-			// client to talk to elastic via es-gateway
+			// client to talk to kibana via es-gateway
+			// TODO: ALINA - Do we need to add Kibana for multi-tenant ?
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
 			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,

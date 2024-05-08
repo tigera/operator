@@ -429,8 +429,7 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 func KibanaEnabled(tenant *operatorv1.Tenant, installation *operatorv1.InstallationSpec) bool {
 	enableKibana := !operatorv1.IsFIPSModeEnabled(installation.FIPSMode)
 	if tenant.MultiTenant() {
-		// TODO: Alina Extract from CR
-		enableKibana = false
+		return tenant.IsKibanaEnabled()
 	}
 	return enableKibana
 }

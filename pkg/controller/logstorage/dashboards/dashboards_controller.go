@@ -70,7 +70,7 @@ type DashboardsSubController struct {
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists || opts.MultiTenant {
+	if !opts.EnterpriseCRDExists {
 		return nil
 	}
 
@@ -261,6 +261,11 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 
 	d.status.OnCRFound()
 
+	if !render.KibanaEnabled(tenant, install) {
+		reqLogger.Info("Kibana is not enabled. Will skip installing dashboards job")
+		return reconcile.Result{}, nil
+	}
+
 	// Determine where to access Kibana.
 	kibanaHost := "tigera-secure-kb-http.tigera-kibana.svc"
 	kibanaPort := uint16(5601)
@@ -279,17 +284,13 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 			d.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
-	} else if !d.multiTenant {
-		// This is the configuration for single tenant with external elastic
-		// If we're using an external ES and Kibana, the Tenant resource must specify the Kibana endpoint.
-		if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.KibanaURL == "" {
-			reqLogger.Error(nil, "Kibana URL must be specified for this tenant")
-			d.status.SetDegraded(operatorv1.ResourceValidationError, "Kibana URL must be specified for this tenant", nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
-
+	} else {
+		// This is the configuration for multi-tenant and single tenant with external elastic
+		// The Tenant resource must specify the Kibana endpoint in both cases. For multi-tenant
+		// it should be the service inside the tenant namespace. For single tenant it should be the
+		// an URL that points to external Kibana
 		// Determine the host and port from the URL.
-		url, err := url.Parse(tenant.Spec.Elastic.KibanaURL)
+		url, err := url.Parse(tenant.Spec.Kibana.URL)
 		if err != nil {
 			reqLogger.Error(err, "Kibana URL is invalid")
 			d.status.SetDegraded(operatorv1.ResourceValidationError, "Kibana URL is invalid", err, reqLogger)
@@ -304,7 +305,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 			return reconcile.Result{}, nil
 		}
 
-		if tenant.ElasticMTLS() {
+		if tenant.KibanaMTLS() {
 			// If mTLS is enabled, get the secret containing the CA and client certificate.
 			externalKibanaSecret = &corev1.Secret{}
 			err = d.client.Get(ctx, client.ObjectKey{Name: logstorage.ExternalCertsSecret, Namespace: common.OperatorNamespace()}, externalKibanaSecret)
@@ -314,10 +315,6 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 				return reconcile.Result{}, err
 			}
 		}
-	} else {
-		// This is the configuration for multi-tenant
-		// We connect to a kibana service deployed in the tenant namespace
-		kibanaHost = fmt.Sprintf("tigera-secure-kb-http.%s.svc", helper.InstallNamespace())
 	}
 
 	// Query the username and password this Dashboards Installer instance should use to authenticate with Elasticsearch.

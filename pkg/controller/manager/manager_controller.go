@@ -158,7 +158,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	for _, namespace := range namespacesToWatch {
 		for _, secretName := range []string{
-			// TODO: ALINA - Do we need to add back esgateway here ?
+			// We need to watch for es-gateway certificate because es-proxy still creates a
+			// client to talk to kibana via es-gateway
 			// TODO: ALINA - Do we need to add Kibana for multi-tenant ?
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,

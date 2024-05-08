@@ -34,17 +34,17 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/logstorage/externalelasticsearch"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -296,14 +296,11 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 				Provider:           r.provider,
 				ElasticLicenseType: esLicenseType,
 				UsePSP:             r.usePSP,
-				// TODO: Alina check if false is the correct value for multi-tenant
-				ApplyTrial: false,
-				Tenant:     tenant,
+				Tenant:             tenant,
 			}),
 		)
 
-		// TODO: Retrieve from tenant CR
-		var kibanaEnabled = true
+		var kibanaEnabled = render.KibanaEnabled(tenant, install)
 		if kibanaEnabled {
 			// Collect the certificates we need to provision Kibana.
 			// These will have been provisioned already by the ES secrets controller.
@@ -319,16 +316,11 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 
 			// We want to retrieve Kibana certificate for all supported configurations
 			kbDNSNames := dns.GetServiceDNSNames(kibana.ServiceName, kibanaHelper.InstallNamespace(), r.clusterDomain)
-			kibanaKeyPair, err := cm.GetKeyPair(r.client, kibana.TigeraKibanaCertSecret, kibanaHelper.TruthNamespace(), kbDNSNames)
+			kibanaKeyPair, err := cm.GetOrCreateKeyPair(r.client, kibana.TigeraKibanaCertSecret, kibanaHelper.TruthNamespace(), kbDNSNames)
 			if err != nil {
 				log.Error(err, err.Error())
 				r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Kibana secrets", err, reqLogger)
 				return reconcile.Result{}, err
-			}
-
-			if kibanaKeyPair == nil {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for kibana key pair to be available", err, reqLogger)
-				return reconcile.Result{}, nil
 			}
 
 			kbService, err := getKibanaService(ctx, r.client, kibanaHelper.InstallNamespace())
@@ -374,18 +366,18 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 			}
 
 			// Determine the host and port from the URL.
-			url, err := url.Parse(tenant.Spec.Elastic.URL)
+			elasticURL, err := url.Parse(tenant.Spec.Elastic.URL)
 			if err != nil {
 				reqLogger.Error(err, "Elasticsearch URL is invalid")
 				r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch URL is invalid", err, reqLogger)
 				return reconcile.Result{}, nil
 			}
 
-			var esClientSecret *corev1.Secret
+			var challengerClientCertificate *corev1.Secret
 			if tenant.ElasticMTLS() {
 				// If mTLS is enabled, get the secret containing the CA and client certificate.
-				esClientSecret = &corev1.Secret{}
-				err = r.client.Get(ctx, client.ObjectKey{Name: logstorage.ExternalCertsSecret, Namespace: common.OperatorNamespace()}, esClientSecret)
+				challengerClientCertificate = &corev1.Secret{}
+				err = r.client.Get(ctx, client.ObjectKey{Name: logstorage.ExternalCertsSecret, Namespace: common.OperatorNamespace()}, challengerClientCertificate)
 				if err != nil {
 					reqLogger.Error(err, "Failed to read external Elasticsearch client certificate secret")
 					r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for external Elasticsearch client certificate secret to be available", err, reqLogger)
@@ -394,27 +386,35 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 			}
 
 			// TODO: Alina - Copy user to tenant namespace
-			// TODO: Alina Retrieve it from tenant CR
-			baseURL := "tigera-kibana"
+
 			multiTenantComponents = append(multiTenantComponents,
+				rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+					Namespace:       kibanaHelper.InstallNamespace(),
+					TruthNamespace:  kibanaHelper.TruthNamespace(),
+					ServiceAccounts: []string{kibana.ObjectName},
+					KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+						rcertificatemanagement.NewKeyPairOption(kibanaKeyPair, true, true),
+					},
+					TrustedBundle: nil,
+				}),
 				kibana.Kibana(&kibana.Configuration{
-					LogStorage:              ls,
-					Installation:            install,
-					Kibana:                  kibanaCR,
-					KibanaKeyPair:           kibanaKeyPair,
-					PullSecrets:             pullSecrets,
-					Provider:                r.provider,
-					KbService:               kbService,
-					ClusterDomain:           r.clusterDomain,
-					BaseURL:                 baseURL,
-					TrustedBundle:           trustedBundle,
-					UnusedTLSSecret:         unusedTLSSecret,
-					UsePSP:                  r.usePSP,
-					Enabled:                 kibanaEnabled,
-					Tenant:                  tenant,
-					Namespace:               kibanaHelper.InstallNamespace(),
-					ElasticClientSecret:     esClientSecret,
-					ExternalElasticEndpoint: url.String(),
+					LogStorage:                  ls,
+					Installation:                install,
+					Kibana:                      kibanaCR,
+					KibanaKeyPair:               kibanaKeyPair,
+					PullSecrets:                 pullSecrets,
+					Provider:                    r.provider,
+					KbService:                   kbService,
+					ClusterDomain:               r.clusterDomain,
+					BaseURL:                     tenant.KibanaBaseURL(),
+					TrustedBundle:               trustedBundle,
+					UnusedTLSSecret:             unusedTLSSecret,
+					UsePSP:                      r.usePSP,
+					Enabled:                     kibanaEnabled,
+					Tenant:                      tenant,
+					Namespace:                   kibanaHelper.InstallNamespace(),
+					ChallengerClientCertificate: challengerClientCertificate,
+					ExternalElasticEndpoint:     elasticURL.String(),
 				}),
 			)
 		}

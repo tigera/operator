@@ -99,9 +99,9 @@ type Configuration struct {
 	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
 	// mTLS is used between Challenger and the external Elastic cluster.
 	// TODO: Alina Mount volume
-	ElasticClientSecret     *corev1.Secret
-	ElasticChallengerUser   *corev1.Secret
-	ExternalElasticEndpoint string
+	ChallengerClientCertificate *corev1.Secret
+	ElasticChallengerUser       *corev1.Secret
+	ExternalElasticEndpoint     string
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -202,9 +202,9 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 		}
 		toCreate = append(toCreate, k.kibanaCR())
 		// TODO: ALINA: I think we do the same in Linseed
-		if k.cfg.ElasticClientSecret != nil {
+		if k.cfg.ChallengerClientCertificate != nil {
 			// If using External ES, we need to copy the client certificates into the tenant namespace to be mounted.
-			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(k.cfg.Namespace, k.cfg.ElasticClientSecret)...)...)
+			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(k.cfg.Namespace, k.cfg.ChallengerClientCertificate)...)...)
 		}
 
 	} else {

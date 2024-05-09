@@ -311,7 +311,7 @@ func (e *eck) operatorStatefulSet() *appsv1.StatefulSet {
 		}
 	}
 	var namespacesToWatch string
-	if e.cfg.Tenant.MultiTenant() {
+	if !e.cfg.Tenant.MultiTenant() {
 		namespacesToWatch = "tigera-elasticsearch,tigera-kibana"
 	}
 	s := &appsv1.StatefulSet{

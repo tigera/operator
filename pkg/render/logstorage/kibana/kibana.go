@@ -343,7 +343,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 
 	if k.cfg.Tenant.MultiTenant() {
 		volumes = append(volumes, k.cfg.TrustedBundle.Volume())
-		volumeMounts = k.cfg.TrustedBundle.VolumeMounts(k.SupportedOSType())
+		volumeMounts = append(volumeMounts, k.cfg.TrustedBundle.VolumeMounts(k.SupportedOSType())...)
 		if k.cfg.ChallengerClientCertificate != nil {
 			// Add a volume for the required client certificate and key.
 			volumes = append(volumes, corev1.Volume{
@@ -380,6 +380,10 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 					Name:  "ES_GATEWAY_ELASTIC_CA_PATH",
 					Value: k.cfg.TrustedBundle.MountPath(),
 				},
+				{
+					Name:  "TENANT_ID",
+					Value: k.cfg.Tenant.Spec.ID,
+				},
 				{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: "elastic"},
 				{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
@@ -396,7 +400,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 			},
 			Image:           k.challengerImage,
 			SecurityContext: securitycontext.NewNonRootContext(),
-			VolumeMounts:    k.cfg.TrustedBundle.VolumeMounts(k.SupportedOSType()),
+			VolumeMounts:    volumeMounts,
 		})
 	}
 

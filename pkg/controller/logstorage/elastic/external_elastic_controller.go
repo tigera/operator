@@ -369,9 +369,8 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 			}
 		}
 
-		elasticChallengerUser := &corev1.Secret{}
-		err = r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchAdminUserSecret, Namespace: common.OperatorNamespace()}, challengerClientCertificate)
-		if err != nil {
+		var elasticChallengerUser corev1.Secret
+		err = r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchAdminUserSecret, Namespace: common.OperatorNamespace()}, &elasticChallengerUser)		if err != nil {
 			reqLogger.Error(err, "Failed to read external user secret")
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for external Elasticsearch user to be available", err, reqLogger)
 			return reconcile.Result{}, err
@@ -405,7 +404,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 				Namespace:                   kibanaHelper.InstallNamespace(),
 				ChallengerClientCertificate: challengerClientCertificate,
 				ExternalElasticEndpoint:     elasticURL.String(),
-				ElasticChallengerUser:       elasticChallengerUser,
+				ElasticChallengerUser:       &elasticChallengerUser,
 			}),
 		)
 	}
@@ -420,32 +419,33 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	// ECK will be deployed per management cluster and will be configured
-	// to watch all namespaces in order to create a Kibana deployment
-	eck := eck.ECK(&eck.Configuration{
-		LogStorage:         ls,
-		Installation:       install,
-		ManagementCluster:  managementCluster,
-		PullSecrets:        pullSecrets,
-		Provider:           r.provider,
-		ElasticLicenseType: esLicenseType,
-		UsePSP:             r.usePSP,
-		Tenant:             tenant,
-	})
-	if err := hdler.CreateOrUpdateOrDelete(ctx, eck, r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// In standard installs, the LogStorage owns the external elastic. For multi-tenant, it's owned by the Tenant instance.
-	if r.multiTenant {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
+	tenantHandler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
+
+	if r.multiTenant && kibanaEnabled {
+		// ECK will be deployed per management cluster and will be configured
+		// to watch all namespaces in order to create a Kibana deployment
+		eck := eck.ECK(&eck.Configuration{
+			LogStorage:         ls,
+			Installation:       install,
+			ManagementCluster:  managementCluster,
+			PullSecrets:        pullSecrets,
+			Provider:           r.provider,
+			ElasticLicenseType: esLicenseType,
+			UsePSP:             r.usePSP,
+			Tenant:             tenant,
+		})
+		if err := hdler.CreateOrUpdateOrDelete(ctx, eck, r.status); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
 		for _, component := range kibanaComponents {
 			if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			if err := tenantHandler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 				return reconcile.Result{}, err
 			}

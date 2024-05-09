@@ -384,7 +384,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 					Name:  "TENANT_ID",
 					Value: k.cfg.Tenant.Spec.ID,
 				},
-				{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: "elastic"},
+				{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: "tigera-mgmt"},
 				{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{

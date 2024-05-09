@@ -20,112 +20,112 @@ package components
 import "github.com/tigera/operator/version"
 
 var (
-	CalicoRelease string = "release-v3.28"
+	CalicoRelease string = "v3.28.0"
 
 	ComponentCalicoCNI = component{
-		Version:  "release-v3.28",
+		Version:  "v3.28.0",
 		Image:    "calico/cni",
 		Registry: "",
 	}
 
 	ComponentCalicoCNIFIPS = component{
-		Version:  "release-v3.28-fips",
+		Version:  "v3.28.0-fips",
 		Image:    "calico/cni",
 		Registry: "",
 	}
 
 	ComponentCalicoCNIWindows = component{
-		Version:  "release-v3.28",
+		Version:  "v3.28.0",
 		Image:    "calico/cni-windows",
 		Registry: "",
 	}
 
 	ComponentCalicoCSRInitContainer = component{
-		Version:  "release-v3.28",
+		Version:  "v3.28.0",
 		Image:    "calico/key-cert-provisioner",
 		Registry: "",
 	}
 
 	ComponentCalicoKubeControllers = component{
-		Version:  "release-v3.28",
+		Version:  "v3.28.0",
 		Image:    "calico/kube-controllers",
 		Registry: "",
 	}
 
 	ComponentCalicoKubeControllersFIPS = component{
-		Version:  "release-v3.28-fips",
+		Version:  "v3.28.0-fips",
 		Image:    "calico/kube-controllers",
 		Registry: "",
 	}
 
 	ComponentCalicoNode = component{
-		Version:  "release-v3.28",
+		Version:  "v3.28.0",
 		Image:    "calico/node",
 		Registry: "",
 	}
 
 	ComponentCalicoNodeFIPS = component{
-		Version:  "release-v3.28-fips",
+		Version:  "v3.28.0-fips",
 		Image:    "calico/node",
 		Registry: "",
 	}
 
 	ComponentCalicoNodeWindows = component{
-		Version:  "release-v3.28",
+		Version:  "v3.28.0",
 		Image:    "calico/node-windows",
 		Registry: "",
 	}
 
 	ComponentCalicoTypha = component{
-		Version:  "release-v3.28",
+		Version:  "v3.28.0",
 		Image:    "calico/typha",
 		Registry: "",
 	}
 
 	ComponentCalicoTyphaFIPS = component{
-		Version:  "release-v3.28-fips",
+		Version:  "v3.28.0-fips",
 		Image:    "calico/typha",
 		Registry: "",
 	}
 
 	ComponentCalicoFlexVolume = component{
-		Version:  "release-v3.28",
+		Version:  "v3.28.0",
 		Image:    "calico/pod2daemon-flexvol",
 		Registry: "",
 	}
 
 	ComponentCalicoAPIServer = component{
-		Version:  "release-v3.28",
+		Version:  "v3.28.0",
 		Image:    "calico/apiserver",
 		Registry: "",
 	}
 
 	ComponentCalicoAPIServerFIPS = component{
-		Version:  "release-v3.28-fips",
+		Version:  "v3.28.0-fips",
 		Image:    "calico/apiserver",
 		Registry: "",
 	}
 
 	ComponentCalicoCSI = component{
-		Version:  "release-v3.28",
+		Version:  "v3.28.0",
 		Image:    "calico/csi",
 		Registry: "",
 	}
 
 	ComponentCalicoCSIFIPS = component{
-		Version:  "release-v3.28-fips",
+		Version:  "v3.28.0-fips",
 		Image:    "calico/csi",
 		Registry: "",
 	}
 
 	ComponentCalicoCSIRegistrar = component{
-		Version:  "release-v3.28",
+		Version:  "v3.28.0",
 		Image:    "calico/node-driver-registrar",
 		Registry: "",
 	}
 
 	ComponentCalicoCSIRegistrarFIPS = component{
-		Version:  "release-v3.28-fips",
+		Version:  "v3.28.0-fips",
 		Image:    "calico/node-driver-registrar",
 		Registry: "",
 	}

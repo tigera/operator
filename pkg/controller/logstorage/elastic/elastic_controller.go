@@ -22,6 +22,7 @@ import (
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/k8s"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	apps "k8s.io/api/apps/v1"
@@ -453,7 +454,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 
 	var kibanaCR *kbv1.Kibana
 	if kibanaEnabled {
-		kibanaCR, err = r.getKibana(ctx)
+		kibanaCR, err = getKibana(ctx, r.client, kibana.Namespace)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Kibana", err, reqLogger)
 			return reconcile.Result{}, err
@@ -504,7 +505,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	var kbService *corev1.Service
 	if kibanaEnabled {
 		// For now, Kibana is only supported in single tenant configurations.
-		kbService, err = r.getKibanaService(ctx)
+		kbService, err = getKibanaService(ctx, r.client, kibana.Namespace)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve the Kibana service", err, reqLogger)
 			return reconcile.Result{}, err
@@ -563,6 +564,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			UnusedTLSSecret: unusedTLSSecret,
 			UsePSP:          r.usePSP,
 			Enabled:         kibanaEnabled,
+			Namespace:       kibana.Namespace,
 		}),
 	}
 
@@ -708,9 +710,9 @@ func (r *ElasticSubController) getElasticsearchService(ctx context.Context) (*co
 	return &svc, nil
 }
 
-func (r *ElasticSubController) getKibana(ctx context.Context) (*kbv1.Kibana, error) {
+func getKibana(ctx context.Context, cli k8s.Client, namespace string) (*kbv1.Kibana, error) {
 	kb := kbv1.Kibana{}
-	err := r.client.Get(ctx, client.ObjectKey{Name: kibana.CRName, Namespace: kibana.Namespace}, &kb)
+	err := cli.Get(ctx, client.ObjectKey{Name: kibana.CRName, Namespace: namespace}, &kb)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
@@ -720,9 +722,9 @@ func (r *ElasticSubController) getKibana(ctx context.Context) (*kbv1.Kibana, err
 	return &kb, nil
 }
 
-func (r *ElasticSubController) getKibanaService(ctx context.Context) (*corev1.Service, error) {
+func getKibanaService(ctx context.Context, cli k8s.Client, namespace string) (*corev1.Service, error) {
 	svc := corev1.Service{}
-	err := r.client.Get(ctx, client.ObjectKey{Name: kibana.ServiceName, Namespace: kibana.Namespace}, &svc)
+	err := cli.Get(ctx, client.ObjectKey{Name: kibana.ServiceName, Namespace: namespace}, &svc)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil

@@ -226,6 +226,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
+						// TODO: Alina are all needed ?
 						{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
 						{Image: "tigera/kube-controllers", Digest: "sha256:kubecontrollershash"},
 						{Image: "tigera/kibana", Digest: "sha256:kibanahash"},

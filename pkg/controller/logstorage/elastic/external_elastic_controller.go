@@ -370,7 +370,8 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 		}
 
 		var elasticChallengerUser corev1.Secret
-		err = r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchAdminUserSecret, Namespace: common.OperatorNamespace()}, &elasticChallengerUser)		if err != nil {
+		err = r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchAdminUserSecret, Namespace: common.OperatorNamespace()}, &elasticChallengerUser)
+		if err != nil {
 			reqLogger.Error(err, "Failed to read external user secret")
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for external Elasticsearch user to be available", err, reqLogger)
 			return reconcile.Result{}, err

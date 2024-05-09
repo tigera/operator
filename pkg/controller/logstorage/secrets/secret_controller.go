@@ -269,7 +269,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	// - Single-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a single trusted bundle in each.
 	//
 	// External ES modes:
-	// - Single-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a single trusted bundle in each.
+	// - Single-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a trusted bundle in tigera-elasticsearch.
 	// - Multi-tenant: nothing installed in tigera-elasticsearch and tigera-kibana Namespace. The trusted bundle isn't created by this controller, but per-tenant keypairs are.
 	if !r.elasticExternal {
 		// This branch provisions the necessary KeyPairs for the internal ES cluster and Kibana, and installs a trusted bundle into tigera-kibana.

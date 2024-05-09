@@ -104,6 +104,7 @@ var _ = Describe("Kibana rendering tests", func() {
 				TrustedBundle: bundle,
 				UsePSP:        true,
 				Enabled:       true,
+				Namespace:     kibana.Namespace,
 			}
 		})
 

@@ -405,10 +405,19 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// and the bundle will simply use the root CA for the tenant. For single-tenant systems, we need to include these in case
 		// any of them haven't been signed by the root CA.
 		trustedSecretNames = []string{
-			render.PacketCaptureServerCert,
 			render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
 			render.TigeraLinseedSecret,
 		}
+
+		packetcaptureapi, err := utils.GetPacketCaptureAPI(ctx, r.client)
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying PacketCapture CR", err, logc)
+			return reconcile.Result{}, err
+		}
+		if packetcaptureapi != nil {
+			trustedSecretNames = append(trustedSecretNames, render.PacketCaptureServerCert)
+		}
+
 		// This is necessary because prior to v3.13 secrets were not signed by a single CA, so we need to include each individually
 		// in the trusted bundle
 		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())

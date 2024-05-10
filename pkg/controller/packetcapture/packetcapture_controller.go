@@ -201,6 +201,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 
 	// Packet capture is disabled in multi tenant management cluster
 	if r.multiTenant && managementCluster != nil {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Packet capture is disabled in the multitenant management cluster.", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

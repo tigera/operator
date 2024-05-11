@@ -23,7 +23,7 @@ import (
 
 const (
 	defaultCalicoRegistry     = "docker.io"
-	defaultEnterpriseRegistry = "gcr.io/unique-caldron-775/cnx"
+	defaultEnterpriseRegistry = "quay.io"
 
 	eeVersionsTpl     = "enterprise.go.tpl"
 	osVersionsTpl     = "calico.go.tpl"

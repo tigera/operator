@@ -109,7 +109,7 @@ git push --tags
 1. Run the following command to generate release notes for the release
 
    ```
-   make release-note
+   make release-note VERSION=<TAG> GITHUB_TOKEN=<access-token>
    ```
 
 1. Go to https://github.com/tigera/operator/releases and edit the release tag to include the generated release notes, and update the title.

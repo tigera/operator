@@ -288,7 +288,17 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedCertBundle = certificateManager.CreateTrustedBundle()
 	}
 
-	secretsToTrust := []string{render.PacketCaptureServerCert, render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)}
+	secretsToTrust := []string{render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)}
+
+	packetcaptureapi, err := utils.GetPacketCaptureAPI(ctx, r.Client)
+	if err != nil && !k8serrors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying PacketCapture CR", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if packetcaptureapi != nil {
+		secretsToTrust = append(secretsToTrust, render.PacketCaptureServerCert)
+	}
+
 	// If external prometheus is enabled, the secret will be signed by the Calico CA and won't get rendered. We can skip
 	// adding it to the bundle, as trusting the CA will suffice.
 	monitorCR := &operatorv1.Monitor{}

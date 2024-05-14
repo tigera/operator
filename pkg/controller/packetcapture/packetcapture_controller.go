@@ -61,10 +61,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// No need to start this controller
 		return nil
 	}
-	licenseAPIReady := &utils.ReadyFlag{}
+
 	tierWatchReady := &utils.ReadyFlag{}
 
-	r := newReconciler(mgr, opts, licenseAPIReady, tierWatchReady)
+	r := newReconciler(mgr, opts, tierWatchReady)
 
 	c, err := ctrlruntime.NewController(PacketCaptureControllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -77,7 +77,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, licenseAPIReady)
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
 
 	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
@@ -106,7 +105,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcilePacketCapture{
 		client:              mgr.GetClient(),
 		scheme:              mgr.GetScheme(),
@@ -115,7 +114,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		status:              status.New(mgr.GetClient(), ResourceName, opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
 		usePSP:              opts.UsePSP,
-		licenseAPIReady:     licenseAPIReady,
 		tierWatchReady:      tierWatchReady,
 		multiTenant:         opts.MultiTenant,
 	}
@@ -135,7 +133,6 @@ type ReconcilePacketCapture struct {
 	status              status.StatusManager
 	clusterDomain       string
 	usePSP              bool
-	licenseAPIReady     *utils.ReadyFlag
 	tierWatchReady      *utils.ReadyFlag
 	multiTenant         bool
 }
@@ -189,7 +186,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	}
 
 	if variant != operatorv1.TigeraSecureEnterprise {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for Installation variant to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -201,7 +198,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 
 	// Packet capture is disabled in multi tenant management cluster
 	if r.multiTenant && managementCluster != nil {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Packet capture is disabled in the multitenant management cluster.", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Packet capture is not supported on multi-tenant management clusters", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -228,9 +225,6 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, packetcaptureapi)
-
-	// Render the desired objects from the CRD and create or update them.
-	reqLogger.V(3).Info("rendering components")
 
 	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {

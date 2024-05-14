@@ -17,6 +17,7 @@ package kibana_test
 import (
 	"context"
 
+	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -629,8 +630,20 @@ var _ = Describe("Kibana rendering tests", func() {
 					Value: cfg.ExternalElasticEndpoint,
 				},
 				corev1.EnvVar{
-					Name:  "ES_GATEWAY_ELASTIC_CA_PATH",
+					Name:  "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH",
 					Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
+				},
+				corev1.EnvVar{
+					Name:  "ES_GATEWAY_ELASTIC_CLIENT_KEY_PATH",
+					Value: "/certs/elasticsearch/client.key",
+				},
+				corev1.EnvVar{
+					Name:  "ES_GATEWAY_ELASTIC_CLIENT_CERT_PATH",
+					Value: "/certs/elasticsearch/client.crt",
+				},
+				corev1.EnvVar{
+					Name:  "ES_GATEWAY_ENABLE_ELASTIC_MUTUAL_TLS",
+					Value: "true",
 				},
 				corev1.EnvVar{
 					Name:  "ES_GATEWAY_ELASTIC_USERNAME",
@@ -685,8 +698,13 @@ var _ = Describe("Kibana rendering tests", func() {
 
 			Expect(kibanaCR.Spec.Config).NotTo(BeNil())
 			Expect(kibanaCR.Spec.Config.Data).NotTo(BeEmpty())
-			Expect(kibanaCR.Spec.Config.Data).To(HaveKeyWithValue("elasticsearch.host", "http://localhost:8080"))
+			Expect(kibanaCR.Spec.Config.Data).To(HaveKeyWithValue("elasticsearch.hosts", "http://localhost:8080"))
 			Expect(kibanaCR.Spec.Config.Data).To(HaveKeyWithValue("elasticsearch.ssl.verificationMode", "none"))
+			Expect(kibanaCR.Spec.Config.Data).To(HaveKeyWithValue("elasticsearch.username", kibana.MultiTenantKibanaUser))
+
+			Expect(kibanaCR.Spec.SecureSettings).NotTo(BeNil())
+			Expect(kibanaCR.Spec.SecureSettings).To(ContainElement(
+				cmnv1.SecretSource{SecretName: kibana.MultiTenantCredentialsSecretName}))
 		})
 	})
 })

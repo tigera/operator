@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
@@ -58,10 +59,13 @@ const (
 	PolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "kibana-access"
 	Port         = 5601
 
+	// TODO: ALINA Check annotations
 	TLSAnnotationHash = "hash.operator.tigera.io/kb-secrets"
 
-	TimeFilter         = "_g=(time:(from:now-24h,to:now))"
-	FlowsDashboardName = "Calico Enterprise Flow Logs"
+	TimeFilter                       = "_g=(time:(from:now-24h,to:now))"
+	FlowsDashboardName               = "Calico Enterprise Flow Logs"
+	MultiTenantCredentialsSecretName = "kibana-elasticsearch-credentials"
+	MultiTenantKibanaUser            = "tigera-mgmt"
 )
 
 var (
@@ -271,8 +275,9 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	}
 
 	if k.cfg.Tenant.MultiTenant() {
-		config["elasticsearch.host"] = "http://localhost:8080"
+		config["elasticsearch.hosts"] = "http://localhost:8080"
 		config["elasticsearch.ssl.verificationMode"] = "none"
+		config["elasticsearch.username"] = MultiTenantKibanaUser
 	} else {
 		config["elasticsearch.ssl.certificateAuthorities"] = []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"}
 	}
@@ -292,8 +297,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 			render.ElasticsearchServiceName,
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
-			dns.GetServiceDNSNames(ServiceName, Namespace, k.cfg.ClusterDomain),
-			Namespace)
+			dns.GetServiceDNSNames(ServiceName, k.cfg.Namespace, k.cfg.ClusterDomain),
+			k.cfg.Namespace)
 
 		initContainers = append(initContainers, csrInitContainer)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
@@ -377,23 +382,36 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 					Value: k.cfg.ExternalElasticEndpoint,
 				},
 				{
-					Name:  "ES_GATEWAY_ELASTIC_CA_PATH",
+					Name:  "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH",
 					Value: k.cfg.TrustedBundle.MountPath(),
+				},
+				{
+					Name:  "ES_GATEWAY_ELASTIC_CLIENT_KEY_PATH",
+					Value: "/certs/elasticsearch/client.key",
+				},
+				{
+					Name:  "ES_GATEWAY_ELASTIC_CLIENT_CERT_PATH",
+					Value: "/certs/elasticsearch/client.crt",
+				},
+				{
+					Name:  "ES_GATEWAY_ENABLE_ELASTIC_MUTUAL_TLS",
+					Value: "true",
 				},
 				{
 					Name:  "TENANT_ID",
 					Value: k.cfg.Tenant.Spec.ID,
 				},
-				{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: "tigera-mgmt"},
+				// TODO: ALINA - These are not actually needed
+				{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: MultiTenantKibanaUser},
 				{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: render.ElasticsearchAdminUserSecret,
 						},
-						// TODO: ALINA - IS THIS THE correct user or do we need to create a new one ?
-						Key: "tigera-mgmt",
+						Key: MultiTenantKibanaUser,
 					},
-				}},
+				},
+				},
 			},
 			Command: []string{
 				"/usr/bin/es-gateway", "-run-as-challenger",
@@ -456,6 +474,14 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		kibana.Spec.ElasticsearchRef = cmnv1.ObjectSelector{
 			Name:      render.ElasticsearchName,
 			Namespace: render.ElasticsearchNamespace,
+		}
+	}
+
+	if k.cfg.Tenant.MultiTenant() {
+		kibana.Spec.SecureSettings = []cmnv1.SecretSource{
+			{
+				SecretName: MultiTenantCredentialsSecretName,
+			},
 		}
 	}
 
@@ -531,17 +557,35 @@ func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
-		// TODO: ALINA - DO WE NEED TO REMOVE EGRESS GATEWAY FOR MULTI-TENANT
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
-		},
 	}...)
+
+	if k.cfg.Tenant.MultiTenant() {
+		// Allow egress traffic to the external Elasticsearch.
+		egressRules = append(egressRules,
+			v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Ports:   []numorstring.Port{{MinPort: 443, MaxPort: 443}},
+					Domains: []string{k.cfg.ExternalElasticEndpoint},
+				},
+			},
+		)
+	} else {
+		// Allow egress traffic to es gateway.
+		egressRules = append(egressRules,
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
+			},
+		)
+	}
 
 	kibanaPortIngressDestination := v3.EntityRule{
 		Ports: networkpolicy.Ports(Port),
 	}
+
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{

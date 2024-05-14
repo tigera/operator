@@ -96,7 +96,7 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
-	// we should update all tenants whenever one changes. For single-tenatn clusters, we can just queue the object.
+	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
 		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
@@ -177,7 +177,16 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 				return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
 			}
 		}
-		// TODO: ALINA - We need a user for kibana
+
+		if r.multiTenant {
+			for _, secretName := range []string{
+				kibana.MultiTenantCredentialsSecretName,
+			} {
+				if err = utils.AddSecretsWatch(c, secretName, kibanaNamespaceHelper.TruthNamespace()); err != nil {
+					return fmt.Errorf("log-storage-elastic-controller failed to watch Secret resource: %w", err)
+				}
+			}
+		}
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,

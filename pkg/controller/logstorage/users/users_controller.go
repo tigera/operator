@@ -18,23 +18,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
-
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/ctrlruntime"
-	"github.com/tigera/operator/pkg/render/logstorage/dashboards"
 	corev1 "k8s.io/api/core/v1"
-
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/crypto"
-	"github.com/tigera/operator/pkg/render"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -44,6 +31,19 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
+	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/crypto"
+	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage/dashboards"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 )
 
 var log = logf.Log.WithName("controller_logstorage_users")
@@ -276,10 +276,38 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		credentialSecrets = append(credentialSecrets, &dashboardUserSecret)
 	}
 
+	var kibanaCredentialSecret *corev1.Secret
+	var kibanaUser *utils.User
+	if r.multiTenant {
+		// Query any existing username and password for this Dashboards instance. If one already exists, we'll simply
+		// use that. Otherwise, generate a new one.
+		keyKibanaCred := types.NamespacedName{Name: kibana.MultiTenantCredentialsSecretName, Namespace: helper.TruthNamespace()}
+		kibanaUser = utils.KibanaUser(clusterID, tenantID)
+		kibanaUser.Password = crypto.GeneratePassword(16)
+		kibanaCredentialSecret = &corev1.Secret{}
+		if err = r.client.Get(ctx, key, kibanaCredentialSecret); err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", keyKibanaCred), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if errors.IsNotFound(err) {
+			// Create the secret to provision into the cluster.
+			kibanaCredentialSecret.Name = kibana.MultiTenantCredentialsSecretName
+			kibanaCredentialSecret.Namespace = helper.TruthNamespace()
+			kibanaCredentialSecret.StringData = map[string]string{
+				"elastic.password": kibanaUser.Password,
+			}
+
+			// Make sure we install the generated credentials into the truth namespace.
+			credentialSecrets = append(credentialSecrets, kibanaCredentialSecret)
+		}
+	}
+
 	if helper.TruthNamespace() != helper.InstallNamespace() {
 		// Copy the credentials into the install namespace.
 		credentialSecrets = append(credentialSecrets, secret.CopyToNamespace(helper.InstallNamespace(), &linseedUserSecret)[0])
 		credentialSecrets = append(credentialSecrets, secret.CopyToNamespace(helper.InstallNamespace(), &dashboardUserSecret)[0])
+		if kibanaCredentialSecret != nil {
+			credentialSecrets = append(credentialSecrets, secret.CopyToNamespace(helper.InstallNamespace(), kibanaCredentialSecret)[0])
+		}
 	}
 	credentialComponent := render.NewPassthrough(credentialSecrets...)
 
@@ -320,6 +348,13 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
+	if kibanaUser != nil {
+		if err = r.createUser(ctx, elasticEndpoint, kibanaUser, reqLogger); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create Kibana user in ES", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 	return reconcile.Result{}, nil
@@ -343,6 +378,20 @@ func (r *UserController) createUserLogin(ctx context.Context, elasticEndpoint st
 
 	// Create the user in ES.
 	user.Password = password
+	if err = esClient.CreateUser(ctx, user); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch user", err, reqLogger)
+		return err
+	}
+
+	return nil
+}
+
+func (r *UserController) createUser(ctx context.Context, elasticEndpoint string, user *utils.User, reqLogger logr.Logger) error {
+	esClient, err := r.esClientFn(r.client, ctx, elasticEndpoint)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
+		return err
+	}
 	if err = esClient.CreateUser(ctx, user); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to create or update Elasticsearch user", err, reqLogger)
 		return err
@@ -418,8 +467,9 @@ func (r *UsersCleanupController) cleanupStaleUsers(ctx context.Context, logger l
 
 		lu := utils.LinseedUser(clusterID, t.Spec.ID)
 		dashboardsUser := utils.DashboardUser(clusterID, t.Spec.ID)
+		kibanaUser := utils.KibanaUser(clusterID, t.Spec.ID)
 		for _, user := range allESUsers {
-			if user.Username == lu.Username || user.Username == dashboardsUser.Username {
+			if user.Username == lu.Username || user.Username == dashboardsUser.Username || user.Username == kibanaUser.Username {
 				err = esClient.DeleteUser(ctx, &user)
 				if err != nil {
 					logger.Error(err, "Failed to delete elastic user")

@@ -184,6 +184,7 @@ func indexPattern(prefix, cluster, suffix, tenant string) string {
 var (
 	ElasticsearchUserNameLinseed            = "tigera-ee-linseed"
 	ElasticsearchUserNameDashboardInstaller = "tigera-ee-dashboards-installer"
+	ElasticsearchUserNameKibana             = "tigera-kibana"
 )
 
 func LinseedUser(clusterID, tenant string) *User {
@@ -223,6 +224,19 @@ func DashboardUser(clusterID, tenant string) *User {
 						Resources:   []string{"*"},
 					}},
 				},
+			},
+		},
+	}
+}
+
+func KibanaUser(clusterID, tenant string) *User {
+	username := formatName(ElasticsearchUserNameKibana, clusterID, tenant)
+
+	return &User{
+		Username: username,
+		Roles: []Role{
+			{
+				Name: "kibana-system",
 			},
 		},
 	}

@@ -196,8 +196,6 @@ spec:
                     type: boolean
                   url:
                     type: string
-                required:
-                - mutualTLS
                 type: object
               linseedDeployment:
                 description: LinseedDeployment configures the linseed Deployment.

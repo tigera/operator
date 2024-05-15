@@ -64,8 +64,7 @@ const (
 
 	TimeFilter                       = "_g=(time:(from:now-24h,to:now))"
 	FlowsDashboardName               = "Calico Enterprise Flow Logs"
-	MultiTenantCredentialsSecretName = "kibana-elasticsearch-credentials"
-	MultiTenantKibanaUser            = "tigera-mgmt"
+	MultiTenantCredentialsSecretName = "tigera-kibana-elasticsearch-credentials"
 )
 
 var (
@@ -104,8 +103,8 @@ type Configuration struct {
 	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
 	// mTLS is used between Challenger and the external Elastic cluster.
 	ChallengerClientCertificate *corev1.Secret
-	ElasticChallengerUser       *corev1.Secret
-	ExternalElasticEndpoint     string
+	ExternalElasticURL          *url.URL
+	KibanaUsername              string
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
@@ -210,10 +209,6 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 			// If using External ES, we need to copy the client certificates into the tenant namespace to be mounted.
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(k.cfg.Namespace, k.cfg.ChallengerClientCertificate)...)...)
 		}
-		if k.cfg.ElasticChallengerUser != nil {
-			// If using External ES, we need to copy the elastic user into the tenant namespace
-			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(k.cfg.Namespace, k.cfg.ElasticChallengerUser)...)...)
-		}
 	} else {
 		toDelete = append(toDelete, k.kibanaCR())
 	}
@@ -277,7 +272,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	if k.cfg.Tenant.MultiTenant() {
 		config["elasticsearch.hosts"] = "http://localhost:8080"
 		config["elasticsearch.ssl.verificationMode"] = "none"
-		config["elasticsearch.username"] = MultiTenantKibanaUser
+		config["elasticsearch.username"] = k.cfg.KibanaUsername
 	} else {
 		config["elasticsearch.ssl.certificateAuthorities"] = []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"}
 	}
@@ -379,7 +374,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 				},
 				{
 					Name:  "ES_GATEWAY_ELASTIC_ENDPOINT",
-					Value: k.cfg.ExternalElasticEndpoint,
+					Value: k.cfg.ExternalElasticURL.String(),
 				},
 				{
 					Name:  "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH",
@@ -400,17 +395,6 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 				{
 					Name:  "TENANT_ID",
 					Value: k.cfg.Tenant.Spec.ID,
-				},
-				// TODO: ALINA - These are not actually needed
-				{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: MultiTenantKibanaUser},
-				{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: render.ElasticsearchAdminUserSecret,
-						},
-						Key: MultiTenantKibanaUser,
-					},
-				},
 				},
 			},
 			Command: []string{
@@ -542,14 +526,7 @@ func (k *kibana) kibanaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 // Allow access to Kibana
 func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
 	networkPolicyHelper := networkpolicy.Helper(k.cfg.Tenant.MultiTenant(), k.cfg.Namespace)
-	egressRules := []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      v3.EntityRule{},
-			Destination: render.ElasticsearchEntityRule,
-		},
-	}
+	var egressRules []v3.Rule
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, k.cfg.Provider == operatorv1.ProviderOpenShift)
 	egressRules = append(egressRules, []v3.Rule{
 		{
@@ -567,23 +544,82 @@ func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
 				Protocol: &networkpolicy.TCPProtocol,
 				Destination: v3.EntityRule{
 					Ports:   []numorstring.Port{{MinPort: 443, MaxPort: 443}},
-					Domains: []string{k.cfg.ExternalElasticEndpoint},
+					Domains: []string{k.cfg.ExternalElasticURL.Hostname()},
 				},
 			},
 		)
 	} else {
-		// Allow egress traffic to es gateway.
+		// Allow egress traffic to ES Gateway and Elastic
 		egressRules = append(egressRules,
 			v3.Rule{
 				Action:      v3.Allow,
 				Protocol:    &networkpolicy.TCPProtocol,
-				Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
+				Source:      v3.EntityRule{},
+				Destination: render.ElasticsearchEntityRule,
 			},
-		)
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
+			})
 	}
 
 	kibanaPortIngressDestination := v3.EntityRule{
 		Ports: networkpolicy.Ports(Port),
+	}
+
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source: v3.EntityRule{
+				// This policy allows access to Kibana from anywhere.
+				Nets: []string{"0.0.0.0/0"},
+			},
+			Destination: kibanaPortIngressDestination,
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source: v3.EntityRule{
+				// This policy allows access to Kibana from anywhere.
+				Nets: []string{"::/0"},
+			},
+			Destination: kibanaPortIngressDestination,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkPolicyHelper.DashboardInstallerSourceEntityRule(),
+			Destination: kibanaPortIngressDestination,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      render.ECKOperatorSourceEntityRule,
+			Destination: kibanaPortIngressDestination,
+		},
+	}
+
+	if k.cfg.Tenant.MultiTenant() {
+		ingressRules = append(ingressRules,
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkPolicyHelper.ManagerSourceEntityRule(),
+				Destination: kibanaPortIngressDestination,
+			})
+	} else {
+		// Zero and single tenant with internal elastic will have all Kibana
+		// traffic proxied via ES Gateway
+		ingressRules = append(ingressRules,
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
+				Destination: kibanaPortIngressDestination,
+			},
+		)
 	}
 
 	return &v3.NetworkPolicy{
@@ -597,47 +633,8 @@ func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(CRName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source: v3.EntityRule{
-						// This policy allows access to Kibana from anywhere.
-						Nets: []string{"0.0.0.0/0"},
-					},
-					Destination: kibanaPortIngressDestination,
-				},
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source: v3.EntityRule{
-						// This policy allows access to Kibana from anywhere.
-						Nets: []string{"::/0"},
-					},
-					Destination: kibanaPortIngressDestination,
-				},
-				// TODO: ALINA - DO WE NEED TO REMOVE EGRESS GATEWAY FOR MULTI-TENANT
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
-					Destination: kibanaPortIngressDestination,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkPolicyHelper.DashboardInstallerSourceEntityRule(),
-					Destination: kibanaPortIngressDestination,
-				},
-				// TODO: ALINA - DO WE NEED TO ADD MANAGER?
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ECKOperatorSourceEntityRule,
-					Destination: kibanaPortIngressDestination,
-				},
-			},
-			Egress: egressRules,
+			Ingress:  ingressRules,
+			Egress:   egressRules,
 		},
 	}
 }

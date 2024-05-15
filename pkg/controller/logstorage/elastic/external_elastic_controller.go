@@ -212,7 +212,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	// When running in multi-tenant mode, we need to install Kibana in tenant Namespaces. However, the LogStorage
 	// resource is still cluster-scoped (since ES is a cluster-wide resource), so we need to look elsewhere to determine
 	// which tenant namespaces require a Kibana instance. We use the tenant API to determine the set of namespaces that should have Kibana.
-	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	tenant, tenantID, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -378,11 +378,19 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 			}
 		}
 
-		var elasticChallengerUser corev1.Secret
-		err = r.client.Get(ctx, client.ObjectKey{Name: render.ElasticsearchAdminUserSecret, Namespace: common.OperatorNamespace()}, &elasticChallengerUser)
+		clusterIDConfigMap := corev1.ConfigMap{}
+		clusterIDConfigMapKey := client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}
+		err = r.client.Get(ctx, clusterIDConfigMapKey, &clusterIDConfigMap)
 		if err != nil {
-			reqLogger.Error(err, "Failed to read external user secret")
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for external Elasticsearch user to be available", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Waiting for ConfigMap %s/%s to be available", clusterIDConfigMapKey.Namespace, clusterIDConfigMapKey.Name),
+				nil, reqLogger)
+			return reconcile.Result{}, err
+		}
+		clusterID, ok := clusterIDConfigMap.Data["cluster-id"]
+		if !ok {
+			err = fmt.Errorf("%s/%s ConfigMap does not contain expected 'cluster-id' key",
+				clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("%v", err), err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -413,8 +421,8 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 				Tenant:                      tenant,
 				Namespace:                   kibanaHelper.InstallNamespace(),
 				ChallengerClientCertificate: challengerClientCertificate,
-				ExternalElasticEndpoint:     elasticURL.String(),
-				ElasticChallengerUser:       &elasticChallengerUser,
+				ExternalElasticURL:          elasticURL,
+				KibanaUsername:              utils.KibanaUser(clusterID, tenantID).Username,
 			}),
 		)
 	}
@@ -422,15 +430,14 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	flowShards := logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
 	clusterConfig := relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
-	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
-	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets)
-	if err := hdler.CreateOrUpdateOrDelete(ctx, externalElasticsearch, r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-		return reconcile.Result{}, err
+	if !r.multiTenant {
+		hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
+		externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets)
+		if err := hdler.CreateOrUpdateOrDelete(ctx, externalElasticsearch, r.status); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
-
-	// In standard installs, the LogStorage owns the external elastic. For multi-tenant, it's owned by the Tenant instance.
-	tenantHandler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
 
 	if r.multiTenant && kibanaEnabled {
 		// ECK will be deployed per management cluster and will be configured
@@ -445,11 +452,14 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 			UsePSP:             r.usePSP,
 			Tenant:             tenant,
 		})
+		hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 		if err := hdler.CreateOrUpdateOrDelete(ctx, eck, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
+		// In standard installs, the LogStorage owns the external elastic. For multi-tenant, it's owned by the Tenant instance.
+		tenantHandler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
 		for _, component := range kibanaComponents {
 			if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)

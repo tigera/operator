@@ -468,23 +468,36 @@ func (r *UsersCleanupController) cleanupStaleUsers(ctx context.Context, logger l
 		lu := utils.LinseedUser(clusterID, t.Spec.ID)
 		dashboardsUser := utils.DashboardUser(clusterID, t.Spec.ID)
 		kibanaUser := utils.KibanaUser(clusterID, t.Spec.ID)
+		deletedUsers := 0
 		for _, user := range allESUsers {
-			if user.Username == lu.Username || user.Username == dashboardsUser.Username || user.Username == kibanaUser.Username {
-				err = esClient.DeleteUser(ctx, &user)
+			switch user.Username {
+			case lu.Username, dashboardsUser.Username:
+				err = esClient.DeleteUser(ctx, &user, false)
 				if err != nil {
 					logger.Error(err, "Failed to delete elastic user")
+				} else {
+					deletedUsers++
 				}
-
-				// Remove the finalizer from the tenant to allow it to be deleted.
-				if stringsutil.StringInSlice(userCleanupFinalizer, t.GetFinalizers()) {
-					t.SetFinalizers(stringsutil.RemoveStringInSlice(userCleanupFinalizer, t.GetFinalizers()))
-					if err = r.client.Update(ctx, &t); err != nil {
-						logger.Error(err, "Failed to remove user cleanup finalizer from tenant")
-					}
+			case kibanaUser.Username:
+				err = esClient.DeleteUser(ctx, &user, true)
+				if err != nil {
+					logger.Error(err, "Failed to delete elastic user")
+				} else {
+					deletedUsers++
 				}
-				break
 			}
 		}
+
+		if deletedUsers > 0 {
+			// Remove the finalizer from the tenant to allow it to be deleted.
+			if stringsutil.StringInSlice(userCleanupFinalizer, t.GetFinalizers()) {
+				t.SetFinalizers(stringsutil.RemoveStringInSlice(userCleanupFinalizer, t.GetFinalizers()))
+				if err = r.client.Update(ctx, &t); err != nil {
+					logger.Error(err, "Failed to remove user cleanup finalizer from tenant")
+				}
+			}
+		}
+
 	}
 	return nil
 }

@@ -288,7 +288,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		// This is the configuration for multi-tenant and single tenant with external elastic
 		// The Tenant resource must specify the Kibana endpoint in both cases. For multi-tenant
 		// it should be the service inside the tenant namespace. For single tenant it should be the
-		// URL that points to external Kibana  Determine the host and port from the URL.
+		// URL that points to external Kibana. Determine the host and port from the URL.
 		url, err := url.Parse(tenant.Spec.Kibana.URL)
 		if err != nil {
 			reqLogger.Error(err, "Kibana URL is invalid")

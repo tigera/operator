@@ -114,7 +114,7 @@ type ElasticsearchClientCreator func(client client.Client, ctx context.Context, 
 type ElasticClient interface {
 	SetILMPolicies(context.Context, *operatorv1.LogStorage) error
 	CreateUser(context.Context, *User) error
-	DeleteUser(context.Context, *User) error
+	DeleteUser(ctx context.Context, user *User, keepRoles bool) error
 	GetUsers(ctx context.Context) ([]User, error)
 }
 
@@ -363,9 +363,11 @@ func (es *esClient) deleteRole(ctx context.Context, role Role) error {
 	return nil
 }
 
-func (es *esClient) DeleteUser(ctx context.Context, user *User) error {
-	if err := es.DeleteRoles(ctx, user.Roles); err != nil {
-		return err
+func (es *esClient) DeleteUser(ctx context.Context, user *User, keepRoles bool) error {
+	if !keepRoles {
+		if err := es.DeleteRoles(ctx, user.Roles); err != nil {
+			return err
+		}
 	}
 
 	_, err := es.client.XPackSecurityDeleteUser(user.Username).Do(ctx)

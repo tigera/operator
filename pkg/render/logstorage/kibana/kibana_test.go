@@ -16,6 +16,7 @@ package kibana_test
 
 import (
 	"context"
+	"net/url"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -38,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -508,14 +508,14 @@ var _ = Describe("Kibana rendering tests", func() {
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				Provider:                operatorv1.ProviderNone,
-				ClusterDomain:           dns.DefaultClusterDomain,
-				TrustedBundle:           bundle,
-				UsePSP:                  true,
-				Enabled:                 true,
-				Namespace:               tenant.Namespace,
-				Tenant:                  tenant,
-				ExternalElasticEndpoint: "https://external-elastic-endpoint:443",
+				Provider:           operatorv1.ProviderNone,
+				ClusterDomain:      dns.DefaultClusterDomain,
+				TrustedBundle:      bundle,
+				UsePSP:             true,
+				Enabled:            true,
+				Namespace:          tenant.Namespace,
+				Tenant:             tenant,
+				ExternalElasticURL: toURL("https://external-elastic-endpoint:443"),
 				ChallengerClientCertificate: &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      logstorage.ExternalCertsSecret,
@@ -526,15 +526,7 @@ var _ = Describe("Kibana rendering tests", func() {
 						"client.key": []byte(``),
 					},
 				},
-				ElasticChallengerUser: &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      render.ElasticsearchAdminUserSecret,
-						Namespace: common.OperatorNamespace(),
-					},
-					Data: map[string][]byte{
-						"tigera-mgmt": []byte(``),
-					},
-				},
+				KibanaUsername: "kibana-user",
 			}
 		})
 
@@ -549,7 +541,6 @@ var _ = Describe("Kibana rendering tests", func() {
 				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: kibana.PolicyName, Namespace: tenant.Namespace}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-kibana", Namespace: tenant.Namespace}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: logstorage.ExternalCertsSecret, Namespace: tenant.Namespace}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchAdminUserSecret, Namespace: tenant.Namespace}},
 				&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.CRName, Namespace: tenant.Namespace}},
 			}
 			rtest.ExpectResources(createResources, expectedResources)
@@ -627,7 +618,7 @@ var _ = Describe("Kibana rendering tests", func() {
 				},
 				corev1.EnvVar{
 					Name:  "ES_GATEWAY_ELASTIC_ENDPOINT",
-					Value: cfg.ExternalElasticEndpoint,
+					Value: cfg.ExternalElasticURL.String(),
 				},
 				corev1.EnvVar{
 					Name:  "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH",
@@ -644,21 +635,6 @@ var _ = Describe("Kibana rendering tests", func() {
 				corev1.EnvVar{
 					Name:  "ES_GATEWAY_ENABLE_ELASTIC_MUTUAL_TLS",
 					Value: "true",
-				},
-				corev1.EnvVar{
-					Name:  "ES_GATEWAY_ELASTIC_USERNAME",
-					Value: "tigera-mgmt",
-				},
-				corev1.EnvVar{
-					Name: "ES_GATEWAY_ELASTIC_PASSWORD",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: render.ElasticsearchAdminUserSecret,
-							},
-							Key: "tigera-mgmt",
-						},
-					},
 				},
 			))
 
@@ -700,7 +676,7 @@ var _ = Describe("Kibana rendering tests", func() {
 			Expect(kibanaCR.Spec.Config.Data).NotTo(BeEmpty())
 			Expect(kibanaCR.Spec.Config.Data).To(HaveKeyWithValue("elasticsearch.hosts", "http://localhost:8080"))
 			Expect(kibanaCR.Spec.Config.Data).To(HaveKeyWithValue("elasticsearch.ssl.verificationMode", "none"))
-			Expect(kibanaCR.Spec.Config.Data).To(HaveKeyWithValue("elasticsearch.username", kibana.MultiTenantKibanaUser))
+			Expect(kibanaCR.Spec.Config.Data).To(HaveKeyWithValue("elasticsearch.username", "kibana-user"))
 
 			Expect(kibanaCR.Spec.SecureSettings).NotTo(BeNil())
 			Expect(kibanaCR.Spec.SecureSettings).To(ContainElement(
@@ -708,6 +684,11 @@ var _ = Describe("Kibana rendering tests", func() {
 		})
 	})
 })
+
+func toURL(val string) *url.URL {
+	url, _ := url.Parse(val)
+	return url
+}
 
 func getX509Certs(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
 	scheme := runtime.NewScheme()

@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
@@ -40,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -57,10 +59,12 @@ const (
 	PolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "kibana-access"
 	Port         = 5601
 
+	// TODO: ALINA Check annotations
 	TLSAnnotationHash = "hash.operator.tigera.io/kb-secrets"
 
-	TimeFilter         = "_g=(time:(from:now-24h,to:now))"
-	FlowsDashboardName = "Calico Enterprise Flow Logs"
+	TimeFilter                       = "_g=(time:(from:now-24h,to:now))"
+	FlowsDashboardName               = "Calico Enterprise Flow Logs"
+	MultiTenantCredentialsSecretName = "tigera-kibana-elasticsearch-credentials"
 )
 
 var (
@@ -93,16 +97,25 @@ type Configuration struct {
 	TrustedBundle   certificatemanagement.TrustedBundleRO
 	UnusedTLSSecret *corev1.Secret
 	Enabled         bool
+	Tenant          *operatorv1.Tenant
+	Namespace       string
+
+	// Secret containing client certificate and key for connecting to the Elastic cluster. If configured,
+	// mTLS is used between Challenger and the external Elastic cluster.
+	ChallengerClientCertificate *corev1.Secret
+	ExternalElasticURL          *url.URL
+	KibanaUsername              string
 
 	// Whether the cluster supports pod security policies.
 	UsePSP bool
 }
 
 type kibana struct {
-	cfg           *Configuration
-	kibanaSecrets []*corev1.Secret
-	kibanaImage   string
-	csrImage      string
+	cfg             *Configuration
+	kibanaSecrets   []*corev1.Secret
+	kibanaImage     string
+	challengerImage string
+	csrImage        string
 }
 
 func (k *kibana) ResolveImages(is *operatorv1.ImageSet) error {
@@ -119,6 +132,13 @@ func (k *kibana) ResolveImages(is *operatorv1.ImageSet) error {
 	k.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
+	}
+
+	if k.cfg.Tenant.MultiTenant() {
+		k.challengerImage, err = components.GetReference(components.ComponentESGateway, reg, path, prefix, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
 	}
 
 	if k.cfg.Installation.CertificateManagement != nil {
@@ -168,20 +188,27 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 		// - securityContext.capabilities.drop=["ALL"]
 		// - securityContext.runAsNonRoot=true
 		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-		toCreate = append(toCreate, render.CreateNamespace(Namespace, k.cfg.Installation.KubernetesProvider, render.PSSBaseline))
-		toCreate = append(toCreate, k.allowTigeraPolicy())
-		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(Namespace))
-		toCreate = append(toCreate, k.serviceAccount())
-
-		if len(k.cfg.PullSecrets) > 0 {
-			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(Namespace, k.cfg.PullSecrets...)...)...)
+		// We only create the certain objects in a zero tenant or single tenant installation
+		// For example, tigera-kibana namespace, pull secrets and default deny
+		// For multi-tenancy, these are already created by other renderers
+		if !k.cfg.Tenant.MultiTenant() {
+			toCreate = append(toCreate, render.CreateNamespace(Namespace, k.cfg.Installation.KubernetesProvider, render.PSSBaseline))
+			if len(k.cfg.PullSecrets) > 0 {
+				toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(Namespace, k.cfg.PullSecrets...)...)...)
+			}
+			toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(Namespace))
 		}
-
+		toCreate = append(toCreate, k.allowTigeraPolicy())
+		toCreate = append(toCreate, k.serviceAccount())
 		if len(k.kibanaSecrets) > 0 {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(k.kibanaSecrets...)...)
 		}
-
 		toCreate = append(toCreate, k.kibanaCR())
+		// TODO: ALINA: I think we do the same in Linseed
+		if k.cfg.ChallengerClientCertificate != nil {
+			// If using External ES, we need to copy the client certificates into the tenant namespace to be mounted.
+			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(k.cfg.Namespace, k.cfg.ChallengerClientCertificate)...)...)
+		}
 	} else {
 		toDelete = append(toDelete, k.kibanaCR())
 	}
@@ -194,7 +221,7 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 		if k.cfg.KibanaKeyPair != nil && k.cfg.KibanaKeyPair.UseCertificateManagement() {
 			// We need to render a secret. It won't ever be used by Kibana for TLS, but is needed to pass ECK's checks.
 			// If the secret changes / gets reconciled, it will not trigger a re-render of Kibana.
-			unusedSecret := k.cfg.KibanaKeyPair.Secret(Namespace)
+			unusedSecret := k.cfg.KibanaKeyPair.Secret(k.cfg.Namespace)
 			unusedSecret.Data = k.cfg.UnusedTLSSecret.Data
 			toCreate = append(toCreate, unusedSecret)
 		}
@@ -213,7 +240,7 @@ func (k *kibana) serviceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ObjectName,
-			Namespace: Namespace,
+			Namespace: k.cfg.Namespace,
 		},
 	}
 }
@@ -230,7 +257,6 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	}
 
 	config := map[string]interface{}{
-		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
 		"server":                             server,
 		"xpack.security.session.lifespan":    "8h",
 		"xpack.security.session.idleTimeout": "30m",
@@ -241,6 +267,14 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		// Telemetry is unwanted for the majority of our customers and if enabled can cause blocked flows. This flag
 		// can still be overwritten in the Kibana Settings if the user desires it.
 		"telemetry.optIn": false,
+	}
+
+	if k.cfg.Tenant.MultiTenant() {
+		config["elasticsearch.hosts"] = "http://localhost:8080"
+		config["elasticsearch.ssl.verificationMode"] = "none"
+		config["elasticsearch.username"] = k.cfg.KibanaUsername
+	} else {
+		config["elasticsearch.ssl.certificateAuthorities"] = []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"}
 	}
 
 	var initContainers []corev1.Container
@@ -258,8 +292,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 			render.ElasticsearchServiceName,
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
-			dns.GetServiceDNSNames(ServiceName, Namespace, k.cfg.ClusterDomain),
-			Namespace)
+			dns.GetServiceDNSNames(ServiceName, k.cfg.Namespace, k.cfg.ClusterDomain),
+			k.cfg.Namespace)
 
 		initContainers = append(initContainers, csrInitContainer)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
@@ -279,7 +313,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
-			})
+			},
+		)
 	}
 
 	count := int32(1)
@@ -287,11 +322,95 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		count = *k.cfg.Installation.ControlPlaneReplicas
 	}
 
+	containers := []corev1.Container{
+		{
+			Name: "kibana",
+			ReadinessProbe: &corev1.Probe{
+				ProbeHandler: corev1.ProbeHandler{
+					HTTPGet: &corev1.HTTPGetAction{
+						Path: fmt.Sprintf("/%s/login", BasePath),
+						Port: intstr.IntOrString{
+							IntVal: Port,
+						},
+						Scheme: corev1.URISchemeHTTPS,
+					},
+				},
+			},
+			SecurityContext: securitycontext.NewNonRootContext(),
+			VolumeMounts:    volumeMounts,
+		},
+	}
+
+	if k.cfg.Tenant.MultiTenant() {
+		volumes = append(volumes, k.cfg.TrustedBundle.Volume())
+		volumeMounts = append(volumeMounts, k.cfg.TrustedBundle.VolumeMounts(k.SupportedOSType())...)
+		if k.cfg.ChallengerClientCertificate != nil {
+			// Add a volume for the required client certificate and key.
+			volumes = append(volumes, corev1.Volume{
+				Name: logstorage.ExternalCertsVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: logstorage.ExternalCertsSecret,
+					},
+				},
+			})
+			volumeMounts = append(volumeMounts, corev1.VolumeMount{
+				Name:      logstorage.ExternalCertsVolumeName,
+				MountPath: "/certs/elasticsearch",
+				ReadOnly:  true,
+			})
+		}
+
+		containers = append(containers, corev1.Container{
+			Name: "challenger",
+			Env: []corev1.EnvVar{
+				{
+					Name:  "ES_GATEWAY_LOG_LEVEL",
+					Value: "INFO",
+				},
+				{
+					Name:  "ES_GATEWAY_KIBANA_CATCH_ALL_ROUTE",
+					Value: "/",
+				},
+				{
+					Name:  "ES_GATEWAY_ELASTIC_ENDPOINT",
+					Value: k.cfg.ExternalElasticURL.String(),
+				},
+				{
+					Name:  "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH",
+					Value: k.cfg.TrustedBundle.MountPath(),
+				},
+				{
+					Name:  "ES_GATEWAY_ELASTIC_CLIENT_KEY_PATH",
+					Value: "/certs/elasticsearch/client.key",
+				},
+				{
+					Name:  "ES_GATEWAY_ELASTIC_CLIENT_CERT_PATH",
+					Value: "/certs/elasticsearch/client.crt",
+				},
+				{
+					Name:  "ES_GATEWAY_ENABLE_ELASTIC_MUTUAL_TLS",
+					Value: "true",
+				},
+				{
+					Name:  "TENANT_ID",
+					Value: k.cfg.Tenant.Spec.ID,
+				},
+			},
+			Command: []string{
+				"/usr/bin/es-gateway", "-run-as-challenger",
+			},
+			Image:           k.challengerImage,
+			SecurityContext: securitycontext.NewNonRootContext(),
+			VolumeMounts:    volumeMounts,
+		})
+	}
+
 	kibana := &kbv1.Kibana{
 		TypeMeta: metav1.TypeMeta{Kind: "Kibana", APIVersion: "kibana.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CRName,
-			Namespace: Namespace,
+			Namespace: k.cfg.Namespace,
 			Labels: map[string]string{
 				"k8s-app": CRName,
 			},
@@ -310,13 +429,9 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 					},
 				},
 			},
-			ElasticsearchRef: cmnv1.ObjectSelector{
-				Name:      render.ElasticsearchName,
-				Namespace: render.ElasticsearchNamespace,
-			},
 			PodTemplate: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: Namespace,
+					Namespace: k.cfg.Namespace,
 					Annotations: map[string]string{
 						TLSAnnotationHash: rmeta.SecretsAnnotationHash(k.kibanaSecrets...),
 					},
@@ -332,26 +447,26 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 					Tolerations:                  k.cfg.Installation.ControlPlaneTolerations,
 					InitContainers:               initContainers,
 					AutomountServiceAccountToken: &automountToken,
-					Containers: []corev1.Container{{
-						Name: "kibana",
-						ReadinessProbe: &corev1.Probe{
-							ProbeHandler: corev1.ProbeHandler{
-								HTTPGet: &corev1.HTTPGetAction{
-									Path: fmt.Sprintf("/%s/login", BasePath),
-									Port: intstr.IntOrString{
-										IntVal: Port,
-									},
-									Scheme: corev1.URISchemeHTTPS,
-								},
-							},
-						},
-						SecurityContext: securitycontext.NewNonRootContext(),
-						VolumeMounts:    volumeMounts,
-					}},
-					Volumes: volumes,
+					Containers:                   containers,
+					Volumes:                      volumes,
 				},
 			},
 		},
+	}
+
+	if !k.cfg.Tenant.MultiTenant() {
+		kibana.Spec.ElasticsearchRef = cmnv1.ObjectSelector{
+			Name:      render.ElasticsearchName,
+			Namespace: render.ElasticsearchNamespace,
+		}
+	}
+
+	if k.cfg.Tenant.MultiTenant() {
+		kibana.Spec.SecureSettings = []cmnv1.SecretSource{
+			{
+				SecretName: MultiTenantCredentialsSecretName,
+			},
+		}
 	}
 
 	if k.cfg.Installation.ControlPlaneReplicas != nil && *k.cfg.Installation.ControlPlaneReplicas > 1 {
@@ -398,7 +513,7 @@ func (k *kibana) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 			{
 				Kind:      "ServiceAccount",
 				Name:      ObjectName,
-				Namespace: Namespace,
+				Namespace: k.cfg.Namespace,
 			},
 		},
 	}
@@ -410,14 +525,8 @@ func (k *kibana) kibanaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 
 // Allow access to Kibana
 func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      v3.EntityRule{},
-			Destination: render.ElasticsearchEntityRule,
-		},
-	}
+	networkPolicyHelper := networkpolicy.Helper(k.cfg.Tenant.MultiTenant(), k.cfg.Namespace)
+	var egressRules []v3.Rule
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, k.cfg.Provider == operatorv1.ProviderOpenShift)
 	egressRules = append(egressRules, []v3.Rule{
 		{
@@ -425,66 +534,107 @@ func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
-		},
 	}...)
+
+	if k.cfg.Tenant.MultiTenant() {
+		// Allow egress traffic to the external Elasticsearch.
+		egressRules = append(egressRules,
+			v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Ports:   []numorstring.Port{{MinPort: 443, MaxPort: 443}},
+					Domains: []string{k.cfg.ExternalElasticURL.Hostname()},
+				},
+			},
+		)
+	} else {
+		// Allow egress traffic to ES Gateway and Elastic
+		egressRules = append(egressRules,
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      v3.EntityRule{},
+				Destination: render.ElasticsearchEntityRule,
+			},
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
+			})
+	}
 
 	kibanaPortIngressDestination := v3.EntityRule{
 		Ports: networkpolicy.Ports(Port),
 	}
+
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source: v3.EntityRule{
+				// This policy allows access to Kibana from anywhere.
+				Nets: []string{"0.0.0.0/0"},
+			},
+			Destination: kibanaPortIngressDestination,
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source: v3.EntityRule{
+				// This policy allows access to Kibana from anywhere.
+				Nets: []string{"::/0"},
+			},
+			Destination: kibanaPortIngressDestination,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkPolicyHelper.DashboardInstallerSourceEntityRule(),
+			Destination: kibanaPortIngressDestination,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      render.ECKOperatorSourceEntityRule,
+			Destination: kibanaPortIngressDestination,
+		},
+	}
+
+	if k.cfg.Tenant.MultiTenant() {
+		ingressRules = append(ingressRules,
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkPolicyHelper.ManagerSourceEntityRule(),
+				Destination: kibanaPortIngressDestination,
+			})
+	} else {
+		// Zero and single tenant with internal elastic will have all Kibana
+		// traffic proxied via ES Gateway
+		ingressRules = append(ingressRules,
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
+				Destination: kibanaPortIngressDestination,
+			},
+		)
+	}
+
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PolicyName,
-			Namespace: Namespace,
+			Namespace: k.cfg.Namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(CRName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source: v3.EntityRule{
-						// This policy allows access to Kibana from anywhere.
-						Nets: []string{"0.0.0.0/0"},
-					},
-					Destination: kibanaPortIngressDestination,
-				},
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source: v3.EntityRule{
-						// This policy allows access to Kibana from anywhere.
-						Nets: []string{"::/0"},
-					},
-					Destination: kibanaPortIngressDestination,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.DefaultHelper().ESGatewaySourceEntityRule(),
-					Destination: kibanaPortIngressDestination,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      networkpolicy.DefaultHelper().DashboardInstallerSourceEntityRule(),
-					Destination: kibanaPortIngressDestination,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.ECKOperatorSourceEntityRule,
-					Destination: kibanaPortIngressDestination,
-				},
-			},
-			Egress: egressRules,
+			Ingress:  ingressRules,
+			Egress:   egressRules,
 		},
 	}
 }

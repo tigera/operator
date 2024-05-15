@@ -63,16 +63,21 @@ var _ = Describe("LogStorage cleanup controller", func() {
 
 		staleLinseedUser := utils.LinseedUser(clusterID1, tenantID1)
 		staleDashboardsUser := utils.DashboardUser(clusterID1, tenantID1)
+		staleKibanaUser := utils.KibanaUser(clusterID1, tenantID1)
 
 		esTestUsers := []utils.User{
 			*staleLinseedUser,
 			*staleDashboardsUser,
+			*staleKibanaUser,
 			*utils.LinseedUser(clusterID1, tenantID2),
 			*utils.DashboardUser(clusterID1, tenantID2),
+			*utils.KibanaUser(clusterID1, tenantID2),
 			*utils.LinseedUser(clusterID2, tenantID1),
 			*utils.DashboardUser(clusterID2, tenantID1),
+			*utils.KibanaUser(clusterID2, tenantID1),
 			*utils.LinseedUser(clusterID2, tenantID2),
 			*utils.DashboardUser(clusterID2, tenantID2),
+			*utils.KibanaUser(clusterID2, tenantID2),
 		}
 
 		testESClient.On("GetUsers", ctx).Return(esTestUsers, nil)

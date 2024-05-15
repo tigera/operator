@@ -429,7 +429,7 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 func KibanaEnabled(tenant *operatorv1.Tenant, installation *operatorv1.InstallationSpec) bool {
 	enableKibana := !operatorv1.IsFIPSModeEnabled(installation.FIPSMode)
 	if tenant.MultiTenant() {
-		enableKibana = false
+		return tenant.IsKibanaEnabled()
 	}
 	return enableKibana
 }
@@ -611,9 +611,13 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		keyPath, certPath = c.cfg.InternalTLSKeyPair.VolumeMountKeyFilePath(), c.cfg.InternalTLSKeyPair.VolumeMountCertificateFilePath()
 	}
 
+	kibanaEndpoint := rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)
+	if c.cfg.Tenant.MultiTenant() {
+		kibanaEndpoint = fmt.Sprintf("https://tigera-secure-kb-http.%s.svc.cluster.local:5601", c.cfg.Namespace)
+	}
 	env := []corev1.EnvVar{
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
-		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
+		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: kibanaEndpoint},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
@@ -959,6 +963,15 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 		Protocol:    &networkpolicy.TCPProtocol,
 		Destination: networkpolicy.PrometheusEntityRule,
 	})
+
+	if c.cfg.Tenant.MultiTenant() {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicyHelper.KibanaEntityRule(),
+		})
+
+	}
 
 	ingressRules := []v3.Rule{
 		{

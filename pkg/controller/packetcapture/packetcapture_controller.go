@@ -209,7 +209,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
-	includeV3NetworkPolicy := true
+	includeV3NetworkPolicy := false
 	if r.tierWatchReady.IsReady() {
 		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 			if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {

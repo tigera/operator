@@ -285,6 +285,45 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
+		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			r := ReconcilePacketCapture{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+
+			Expect(err).ShouldNot(HaveOccurred())
+			policies := v3.NetworkPolicyList{}
+			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should omit allow-tigera policy and not degrade when tier watch is not ready", func() {
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+			notReady := &utils.ReadyFlag{}
+			r := ReconcilePacketCapture{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      notReady,
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+
+			Expect(err).ShouldNot(HaveOccurred())
+			policies := v3.NetworkPolicyList{}
+			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
 		It("should render allow-tigera policy when tier and tier watch are ready", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
@@ -295,37 +334,6 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(1))
 			Expect(policies.Items[0].Name).To(Equal("allow-tigera.tigera-packetcapture"))
-		})
-	})
-
-	Context("allow-tigera reconciliation", func() {
-		var readyFlag *utils.ReadyFlag
-
-		BeforeEach(func() {
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("SetMetaData", mock.Anything).Return()
-
-			readyFlag = &utils.ReadyFlag{}
-			readyFlag.MarkAsReady()
-			r = ReconcilePacketCapture{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      readyFlag,
-			}
-			Expect(cli.Create(ctx, installation)).To(BeNil())
-		})
-
-		It("should wait if allow-tigera tier is unavailable", func() {
-			test.DeleteAllowTigeraTierAndExpectWait(ctx, cli, &r, mockStatus)
-		})
-
-		It("should wait if tier watch is not ready", func() {
-			r.tierWatchReady = &utils.ReadyFlag{}
-			test.ExpectWaitForTierWatch(ctx, &r, mockStatus)
 		})
 	})
 

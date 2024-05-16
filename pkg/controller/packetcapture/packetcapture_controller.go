@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -207,20 +208,17 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
-	if !r.tierWatchReady.IsReady() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", err, reqLogger)
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-	}
-
 	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for allow-tigera tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	includeV3NetworkPolicy := false
+	if r.tierWatchReady.IsReady() {
+		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+			if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		} else {
+			includeV3NetworkPolicy = true
 		}
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying allow-tigera tier", err, reqLogger)
-		return reconcile.Result{}, err
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -304,8 +302,10 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		}),
 	}
 
-	if pcPolicy := render.PacketCaptureAPIPolicy(packetCaptureApiCfg); pcPolicy != nil {
-		components = append(components, pcPolicy)
+	if includeV3NetworkPolicy {
+		if pcPolicy := render.PacketCaptureAPIPolicy(packetCaptureApiCfg); pcPolicy != nil {
+			components = append(components, pcPolicy)
+		}
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {

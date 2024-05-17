@@ -164,7 +164,7 @@ var _ = Describe("Linseed rendering tests", func() {
 
 			// The deployment should have the hash annotation set, as well as a volume and volume mount for the client secret.
 			Expect(d.Spec.Template.Annotations["hash.operator.tigera.io/elastic-client-secret"]).To(Equal("ae1a6776a81bf1fc0ee4aac936a90bd61a07aea7"))
-			Expect(d.Spec.Template.Annotations["hash.operator.tigera.io/elastic-client-credential-secret"]).To(Equal("465c25d580ea36d8e7cda470a0c34afd05eae6f7:wq"))
+			Expect(d.Spec.Template.Annotations[fmt.Sprintf("hash.operator.tigera.io/%s", render.ElasticsearchLinseedUserSecret)]).To(Equal("465c25d580ea36d8e7cda470a0c34afd05eae6f7"))
 			Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(corev1.Volume{
 				Name: logstorage.ExternalCertsVolumeName,
 				VolumeSource: corev1.VolumeSource{

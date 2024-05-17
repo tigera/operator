@@ -136,7 +136,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		render.LinseedTokenSecret,
 		monitor.PrometheusClientTLSSecretName,
 		render.ElasticsearchLinseedUserSecret,
-		render.ElasticsearchLinseedUserSecret,
 	}
 
 	// Determine namespaces to watch.

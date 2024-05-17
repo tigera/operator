@@ -433,7 +433,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		annotations["hash.operator.tigera.io/elastic-client-secret"] = rmeta.SecretsAnnotationHash(l.cfg.ElasticClientSecret)
 	}
 	if l.cfg.ElasticClientCredentialsSecret != nil {
-		annotations["hash.operator.tigera.io/elastic-client-credential-secret"] = rmeta.SecretsAnnotationHash(l.cfg.ElasticClientCredentialsSecret)
+		annotations[fmt.Sprintf("hash.operator.tigera.io/%s", render.ElasticsearchLinseedUserSecret)] = rmeta.SecretsAnnotationHash(l.cfg.ElasticClientCredentialsSecret)
 	}
 
 	if l.cfg.TokenKeyPair != nil {

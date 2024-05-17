@@ -136,6 +136,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		render.LinseedTokenSecret,
 		monitor.PrometheusClientTLSSecretName,
 		render.ElasticsearchLinseedUserSecret,
+		render.ElasticsearchLinseedUserSecret,
 	}
 
 	// Determine namespaces to watch.
@@ -346,6 +347,15 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
+	// Get secrets needed for linseed to talk to elastic.
+	// In a zero-tenant setup, this user is created by es-kubecontrollers
+	// In a multi-tenant setup, this user is crated by users controllers
+	linseedElasticUserCredentials, err := utils.GetSecret(ctx, r.client, render.ElasticsearchLinseedUserSecret, helper.TruthNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get linseed elastic credentials secret", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
@@ -418,24 +428,25 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	cfg := &linseed.Config{
-		Installation:        install,
-		PullSecrets:         pullSecrets,
-		Namespace:           helper.InstallNamespace(),
-		BindNamespaces:      bindNamespaces,
-		TrustedBundle:       trustedBundle,
-		ClusterDomain:       r.clusterDomain,
-		KeyPair:             linseedKeyPair,
-		TokenKeyPair:        tokenKeyPair,
-		UsePSP:              r.usePSP,
-		ESClusterConfig:     esClusterConfig,
-		HasDPIResource:      hasDPIResource,
-		ManagementCluster:   managementCluster != nil,
-		Tenant:              tenant,
-		ExternalElastic:     r.elasticExternal,
-		ElasticHost:         elasticHost,
-		ElasticPort:         elasticPort,
-		ElasticClientSecret: esClientSecret,
-		LogStorage:          logStorage,
+		Installation:                   install,
+		PullSecrets:                    pullSecrets,
+		Namespace:                      helper.InstallNamespace(),
+		BindNamespaces:                 bindNamespaces,
+		TrustedBundle:                  trustedBundle,
+		ClusterDomain:                  r.clusterDomain,
+		KeyPair:                        linseedKeyPair,
+		TokenKeyPair:                   tokenKeyPair,
+		UsePSP:                         r.usePSP,
+		ESClusterConfig:                esClusterConfig,
+		HasDPIResource:                 hasDPIResource,
+		ManagementCluster:              managementCluster != nil,
+		Tenant:                         tenant,
+		ExternalElastic:                r.elasticExternal,
+		ElasticHost:                    elasticHost,
+		ElasticPort:                    elasticPort,
+		ElasticClientSecret:            esClientSecret,
+		ElasticClientCredentialsSecret: linseedElasticUserCredentials,
+		LogStorage:                     logStorage,
 	}
 	linseedComponent := linseed.Linseed(cfg)
 

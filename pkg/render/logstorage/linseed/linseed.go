@@ -123,6 +123,11 @@ type Config struct {
 	// mTLS is used between Linseed and the external Elastic cluster.
 	ElasticClientSecret *corev1.Secret
 
+	// Secret containing the user linseed connects to Elasticsearch
+	// In a zero tenant setup, es-kubecontrollers create this secret
+	// In a multi-tenant setup, users controllers create this secret
+	ElasticClientCredentialsSecret *corev1.Secret
+
 	ElasticHost string
 	ElasticPort string
 
@@ -426,6 +431,9 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	annotations[l.cfg.KeyPair.HashAnnotationKey()] = l.cfg.KeyPair.HashAnnotationValue()
 	if l.cfg.ElasticClientSecret != nil {
 		annotations["hash.operator.tigera.io/elastic-client-secret"] = rmeta.SecretsAnnotationHash(l.cfg.ElasticClientSecret)
+	}
+	if l.cfg.ElasticClientCredentialsSecret != nil {
+		annotations["hash.operator.tigera.io/elastic-client-credential-secret"] = rmeta.SecretsAnnotationHash(l.cfg.ElasticClientCredentialsSecret)
 	}
 
 	if l.cfg.TokenKeyPair != nil {

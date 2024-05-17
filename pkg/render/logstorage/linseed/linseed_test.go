@@ -92,21 +92,35 @@ var _ = Describe("Linseed rendering tests", func() {
 			replicas = 2
 			kp, tokenKP, bundle := getTLS(installation)
 
+			// Create the ES user secret. Generally this is created by either es-kube-controllers or the user controller in this operator.
+			userSecret := &corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.ElasticsearchLinseedUserSecret,
+					Namespace: render.ElasticsearchNamespace,
+				},
+				Data: map[string][]byte{
+					"username": []byte("test-username"),
+					"password": []byte("test-username"),
+				},
+			}
+
 			cfg = &Config{
 				Installation: installation,
 				PullSecrets: []*corev1.Secret{
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				KeyPair:         kp,
-				TokenKeyPair:    tokenKP,
-				TrustedBundle:   bundle,
-				ClusterDomain:   clusterDomain,
-				UsePSP:          true,
-				ESClusterConfig: esClusterConfig,
-				Namespace:       render.ElasticsearchNamespace,
-				BindNamespaces:  []string{render.ElasticsearchNamespace},
-				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
-				ElasticPort:     "9200",
+				KeyPair:                        kp,
+				TokenKeyPair:                   tokenKP,
+				TrustedBundle:                  bundle,
+				ClusterDomain:                  clusterDomain,
+				UsePSP:                         true,
+				ESClusterConfig:                esClusterConfig,
+				Namespace:                      render.ElasticsearchNamespace,
+				BindNamespaces:                 []string{render.ElasticsearchNamespace},
+				ElasticHost:                    "tigera-secure-es-http.tigera-elasticsearch.svc",
+				ElasticPort:                    "9200",
+				ElasticClientCredentialsSecret: userSecret,
 			}
 		})
 
@@ -150,6 +164,7 @@ var _ = Describe("Linseed rendering tests", func() {
 
 			// The deployment should have the hash annotation set, as well as a volume and volume mount for the client secret.
 			Expect(d.Spec.Template.Annotations["hash.operator.tigera.io/elastic-client-secret"]).To(Equal("ae1a6776a81bf1fc0ee4aac936a90bd61a07aea7"))
+			Expect(d.Spec.Template.Annotations["hash.operator.tigera.io/elastic-client-credential-secret"]).To(Equal("465c25d580ea36d8e7cda470a0c34afd05eae6f7:wq"))
 			Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(corev1.Volume{
 				Name: logstorage.ExternalCertsVolumeName,
 				VolumeSource: corev1.VolumeSource{

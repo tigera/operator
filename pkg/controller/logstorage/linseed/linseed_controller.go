@@ -346,6 +346,19 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
+	// Query the username and password this Linseed instance should use to authenticate with Elasticsearch.
+	// For multi-tenant systems, credentials are created by the elasticsearch users controller.
+	// For single-tenant system, these are created by es-kube-controllers.
+	key = types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.InstallNamespace()}
+	credentials := corev1.Secret{}
+	if err = r.client.Get(ctx, key, &credentials); err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
+		return reconcile.Result{}, err
+	} else if errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed credential Secret %s", key), err, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+
 	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
@@ -418,24 +431,25 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	cfg := &linseed.Config{
-		Installation:        install,
-		PullSecrets:         pullSecrets,
-		Namespace:           helper.InstallNamespace(),
-		BindNamespaces:      bindNamespaces,
-		TrustedBundle:       trustedBundle,
-		ClusterDomain:       r.clusterDomain,
-		KeyPair:             linseedKeyPair,
-		TokenKeyPair:        tokenKeyPair,
-		UsePSP:              r.usePSP,
-		ESClusterConfig:     esClusterConfig,
-		HasDPIResource:      hasDPIResource,
-		ManagementCluster:   managementCluster != nil,
-		Tenant:              tenant,
-		ExternalElastic:     r.elasticExternal,
-		ElasticHost:         elasticHost,
-		ElasticPort:         elasticPort,
-		ElasticClientSecret: esClientSecret,
-		LogStorage:          logStorage,
+		Installation:                   install,
+		PullSecrets:                    pullSecrets,
+		Namespace:                      helper.InstallNamespace(),
+		BindNamespaces:                 bindNamespaces,
+		TrustedBundle:                  trustedBundle,
+		ClusterDomain:                  r.clusterDomain,
+		KeyPair:                        linseedKeyPair,
+		TokenKeyPair:                   tokenKeyPair,
+		UsePSP:                         r.usePSP,
+		ESClusterConfig:                esClusterConfig,
+		HasDPIResource:                 hasDPIResource,
+		ManagementCluster:              managementCluster != nil,
+		Tenant:                         tenant,
+		ExternalElastic:                r.elasticExternal,
+		ElasticHost:                    elasticHost,
+		ElasticPort:                    elasticPort,
+		ElasticClientSecret:            esClientSecret,
+		ElasticClientCredentialsSecret: &credentials,
+		LogStorage:                     logStorage,
 	}
 	linseedComponent := linseed.Linseed(cfg)
 

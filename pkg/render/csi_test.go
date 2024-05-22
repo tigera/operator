@@ -57,6 +57,9 @@ var _ = Describe("CSI rendering tests", func() {
 		}{
 			{name: "csi.tigera.io", ns: "", group: "storage", version: "v1", kind: "CSIDriver"},
 			{name: "csi-node-driver", ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "csi-node-driver", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "csi-node-driver", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "csi-node-driver", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 		}
 
 		comp := render.CSI(&cfg)
@@ -114,7 +117,10 @@ var _ = Describe("CSI rendering tests", func() {
 			kind    string
 		}{
 			{name: "csi.tigera.io", ns: "", group: "storage", version: "v1", kind: "CSIDriver"},
-			{name: "csi-node-driver", ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "csi-node-driver", ns: "calico-system", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "csi-node-driver", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "csi-node-driver", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "csi-node-driver", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 		}
 		comp := render.CSI(&cfg)
 		Expect(comp.ResolveImages(nil)).To(BeNil())
@@ -195,6 +201,22 @@ var _ = Describe("CSI rendering tests", func() {
 
 		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(BeEmpty())
+	})
+
+	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+		cfg.OpenShift = true
+		component := render.CSI(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		role := rtest.GetResource(resources, "csi-node-driver", "calico-system", "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
 	})
 
 	Context("With csi-node-driver DaemonSet overrides", func() {

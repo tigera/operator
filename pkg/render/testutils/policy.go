@@ -32,7 +32,7 @@ import (
 // allow-tigera policies correctly adapt for each relevant potential case. Update if new scenarios arise.
 type AllowTigeraScenario struct {
 	ManagedCluster bool
-	Openshift      bool
+	OpenShift      bool
 	DPIEnabled     bool
 }
 
@@ -100,13 +100,13 @@ func SelectPolicyByClusterTypeAndProvider(scenario AllowTigeraScenario,
 	managedOpenshiftPolicy *v3.NetworkPolicy,
 ) *v3.NetworkPolicy {
 	switch scenario {
-	case AllowTigeraScenario{ManagedCluster: false, Openshift: false}:
+	case AllowTigeraScenario{ManagedCluster: false, OpenShift: false}:
 		return unmanagedNoProviderPolicy
-	case AllowTigeraScenario{ManagedCluster: false, Openshift: true}:
+	case AllowTigeraScenario{ManagedCluster: false, OpenShift: true}:
 		return unmanagedOpenshiftPolicy
-	case AllowTigeraScenario{ManagedCluster: true, Openshift: false}:
+	case AllowTigeraScenario{ManagedCluster: true, OpenShift: false}:
 		return managedNoProviderPolicy
-	case AllowTigeraScenario{ManagedCluster: true, Openshift: true}:
+	case AllowTigeraScenario{ManagedCluster: true, OpenShift: true}:
 		return managedOpenshiftPolicy
 	default:
 		return nil
@@ -115,7 +115,7 @@ func SelectPolicyByClusterTypeAndProvider(scenario AllowTigeraScenario,
 
 // SelectPolicyByProvider simply selects a variant of a policy that varies depending on provider type only.
 func SelectPolicyByProvider(scenario AllowTigeraScenario, noProviderPolicy *v3.NetworkPolicy, openshiftProviderPolicy *v3.NetworkPolicy) *v3.NetworkPolicy {
-	if scenario.Openshift {
+	if scenario.OpenShift {
 		return openshiftProviderPolicy
 	} else {
 		return noProviderPolicy

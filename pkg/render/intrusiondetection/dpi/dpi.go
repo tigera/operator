@@ -17,8 +17,6 @@ package dpi
 import (
 	"fmt"
 
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -27,14 +25,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -53,13 +55,16 @@ type DPIConfig struct {
 	Installation       *operatorv1.InstallationSpec
 	TyphaNodeTLS       *render.TyphaNodeTLS
 	PullSecrets        []*corev1.Secret
-	Openshift          bool
+	OpenShift          bool
 	ManagedCluster     bool
 	ManagementCluster  bool
 	HasNoLicense       bool
 	HasNoDPIResource   bool
 	ClusterDomain      string
 	DPICertSecret      certificatemanagement.KeyPairInterface
+
+	// Whether the cluster supports pod security policies.
+	UsePSP bool
 }
 
 func DPI(cfg *DPIConfig) render.Component {
@@ -196,7 +201,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 }
 
 func (d *dpiComponent) dpiContainer() corev1.Container {
-	sc := securitycontext.NewRootContext(d.cfg.Openshift)
+	sc := securitycontext.NewRootContext(d.cfg.OpenShift)
 	sc.Capabilities.Add = []corev1.Capability{
 		"NET_ADMIN",
 		"NET_RAW",
@@ -397,13 +402,21 @@ func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if d.cfg.Installation.KubernetesProvider != operatorv1.ProviderOpenShift {
+	if d.cfg.UsePSP {
 		// Allow access to the pod security policy in case this is enforced on the cluster
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"policy"},
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{DeepPacketInspectionName},
+		})
+	}
+	if d.cfg.OpenShift {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.Privileged},
 		})
 	}
 	return role
@@ -471,7 +484,7 @@ func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 	}
-	egressRules = networkpolicy.AppendServiceSelectorDNSEgressRules(egressRules, d.cfg.Openshift)
+	egressRules = networkpolicy.AppendServiceSelectorDNSEgressRules(egressRules, d.cfg.OpenShift)
 
 	if d.cfg.ManagedCluster {
 		egressRules = append(egressRules, v3.Rule{

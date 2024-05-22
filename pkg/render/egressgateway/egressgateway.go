@@ -42,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 )
 
 const (
@@ -107,30 +108,23 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	objectsToCreate := append(
 		secret.ToRuntimeObjects(c.egwPullSecrets()...),
 		c.egwServiceAccount(),
+		c.egwRole(),
+		c.egwRoleBinding(),
 	)
+
+	// It is possible to have multiple egress gateway resources in different namespaces.
+	// The cluster-level psp is deleted in egressgateway_controller when no egress gateway
+	// is in the cluster.
+	if c.config.UsePSP {
+		objectsToCreate = append(objectsToCreate, PodSecurityPolicy())
+	}
+
 	if c.config.OpenShift {
 		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
 	}
 
-	var objectsToDelete []client.Object
-	if c.config.UsePSP {
-		objectsToCreate = append(objectsToCreate,
-			PodSecurityPolicy(),
-			c.egwRole(),
-			c.egwRoleBinding(),
-		)
-	} else {
-		// It is possible to have multiple egress gateway resources in different namespaces.
-		// We only delete namespaced role and role binding here. The cluster-level psp is
-		// deleted in egressgateway_controller when no egress gateway is in the cluster.
-		objectsToDelete = append(objectsToDelete,
-			c.egwRole(),
-			c.egwRoleBinding(),
-		)
-	}
-
 	objectsToCreate = append(objectsToCreate, c.egwDeployment())
-	return objectsToCreate, objectsToDelete
+	return objectsToCreate, nil
 }
 
 func (c *component) Ready() bool {
@@ -365,13 +359,13 @@ func (c *component) egwRole() *rbacv1.Role {
 		},
 	}
 
-	if c.config.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+	if c.config.OpenShift {
 		role.Rules = append(role.Rules,
 			rbacv1.PolicyRule{
 				APIGroups:     []string{"security.openshift.io"},
 				Resources:     []string{"securitycontextconstraints"},
 				Verbs:         []string{"use"},
-				ResourceNames: []string{"privileged"},
+				ResourceNames: []string{OpenShiftSCCName},
 			},
 		)
 	}
@@ -501,26 +495,12 @@ func (c *component) getSecurityContextConstraints() *ocsv1.SecurityContextConstr
 }
 
 func SecurityContextConstraints() *ocsv1.SecurityContextConstraints {
-	return &ocsv1.SecurityContextConstraints{
-		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
-		ObjectMeta:               metav1.ObjectMeta{Name: OpenShiftSCCName},
-		AllowHostDirVolumePlugin: false,
-		AllowHostIPC:             false,
-		AllowHostNetwork:         false,
-		AllowHostPID:             false,
-		AllowHostPorts:           false,
-		AllowPrivilegeEscalation: ptr.BoolToPtr(true),
-		AllowPrivilegedContainer: true,
-		AllowedCapabilities:      []corev1.Capability{corev1.Capability("NET_ADMIN"), corev1.Capability("NET_RAW")},
-		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyMustRunAs},
-		RunAsUser:                ocsv1.RunAsUserStrategyOptions{Type: ocsv1.RunAsUserStrategyRunAsAny},
-		ReadOnlyRootFilesystem:   false,
-		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
-		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
-		Users:                    []string{},
-		Volumes:                  []ocsv1.FSType{"*"},
-		SeccompProfiles:          []string{"runtime/default"},
-	}
+	scc := securitycontextconstraints.NewNonRootSecurityContextConstraints(OpenShiftSCCName, []string{})
+	scc.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
+	scc.AllowPrivilegedContainer = true
+	scc.AllowedCapabilities = []corev1.Capability{corev1.Capability("NET_ADMIN"), corev1.Capability("NET_RAW")}
+	scc.ReadOnlyRootFilesystem = false
+	return scc
 }
 
 func concatString(arr []string) string {

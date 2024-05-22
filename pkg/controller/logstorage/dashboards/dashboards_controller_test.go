@@ -18,12 +18,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/tigera/operator/pkg/render/logstorage/dashboards"
+	"k8s.io/apimachinery/pkg/types"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
-	"github.com/stretchr/testify/mock"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -111,6 +111,18 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 		ctx = context.Background()
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
+		mockStatus = &status.MockStatus{}
+		mockStatus.On("Run").Return()
+		mockStatus.On("AddDaemonsets", mock.Anything)
+		mockStatus.On("AddDeployments", mock.Anything)
+		mockStatus.On("AddStatefulSets", mock.Anything)
+		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+		mockStatus.On("AddCronJobs", mock.Anything)
+		mockStatus.On("OnCRFound").Return()
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		mockStatus.On("ClearDegraded")
+
 		// Create a basic Installation.
 		var replicas int32 = 2
 		install = &operatorv1.Installation{
@@ -150,18 +162,6 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 
 	Context("Zero tenant", func() {
 		BeforeEach(func() {
-			mockStatus = &status.MockStatus{}
-			mockStatus.On("Run").Return()
-			mockStatus.On("AddDaemonsets", mock.Anything)
-			mockStatus.On("AddDeployments", mock.Anything)
-			mockStatus.On("AddStatefulSets", mock.Anything)
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-			mockStatus.On("AddCronJobs", mock.Anything)
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("ReadyToMonitor")
-			mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
-			mockStatus.On("ClearDegraded")
-
 			// Create a CA secret for the test, and create its KeyPair.
 			cm, err := certificatemanager.Create(cli, &install.Spec, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).ShouldNot(HaveOccurred())
@@ -265,6 +265,70 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 			dashboardInstaller := test.GetContainer(dashboardJob.Spec.Template.Spec.Containers, dashboards.Name)
 			Expect(dashboardInstaller).ToNot(BeNil())
 			Expect(dashboardInstaller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s@%s", components.ComponentElasticTseeInstaller.Image, "sha256:dashboardhash")))
+		})
+	})
+
+	Context("Multi-tenant", func() {
+		var tenant *operatorv1.Tenant
+		var tenantNS string
+
+		BeforeEach(func() {
+			tenantNS = "tenant-ns-a"
+			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: tenantNS}})).ShouldNot(HaveOccurred())
+
+			tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "default",
+					Namespace: tenantNS,
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a",
+					Kibana: &operatorv1.TenantKibanaSpec{
+						URL: fmt.Sprintf("https://kibana.%s.svc:5601", tenantNS),
+					},
+				},
+			}
+			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
+
+			// Create a CA secret for the test, and create its KeyPair.
+			opts := []certificatemanager.Option{
+				certificatemanager.AllowCACreation(),
+				certificatemanager.WithTenant(tenant),
+			}
+			cm, err := certificatemanager.Create(cli, &install.Spec, dns.DefaultClusterDomain, tenantNS, opts...)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(cli.Create(ctx, cm.KeyPair().Secret(tenantNS))).ShouldNot(HaveOccurred())
+			bundle := cm.CreateTrustedBundle()
+			Expect(cli.Create(ctx, bundle.ConfigMap(tenantNS))).ShouldNot(HaveOccurred())
+
+			// Create the ES user secret. Generally this is created by either es-kube-controllers or the user controller in this operator.
+			userSecret := &corev1.Secret{}
+			userSecret.Name = dashboards.ElasticCredentialsSecret
+			userSecret.Namespace = tenantNS
+			userSecret.Data = map[string][]byte{"username": []byte("test-username"), "password": []byte("test-password")}
+			Expect(cli.Create(ctx, userSecret)).ShouldNot(HaveOccurred())
+
+			// Create the reconciler for the tests.
+			r, err = NewDashboardsControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, true, true)
+			Expect(err).ShouldNot(HaveOccurred())
+		})
+
+		It("should reconcile resources", func() {
+			// Run the reconciler.
+			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default", Namespace: tenantNS}})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result).Should(Equal(successResult))
+
+			// Check that K8s Job was created as expected. We don't need to check every resource in detail, since
+			// the render package has its own tests which cover this in more detail.
+			dashboardJob := batchv1.Job{
+				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      dashboards.Name,
+					Namespace: tenantNS,
+				},
+			}
+			Expect(test.GetResource(cli, &dashboardJob)).To(BeNil())
 		})
 	})
 })

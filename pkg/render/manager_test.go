@@ -33,7 +33,6 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -433,7 +432,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				VoltronLinseedKeyPair: voltronLinseedCert,
 				InternalTLSKeyPair:    internalTraffic,
 				Installation:          installation,
-				ClusterConfig:         &relasticsearch.ClusterConfig{},
 				Namespace:             render.ManagerNamespace,
 				TruthNamespace:        common.OperatorNamespace(),
 			}
@@ -699,14 +697,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	// renderManager passes in as few parameters as possible to render.Manager without it
 	// panicing. It accepts variations on the installspec for testing purposes.
 	renderManager := func(i *operatorv1.InstallationSpec) *appsv1.Deployment {
-		var esConfigMap *relasticsearch.ClusterConfig
-		// We only require Elastic cluster configuration when Kibana is enabled.
-		if render.KibanaEnabled(nil, i) {
-			esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
-		}
 		cfg := &render.ManagerConfiguration{
 			TrustedCertBundle:     bundle,
-			ClusterConfig:         esConfigMap,
 			TLSKeyPair:            kp,
 			VoltronLinseedKeyPair: voltronLinseedKP,
 			Installation:          i,
@@ -1109,6 +1101,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_CLAIM", Value: "tenant-a"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", tenantANamespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_KIBANA_ENDPOINT", Value: fmt.Sprintf("https://tigera-secure-kb-http.%s.svc.cluster.local:5601", tenantANamespace)}))
 			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", tenantANamespace)}))
 			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
 			Expect(esProxyEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantANamespace}))
@@ -1333,15 +1326,9 @@ func renderObjects(roc renderConfig) []client.Object {
 		roc.bindingNamespaces = []string{roc.ns}
 	}
 
-	var esConfigMap *relasticsearch.ClusterConfig
-	// We only require Elastic cluster configuration when Kibana is enabled.
-	if render.KibanaEnabled(roc.tenant, roc.installation) {
-		esConfigMap = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
-	}
 	cfg := &render.ManagerConfiguration{
 		KeyValidatorConfig:      dexCfg,
 		TrustedCertBundle:       bundle,
-		ClusterConfig:           esConfigMap,
 		TLSKeyPair:              managerTLS,
 		Installation:            roc.installation,
 		ManagementCluster:       roc.managementCluster,

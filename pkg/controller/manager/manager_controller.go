@@ -499,20 +499,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	var clusterConfig *relasticsearch.ClusterConfig
-	// We only require Elastic cluster configuration when Kibana is enabled.
-	if render.KibanaEnabled(tenant, installation) {
-		clusterConfig, err = utils.GetElasticsearchClusterConfig(context.Background(), r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
-				return reconcile.Result{}, nil
-			}
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
-			return reconcile.Result{}, err
-		}
-	}
-
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, logc)
@@ -665,7 +651,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		VoltronRouteConfig:      routeConfig,
 		KeyValidatorConfig:      keyValidatorConfig,
 		TrustedCertBundle:       trustedBundle,
-		ClusterConfig:           clusterConfig,
 		TLSKeyPair:              tlsSecret,
 		VoltronLinseedKeyPair:   linseedVoltronServerCert,
 		PullSecrets:             pullSecrets,

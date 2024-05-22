@@ -311,7 +311,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 	})
 
-	It("should create security context if platform is openshift", func() {
+	It("should create SecurityContextConstraints if platform is OpenShift", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string

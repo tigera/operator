@@ -76,7 +76,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 	// Only add default CIDRs if there are no existing pools in the cluster. If there are existing pools in the cluster,
 	// then we assume that the user has configured them correctly out-of-band and we should not install any others.
 	if currentPools == nil || len(currentPools.Items) == 0 {
-		if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
+		if instance.Spec.KubernetesProvider.IsOpenShift() {
 			// If configured to run in openshift, then also fetch the openshift configuration API.
 			log.V(1).Info("Fetching OpenShift network configuration")
 			openshiftConfig := &configv1.Network{}

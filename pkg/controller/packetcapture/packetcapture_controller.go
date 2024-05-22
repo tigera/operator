@@ -281,7 +281,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	trustedBundle := certificateManager.CreateTrustedBundle(certificates...)
 	packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
 		PullSecrets:                 pullSecrets,
-		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
+		OpenShift:                   r.provider.IsOpenShift(),
 		Installation:                installationSpec,
 		KeyValidatorConfig:          keyValidatorConfig,
 		ServerCertSecret:            packetCaptureCertSecret,

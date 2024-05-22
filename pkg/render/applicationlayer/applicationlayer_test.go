@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -64,10 +65,10 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			kind    string
 		}{
 			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
-			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 			{name: "application-layer", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 		// Should render the correct resources.
@@ -290,6 +291,21 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 	})
 
+	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+		component := applicationlayer.ApplicationLayer(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		role := rtest.GetResource(resources, "application-layer", "calico-system", "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
+	})
+
 	It("should render with custom l7 collector configuration", func() {
 		// create component with render the correct resources.
 		// Should render the correct resources.
@@ -342,6 +358,8 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			kind    string
 		}{
 			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
@@ -364,6 +382,8 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			kind    string
 		}{
 			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
@@ -496,6 +516,8 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			kind    string
 		}{
 			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: applicationlayer.ModSecurityRulesetConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},

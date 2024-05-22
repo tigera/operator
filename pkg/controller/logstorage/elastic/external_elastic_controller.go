@@ -90,7 +90,7 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 	r.status.Run(opts.ShutdownContext)
 
 	// Create a controller using the reconciler and register it with the manager to receive reconcile calls.
-	c, err := ctrlruntime.NewController("log-storage-external-es-controllerr", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("log-storage-external-es-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}

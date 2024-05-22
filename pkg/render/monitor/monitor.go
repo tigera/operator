@@ -127,7 +127,7 @@ type Config struct {
 	ClientTLSSecret          certificatemanagement.KeyPairInterface
 	ClusterDomain            string
 	TrustedCertBundle        certificatemanagement.TrustedBundle
-	Openshift                bool
+	OpenShift                bool
 	KubeControllerPort       int
 	UsePSP                   bool
 }
@@ -953,7 +953,7 @@ func (mc *monitorComponent) operatorRoleBinding() *rbacv1.RoleBinding {
 // Creates a network policy to allow traffic to Alertmanager (TCP port 9093).
 func allowTigeraAlertManagerPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{
 		// Allows all egress traffic from AlertManager.
 		Action:   v3.Allow,
@@ -1005,7 +1005,7 @@ func allowTigeraAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 			},
 		},
 	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
@@ -1044,7 +1044,7 @@ func allowTigeraAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 // Creates a network policy to allow traffic to access the Prometheus (TCP port 9095).
 func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -1129,7 +1129,7 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 // Creates a network policy to allow traffic to access through tigera-prometheus-api
 func allowTigeraPrometheusAPIPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
@@ -1164,7 +1164,7 @@ func allowTigeraPrometheusAPIPolicy(cfg *Config) *v3.NetworkPolicy {
 // Creates a network policy to allow the prometheus-operatorto access the kube-apiserver
 func allowTigeraPrometheusOperatorPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,

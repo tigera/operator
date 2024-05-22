@@ -826,7 +826,7 @@ func (c *windowsComponent) windowsDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1
 	}
 
 	var affinity *corev1.Affinity
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderAKS {
+	if c.cfg.Installation.KubernetesProvider.IsAKS() {
 		affinity = &corev1.Affinity{
 			NodeAffinity: &corev1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
@@ -840,7 +840,7 @@ func (c *windowsComponent) windowsDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1
 				},
 			},
 		}
-	} else if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS {
+	} else if c.cfg.Installation.KubernetesProvider.IsEKS() {
 		affinity = &corev1.Affinity{
 			NodeAffinity: &corev1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{

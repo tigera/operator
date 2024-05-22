@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -132,7 +132,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	c, err := controller.New("tigera-installation-controller", mgr, controller.Options{Reconciler: ri})
 	if err != nil {
-		return fmt.Errorf("Failed to create tigera-installation-controller: %w", err)
+		return fmt.Errorf("failed to create tigera-installation-controller: %w", err)
 	}
 
 	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
@@ -159,7 +159,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
 	nm, err := migration.NewCoreNamespaceMigration(mgr.GetConfig())
 	if err != nil {
-		return nil, fmt.Errorf("Failed to initialize Namespace migration: %w", err)
+		return nil, fmt.Errorf("failed to initialize Namespace migration: %w", err)
 	}
 
 	statusManager := status.New(mgr.GetClient(), "calico", opts.KubernetesVersion)
@@ -213,7 +213,7 @@ func add(c controller.Controller, r *ReconcileInstallation) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch calico Tigerastatus: %w", err)
 	}
 
-	if r.autoDetectedProvider == operator.ProviderOpenShift {
+	if r.autoDetectedProvider.IsOpenShift() {
 		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
 		// merge this configuration with our own and the write back the status object.
 		err = c.Watch(&source.Kind{Type: &configv1.Network{}}, &handler.EnqueueRequestForObject{})
@@ -410,7 +410,7 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 	err = client.Get(ctx, key, awsNode)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("Unable to read aws-node daemonset: %s", err.Error())
+			return fmt.Errorf("unable to read aws-node daemonset: %s", err.Error())
 		}
 		awsNode = nil
 	}
@@ -438,7 +438,7 @@ func mergeAndFillDefaults(i *operator.Installation, o *configv1.Network, kubeadm
 	}
 	if awsNode != nil {
 		if err := updateInstallationForAWSNode(i, awsNode); err != nil {
-			return fmt.Errorf("Could not resolve AWS node configuration: %s", err.Error())
+			return fmt.Errorf("could not resolve AWS node configuration: %s", err.Error())
 		}
 	}
 
@@ -739,15 +739,15 @@ func fillDefaults(instance *operator.Installation) error {
 
 	// If not specified by the user, set the flex volume plugin location based on platform.
 	if len(instance.Spec.FlexVolumePath) == 0 {
-		if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
+		if instance.Spec.KubernetesProvider.IsOpenShift() {
 			// In OpenShift 4.x, the location for flexvolume plugins has changed.
 			// See: https://bugzilla.redhat.com/show_bug.cgi?id=1667606#c5
 			instance.Spec.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
-		} else if instance.Spec.KubernetesProvider == operator.ProviderGKE {
+		} else if instance.Spec.KubernetesProvider.IsGKE() {
 			instance.Spec.FlexVolumePath = "/home/kubernetes/flexvolume/"
-		} else if instance.Spec.KubernetesProvider == operator.ProviderAKS {
+		} else if instance.Spec.KubernetesProvider.IsAKS() {
 			instance.Spec.FlexVolumePath = "/etc/kubernetes/volumeplugins/"
-		} else if instance.Spec.KubernetesProvider == operator.ProviderRKE2 {
+		} else if instance.Spec.KubernetesProvider.IsRKE2() {
 			instance.Spec.FlexVolumePath = "/var/lib/kubelet/volumeplugins/"
 		} else {
 			instance.Spec.FlexVolumePath = "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/"
@@ -778,7 +778,7 @@ func fillDefaults(instance *operator.Installation) error {
 func mergeProvider(cr *operator.Installation, provider operator.Provider) error {
 	// If we detected one provider but user set provider to something else, throw an error
 	if provider != operator.ProviderNone && cr.Spec.KubernetesProvider != operator.ProviderNone && cr.Spec.KubernetesProvider != provider {
-		msg := "Installation spec.kubernetesProvider '%s' does not match auto-detected value '%s'"
+		msg := "installation spec.kubernetesProvider '%s' does not match auto-detected value '%s'"
 		return fmt.Errorf(msg, cr.Spec.KubernetesProvider, provider)
 	}
 
@@ -984,7 +984,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		} else if err != nil {
 			r.status.SetDegraded(operator.InternalServerError, "Error discovering Tigera Secure availability", err, reqLogger)
 		} else {
-			r.status.SetDegraded(operator.InternalServerError, "Cannot deploy Tigera Secure", fmt.Errorf("Missing Tigera Secure custom resource definitions"), reqLogger)
+			r.status.SetDegraded(operator.InternalServerError, "Cannot deploy Tigera Secure", fmt.Errorf("missing Tigera Secure custom resource definitions"), reqLogger)
 		}
 
 		// Queue a retry. We don't want to watch the APIServer API since it might not exist and would cause
@@ -1117,7 +1117,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	openShiftOnAws := false
-	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
+	if instance.Spec.KubernetesProvider.IsOpenShift() {
 		openShiftOnAws, err = isOpenshiftOnAws(instance, ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceReadError, "Error checking if OpenShift is on AWS", err, reqLogger)
@@ -1273,7 +1273,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	if instance.Spec.KubernetesProvider == operator.ProviderGKE {
+	if instance.Spec.KubernetesProvider.IsGKE() {
 		// We do this only for GKE as other providers don't (yet?)
 		// automatically add resource quota that constrains whether
 		// Calico components that are marked cluster or node critical
@@ -1364,7 +1364,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Installation: &instance.Spec,
 		Terminating:  terminating,
 		UsePSP:       r.usePSP,
-		OpenShift:    instance.Spec.KubernetesProvider == operator.ProviderOpenShift,
+		OpenShift:    instance.Spec.KubernetesProvider.IsOpenShift(),
 	}
 	components = append(components, render.CSI(&csiCfg))
 
@@ -1465,7 +1465,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// We have successfully reconciled the Calico installation.
-	if instance.Spec.KubernetesProvider == operator.ProviderOpenShift {
+	if instance.Spec.KubernetesProvider.IsOpenShift() {
 		openshiftConfig := &configv1.Network{}
 		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
@@ -1503,7 +1503,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Write updated status.
 	if statusMTU > math.MaxInt32 || statusMTU < 0 {
-		return reconcile.Result{}, errors.New("The MTU size should be between Max int32 (2147483647) and 0")
+		return reconcile.Result{}, errors.New("the MTU size should be between Max int32 (2147483647) and 0")
 	}
 	instance.Status.MTU = int32(statusMTU)
 	// Variant and CalicoVersion must be updated at the same time.
@@ -1656,7 +1656,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(install *operato
 	// Determine the felix health port to use. Prefer the configuration from FelixConfiguration,
 	// but default to 9099 (or 9199 on OpenShift). We will also write back whatever we select to FelixConfiguration.
 	felixHealthPort := 9099
-	if install.Spec.KubernetesProvider == operator.ProviderOpenShift {
+	if install.Spec.KubernetesProvider.IsOpenShift() {
 		felixHealthPort = 9199
 	}
 	if fc.Spec.HealthPort == nil {
@@ -1727,7 +1727,7 @@ func (r *ReconcileInstallation) checkActive(log logr.Logger) (*corev1.ConfigMap,
 			"my-namespace", common.OperatorNamespace(),
 			"active-namespace", activeNs)
 		osExitOverride(0)
-		return nil, fmt.Errorf("Returning error for test purposes")
+		return nil, fmt.Errorf("returning error for test purposes")
 	}
 
 	if cm == nil {
@@ -1762,7 +1762,7 @@ func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error
 		if apierrors.IsNotFound(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("Failed to read ConfigMap %q: %s", cmName, err)
+		return nil, fmt.Errorf("failed to read ConfigMap %q: %s", cmName, err)
 	}
 	return cm, nil
 }
@@ -1783,13 +1783,13 @@ func getBirdTemplates(client client.Client) (map[string]string, error) {
 // by the KubernetesProvider on the installation and the infrastructure OpenShift
 // status.
 func isOpenshiftOnAws(install *operator.Installation, ctx context.Context, client client.Client) (bool, error) {
-	if install.Spec.KubernetesProvider != operator.ProviderOpenShift {
+	if !install.Spec.KubernetesProvider.IsOpenShift() {
 		return false, nil
 	}
 	infra := configv1.Infrastructure{}
 	// If configured to run in openshift, then also fetch the openshift configuration API.
 	if err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, &infra); err != nil {
-		return false, fmt.Errorf("Unable to read OpenShift infrastructure configuration: %s", err.Error())
+		return false, fmt.Errorf("unable to read OpenShift infrastructure configuration: %s", err.Error())
 	}
 	return (infra.Status.PlatformStatus.Type == "AWS"), nil
 }

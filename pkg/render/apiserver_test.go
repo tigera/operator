@@ -98,7 +98,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			K8SServiceEndpoint: k8sapi.ServiceEndpoint{},
 			Installation:       instance,
 			APIServer:          apiserver,
-			Openshift:          openshift,
+			OpenShift:          true,
 			TLSKeyPair:         kp,
 			TrustedBundle:      trustedBundle,
 			UsePSP:             true,
@@ -146,7 +146,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
 		cfg.TLSKeyPair = kp
-		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openshift bool
+		// APIServer(registry string, tlsKeyPair *corev1.Secret, pullSecrets []*corev1.Secret, openShift bool
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -359,6 +359,23 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		for _, r := range resources {
 			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 		}
+	})
+
+	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+		component, err := render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		role := rtest.GetResource(resources, "tigera-extension-apiserver-auth-access", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
 	})
 
 	It("should render the env variable for queryserver when FIPS is enabled", func() {
@@ -954,7 +971,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		DescribeTable("should render allow-tigera policy",
 			func(scenario testutils.AllowTigeraScenario) {
-				cfg.Openshift = scenario.Openshift
+				cfg.OpenShift = scenario.OpenShift
 				if scenario.ManagedCluster {
 					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
 				} else {
@@ -968,10 +985,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 				expectedPolicy := testutils.SelectPolicyByProvider(scenario, apiServerPolicy, apiServerPolicyForOCP)
 				Expect(policy).To(Equal(expectedPolicy))
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
 		)
 	})
 
@@ -1532,7 +1549,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			K8SServiceEndpoint: k8sapi.ServiceEndpoint{},
 			Installation:       instance,
 			APIServer:          apiserver,
-			Openshift:          openshift,
+			OpenShift:          true,
 			TLSKeyPair:         kp,
 			UsePSP:             true,
 		}

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,8 +24,6 @@ import (
 	"strings"
 	"text/template"
 
-	ocsv1 "github.com/openshift/api/security/v1"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -43,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 )
 
 const (
@@ -151,7 +150,7 @@ func (c *component) SupportedOSType() rmeta.OSType {
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 	// If l7spec is provided render the required objects.
-	objs = append(objs, c.serviceAccount())
+	objs = append(objs, c.serviceAccount(), c.role(), c.roleBinding())
 
 	c.config.dikastesEnabled = false
 	if c.config.WAFEnabled || c.config.ALPEnabled {
@@ -171,21 +170,12 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// Envoy & Dikastes Daemonset
 	objs = append(objs, c.daemonset())
 
-	if c.config.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
+	if c.config.Installation.KubernetesProvider.IsDockerEE() {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
 	}
 
-	// If we're running on openshift, we need to add in an SCC.
-	if c.config.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
-		objs = append(objs, c.securityContextConstraints())
-	}
-
 	if c.config.UsePSP {
-		objs = append(objs,
-			c.role(),
-			c.roleBinding(),
-			c.podSecurityPolicy(),
-		)
+		objs = append(objs, c.podSecurityPolicy())
 	}
 
 	return objs, nil
@@ -532,20 +522,32 @@ func (c *component) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding 
 }
 
 func (c *component) role() *rbacv1.Role {
+	var rules []rbacv1.PolicyRule
+	if c.config.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{PodSecurityPolicyName},
+		})
+	}
+
+	if c.config.Installation.KubernetesProvider.IsOpenShift() {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.Privileged},
+		})
+	}
+
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RoleName,
 			Namespace: common.CalicoNamespace,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{PodSecurityPolicyName},
-			},
-		},
+		Rules: rules,
 	}
 }
 
@@ -585,27 +587,4 @@ func (c *component) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
 	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.CSI, policyv1beta1.FlexVolume)
 	return psp
-}
-
-// securityContextConstraints returns SCC needed for daemonset to run on Openshift.
-func (c *component) securityContextConstraints() *ocsv1.SecurityContextConstraints {
-	privilegeEscalation := false
-	return &ocsv1.SecurityContextConstraints{
-		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
-		ObjectMeta:               metav1.ObjectMeta{Name: common.CalicoNamespace},
-		AllowHostDirVolumePlugin: false,
-		AllowHostIPC:             true,
-		AllowHostNetwork:         true,
-		AllowHostPID:             false,
-		AllowHostPorts:           false,
-		AllowPrivilegeEscalation: &privilegeEscalation,
-		AllowPrivilegedContainer: false,
-		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyRunAsAny},
-		RunAsUser:                ocsv1.RunAsUserStrategyOptions{Type: ocsv1.RunAsUserStrategyRunAsAny},
-		ReadOnlyRootFilesystem:   true,
-		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
-		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
-		Users:                    []string{fmt.Sprintf("system:serviceaccount:%s:%s", common.CalicoNamespace, APLName)},
-		Volumes:                  []ocsv1.FSType{"*"},
-	}
 }

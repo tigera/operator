@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -36,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
 	"github.com/tigera/operator/pkg/url"
@@ -277,7 +279,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs, c.metricsService())
 
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderGKE {
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
 		// We do this only for GKE as other providers don't (yet?)
 		// automatically add resource quota that constrains whether
 		// components that are marked cluster or node critical
@@ -614,7 +616,7 @@ func (c *fluentdComponent) container() corev1.Container {
 		ImagePullPolicy: ImagePullPolicy(),
 		Env:             envs,
 		// On OpenShift Fluentd needs privileged access to access logs on host path volume
-		SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift),
+		SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider.IsOpenShift()),
 		VolumeMounts:    volumeMounts,
 		StartupProbe:    c.startup(),
 		LivenessProbe:   c.liveness(),
@@ -1022,12 +1024,12 @@ func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
 			ResourceNames: []string{c.fluentdName()},
 		})
 	}
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
 			Resources:     []string{"securitycontextconstraints"},
 			Verbs:         []string{"use"},
-			ResourceNames: []string{PSSPrivileged},
+			ResourceNames: []string{securitycontextconstraints.Privileged},
 		})
 	}
 	return role
@@ -1320,7 +1322,7 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 				NotPorts:          networkpolicy.Ports(8444),
 			},
 		})
-		egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+		egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Installation.KubernetesProvider.IsOpenShift())
 	}
 	egressRules = append(egressRules, v3.Rule{
 		Action: v3.Allow,

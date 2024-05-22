@@ -1,4 +1,4 @@
-// Copyright (c) 2020,2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020,2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -533,7 +533,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	var eksConfig *render.EksCloudwatchLogConfig
 	var esClusterConfig *relasticsearch.ClusterConfig
 	var eksLogForwarderKeyPair certificatemanagement.KeyPairInterface
-	if installation.KubernetesProvider == operatorv1.ProviderEKS {
+	if installation.KubernetesProvider.IsEKS() {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
@@ -601,7 +601,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle: trustedBundle,
 	}
 
-	if installation.KubernetesProvider == operatorv1.ProviderEKS {
+	if installation.KubernetesProvider.IsEKS() {
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
 				certificateComponent.ServiceAccounts = append(certificateComponent.ServiceAccounts, render.EKSLogForwarderName)

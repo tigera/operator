@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 )
 
 const (
@@ -352,12 +353,12 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			ResourceNames: []string{common.TyphaDeploymentName},
 		})
 	}
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+	if c.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
 			Resources:     []string{"securitycontextconstraints"},
 			Verbs:         []string{"use"},
-			ResourceNames: []string{PSSPrivileged},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
 		})
 	}
 	return role

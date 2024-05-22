@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -300,6 +300,34 @@ var (
 	ProviderDockerEE  Provider = "DockerEnterprise"
 	ProviderTKG       Provider = "TKG"
 )
+
+func (p Provider) IsAKS() bool {
+	return p == ProviderAKS
+}
+
+func (p Provider) IsDockerEE() bool {
+	return p == ProviderDockerEE
+}
+
+func (p Provider) IsEKS() bool {
+	return p == ProviderEKS
+}
+
+func (p Provider) IsGKE() bool {
+	return p == ProviderGKE
+}
+
+func (p Provider) IsOpenShift() bool {
+	return p == ProviderOpenShift
+}
+
+func (p Provider) IsRKE2() bool {
+	return p == ProviderRKE2
+}
+
+func (p Provider) IsTKG() bool {
+	return p == ProviderTKG
+}
 
 // ProductVariant represents the variant of the product.
 //

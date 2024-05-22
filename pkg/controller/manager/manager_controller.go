@@ -48,6 +48,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	rmanager "github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -105,17 +106,17 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	})
 
 	// Watch for changes to primary resource Manager
-	err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.Manager{}, eventHandler)
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
 
-	err = c.WatchObject(&operatorv1.TLSTerminatedRoute{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.TLSTerminatedRoute{}, eventHandler)
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch TLSTerminatedRoutes: %w", err)
 	}
 
-	err = c.WatchObject(&operatorv1.TLSPassThroughRoute{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.TLSPassThroughRoute{}, eventHandler)
 	if err != nil {
 		return fmt.Errorf("manager-controller failed to watch TLSPassThroughRoutes: %w", err)
 	}
@@ -146,7 +147,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("manager-controller failed to watch ImageSet: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.WatchObject(&operatorv1.Tenant{}, eventHandler); err != nil {
 			return fmt.Errorf("manager-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -156,14 +157,21 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if helper.TruthNamespace() == helper.InstallNamespace() {
 		namespacesToWatch = []string{helper.InstallNamespace()}
 	}
+	secretsToWatch := []string{
+		render.ManagerTLSSecretName,
+		render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
+		render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
+	}
+	if opts.MultiTenant {
+		secretsToWatch = append(secretsToWatch, kibana.TigeraKibanaCertSecret)
+	} else {
+		// We need to watch for es-gateway certificate because es-proxy still creates a
+		// client to talk to kibana via es-gateway for zero-tenant and single-tenant
+		secretsToWatch = append(secretsToWatch, relasticsearch.PublicCertSecret)
+	}
+
 	for _, namespace := range namespacesToWatch {
-		for _, secretName := range []string{
-			// We need to watch for es-gateway certificate because es-proxy still creates a
-			// client to talk to elastic via es-gateway
-			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
-			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
-			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
-		} {
+		for _, secretName := range []string{} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}
@@ -500,20 +508,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	var clusterConfig *relasticsearch.ClusterConfig
-	// We only require Elastic cluster configuration when Kibana is enabled.
-	if render.KibanaEnabled(tenant, installation) {
-		clusterConfig, err = utils.GetElasticsearchClusterConfig(context.Background(), r.client)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, logc)
-				return reconcile.Result{}, nil
-			}
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, logc)
-			return reconcile.Result{}, err
-		}
-	}
-
 	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, logc)
@@ -666,7 +660,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		VoltronRouteConfig:      routeConfig,
 		KeyValidatorConfig:      keyValidatorConfig,
 		TrustedCertBundle:       trustedBundle,
-		ClusterConfig:           clusterConfig,
 		TLSKeyPair:              tlsSecret,
 		VoltronLinseedKeyPair:   linseedVoltronServerCert,
 		PullSecrets:             pullSecrets,

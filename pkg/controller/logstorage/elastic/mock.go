@@ -58,13 +58,15 @@ func (m *MockESClient) DeleteRoles(ctx context.Context, roles []utils.Role) erro
 	return ret.Error(0)
 }
 
-func (m *MockESClient) DeleteUser(ctx context.Context, u *utils.User) error {
-	ret := m.MethodCalled("DeleteRoles", ctx, u.Roles)
-	if ret.Error(0) != nil {
-		return ret.Error(0)
+func (m *MockESClient) DeleteUser(ctx context.Context, u *utils.User, keepRoles bool) error {
+	if !keepRoles {
+		ret := m.MethodCalled("DeleteRoles", ctx, u.Roles)
+		if ret.Error(0) != nil {
+			return ret.Error(0)
+		}
 	}
 
-	ret = m.Called(ctx, u)
+	ret := m.Called(ctx, u)
 	return ret.Error(0)
 }
 

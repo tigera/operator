@@ -48,6 +48,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	rmanager "github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -156,15 +157,21 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if helper.TruthNamespace() == helper.InstallNamespace() {
 		namespacesToWatch = []string{helper.InstallNamespace()}
 	}
+	secretsToWatch := []string{
+		render.ManagerTLSSecretName,
+		render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
+		render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
+	}
+	if opts.MultiTenant {
+		secretsToWatch = append(secretsToWatch, kibana.TigeraKibanaCertSecret)
+	} else {
+		// We need to watch for es-gateway certificate because es-proxy still creates a
+		// client to talk to kibana via es-gateway for zero-tenant and single-tenant
+		secretsToWatch = append(secretsToWatch, relasticsearch.PublicCertSecret)
+	}
+
 	for _, namespace := range namespacesToWatch {
-		for _, secretName := range []string{
-			// We need to watch for es-gateway certificate because es-proxy still creates a
-			// client to talk to kibana via es-gateway
-			// TODO: ALINA - Do we need to add Kibana for multi-tenant ?
-			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
-			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
-			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
-		} {
+		for _, secretName := range []string{} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}

@@ -157,11 +157,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if helper.TruthNamespace() == helper.InstallNamespace() {
 		namespacesToWatch = []string{helper.InstallNamespace()}
 	}
+
 	secretsToWatch := []string{
 		render.ManagerTLSSecretName,
 		render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
 		render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 	}
+
 	if opts.MultiTenant {
 		secretsToWatch = append(secretsToWatch, kibana.TigeraKibanaCertSecret)
 	} else {
@@ -171,7 +173,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	for _, namespace := range namespacesToWatch {
-		for _, secretName := range []string{} {
+		for _, secretName := range secretsToWatch {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("manager-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)
 			}

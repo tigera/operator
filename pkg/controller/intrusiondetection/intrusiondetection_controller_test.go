@@ -22,6 +22,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
+
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
+
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,8 +37,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -105,6 +108,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			licenseAPIReady: &utils.ReadyFlag{},
 			dpiAPIReady:     &utils.ReadyFlag{},
 			tierWatchReady:  &utils.ReadyFlag{},
+			usePSP:          false,
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -316,6 +320,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				licenseAPIReady: readyFlag,
 				dpiAPIReady:     readyFlag,
 				tierWatchReady:  readyFlag,
+				usePSP:          false,
 			}
 		})
 

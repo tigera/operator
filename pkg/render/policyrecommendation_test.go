@@ -88,7 +88,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 	})
 
 	It("should render all resources for a default configuration", func() {
-		cfg.Openshift = notOpenshift
+		cfg.OpenShift = false
 		component := render.PolicyRecommendation(cfg)
 		resources, _ := component.Objects()
 
@@ -354,7 +354,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		DescribeTable("should render allow-tigera policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.ManagedCluster = scenario.ManagedCluster
-				cfg.Openshift = scenario.Openshift
+				cfg.OpenShift = scenario.OpenShift
 				component := render.PolicyRecommendation(cfg)
 				resources, _ := component.Objects()
 
@@ -362,8 +362,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				expectedPolicy := getExpectedPolicy(scenario)
 				Expect(policy).To(Equal(expectedPolicy))
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
 		)
 	})
 

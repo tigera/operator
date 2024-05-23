@@ -19,11 +19,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tigera/operator/pkg/ptr"
-
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"github.com/tigera/operator/pkg/render/logstorage"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -34,17 +29,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -249,6 +249,15 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{PodSecurityPolicyName},
+		})
+	}
+
+	if l.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
 		})
 	}
 
@@ -567,7 +576,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 	// - Cluster DNS
 	// - Elasticsearch
 	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, l.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, l.cfg.Installation.KubernetesProvider.IsOpenShift())
 	egressRules = append(egressRules, []v3.Rule{
 		{
 			Action:      v3.Allow,

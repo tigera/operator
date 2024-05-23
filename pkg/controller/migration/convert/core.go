@@ -21,8 +21,9 @@ import (
 	"strconv"
 	"strings"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	corev1 "k8s.io/api/core/v1"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 var toBeIgnoredAnnotationKeyRegExps []*regexp.Regexp
@@ -321,7 +322,7 @@ func removeExpectedAnnotations(existing, ignoreWithValue map[string]string, toBe
 func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
 	// check calico-node nodeSelectors
 	if c.node.Spec.Template.Spec.Affinity != nil {
-		if !(install.Spec.KubernetesProvider == operatorv1.ProviderAKS && reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
+		if !(install.Spec.KubernetesProvider.IsAKS() && reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
 			NodeAffinity: &corev1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
 					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
@@ -333,7 +334,7 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 					}},
 				},
 			},
-		})) && !(install.Spec.KubernetesProvider == operatorv1.ProviderEKS && reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
+		})) && !(install.Spec.KubernetesProvider.IsEKS() && reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
 			NodeAffinity: &corev1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
 					NodeSelectorTerms: []corev1.NodeSelectorTerm{{

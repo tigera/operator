@@ -47,8 +47,6 @@ import (
 )
 
 var (
-	openshift            = true
-	notOpenshift         = false
 	bgpEnabled           = operatorv1.BGPEnabled
 	bgpDisabled          = operatorv1.BGPDisabled
 	nonPrivilegedEnabled = operatorv1.NonPrivilegedEnabled

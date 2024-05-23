@@ -329,7 +329,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 
 	dexComponentCfg := &render.DexComponentConfiguration{
 		PullSecrets:    pullSecrets,
-		Openshift:      r.provider == oprv1.ProviderOpenShift,
+		OpenShift:      r.provider.IsOpenShift(),
 		Installation:   install,
 		DexConfig:      dexCfg,
 		ClusterDomain:  r.clusterDomain,

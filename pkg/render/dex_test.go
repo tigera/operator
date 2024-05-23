@@ -499,7 +499,7 @@ var _ = Describe("dex rendering tests", func() {
 
 			DescribeTable("should render allow-tigera policy",
 				func(scenario testutils.AllowTigeraScenario) {
-					cfg.Openshift = scenario.Openshift
+					cfg.OpenShift = scenario.OpenShift
 					component := render.Dex(cfg)
 					resources, _ := component.Objects()
 
@@ -508,8 +508,8 @@ var _ = Describe("dex rendering tests", func() {
 					Expect(policy).To(Equal(expectedPolicy))
 				},
 				// Dex only renders in the presence of an Authentication CR, therefore does not have a config option for managed clusters.
-				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
 			)
 		})
 	})

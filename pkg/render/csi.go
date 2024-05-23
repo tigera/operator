@@ -33,6 +33,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 )
 
 const (
@@ -106,7 +107,7 @@ func (c *csiComponent) csiTolerations() []corev1.Toleration {
 
 func (c *csiComponent) csiAffinities() *corev1.Affinity {
 	var affinity *corev1.Affinity
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderAKS {
+	if c.cfg.Installation.KubernetesProvider.IsAKS() {
 		affinity = &corev1.Affinity{
 			NodeAffinity: &corev1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
@@ -120,7 +121,7 @@ func (c *csiComponent) csiAffinities() *corev1.Affinity {
 				},
 			},
 		}
-	} else if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS {
+	} else if c.cfg.Installation.KubernetesProvider.IsEKS() {
 		affinity = &corev1.Affinity{
 			NodeAffinity: &corev1.NodeAffinity{
 				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
@@ -349,20 +350,30 @@ func (c *csiComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 }
 
 func (c *csiComponent) role() *rbacv1.Role {
+	var rules []rbacv1.PolicyRule
+	if c.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{CSIDaemonSetName},
+		})
+	}
+	if c.cfg.OpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.Privileged},
+		})
+	}
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CSIDaemonSetName,
 			Namespace: CSIDaemonSetNamespace,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{CSIDaemonSetName},
-			},
-		},
+		Rules: rules,
 	}
 }
 

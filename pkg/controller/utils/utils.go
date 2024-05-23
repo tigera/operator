@@ -26,13 +26,11 @@ import (
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 
 	"github.com/go-logr/logr"
+
 	appsv1 "k8s.io/api/apps/v1"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
@@ -41,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -48,6 +47,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -265,7 +265,7 @@ func AddNamespacedWatch(c ctrlruntime.Controller, obj client.Object, h handler.E
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	instance, msg, err := GetAPIServer(context.Background(), client)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			l.V(3).Info("APIServer resource does not exist")
 			return false
 		}
@@ -284,7 +284,7 @@ func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
 	instance := &operatorv1.LogStorage{}
 	err := cli.Get(ctx, DefaultTSEEInstanceKey, instance)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err
@@ -297,7 +297,7 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	logCollector := &operatorv1.LogCollector{}
 	err := cli.Get(ctx, DefaultTSEEInstanceKey, logCollector)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -343,22 +343,22 @@ func ValidateCertPair(client client.Client, namespace, certPairSecretName, keyNa
 	if err != nil {
 		// If the reason for the error is not found then that is acceptable
 		// so return valid in that case.
-		statErr, ok := err.(*kerrors.StatusError)
+		statErr, ok := err.(*errors.StatusError)
 		if ok && statErr.ErrStatus.Reason == metav1.StatusReasonNotFound {
 			return nil, nil
 		} else {
-			return nil, fmt.Errorf("Failed to read cert %q from datastore: %s", certPairSecretName, err)
+			return nil, fmt.Errorf("failed to read cert %q from datastore: %s", certPairSecretName, err)
 		}
 	}
 
 	if keyName != "" {
 		if val, ok := secret.Data[keyName]; !ok || len(val) == 0 {
-			return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, keyName)
+			return secret, fmt.Errorf("secret %q does not have a field named %q", certPairSecretName, keyName)
 		}
 	}
 
 	if val, ok := secret.Data[certName]; !ok || len(val) == 0 {
-		return secret, fmt.Errorf("Secret %q does not have a field named %q", certPairSecretName, certName)
+		return secret, fmt.Errorf("secret %q does not have a field named %q", certPairSecretName, certName)
 	}
 
 	return secret, nil
@@ -384,9 +384,9 @@ func GetK8sServiceEndPoint(client client.Client) (*corev1.ConfigMap, error) {
 func PopulateK8sServiceEndPoint(client client.Client) error {
 	cm, err := GetK8sServiceEndPoint(client)
 	if err != nil {
-		if !kerrors.IsNotFound(err) {
+		if !errors.IsNotFound(err) {
 			// If the configmap is unavailable, do not return an error
-			return fmt.Errorf("Failed to read ConfigMap %q: %s", render.K8sSvcEndpointConfigMapName, err)
+			return fmt.Errorf("failed to read ConfigMap %q: %s", render.K8sSvcEndpointConfigMapName, err)
 		}
 	} else {
 		k8sapi.Endpoint.Host = cm.Data["KUBERNETES_SERVICE_HOST"]
@@ -415,7 +415,7 @@ func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.Man
 
 	err := c.Get(ctx, DefaultTSEEInstanceKey, managementCluster)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -430,7 +430,7 @@ func GetManagementClusterConnection(ctx context.Context, c client.Client) (*oper
 
 	err := c.Get(ctx, DefaultTSEEInstanceKey, managementClusterConnection)
 	if err != nil {
-		if kerrors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -465,7 +465,7 @@ func GetTenant(ctx context.Context, mt bool, cli client.Client, ns string) (*ope
 	}
 
 	if instance.Spec.ID == "" {
-		return nil, "", fmt.Errorf("Tenant %s/%s has no ID specified", ns, instance.Name)
+		return nil, "", fmt.Errorf("tenant %s/%s has no ID specified", ns, instance.Name)
 	}
 	return instance, instance.Spec.ID, nil
 }
@@ -512,7 +512,7 @@ func GetInstallation(ctx context.Context, client client.Client) (operatorv1.Prod
 	// update Installation with 'overlay'
 	overlay := operatorv1.Installation{}
 	if err := client.Get(ctx, OverlayInstanceKey, &overlay); err != nil {
-		if !apierrors.IsNotFound(err) {
+		if !errors.IsNotFound(err) {
 			return instance.Status.Variant, nil, err
 		}
 	} else {
@@ -543,7 +543,7 @@ func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APISer
 		if err == nil {
 			return nil,
 				"Duplicate configuration detected",
-				fmt.Errorf("Multiple APIServer CRs provided. To fix, run \"kubectl delete apiserver tigera-secure\"")
+				fmt.Errorf("multiple APIServer CRs provided. To fix, run \"kubectl delete apiserver tigera-secure\"")
 		}
 	}
 	return instance, "", nil
@@ -569,7 +569,7 @@ func GetElasticLicenseType(ctx context.Context, cli client.Client, logger logr.L
 	}
 	license, ok := cm.Data["eck_license_level"]
 	if !ok {
-		return render.ElasticsearchLicenseTypeUnknown, fmt.Errorf("eck_license_level not available.")
+		return render.ElasticsearchLicenseTypeUnknown, fmt.Errorf("eck_license_level not available")
 	}
 
 	return StrToElasticLicenseType(license, logger), nil
@@ -735,7 +735,7 @@ func GetKubeControllerMetricsPort(ctx context.Context, client client.Client) (in
 
 	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers metric port.
 	err := client.Get(ctx, types.NamespacedName{Name: "default"}, kubeControllersConfig)
-	if err != nil && !apierrors.IsNotFound(err) {
+	if err != nil && !errors.IsNotFound(err) {
 		return 0, err
 	}
 
@@ -788,7 +788,7 @@ func GetDNSServiceIPs(ctx context.Context, client client.Client, provider operat
 	// Default kubernetes dns service is named "kube-dns", but RKE2 is using a different name for the default
 	// dns service i.e. "rke2-coredns-rke2-coredns".
 	dnsServiceName := "kube-dns"
-	if provider == operatorv1.ProviderRKE2 {
+	if provider.IsRKE2() {
 		dnsServiceName = "rke2-coredns-rke2-coredns"
 	}
 
@@ -806,9 +806,9 @@ func GetDNSServiceIPs(ctx context.Context, client client.Client, provider operat
 // This is "kube-dns" for most providers, but varies on OpenShift and RKE2.
 func GetDNSServiceName(provider operatorv1.Provider) types.NamespacedName {
 	kubeDNSServiceName := types.NamespacedName{Name: "kube-dns", Namespace: "kube-system"}
-	if provider == operatorv1.ProviderOpenShift {
+	if provider.IsOpenShift() {
 		kubeDNSServiceName = types.NamespacedName{Name: "dns-default", Namespace: "openshift-dns"}
-	} else if provider == operatorv1.ProviderRKE2 {
+	} else if provider.IsRKE2() {
 		kubeDNSServiceName = types.NamespacedName{Name: "rke2-coredns-rke2-coredns", Namespace: "kube-system"}
 	}
 	return kubeDNSServiceName
@@ -823,19 +823,19 @@ func MonitorConfigMap(cs kubernetes.Interface, name string, data map[string]stri
 			common.OperatorNamespace(),
 			fields.OneTermEqualSelector("metadata.name", name),
 		),
-		&v1.ConfigMap{},
+		&corev1.ConfigMap{},
 		0, // no resync period
 	)
 	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		UpdateFunc: func(_, newObj interface{}) {
-			if !compareMap(data, newObj.(*v1.ConfigMap).Data) {
+			if !compareMap(data, newObj.(*corev1.ConfigMap).Data) {
 				log.Info("detected config change. rebooting")
 				os.Exit(0)
 			}
 			log.Info("ignoring configmap update as data was not modified")
 		},
 		AddFunc: func(obj interface{}) {
-			if !compareMap(data, obj.(*v1.ConfigMap).Data) {
+			if !compareMap(data, obj.(*corev1.ConfigMap).Data) {
 				log.Info("detected config creation change. rebooting")
 				os.Exit(0)
 			}

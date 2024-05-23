@@ -208,6 +208,21 @@ var _ = Describe("Linseed rendering tests", func() {
 			}
 		})
 
+		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+			component := Linseed(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			role := rtest.GetResource(resources, "tigera-linseed", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"nonroot-v2"},
+			}))
+		})
+
 		It("should render a Linseed deployment and all supporting resources when CertificateManagement is enabled", func() {
 			secret, err := certificatemanagement.CreateSelfSignedSecret("", "", "", nil)
 			Expect(err).NotTo(HaveOccurred())
@@ -375,7 +390,7 @@ var _ = Describe("Linseed rendering tests", func() {
 
 			DescribeTable("should render allow-tigera policy",
 				func(scenario testutils.AllowTigeraScenario) {
-					if scenario.Openshift {
+					if scenario.OpenShift {
 						cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 					} else {
 						cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
@@ -390,10 +405,10 @@ var _ = Describe("Linseed rendering tests", func() {
 				},
 				// Linseed only renders in the presence of an LogStorage CR and absence of a ManagementClusterConnection CR, therefore
 				// does not have a config option for managed clusters.
-				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-				Entry("for management/standalone, kube-dns with dpi", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false, DPIEnabled: true}),
-				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
-				Entry("for management/standalone, openshift-dns with dpi", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true, DPIEnabled: true}),
+				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
+				Entry("for management/standalone, kube-dns with dpi", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false, DPIEnabled: true}),
+				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+				Entry("for management/standalone, openshift-dns with dpi", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true, DPIEnabled: true}),
 			)
 		})
 

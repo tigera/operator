@@ -20,8 +20,6 @@ import (
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/ctrlruntime"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -29,12 +27,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -46,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/tenancy"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -176,6 +178,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		tierWatchReady:  tierWatchReady,
 		multiTenant:     opts.MultiTenant,
 		elasticExternal: opts.ElasticExternal,
+		usePSP:          opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -198,6 +201,7 @@ type ReconcileIntrusionDetection struct {
 	tierWatchReady  *utils.ReadyFlag
 	multiTenant     bool
 	elasticExternal bool
+	usePSP          bool
 }
 
 func getIntrusionDetection(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.IntrusionDetection, error) {
@@ -456,7 +460,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		LogCollector:                 lc,
 		Installation:                 network,
 		PullSecrets:                  pullSecrets,
-		Openshift:                    r.provider == operatorv1.ProviderOpenShift,
+		OpenShift:                    r.provider.IsOpenShift(),
 		ClusterDomain:                r.clusterDomain,
 		ManagedCluster:               isManagedCluster,
 		ManagementCluster:            isManagementCluster,
@@ -523,13 +527,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			Installation:       network,
 			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
-			Openshift:          r.provider == operatorv1.ProviderOpenShift,
+			OpenShift:          r.provider.IsOpenShift(),
 			ManagedCluster:     isManagedCluster,
 			ManagementCluster:  isManagementCluster,
 			HasNoLicense:       hasNoLicense,
 			HasNoDPIResource:   hasNoDPIResource,
 			ClusterDomain:      r.clusterDomain,
 			DPICertSecret:      dpiKeyPair,
+			UsePSP:             r.usePSP,
 		})
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, dpiComponent); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)

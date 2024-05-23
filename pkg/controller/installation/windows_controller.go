@@ -20,32 +20,14 @@ import (
 	"fmt"
 	"reflect"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
-	configv1 "github.com/openshift/api/config/v1"
-	"github.com/tigera/operator/pkg/active"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/ctrlruntime"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/monitor"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-
-	apiv3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -54,6 +36,26 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	configv1 "github.com/openshift/api/config/v1"
+
+	apiv3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/active"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var logw = logf.Log.WithName("controller_windows")
@@ -82,7 +84,7 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("tigera-windows-controller failed to watch calico Tigerastatus: %w", err)
 	}
 
-	if ri.autoDetectedProvider == operatorv1.ProviderOpenShift {
+	if ri.autoDetectedProvider.IsOpenShift() {
 		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
 		// merge this configuration with our own and the write back the status object.
 		err = c.WatchObject(&configv1.Network{}, &handler.EnqueueRequestForObject{})

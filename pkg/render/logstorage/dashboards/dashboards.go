@@ -25,21 +25,21 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 
-	rcomponents "github.com/tigera/operator/pkg/render/common/components"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -137,21 +137,19 @@ func (d *dashboards) resources() []client.Object {
 		d.AllowTigeraPolicy(),
 		d.ServiceAccount(),
 		d.Job(),
+		d.ClusterRole(),
+		d.ClusterRoleBinding(),
 	}
 
 	if d.cfg.UsePSP {
-		resources = append(resources,
-			d.PSPClusterRole(),
-			d.PSPClusterRoleBinding(),
-			d.PodSecurityPolicy(),
-		)
+		resources = append(resources, d.PodSecurityPolicy())
 	}
 	return resources
 }
 
 func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, d.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, d.cfg.Installation.KubernetesProvider.IsOpenShift())
 	if d.cfg.ExternalKibanaClientSecret != nil {
 		egressRules = append(egressRules, v3.Rule{
 			Action:   v3.Allow,
@@ -343,25 +341,37 @@ func (d *dashboards) ServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func (d *dashboards) PSPClusterRole() *rbacv1.ClusterRole {
+func (d *dashboards) ClusterRole() *rbacv1.ClusterRole {
+	var rules []rbacv1.PolicyRule
+	if d.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			// Allow access to the pod security policy in case this is enforced on the cluster
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{Name},
+		})
+	}
+
+	if d.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: Name,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{Name},
-			},
-		},
+		Rules: rules,
 	}
 }
 
-func (d *dashboards) PSPClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (d *dashboards) ClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

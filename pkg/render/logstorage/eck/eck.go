@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
@@ -36,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 )
 
 const (
@@ -76,12 +78,9 @@ func (e *eck) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := e.cfg.Installation.Registry
 	path := e.cfg.Installation.ImagePath
 	prefix := e.cfg.Installation.ImagePrefix
-	var err error
 	errMsgs := make([]string, 0)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
 
+	var err error
 	e.esOperatorImage, err = components.GetReference(components.ComponentElasticsearchOperator, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -114,13 +113,11 @@ func (e *eck) Objects() ([]client.Object, []client.Object) {
 	)
 	// This is needed for the operator to be able to set privileged mode for pods.
 	// https://docs.docker.com/ee/ucp/authorization/#secure-kubernetes-defaults
-	if e.cfg.Provider == operatorv1.ProviderDockerEE {
+	if e.cfg.Provider.IsDockerEE() {
 		toCreate = append(toCreate, e.operatorClusterAdminClusterRoleBinding())
 	}
 	if e.cfg.UsePSP {
-		toCreate = append(toCreate,
-			e.operatorPodSecurityPolicy(),
-		)
+		toCreate = append(toCreate, e.operatorPodSecurityPolicy())
 	}
 
 	if e.cfg.ApplyTrial {
@@ -238,6 +235,15 @@ func (e *eck) operatorClusterRole() *rbacv1.ClusterRole {
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{OperatorName},
+		})
+	}
+
+	if e.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
 		})
 	}
 
@@ -424,7 +430,7 @@ func (e *eck) elasticEnterpriseTrial() *corev1.Secret {
 // Allow the elastic-operator to communicate with API server, DNS and elastic search.
 func (e *eck) operatorAllowTigeraPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Provider == operatorv1.ProviderOpenShift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Provider.IsOpenShift())
 	egressRules = append(egressRules, []v3.Rule{
 		{
 			Action:      v3.Allow,

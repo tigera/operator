@@ -534,7 +534,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	var eksConfig *render.EksCloudwatchLogConfig
 	var esClusterConfig *relasticsearch.ClusterConfig
 	var eksLogForwarderKeyPair certificatemanagement.KeyPairInterface
-	if installation.KubernetesProvider == operatorv1.ProviderEKS {
+	if installation.KubernetesProvider.IsEKS() {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
@@ -602,7 +602,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle: trustedBundle,
 	}
 
-	if installation.KubernetesProvider == operatorv1.ProviderEKS {
+	if installation.KubernetesProvider.IsEKS() {
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
 				certificateComponent.ServiceAccounts = append(certificateComponent.ServiceAccounts, render.EKSLogForwarderName)

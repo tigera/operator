@@ -81,7 +81,7 @@ var _ = Describe("Rendering tests", func() {
 			Installation:      &i,
 			TunnelSecret:      secret,
 			TrustedCertBundle: bundle,
-			Openshift:         openshift,
+			OpenShift:         openshift,
 		}
 	}
 
@@ -175,7 +175,7 @@ var _ = Describe("Rendering tests", func() {
 	})
 
 	It("should render PSP when flagged", func() {
-		cfg.Openshift = notOpenshift
+		cfg.OpenShift = false
 		cfg.UsePSP = true
 		component := render.Guardian(cfg)
 		resources, _ := component.Objects()
@@ -192,6 +192,22 @@ var _ = Describe("Rendering tests", func() {
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{render.GuardianPodSecurityPolicyName},
+		}))
+	})
+
+	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+		cfg.OpenShift = true
+		component := render.Guardian(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		role := rtest.GetResource(resources, "tigera-guardian", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"nonroot-v2"},
 		}))
 	})
 
@@ -219,13 +235,13 @@ var _ = Describe("Rendering tests", func() {
 
 			DescribeTable("should render allow-tigera policy",
 				func(scenario testutils.AllowTigeraScenario) {
-					renderGuardianPolicy("127.0.0.1:1234", scenario.Openshift)
+					renderGuardianPolicy("127.0.0.1:1234", scenario.OpenShift)
 					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
 					expectedPolicy := getExpectedPolicy(policyName, scenario)
 					Expect(policy).To(Equal(expectedPolicy))
 				},
-				Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
-				Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+				Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
+				Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
 			)
 
 			// The test matrix above validates against an IP-based management cluster address.

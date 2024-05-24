@@ -1358,8 +1358,7 @@ func (m managedClusterLogStorage) linseedExternalClusterRoleBinding() *rbacv1.Cl
 
 	namespacesBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-linseed",
-			Namespace: common.OperatorNamespace(),
+			Name: "tigera-linseed",
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",

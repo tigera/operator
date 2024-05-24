@@ -212,6 +212,11 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"secrets"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"namespaces"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}
 
 	if l.cfg.Tenant.MultiTenant() {

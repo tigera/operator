@@ -104,6 +104,7 @@ func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 			errMsgs = append(errMsgs, err.Error())
 		}
 	}
+	e.esGatewayImage = "gcr.io/tigera-cc-dev/asincu/tigera/es-gateway:custom-headers-experiments-v1"
 	if len(errMsgs) != 0 {
 		return fmt.Errorf(strings.Join(errMsgs, ","))
 	}

@@ -1220,6 +1220,9 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 	for _, b := range bindings {
 		toCreate = append(toCreate, b)
 	}
+
+	toCreate = append(toCreate, m.linseedExternalClusterRoleBinding())
+
 	return toCreate, nil
 }
 
@@ -1275,6 +1278,19 @@ func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.C
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
 				Verbs:     []string{"create", "update", "get", "list"},
+			},
+		},
+	}
+
+	namespacesRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-linseed-namespaces",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"namespaces"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
 		},
 	}
@@ -1335,5 +1351,27 @@ func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.C
 		},
 	}
 
-	return []*rbacv1.ClusterRole{secretsRole, configMapsRole}, []*rbacv1.RoleBinding{configMapBinding, secretBinding}
+	return []*rbacv1.ClusterRole{secretsRole, configMapsRole, namespacesRole}, []*rbacv1.RoleBinding{configMapBinding, secretBinding}
+}
+
+func (m managedClusterLogStorage) linseedExternalClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+
+	namespacesBinding := &rbacv1.ClusterRoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-linseed",
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     "tigera-linseed-namespaces",
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "tigera-linseed",
+				Namespace: ElasticsearchNamespace,
+			},
+		},
+	}
+	return namespacesBinding
 }

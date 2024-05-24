@@ -666,8 +666,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}},
 					{"tigera-linseed-secrets", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-linseed-configmaps", "", &rbacv1.ClusterRole{}, nil},
+					{"tigera-linseed-namespaces", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-linseed", "calico-system", &rbacv1.RoleBinding{}, nil},
 					{"tigera-linseed", "tigera-operator", &rbacv1.RoleBinding{}, nil},
+					{"tigera-linseed", "", &rbacv1.ClusterRoleBinding{}, nil},
 				}
 				component := render.NewManagedClusterLogStorage(cfg)
 				createResources, deleteResources := component.Objects()

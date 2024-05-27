@@ -198,7 +198,8 @@ func (e *esGateway) esGatewayPodSecurityPolicy() *policyv1beta1.PodSecurityPolic
 func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "NAMESPACE", Value: e.cfg.Namespace},
-		{Name: "ES_GATEWAY_LOG_LEVEL", Value: "INFO"},
+		{Name: "TENANT_ID", Value: "alina"},
+		{Name: "ES_GATEWAY_LOG_LEVEL", Value: "TRACE"},
 		{Name: "ES_GATEWAY_ELASTIC_ENDPOINT", Value: ElasticsearchHTTPSEndpoint},
 		{Name: "ES_GATEWAY_KIBANA_ENDPOINT", Value: KibanaHTTPSEndpoint},
 		{Name: "ES_GATEWAY_HTTPS_CERT", Value: e.cfg.ESGatewayKeyPair.VolumeMountCertificateFilePath()},
@@ -207,6 +208,7 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 		{Name: "ES_GATEWAY_ELASTIC_CLIENT_CERT_PATH", Value: e.cfg.TrustedBundle.MountPath()},
 		{Name: "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH", Value: e.cfg.TrustedBundle.MountPath()},
 		{Name: "ES_GATEWAY_KIBANA_CA_BUNDLE_PATH", Value: e.cfg.TrustedBundle.MountPath()},
+		{Name: "ES_GATEWAY_CHALLENGER_PORT", Value: "5554"},
 		{Name: "ES_GATEWAY_ELASTIC_USERNAME", Value: e.cfg.EsAdminUserName},
 		{Name: "ES_GATEWAY_ELASTIC_PASSWORD", ValueFrom: &corev1.EnvVarSource{
 			SecretKeyRef: &corev1.SecretKeySelector{
@@ -252,20 +254,23 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				{
 					Name:            DeploymentName,
-					Image:           e.esGatewayImage,
+					Image:           "gcr.io/tigera-cc-dev/asincu/tigera/es-gateway:option3-v16",
 					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
-					ReadinessProbe: &corev1.Probe{
-						ProbeHandler: corev1.ProbeHandler{
-							HTTPGet: &corev1.HTTPGetAction{
-								Path:   "/health",
-								Port:   intstr.FromInt(Port),
-								Scheme: corev1.URISchemeHTTPS,
-							},
-						},
-						InitialDelaySeconds: 10,
+					Command: []string{
+						"/usr/bin/es-gateway", "-run-as-challenger",
 					},
+					//ReadinessProbe: &corev1.Probe{
+					//	ProbeHandler: corev1.ProbeHandler{
+					//		HTTPGet: &corev1.HTTPGetAction{
+					//			Path:   "/health",
+					//			Port:   intstr.FromInt(Port),
+					//			Scheme: corev1.URISchemeHTTPS,
+					//		},
+					//	},
+					//	InitialDelaySeconds: 10,
+					//},
 					SecurityContext: securitycontext.NewNonRootContext(),
 				},
 			},

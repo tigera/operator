@@ -232,13 +232,12 @@ var _ = Describe("Rendering tests", func() {
 		// - X Same as default config
 		// - 1 Service to expose calico/node metrics.
 		// - 1 Service to expose Windows calico/node metrics.
-		// - 1 ns (tigera-dex)
 		var nodeMetricsPort int32 = 9081
 		instance.Variant = operatorv1.TigeraSecureEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal((6 + 3 + 4 + 1 + 7 + 6 + 1 + 2) + 1 + 1 + 1))
+		Expect(componentCount(c)).To(Equal((6 + 3 + 4 + 1 + 7 + 6 + 1 + 2) + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -261,7 +260,6 @@ var _ = Describe("Rendering tests", func() {
 		}{
 			// Namespaces first.
 			{common.CalicoNamespace, "", "", "v1", "Namespace"},
-			{render.DexObjectName, "", "", "v1", "Namespace"},
 
 			// Typha objects.
 			{render.TyphaServiceAccountName, common.CalicoNamespace, "", "v1", "ServiceAccount"},

@@ -212,6 +212,7 @@ var _ = Describe("dex rendering tests", func() {
 				version string
 				kind    string
 			}{
+				{render.DexObjectName, "", "", "v1", "Namespace"},
 				{render.DexPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
 				{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ServiceAccount"},
@@ -320,6 +321,7 @@ var _ = Describe("dex rendering tests", func() {
 				version string
 				kind    string
 			}{
+				{render.DexObjectName, "", "", "v1", "Namespace"},
 				{render.DexPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
 				{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.DexNamespace, "projectcalico.org", "v3", "NetworkPolicy"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ServiceAccount"},

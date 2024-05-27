@@ -1,4 +1,5 @@
 // Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -47,7 +48,7 @@ import (
 
 var (
 	Name                     = "dashboards-installer"
-	ElasticCredentialsSecret = "tigera-ee-dashboards-installer-elasticsearch-user-secret"
+	ElasticCredentialsSecret = "tigera-secure-es-elastic-user"
 	PolicyName               = networkpolicy.TigeraComponentPolicyPrefix + Name
 )
 
@@ -219,8 +220,8 @@ func (d *dashboards) Job() *batchv1.Job {
 			Value: "false",
 		},
 		{
-			Name:      "USER",
-			ValueFrom: secret.GetEnvVarSource(secretName, "username", false),
+			Name:  "USER",
+			Value: "elastic",
 		},
 		{
 			Name:      "PASSWORD",

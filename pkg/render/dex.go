@@ -117,7 +117,9 @@ func (*dexComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
+
 	objs := []client.Object{
+		CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		c.allowTigeraNetworkPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(DexNamespace),
 		c.serviceAccount(),

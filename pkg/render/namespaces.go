@@ -62,10 +62,6 @@ func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 		ns = []client.Object{}
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		// We need to always have ns tigera-dex even when the Authentication CR is not present, so policies can be added to this namespace.
-		ns = append(ns, CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider, PSSRestricted))
-	}
 	if len(c.cfg.PullSecrets) > 0 {
 		ns = append(ns, secret.ToRuntimeObjects(secret.CopyToNamespace(common.CalicoNamespace, c.cfg.PullSecrets...)...)...)
 	}

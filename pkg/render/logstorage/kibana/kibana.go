@@ -230,7 +230,6 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	}
 
 	config := map[string]interface{}{
-		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
 		"server":                             server,
 		"xpack.security.session.lifespan":    "8h",
 		"xpack.security.session.idleTimeout": "30m",
@@ -242,6 +241,9 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		// can still be overwritten in the Kibana Settings if the user desires it.
 		"telemetry.optIn": false,
 	}
+	config["elasticsearch.hosts"] = "http://localhost:8080"
+	config["elasticsearch.ssl.verificationMode"] = "none"
+	config["elasticsearch.requestHeadersWhitelist"] = []string{"authorization", "x-tenant-experiment-id"}
 
 	var initContainers []corev1.Container
 	var volumes []corev1.Volume
@@ -282,6 +284,22 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 			})
 	}
 
+	volumes = append(volumes, k.cfg.TrustedBundle.Volume())
+	volumeMounts = append(volumeMounts, k.cfg.TrustedBundle.VolumeMounts(k.SupportedOSType())...)
+	//// Add a volume for the required client certificate and key.
+	//volumes = append(volumes, corev1.Volume{
+	//	Name: logstorage.ExternalCertsVolumeName,
+	//	VolumeSource: corev1.VolumeSource{
+	//		Secret: &corev1.SecretVolumeSource{
+	//			SecretName: logstorage.ExternalCertsSecret,
+	//		},
+	//	},
+	//})
+	//volumeMounts = append(volumeMounts, corev1.VolumeMount{
+	//	Name:      logstorage.ExternalCertsVolumeName,
+	//	MountPath: "/certs/elasticsearch",
+	//	ReadOnly:  true,
+	//})
 	count := int32(1)
 	if k.cfg.Installation.ControlPlaneReplicas != nil {
 		count = *k.cfg.Installation.ControlPlaneReplicas
@@ -347,7 +365,38 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 						},
 						SecurityContext: securitycontext.NewNonRootContext(),
 						VolumeMounts:    volumeMounts,
-					}},
+					},
+						{
+							Name: "challenger",
+							Env: []corev1.EnvVar{
+								{
+									Name:  "ES_GATEWAY_LOG_LEVEL",
+									Value: "TRACE",
+								},
+								{
+									Name:  "ES_GATEWAY_KIBANA_CATCH_ALL_ROUTE",
+									Value: "/",
+								},
+								{
+									Name:  "ES_GATEWAY_ELASTIC_ENDPOINT",
+									Value: "https://tigera-secure-es-http.tigera-elasticsearch.svc:9200",
+								},
+								{
+									Name:  "ES_GATEWAY_ELASTIC_CA_BUNDLE_PATH",
+									Value: k.cfg.TrustedBundle.MountPath(),
+								},
+								{
+									Name:  "TENANT_ID",
+									Value: "alina",
+								},
+							},
+							Command: []string{
+								"/usr/bin/es-gateway", "-run-as-challenger",
+							},
+							Image:           "gcr.io/unique-caldron-775/cnx/tigera/es-gateway:v3.20.0-1.0-calient-0.dev-503-g63cb5184da7b",
+							SecurityContext: securitycontext.NewNonRootContext(),
+							VolumeMounts:    volumeMounts,
+						}},
 					Volumes: volumes,
 				},
 			},

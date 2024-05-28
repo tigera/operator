@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
 )
@@ -66,7 +67,7 @@ type PolicyRecommendationConfiguration struct {
 	ClusterDomain                  string
 	Installation                   *operatorv1.InstallationSpec
 	ManagedCluster                 bool
-	Openshift                      bool
+	OpenShift                      bool
 	PullSecrets                    []*corev1.Secret
 	TrustedBundle                  certificatemanagement.TrustedBundleRO
 	PolicyRecommendationCertSecret certificatemanagement.KeyPairInterface
@@ -201,6 +202,15 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{PolicyRecommendationPodSecurityPolicyName},
+		})
+	}
+
+	if pr.cfg.OpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.HostNetworkV2},
 		})
 	}
 
@@ -431,7 +441,7 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 		})
 	}
 
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, pr.cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, pr.cfg.OpenShift)
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},

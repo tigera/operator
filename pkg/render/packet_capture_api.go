@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -62,7 +63,7 @@ var (
 // PacketCaptureApiConfiguration contains all the config information needed to render the component.
 type PacketCaptureApiConfiguration struct {
 	PullSecrets                 []*corev1.Secret
-	Openshift                   bool
+	OpenShift                   bool
 	Installation                *operatorv1.InstallationSpec
 	KeyValidatorConfig          authentication.KeyValidatorConfig
 	ServerCertSecret            certificatemanagement.KeyPairInterface
@@ -200,6 +201,15 @@ func (pc *packetCaptureApiComponent) clusterRole() client.Object {
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{PacketCapturePodSecurityPolicyName},
+		})
+	}
+
+	if pc.cfg.OpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
 		})
 	}
 
@@ -357,7 +367,7 @@ func allowTigeraPolicy(cfg *PacketCaptureApiConfiguration) *v3.NetworkPolicy {
 			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	if !managedCluster {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,

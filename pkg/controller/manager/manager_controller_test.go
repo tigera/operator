@@ -56,6 +56,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/monitor"
 	tigeratls "github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 )
 
@@ -1032,9 +1033,6 @@ var _ = Describe("Manager controller tests", func() {
 			tenantBNamespace := "tenant-b"
 			BeforeEach(func() {
 				r.multiTenant = true
-			})
-
-			It("Should reconcile only if a namespace is provided.", func() {
 				// Create the Tenant resources for tenant-a and tenant-b.
 				tenantA := &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1096,7 +1094,11 @@ var _ = Describe("Manager controller tests", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 
-				_, err = r.Reconcile(ctx, reconcile.Request{})
+			})
+
+			It("Should reconcile only if a namespace is provided.", func() {
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
 				tenantADeployment := appsv1.Deployment{
@@ -1183,6 +1185,64 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				Expect(clusterRoleBinding.Subjects).To(HaveLen(3))
 			})
+
+			It("should apply TLSRoutes in from the manager namespace", func() {
+
+				Expect(c.Create(ctx, &operatorv1.TLSTerminatedRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: tenantANamespace,
+						Name:      "tenant-a-route",
+					},
+					Spec: operatorv1.TLSTerminatedRouteSpec{
+						CABundle: &corev1.ConfigMapKeySelector{
+							Key: "tigera-ca-bundle.crt",
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: certificatemanagement.TrustedCertConfigMapNamePublic,
+							},
+						},
+						Destination: "https://internal.foo.svc",
+						PathMatch: &operatorv1.PathMatch{
+							Path: "/foo/",
+						},
+						Target: "UI",
+					},
+				})).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: tenantANamespace,
+					},
+				})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				_, err = r.Reconcile(ctx, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: tenantBNamespace,
+					},
+				})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				tenantARoutes := corev1.ConfigMap{
+					TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "voltron-routes",
+						Namespace: tenantANamespace,
+					},
+				}
+				tenantBRoutes := corev1.ConfigMap{
+					TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "voltron-routes",
+						Namespace: tenantBNamespace,
+					},
+				}
+
+				Expect(test.GetResource(c, &tenantARoutes)).ToNot(HaveOccurred())
+				Expect(tenantARoutes.Data).ToNot(BeEmpty())
+
+				Expect(kerror.IsNotFound(test.GetResource(c, &tenantBRoutes))).Should(BeTrue())
+			})
+
 		})
 
 		Context("FIPS reconciliation", func() {

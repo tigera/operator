@@ -1,0 +1,9 @@
+FROM python:3-alpine
+
+LABEL maintainer="engineering-release@tigera.io"
+
+WORKDIR /workdir
+
+RUN python3 -m pip install PyGithub==2.3.0 PyYAML==6.0.1
+
+CMD [ "./hack/generate_release_notes.py" ]

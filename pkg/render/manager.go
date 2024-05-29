@@ -39,7 +39,6 @@ import (
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rkibana "github.com/tigera/operator/pkg/render/common/kibana"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -129,8 +128,6 @@ type ManagerConfiguration struct {
 	VoltronRouteConfig *manager.VoltronRouteConfig
 
 	KeyValidatorConfig authentication.KeyValidatorConfig
-	ESSecrets          []*corev1.Secret
-	ClusterConfig      *relasticsearch.ClusterConfig
 	PullSecrets        []*corev1.Secret
 	Openshift          bool
 	Installation       *operatorv1.InstallationSpec
@@ -259,7 +256,6 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.securityContextConstraints())
 	}
 
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.ESSecrets...)...)...)
 	objs = append(objs, c.managerDeployment())
 	if c.cfg.KeyValidatorConfig != nil {
 		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(c.cfg.Namespace)...)...)
@@ -308,7 +304,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		}
 	}
 
-	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
+	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ManagerDeploymentName,
 			Namespace:   c.cfg.Namespace,
@@ -323,7 +319,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Containers:         managerPodContainers,
 			Volumes:            c.managerVolumes(),
 		},
-	}, c.cfg.ESSecrets).(*corev1.PodTemplateSpec)
+	}
 
 	if c.cfg.Replicas != nil && *c.cfg.Replicas > 1 {
 		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", c.cfg.Namespace)

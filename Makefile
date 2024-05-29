@@ -477,8 +477,8 @@ maybe-build-release:
 	./hack/maybe-build-release.sh
 
 release-notes: var-require-all-VERSION-GITHUB_TOKEN clean
-	@python3 -m pip install PyYAML PyGithub==2.3.0 && \
-		GITHUB_TOKEN=$(GITHUB_TOKEN) VERSION=$(VERSION) ./generate-release-notes.py
+	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .
+	@docker run --rm -v $(CURDIR):/workdir -e	GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) tigera/release-notes
 
 ## Tags and builds a release from start to finish.
 release: release-prereqs

@@ -1,21 +1,19 @@
 #!/usr/bin/env python3
-# pylint: disable=missing-module-docstring
-# pylint: disable=missing-class-docstring
-# pylint: disable=missing-function-docstring
+"""Generate release notes for a milestone.
+
+Raises:
+  ReleaseNoteError: _description_
+"""
 import os
 import re
-import io
 import datetime
-
-# To install, run python3 -m pip install PyYAML
 import yaml
-
-# To install, run python3 -m pip install PyGithub==2.3.0
-from github import Github, Auth  # https://github.com/PyGithub/PyGithub
+from github import Github, Auth, Issue  # https://github.com/PyGithub/PyGithub
 
 # Validate required environment variables
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 assert GITHUB_TOKEN, "GITHUB_TOKEN must be set"
+# Version corresponds to the milestone in the GitHub repository
 VERSION = os.environ.get("VERSION")
 assert os.environ.get("VERSION"), "VERSION must be set"
 assert VERSION.startswith("v"), "VERSION must start with 'v'"
@@ -24,50 +22,63 @@ assert VERSION.startswith("v"), "VERSION must start with 'v'"
 auth = Auth.Token(os.environ.get("GITHUB_TOKEN"))
 g = Github(auth=auth)
 
-# The milestone to generate notes for.
-MILESTONE = VERSION
-
 # The file where we'll store the release notes.
 FILENAME = f"{VERSION}-release-notes.md"
 
 
 class ReleaseNoteError(Exception):
-    pass
+    """Release note error.
+
+    Args:
+      Exception (_type_): _description_
+    """
 
 
-# Returns a dictionary where the keys are repositories, and the values are
-# a list of issues in the repository which match the milestone and
-# have a `release-note-required` label.
-def issues_in_milestone():
+def issues_in_milestone() -> list:
+    """Returns a dictionary where the keys are repositories, and the values are
+    a list of issues in the repository which match the milestone and
+    have a `release-note-required` label.
+
+    Raises:
+        ReleaseNoteError: _description_
+
+    Returns:
+        list: list of issues
+    """
     repo = g.get_repo("tigera/operator")
 
     # Find the milestone. This finds all open milestones.
     milestones = repo.get_milestones()
     for m in milestones:
-        if m.title == MILESTONE:
+        if m.title == VERSION:
             # Found the milestone in this repo - look for issues (but only
             # ones that have been closed!)
             print(f"  found milestone {m.title}")
-            issues = []
             milestone_issues = repo.get_issues(
                 milestone=m, state="closed", labels=["release-note-required"]
             )
+            issues = []
             for issue in milestone_issues:
                 pr = issue.as_pull_request()
                 if pr.merged:
                     # Filter out PRs which are closed but not merged.
                     issues.append(issue)
-                else:
-                    print(f"WARNING: {pr.number} is not merged, skipping")
+                elif pr.state == "open":
+                    print(f"WARNING: {pr.number} is still open, remove from milestione... skipping")
             if len(issues) == 0:
                 raise ReleaseNoteError(f"no issues found for milestone {m.title}")
             return issues
 
 
-# Takes an issue and returns the appropriate release notes from that
-# issue as a list.  If it has a release-note section defined, that is used.
-# If not, then it simply returns the title.
-def extract_release_notes(issue):
+def extract_release_notes(issue: Issue) -> list:
+    """Take an issue and return the appropriate release notes from that issue as a list.
+
+    Args:
+        issue (Issue): _GitHub issue_
+
+    Returns:
+        list: Either the release notes from the issue, or the title.
+    """
     # Look for a release note section in the body.
     matches = None
     if issue.body:
@@ -80,7 +91,15 @@ def extract_release_notes(issue):
         return [issue.title.strip()]
 
 
-def kind(issue):
+def kind(issue: Issue) -> str:
+    """Get the kind of issue.
+
+    Args:
+          issue (Issue): _GitHub issue_
+
+    Returns:
+        str: enhancement, bug, or other
+    """
     for l in issue.labels:
         if l.name == "kind/enhancement":
             return "enhancement"
@@ -89,14 +108,28 @@ def kind(issue):
     return "other"
 
 
-def enterprise_feature(issue):
+def enterprise_feature(issue: Issue) -> bool:
+    """Check if the issue is an enterprise feature.
+
+    Args:
+        issue (Issue): GitHub issue
+
+    Returns:
+        _bool_: True if the issue is an enterprise feature
+    """
     for l in issue.labels:
         if l.name == "enterprise":
             return True
     return False
 
 
-def print_issues_to_file(file, issues):
+def print_issues_to_file(file, issues: list) -> None:
+    """Print issues to a file.
+
+    Args:
+        file (TextIOWrapper): file to write to
+        issues (list): list of issues
+    """
     for issue in issues:
         for note in extract_release_notes(issue):
             if enterprise_feature(issue):
@@ -110,12 +143,22 @@ def print_issues_to_file(file, issues):
     file.write("\n")
 
 
-def calico_version():
+def calico_version() -> str:
+    """Get the Calico version.
+
+    Returns:
+        str: calico version
+    """
     v = yaml.safe_load(open("config/calico_versions.yml", "r", encoding="utf-8"))
     return v["title"]
 
 
-def enterprise_version():
+def enterprise_version() -> str:
+    """Get the Calico Enterprise version.
+
+    Returns:
+        str: calico enterprise version
+    """
     v = yaml.safe_load(open("config/enterprise_versions.yml", "r", encoding="utf-8"))
     return v["title"]
 
@@ -140,7 +183,7 @@ if __name__ == "__main__":
             other.append(i)
 
     # Write release notes out to a file.
-    with io.open(FILENAME, "w", encoding="utf-8") as f:
+    with open(FILENAME, "w", encoding="utf-8") as f:
         f.write(f"{date}\n\n")
 
         f.write("#### Included Calico versions\n\n")
@@ -162,5 +205,5 @@ if __name__ == "__main__":
     print("Please review for accuracy, and format appropriately before releasing.")
     print("")
     print(
-        f"Visit https://github.com/tigera/operator/releases/new?tag={MILESTONE}# to publish"
+        f"Visit https://github.com/tigera/operator/releases/new?tag={VERSION}# to publish"
     )

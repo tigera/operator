@@ -1383,7 +1383,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// Requeue so we can update our resources (without the migration changes)
 		return reconcile.Result{Requeue: true}, nil
 	} else if r.namespaceMigration.NeedCleanup() {
-		if err := r.namespaceMigration.CleanupMigration(ctx); err != nil {
+		if err := r.namespaceMigration.CleanupMigration(ctx, reqLogger); err != nil {
 			r.status.SetDegraded(operator.ResourceMigrationError, "error migrating resources to calico-system", err, reqLogger)
 			return reconcile.Result{}, err
 		}

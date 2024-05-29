@@ -21,14 +21,15 @@ import (
 	"strconv"
 	"strings"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
-	voltronRoutesConfigMapName = "voltron-routes"
+	VoltronRoutesConfigMapName = "voltron-routes"
 	voltronRoutesFolderPath    = "/config_maps/voltron-routes"
 
 	configMapFolder = "/config_maps"
@@ -281,12 +282,12 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 	// Add the config map so mountConfigMap can add the annotation for the data.
 	builder.AddConfigMap(&corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: voltronRoutesConfigMapName,
+			Name: VoltronRoutesConfigMapName,
 		},
 		Data: routesData,
 	})
 
-	if _, err := builder.mountConfigMapReference(voltronRoutesConfigMapName, ""); err != nil {
+	if _, err := builder.mountConfigMapReference(VoltronRoutesConfigMapName, ""); err != nil {
 		return nil, err
 	}
 
@@ -478,7 +479,7 @@ func (cfg *VoltronRouteConfig) VolumeMounts() []corev1.VolumeMount {
 func (cfg *VoltronRouteConfig) RoutesConfigMap(namespace string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      voltronRoutesConfigMapName,
+			Name:      VoltronRoutesConfigMapName,
 			Namespace: namespace,
 		},
 		Data: cfg.routesData,

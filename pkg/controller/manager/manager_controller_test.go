@@ -54,7 +54,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
-	"github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
 	tigeratls "github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -1226,14 +1225,14 @@ var _ = Describe("Manager controller tests", func() {
 				tenantARoutes := corev1.ConfigMap{
 					TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      manager.VoltronRoutesConfigMapName,
+						Name:      "voltron-routes",
 						Namespace: tenantANamespace,
 					},
 				}
 				tenantBRoutes := corev1.ConfigMap{
 					TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      manager.VoltronRoutesConfigMapName,
+						Name:      "voltron-routes",
 						Namespace: tenantBNamespace,
 					},
 				}

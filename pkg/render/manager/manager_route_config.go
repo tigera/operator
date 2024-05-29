@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	VoltronRoutesConfigMapName = "voltron-routes"
+	voltronRoutesConfigMapName = "voltron-routes"
 	voltronRoutesFolderPath    = "/config_maps/voltron-routes"
 
 	configMapFolder = "/config_maps"
@@ -282,12 +282,12 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 	// Add the config map so mountConfigMap can add the annotation for the data.
 	builder.AddConfigMap(&corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: VoltronRoutesConfigMapName,
+			Name: voltronRoutesConfigMapName,
 		},
 		Data: routesData,
 	})
 
-	if _, err := builder.mountConfigMapReference(VoltronRoutesConfigMapName, ""); err != nil {
+	if _, err := builder.mountConfigMapReference(voltronRoutesConfigMapName, ""); err != nil {
 		return nil, err
 	}
 
@@ -479,7 +479,7 @@ func (cfg *VoltronRouteConfig) VolumeMounts() []corev1.VolumeMount {
 func (cfg *VoltronRouteConfig) RoutesConfigMap(namespace string) *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      VoltronRoutesConfigMapName,
+			Name:      voltronRoutesConfigMapName,
 			Namespace: namespace,
 		},
 		Data: cfg.routesData,

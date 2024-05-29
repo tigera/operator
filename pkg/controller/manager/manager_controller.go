@@ -656,7 +656,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		namespaces = append(namespaces, render.ManagerNamespace)
 	}
 
-	routeConfig, err := getVoltronRouteConfig(ctx, r.client, helper.InstallNamespace())
+	routeNamespace := "" // by default, look for routes in all namespaces
+	if r.multiTenant {
+		routeNamespace = request.Namespace // but only in the tenant namespace in multi-tenant clusters
+	}
+	routeConfig, err := getVoltronRouteConfig(ctx, r.client, helper.InstallNamespace(), routeNamespace)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.InternalServerError, "Failed to create Voltron Route Configuration", err, logc)
 		return reconcile.Result{}, err
@@ -753,14 +757,19 @@ func fillDefaults(mc *operatorv1.ManagementCluster) {
 	}
 }
 
-func getVoltronRouteConfig(ctx context.Context, cli client.Client, managerNamespace string) (*rmanager.VoltronRouteConfig, error) {
+func getVoltronRouteConfig(ctx context.Context, cli client.Client, managerNamespace string, routeNamespace string) (*rmanager.VoltronRouteConfig, error) {
+	var listOptions []client.ListOption
+	if routeNamespace != "" {
+		listOptions = append(listOptions, client.InNamespace(routeNamespace))
+	}
+
 	terminatedRouteList := &operatorv1.TLSTerminatedRouteList{}
-	if err := cli.List(ctx, terminatedRouteList); err != nil {
+	if err := cli.List(ctx, terminatedRouteList, listOptions...); err != nil {
 		return nil, err
 	}
 
 	passThroughRouteList := &operatorv1.TLSPassThroughRouteList{}
-	if err := cli.List(ctx, passThroughRouteList); err != nil {
+	if err := cli.List(ctx, passThroughRouteList, listOptions...); err != nil {
 		return nil, err
 	}
 

@@ -196,7 +196,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 	})
 
-	It("should render security context constrains properly when provider is openshift", func() {
+	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, KubernetesProvider: operatorv1.ProviderOpenShift}, compliance: compliance, complianceFeatureActive: true})
 
 		// tigera-manager-role clusterRole should have openshift securitycontextconstraints PolicyRule
@@ -205,7 +205,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			APIGroups:     []string{"security.openshift.io"},
 			Resources:     []string{"securitycontextconstraints"},
 			Verbs:         []string{"use"},
-			ResourceNames: []string{"privileged"},
+			ResourceNames: []string{"nonroot-v2"},
 		}))
 	})
 
@@ -967,7 +967,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			func(scenario testutils.AllowTigeraScenario) {
 				// Default configuration.
 				resources := renderObjects(renderConfig{
-					openshift:               scenario.Openshift,
+					openshift:               scenario.OpenShift,
 					oidc:                    false,
 					managementCluster:       nil,
 					installation:            installation,
@@ -993,8 +993,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Expect(policy).To(Equal(expectedPolicy))
 			},
 			// Manager only renders in the presence of a Manager CR, therefore does not have a config option for managed clusters.
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
 		)
 	})
 
@@ -1350,7 +1350,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		Replicas:                roc.installation.ControlPlaneReplicas,
 		Compliance:              roc.compliance,
 		ComplianceLicenseActive: roc.complianceFeatureActive,
-		Openshift:               roc.openshift,
+		OpenShift:               roc.openshift,
 		UsePSP:                  true,
 		Namespace:               roc.ns,
 		BindingNamespaces:       roc.bindingNamespaces,

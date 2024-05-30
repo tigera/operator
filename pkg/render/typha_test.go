@@ -90,7 +90,7 @@ var _ = Describe("Typha rendering tests", func() {
 		}
 	})
 
-	It("should render security context constrains properly when provider is openshift", func() {
+	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 		component := render.Typha(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -102,7 +102,7 @@ var _ = Describe("Typha rendering tests", func() {
 			APIGroups:     []string{"security.openshift.io"},
 			Resources:     []string{"securitycontextconstraints"},
 			Verbs:         []string{"use"},
-			ResourceNames: []string{"privileged"},
+			ResourceNames: []string{"nonroot-v2"},
 		}))
 	})
 

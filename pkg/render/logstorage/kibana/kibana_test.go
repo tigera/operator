@@ -152,6 +152,8 @@ var _ = Describe("Kibana rendering tests", func() {
 			// Should not contain any PodSecurityPolicies
 			for _, r := range resources {
 				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
+				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("ClusterRole"))
+				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("ClusterRoleBinding"))
 			}
 		})
 

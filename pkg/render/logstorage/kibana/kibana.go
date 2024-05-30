@@ -164,10 +164,13 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, render.CreateNamespace(Namespace, k.cfg.Installation.KubernetesProvider, render.PSSBaseline))
 		toCreate = append(toCreate, k.allowTigeraPolicy())
 		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(Namespace))
-		toCreate = append(toCreate, k.serviceAccount(), k.clusterRole(), k.clusterRoleBinding())
+		toCreate = append(toCreate, k.serviceAccount())
 
-		if k.cfg.UsePSP {
-			toCreate = append(toCreate, k.kibanaPodSecurityPolicy())
+		if k.cfg.UsePSP || k.cfg.Installation.KubernetesProvider.IsOpenShift() {
+			toCreate = append(toCreate, k.clusterRole(), k.clusterRoleBinding())
+			if k.cfg.UsePSP {
+				toCreate = append(toCreate, k.kibanaPodSecurityPolicy())
+			}
 		}
 
 		if len(k.cfg.PullSecrets) > 0 {

@@ -303,6 +303,10 @@ var (
 	ProviderTKG       Provider = "TKG"
 )
 
+func (p Provider) IsNone() bool {
+	return p == ProviderNone
+}
+
 func (p Provider) IsAKS() bool {
 	return p == ProviderAKS
 }

@@ -23,6 +23,8 @@ import (
 	"github.com/tigera/operator/pkg/ptr"
 )
 
+// Default OpenShift security context constraints (SCCs) defined in
+// https://docs.openshift.com/container-platform/4.14/authentication/managing-security-context-constraints.html#default-sccs_configuring-internal-oauth
 const (
 	HostAccess    = "hostaccess"
 	HostNetworkV2 = "hostnetwork-v2"

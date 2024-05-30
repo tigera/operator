@@ -154,7 +154,7 @@ func (c *component) SupportedOSType() rmeta.OSType {
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	var objs []client.Object
 	// If l7spec is provided render the required objects.
-	objs = append(objs, c.serviceAccount(), c.role(), c.roleBinding())
+	objs = append(objs, c.serviceAccount())
 
 	c.config.dikastesEnabled = false
 	if c.config.WAFEnabled || c.config.ALPEnabled {
@@ -178,8 +178,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
 	}
 
-	if c.config.UsePSP {
-		objs = append(objs, c.podSecurityPolicy())
+	if c.config.UsePSP || c.config.Installation.KubernetesProvider.IsOpenShift() {
+		objs = append(objs, c.role(), c.roleBinding())
+		if c.config.UsePSP {
+			objs = append(objs, c.podSecurityPolicy())
+		}
 	}
 
 	return objs, nil

@@ -777,7 +777,7 @@ func fillDefaults(instance *operator.Installation) error {
 // and updates the Installation CR accordingly. It returns an error if incompatible values are provided.
 func mergeProvider(cr *operator.Installation, provider operator.Provider) error {
 	// If we detected one provider but user set provider to something else, throw an error
-	if provider != operator.ProviderNone && cr.Spec.KubernetesProvider != operator.ProviderNone && cr.Spec.KubernetesProvider != provider {
+	if !provider.IsNone() && !cr.Spec.KubernetesProvider.IsNone() && cr.Spec.KubernetesProvider != provider {
 		msg := "installation spec.kubernetesProvider '%s' does not match auto-detected value '%s'"
 		return fmt.Errorf(msg, cr.Spec.KubernetesProvider, provider)
 	}
@@ -785,7 +785,7 @@ func mergeProvider(cr *operator.Installation, provider operator.Provider) error 
 	// If we've reached this point, it means only one source of provider is being used - auto-detection or
 	// user-provided, but not both. Or, it means that both have been specified but are the same.
 	// If it's the CR provided one, then just use that. Otherwise, use the auto-detected one.
-	if cr.Spec.KubernetesProvider == operator.ProviderNone {
+	if cr.Spec.KubernetesProvider.IsNone() {
 		cr.Spec.KubernetesProvider = provider
 	}
 	log.WithValues("provider", cr.Spec.KubernetesProvider).V(1).Info("Determined provider")

@@ -97,10 +97,13 @@ func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Ob
 		e.allowTigeraPolicy(),
 	}
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...)...)
-	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount(), e.metricsRole(), e.metricsRoleBinding())
+	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount())
 
-	if e.cfg.UsePSP {
-		toCreate = append(toCreate, e.metricsPodSecurityPolicy())
+	if e.cfg.UsePSP || e.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		toCreate = append(toCreate, e.metricsRole(), e.metricsRoleBinding())
+		if e.cfg.UsePSP {
+			toCreate = append(toCreate, e.metricsPodSecurityPolicy())
+		}
 	}
 	return toCreate, objsToDelete
 }

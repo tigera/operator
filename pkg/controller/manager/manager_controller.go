@@ -670,7 +670,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		TLSKeyPair:              tlsSecret,
 		VoltronLinseedKeyPair:   linseedVoltronServerCert,
 		PullSecrets:             pullSecrets,
-		Openshift:               r.provider == operatorv1.ProviderOpenShift,
+		OpenShift:               r.provider.IsOpenShift(),
 		Installation:            installation,
 		ManagementCluster:       managementCluster,
 		TunnelServerCert:        tunnelServerCert,

@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -37,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
 )
@@ -55,7 +57,6 @@ const (
 	IntrusionDetectionInstallerPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
 
 	ADAPIObjectName                 = "anomaly-detection-api"
-	ADAPIPodSecurityPolicyName      = "anomaly-detection-api"
 	IntrusionDetectionTLSSecretName = "intrusion-detection-tls"
 	DPITLSSecretName                = "deep-packet-inspection-tls"
 	ADAPIPolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
@@ -98,7 +99,7 @@ type IntrusionDetectionConfiguration struct {
 	LogCollector       *operatorv1.LogCollector
 	Installation       *operatorv1.InstallationSpec
 	PullSecrets        []*corev1.Secret
-	Openshift          bool
+	OpenShift          bool
 	ClusterDomain      string
 	ESLicenseType      ElasticsearchLicenseType
 	ManagedCluster     bool
@@ -359,7 +360,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		// is the owner of the AD Cronjobs - Openshift blocks setting an
 		// blockOwnerDeletion to true if an ownerReference refers to a resource
 		// you can't set finalizers on"
-		if c.cfg.Openshift {
+		if c.cfg.OpenShift {
 			managementRule = append(managementRule,
 				rbacv1.PolicyRule{
 					APIGroups: []string{"apps"},
@@ -371,15 +372,17 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		rules = append(rules, managementRule...)
 	}
 
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+	if c.cfg.OpenShift {
+		sccName := securitycontextconstraints.NonRootV2
 		if c.syslogForwardingIsEnabled() {
-			rules = append(rules, rbacv1.PolicyRule{
-				APIGroups:     []string{"security.openshift.io"},
-				Resources:     []string{"securitycontextconstraints"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{PSSPrivileged},
-			})
+			sccName = securitycontextconstraints.Privileged
 		}
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{sccName},
+		})
 	}
 
 	return &rbacv1.ClusterRole{
@@ -666,7 +669,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		// use privileged UID/GID 0.
 		// On OpenShift, if we need the volume mount to hostpath volume for syslog forwarding,
 		// then IDS controller needs privileged access to write event logs to that volume
-		sc = securitycontext.NewRootContext(c.cfg.Openshift)
+		sc = securitycontext.NewRootContext(c.cfg.OpenShift)
 	}
 
 	if c.cfg.ManagedCluster {
@@ -981,7 +984,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 			},
 		},
 	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 	if c.cfg.ManagedCluster {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,

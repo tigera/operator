@@ -919,3 +919,7 @@ func RemoveInstallationFinalizer(i *operatorv1.Installation, finalizer string) {
 		i.SetFinalizers(stringsutil.RemoveStringInSlice(finalizer, i.GetFinalizers()))
 	}
 }
+
+func LinseedTokenSecretName(serviceAccountName string) string {
+	return fmt.Sprintf(render.LinseedTokenSecret, serviceAccountName)
+}

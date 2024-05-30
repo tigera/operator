@@ -108,23 +108,26 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	objectsToCreate := append(
 		secret.ToRuntimeObjects(c.egwPullSecrets()...),
 		c.egwServiceAccount(),
-		c.egwRole(),
-		c.egwRoleBinding(),
 	)
 
-	// It is possible to have multiple egress gateway resources in different namespaces.
-	// The cluster-level psp is deleted in egressgateway_controller when no egress gateway
-	// is in the cluster.
-	if c.config.UsePSP {
-		objectsToCreate = append(objectsToCreate, PodSecurityPolicy())
-	}
-
-	if c.config.OpenShift {
-		objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
+	var objectsToDelete []client.Object
+	if c.config.UsePSP || c.config.OpenShift {
+		objectsToCreate = append(objectsToCreate, c.egwRole(), c.egwRoleBinding())
+		if c.config.UsePSP {
+			objectsToCreate = append(objectsToCreate, PodSecurityPolicy())
+		}
+		if c.config.OpenShift {
+			objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
+		}
+	} else {
+		// It is possible to have multiple egress gateway resources in different namespaces.
+		// We only delete namespaced role and role binding here. The cluster-level psp and scc
+		// are deleted in egressgateway_controller when no egress gateway is in the cluster.
+		objectsToDelete = append(objectsToDelete, c.egwRole(), c.egwRoleBinding())
 	}
 
 	objectsToCreate = append(objectsToCreate, c.egwDeployment())
-	return objectsToCreate, nil
+	return objectsToCreate, objectsToDelete
 }
 
 func (c *component) Ready() bool {

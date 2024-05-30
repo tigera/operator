@@ -136,12 +136,13 @@ func (d *dashboards) resources() []client.Object {
 		d.AllowTigeraPolicy(),
 		d.ServiceAccount(),
 		d.Job(),
-		d.ClusterRole(),
-		d.ClusterRoleBinding(),
 	}
 
-	if d.cfg.UsePSP {
-		resources = append(resources, d.PodSecurityPolicy())
+	if d.cfg.UsePSP || d.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		resources = append(resources, d.ClusterRole(), d.ClusterRoleBinding())
+		if d.cfg.UsePSP {
+			resources = append(resources, d.PodSecurityPolicy())
+		}
 	}
 	return resources
 }

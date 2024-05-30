@@ -398,7 +398,6 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 		}
 	}
 
-	openshift := r.provider.IsOpenShift()
 	config := &egressgateway.Config{
 		PullSecrets:       pullSecrets,
 		Installation:      installation,
@@ -408,7 +407,7 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 		VXLANVNI:          egwVXLANVNI,
 		IptablesBackend:   ipTablesBackend,
 		UsePSP:            r.usePSP,
-		OpenShift:         openshift,
+		OpenShift:         r.provider.IsOpenShift(),
 		NamespaceAndNames: namespaceAndNames,
 	}
 

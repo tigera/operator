@@ -117,9 +117,18 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}{
 			{"test-secret", "test-ns", "", "v1", "Secret"},
 			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
+			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
+		}
+
+		expectedResToBeDeleted := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
 			{"egress-test", "test-ns", rbac, "v1", "Role"},
 			{"egress-test", "test-ns", rbac, "v1", "RoleBinding"},
-			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
 		}
 
 		component := egressgateway.EgressGateway(&egressgateway.Config{
@@ -131,10 +140,15 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			VXLANPort:       4790,
 			IptablesBackend: "nft",
 		})
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		resources, resToBeDeleted := component.Objects()
+		Expect(resources).To(HaveLen(len(expectedResources)))
+		Expect(resToBeDeleted).To(HaveLen(len(expectedResToBeDeleted)))
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+		}
+		for i, expectedResToBeDeleted := range expectedResToBeDeleted {
+			rtest.ExpectResourceTypeAndObjectMetadata(resToBeDeleted[i], expectedResToBeDeleted.name, expectedResToBeDeleted.ns, expectedResToBeDeleted.group,
+				expectedResToBeDeleted.version, expectedResToBeDeleted.kind)
 		}
 
 		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -259,7 +273,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			VXLANPort:    4790,
 		})
 		resources, _ := component.Objects()
-		Expect(resources).To(HaveLen(4))
+		Expect(resources).To(HaveLen(2))
 		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers[0].Resources).To(Equal(expectedResource))
 		elasticIPAnnotation := dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/awsElasticIPs"]

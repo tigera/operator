@@ -330,13 +330,16 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.cfg.ElasticsearchUserSecret)
 	}
 
-	toCreate = append(toCreate, es.elasticsearchServiceAccount(), es.elasticsearchClusterRole(), es.elasticsearchClusterRoleBinding())
+	toCreate = append(toCreate, es.elasticsearchServiceAccount())
 	toCreate = append(toCreate, es.cfg.ClusterConfig.ConfigMap())
 
 	toCreate = append(toCreate, es.elasticsearchCluster())
 
-	if es.cfg.UsePSP {
-		toCreate = append(toCreate, es.eckOperatorPodSecurityPolicy(), es.elasticsearchPodSecurityPolicy())
+	if es.cfg.UsePSP || es.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		toCreate = append(toCreate, es.elasticsearchClusterRole(), es.elasticsearchClusterRoleBinding())
+		if es.cfg.UsePSP {
+			toCreate = append(toCreate, es.eckOperatorPodSecurityPolicy(), es.elasticsearchPodSecurityPolicy())
+		}
 	}
 
 	if es.cfg.KibanaEnabled {
@@ -349,10 +352,13 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, CreateNamespace(KibanaNamespace, es.cfg.Installation.KubernetesProvider, PSSBaseline))
 		toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
 		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace))
-		toCreate = append(toCreate, es.kibanaServiceAccount(), es.kibanaClusterRole(), es.kibanaClusterRoleBinding())
+		toCreate = append(toCreate, es.kibanaServiceAccount())
 
-		if es.cfg.UsePSP {
-			toCreate = append(toCreate, es.kibanaPodSecurityPolicy())
+		if es.cfg.UsePSP || es.cfg.Installation.KubernetesProvider.IsOpenShift() {
+			toCreate = append(toCreate, es.kibanaClusterRole(), es.kibanaClusterRoleBinding())
+			if es.cfg.UsePSP {
+				toCreate = append(toCreate, es.kibanaPodSecurityPolicy())
+			}
 		}
 
 		if len(es.cfg.PullSecrets) > 0 {

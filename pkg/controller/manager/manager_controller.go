@@ -761,12 +761,12 @@ func fillDefaults(mc *operatorv1.ManagementCluster) {
 
 func getVoltronRouteConfig(ctx context.Context, cli client.Client, managerNamespace string) (*rmanager.VoltronRouteConfig, error) {
 	terminatedRouteList := &operatorv1.TLSTerminatedRouteList{}
-	if err := cli.List(ctx, terminatedRouteList); err != nil {
+	if err := cli.List(ctx, terminatedRouteList, client.InNamespace(managerNamespace)); err != nil {
 		return nil, err
 	}
 
 	passThroughRouteList := &operatorv1.TLSPassThroughRouteList{}
-	if err := cli.List(ctx, passThroughRouteList); err != nil {
+	if err := cli.List(ctx, passThroughRouteList, client.InNamespace(managerNamespace)); err != nil {
 		return nil, err
 	}
 

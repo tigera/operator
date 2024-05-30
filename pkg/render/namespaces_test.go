@@ -17,9 +17,10 @@ package render_test
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	operatorv1 "github.com/tigera/operator/api/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 )
@@ -54,6 +55,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		Expect(meta.GetLabels()["openshift.io/run-level"]).To(Equal("0"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("control-plane"))
 		Expect(meta.GetAnnotations()["openshift.io/node-selector"]).To(Equal(""))
+		Expect(meta.GetAnnotations()["security.openshift.io/scc.podSecurityLabelSync"]).To(Equal("false"))
 	})
 
 	It("should render a namespace for aks", func() {

@@ -20,11 +20,12 @@ import (
 	"fmt"
 	"strings"
 
-	pcv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	pcv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 )
 
 // InstallationSpec defines configuration for a Calico or Calico Enterprise installation.
@@ -301,6 +302,38 @@ var (
 	ProviderDockerEE  Provider = "DockerEnterprise"
 	ProviderTKG       Provider = "TKG"
 )
+
+func (p Provider) IsNone() bool {
+	return p == ProviderNone
+}
+
+func (p Provider) IsAKS() bool {
+	return p == ProviderAKS
+}
+
+func (p Provider) IsDockerEE() bool {
+	return p == ProviderDockerEE
+}
+
+func (p Provider) IsEKS() bool {
+	return p == ProviderEKS
+}
+
+func (p Provider) IsGKE() bool {
+	return p == ProviderGKE
+}
+
+func (p Provider) IsOpenShift() bool {
+	return p == ProviderOpenShift
+}
+
+func (p Provider) IsRKE2() bool {
+	return p == ProviderRKE2
+}
+
+func (p Provider) IsTKG() bool {
+	return p == ProviderTKG
+}
 
 // ProductVariant represents the variant of the product.
 //

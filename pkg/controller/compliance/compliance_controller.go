@@ -122,6 +122,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 			render.ComplianceServerCertSecret, render.ManagerInternalTLSSecretName, certificatemanagement.CASecretName,
 			render.TigeraLinseedSecret, render.VoltronLinseedTLS,
 			render.VoltronLinseedPublicCert,
+			fmt.Sprintf(render.LinseedTokenSecret, render.ComplianceBenchmarkerServiceAccount),
+			fmt.Sprintf(render.LinseedTokenSecret, render.ComplianceControllerServiceAccount),
+			fmt.Sprintf(render.LinseedTokenSecret, render.ComplianceReporterServiceAccount),
+			fmt.Sprintf(render.LinseedTokenSecret, render.ComplianceSnapshotterServiceAccount),
 		} {
 			if err = utils.AddSecretsWatch(complianceController, secretName, namespace); err != nil {
 				return fmt.Errorf("compliance-controller failed to watch the secret '%s' in '%s' namespace: %w", secretName, namespace, err)

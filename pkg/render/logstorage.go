@@ -1208,7 +1208,7 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 	// ManagedClusters simply need the namespace, role, and binding created so that Linseed in the management cluster has permissions
 	// to create token secrets in the managed cluster.
 	toCreate := []client.Object{}
-	roles, bindings := m.linseedExternalRolesAndBindings()
+	roles, bindings, clusterRB := m.linseedExternalRolesAndBindings()
 	toCreate = append(toCreate,
 		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged),
 		m.elasticsearchExternalService(),
@@ -1221,7 +1221,9 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 		toCreate = append(toCreate, b)
 	}
 
-	toCreate = append(toCreate, m.linseedExternalClusterRoleBinding())
+	for _, crb := range clusterRB {
+		toCreate = append(toCreate, crb)
+	}
 
 	return toCreate, nil
 }
@@ -1264,7 +1266,7 @@ func (m *managedClusterLogStorage) elasticsearchExternalService() *corev1.Servic
 
 // In managed clusters we need to provision roles and bindings for linseed to provide permissions
 // to get configmaps and manipulate secrets
-func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.ClusterRole, []*rbacv1.RoleBinding) {
+func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.ClusterRole, []*rbacv1.RoleBinding, []*rbacv1.ClusterRoleBinding) {
 	// Create separate ClusterRoles for necessary configmap and secret operations, then bind them to the namespaces
 	// where they are required so that we're only granting exactly which permissions we need in the namespaces in which
 	// they're required. Other controllers may also bind this cluster role to their own namespace if they require
@@ -1282,6 +1284,8 @@ func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.C
 		},
 	}
 
+	// This permission allows Linseed to watch for namespace creation and existence in the managed cluster
+	// before attempting to copy the Linseed token into those namespaces.
 	namespacesRole := &rbacv1.ClusterRole{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-linseed-namespaces",
@@ -1351,11 +1355,6 @@ func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.C
 		},
 	}
 
-	return []*rbacv1.ClusterRole{secretsRole, configMapsRole, namespacesRole}, []*rbacv1.RoleBinding{configMapBinding, secretBinding}
-}
-
-func (m managedClusterLogStorage) linseedExternalClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-
 	namespacesBinding := &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-linseed",
@@ -1373,5 +1372,6 @@ func (m managedClusterLogStorage) linseedExternalClusterRoleBinding() *rbacv1.Cl
 			},
 		},
 	}
-	return namespacesBinding
+
+	return []*rbacv1.ClusterRole{secretsRole, configMapsRole, namespacesRole}, []*rbacv1.RoleBinding{configMapBinding, secretBinding}, []*rbacv1.ClusterRoleBinding{namespacesBinding}
 }

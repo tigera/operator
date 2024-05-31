@@ -226,9 +226,8 @@ var _ = Describe("Dashboards rendering tests", func() {
 				},
 				Spec: operatorv1.TenantSpec{
 					ID: "test-tenant",
-					Elastic: &operatorv1.TenantElasticSpec{
-						KibanaURL: "https://external-kibana:443",
-						MutualTLS: true,
+					Kibana: &operatorv1.TenantKibanaSpec{
+						URL: "https://tigera-secure-kb-http.test-tenant-ns.svc:5601",
 					},
 				},
 			}
@@ -241,55 +240,10 @@ var _ = Describe("Dashboards rendering tests", func() {
 				TrustedBundle: bundle,
 				Namespace:     "tenant-test-tenant",
 				Tenant:        tenant,
-				KibanaHost:    "external-kibana",
+				KibanaHost:    "tigera-secure-kb-http.test-tenant-ns.svc",
 				KibanaScheme:  "https",
-				KibanaPort:    443,
+				KibanaPort:    5601,
 			}
-		})
-
-		It("should support an external kibana endpoint", func() {
-			cfg.ExternalKibanaClientSecret = &corev1.Secret{
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      logstorage.ExternalCertsSecret,
-					Namespace: cfg.Namespace,
-				},
-				Data: map[string][]byte{
-					"client.crt": {1, 2, 3},
-					"client.key": {4, 5, 6},
-				},
-			}
-			component := Dashboards(cfg)
-			createResources, _ := component.Objects()
-			d, ok := rtest.GetResource(createResources, Name, cfg.Namespace, "batch", "v1", "Job").(*batchv1.Job)
-			Expect(ok).To(BeTrue(), "Job not found")
-
-			// The deployment should have the hash annotation set, as well as a volume and volume mount for the client secret.
-			Expect(d.Spec.Template.Annotations["hash.operator.tigera.io/kibana-client-secret"]).To(Equal("ae1a6776a81bf1fc0ee4aac936a90bd61a07aea7"))
-			Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(corev1.Volume{
-				Name: logstorage.ExternalCertsVolumeName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: logstorage.ExternalCertsSecret,
-					},
-				},
-			}))
-			Expect(d.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
-				Name:      logstorage.ExternalCertsVolumeName,
-				MountPath: "/certs/kibana/mtls",
-				ReadOnly:  true,
-			}))
-
-			// Should expect mTLS env vars set.
-			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
-				Name: "KIBANA_CLIENT_KEY", Value: "/certs/kibana/mtls/client.key",
-			}))
-			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
-				Name: "KIBANA_CLIENT_CERT", Value: "/certs/kibana/mtls/client.crt",
-			}))
-			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
-				Name: "KIBANA_MTLS_ENABLED", Value: "true",
-			}))
 		})
 
 		It("should render resources in the tenant namespace", func() {
@@ -312,8 +266,8 @@ var _ = Describe("Dashboards rendering tests", func() {
 			envs := job.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_SPACE_ID", Value: cfg.Tenant.Spec.ID}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_SCHEME", Value: "https"}))
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_HOST", Value: "external-kibana"}))
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_PORT", Value: "443"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_HOST", Value: "tigera-secure-kb-http.test-tenant-ns.svc"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_PORT", Value: "5601"}))
 		})
 
 		It("should override resource request with the value from TenantSpec's dashboardsJob when available", func() {
@@ -372,6 +326,10 @@ var _ = Describe("Dashboards rendering tests", func() {
 				},
 				Spec: operatorv1.TenantSpec{
 					ID: "test-tenant",
+					Kibana: &operatorv1.TenantKibanaSpec{
+						URL:       "https://external-kibana:443",
+						MutualTLS: true,
+					},
 				},
 			}
 			bundle := getBundle(installation)

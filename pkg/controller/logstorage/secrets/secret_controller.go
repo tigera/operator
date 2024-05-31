@@ -111,7 +111,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
 	}
 	if opts.MultiTenant {
-		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
+		if err = c.WatchObject(&operatorv1.Tenant{}, eventHandler); err != nil {
 			return fmt.Errorf("log-storage-secrets-controller failed to watch Tenant resource: %w", err)
 		}
 	}
@@ -262,15 +262,15 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 
 	// Determine if Kibana should be enabled for this cluster.
-	kibanaEnabled := !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && !r.multiTenant
+	kibanaEnabled := render.KibanaEnabled(tenant, install)
 
 	// Internal ES modes:
 	// - Zero-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a single trusted bundle in each.
 	// - Single-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a single trusted bundle in each.
 	//
 	// External ES modes:
-	// - Single-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a single trusted bundle in each.
-	// - Multi-tenant: nothing installed in tigera-elasticsearch Namespace. The trusted bundle isn't created by this controller, but per-tenant keypairs are.
+	// - Single-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a trusted bundle in tigera-elasticsearch.
+	// - Multi-tenant: nothing installed in tigera-elasticsearch and tigera-kibana Namespace. The trusted bundle isn't created by this controller, but per-tenant keypairs are.
 	if !r.elasticExternal {
 		// This branch provisions the necessary KeyPairs for the internal ES cluster and Kibana, and installs a trusted bundle into tigera-kibana.
 		// The trusted bundle for the tigera-elasticsearch namespace will be created further below as part of generateTigeraSecrets(), as it
@@ -499,10 +499,16 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 
 	if r.elasticExternal {
 		// For external ES, we don't need to generate a keypair for ES itself. Instead, a public certificate
-		// for the external ES and Kibana instances must be provided. Load and include in these into
+		// for the external ES instances must be provided. Load and include in these into
 		// the trusted bundle for Linseed and es-gateway.
 		certs[logstorage.ExternalESPublicCertName] = common.OperatorNamespace()
-		certs[logstorage.ExternalKBPublicCertName] = common.OperatorNamespace()
+		if r.multiTenant {
+			// A multi-tenant setup will have an external Elastic, but an internal Kibana
+			certs[kibana.TigeraKibanaCertSecret] = helper.TruthNamespace()
+		} else {
+			// Single tenant with external Elastic uses an external Kibana instance
+			certs[logstorage.ExternalKBPublicCertName] = common.OperatorNamespace()
+		}
 	} else {
 		// For internal ES, the operator creates a keypair for ES and Kibana itself earlier in the execution of this controller.
 		// Include these in the trusted bundle as well, so that Linseed and es-gateway can trust them.

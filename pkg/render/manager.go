@@ -130,7 +130,6 @@ type ManagerConfiguration struct {
 
 	KeyValidatorConfig authentication.KeyValidatorConfig
 	ESSecrets          []*corev1.Secret
-	ClusterConfig      *relasticsearch.ClusterConfig
 	PullSecrets        []*corev1.Secret
 	Openshift          bool
 	Installation       *operatorv1.InstallationSpec
@@ -429,7 +428,7 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 func KibanaEnabled(tenant *operatorv1.Tenant, installation *operatorv1.InstallationSpec) bool {
 	enableKibana := !operatorv1.IsFIPSModeEnabled(installation.FIPSMode)
 	if tenant.MultiTenant() {
-		enableKibana = false
+		return tenant.IsKibanaEnabled()
 	}
 	return enableKibana
 }
@@ -521,7 +520,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
 		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", c.cfg.ComplianceNamespace, c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_LOGLEVEL", Value: "Info"},
-		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
+		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: c.kibanaEndpoint()},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
@@ -613,7 +612,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	env := []corev1.EnvVar{
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
-		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
+		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: c.kibanaEndpoint()},
 		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
@@ -658,6 +657,14 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 		Env:             env,
 		VolumeMounts:    volumeMounts,
 	}
+}
+
+func (c *managerComponent) kibanaEndpoint() string {
+	kibanaEndpoint := rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)
+	if c.cfg.Tenant.MultiTenant() {
+		kibanaEndpoint = fmt.Sprintf("https://tigera-secure-kb-http.%s.svc.cluster.local:5601", c.cfg.Namespace)
+	}
+	return kibanaEndpoint
 }
 
 // managerTolerations returns the tolerations for the Tigera Secure manager deployment pods.
@@ -959,6 +966,15 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 		Protocol:    &networkpolicy.TCPProtocol,
 		Destination: networkpolicy.PrometheusEntityRule,
 	})
+
+	if c.cfg.Tenant.MultiTenant() {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicyHelper.KibanaEntityRule(),
+		})
+
+	}
 
 	ingressRules := []v3.Rule{
 		{

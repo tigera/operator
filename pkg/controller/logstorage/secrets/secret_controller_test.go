@@ -78,19 +78,22 @@ func NewSecretControllerWithShims(
 	status status.StatusManager,
 	provider operatorv1.Provider,
 	clusterDomain string,
+	externalElastic bool,
 ) (*SecretSubController, error) {
 	opts := options.AddOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),
+		ElasticExternal:  externalElastic,
 	}
 
 	r := &SecretSubController{
-		client:        cli,
-		scheme:        scheme,
-		status:        status,
-		clusterDomain: opts.ClusterDomain,
-		multiTenant:   opts.MultiTenant,
+		client:          cli,
+		scheme:          scheme,
+		status:          status,
+		clusterDomain:   opts.ClusterDomain,
+		multiTenant:     opts.MultiTenant,
+		elasticExternal: opts.ElasticExternal,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil
@@ -198,7 +201,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		Expect(cli.Delete(ctx, caSecret)).ShouldNot(HaveOccurred())
 
 		// Run the reconciler.
-		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
 		Expect(err).ShouldNot(HaveOccurred())
 		_, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).Should(HaveOccurred())
@@ -213,7 +216,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		CreateLogStorage(cli, ls)
 
 		// Run the reconciler.
-		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
 		Expect(err).ShouldNot(HaveOccurred())
 		_, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
@@ -304,7 +307,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 		})).ShouldNot(HaveOccurred())
 
-		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// Elasticsearch and kibana secrets are good.
@@ -347,7 +350,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			},
 		})
 
-		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
 		Expect(err).ShouldNot(HaveOccurred())
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
@@ -409,7 +412,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			},
 		})
 
-		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		result, err := r.Reconcile(ctx, reconcile.Request{})
@@ -450,7 +453,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(cli.Create(ctx, kbSecret)).ShouldNot(HaveOccurred())
 
-		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// Reconcile - the secret should be unchanged.
@@ -492,7 +495,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(cli.Create(ctx, gwSecret)).ShouldNot(HaveOccurred())
 
-		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		result, err := r.Reconcile(ctx, reconcile.Request{})
@@ -524,7 +527,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
 		})).ShouldNot(HaveOccurred())
 
-		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
 		Expect(err).ShouldNot(HaveOccurred())
 
 		result, err := r.Reconcile(ctx, reconcile.Request{})
@@ -545,7 +548,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		Expect(cli.Create(ctx, mcc)).ShouldNot(HaveOccurred())
 
 		// Run the reconciler.
-		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false)
 		Expect(err).ShouldNot(HaveOccurred())
 		_, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
@@ -576,8 +579,6 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			// Create the external ES and Kibana public certificates, used for external ES.
 			externalESSecret := rtest.CreateCertSecret(logstorage.ExternalESPublicCertName, common.OperatorNamespace(), "external.es.com")
 			Expect(cli.Create(ctx, externalESSecret)).ShouldNot(HaveOccurred())
-			externalKibanaSecret := rtest.CreateCertSecret(logstorage.ExternalKBPublicCertName, common.OperatorNamespace(), "external.kb.com")
-			Expect(cli.Create(ctx, externalKibanaSecret)).ShouldNot(HaveOccurred())
 
 			// Create a per-tenant CA secret for the test, and create its KeyPair.
 			cm, err := certificatemanager.Create(cli,
@@ -609,7 +610,6 @@ var _ = Describe("LogStorage Secrets controller", func() {
 				{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()},
 				{Name: certificatemanagement.TenantCASecretName, Namespace: tenantNS},
 				{Name: logstorage.ExternalESPublicCertName, Namespace: common.OperatorNamespace()},
-				{Name: logstorage.ExternalKBPublicCertName, Namespace: common.OperatorNamespace()},
 
 				// These are created by the controller.
 				{Name: render.TigeraLinseedSecret, Namespace: tenantNS},
@@ -620,6 +620,65 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			bundle := &corev1.ConfigMap{}
 			bundleKey := types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: tenantNS}
 			Expect(cli.Get(ctx, bundleKey, bundle)).Should(HaveOccurred())
+		})
+	})
+
+	Context("External elastic secret rendering", func() {
+
+		BeforeEach(func() {
+			// Create the external ES and Kibana public certificates, used for external ES.
+			externalESSecret := rtest.CreateCertSecret(logstorage.ExternalESPublicCertName, common.OperatorNamespace(), "external.es.com")
+			Expect(cli.Create(ctx, externalESSecret)).ShouldNot(HaveOccurred())
+
+			// Create the external ES and Kibana public certificates, used for external ES.
+			externalKBSecret := rtest.CreateCertSecret(logstorage.ExternalKBPublicCertName, common.OperatorNamespace(), "external.es.com")
+			Expect(cli.Create(ctx, externalKBSecret)).ShouldNot(HaveOccurred())
+		})
+
+		It("should render all necessary secrets for a single-tenant management cluster with external elastic", func() {
+			// Create a LogStorage instance with a default configuration.
+			ls := &operatorv1.LogStorage{}
+			ls.Name = "tigera-secure"
+			ls.Status.State = operatorv1.TigeraStatusReady
+			CreateLogStorage(cli, ls)
+
+			// Run the reconciler.
+			r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, true)
+			Expect(err).ShouldNot(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Expect secrets to have been created.
+			expected := []types.NamespacedName{
+				// These are created in BeforeEach.
+				{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()},
+				{Name: logstorage.ExternalESPublicCertName, Namespace: common.OperatorNamespace()},
+				{Name: logstorage.ExternalKBPublicCertName, Namespace: common.OperatorNamespace()},
+
+				// These are created by the controller.
+				{Name: esmetrics.ElasticsearchMetricsServerTLSSecret, Namespace: common.OperatorNamespace()},
+				{Name: esmetrics.ElasticsearchMetricsServerTLSSecret, Namespace: render.ElasticsearchNamespace},
+
+				{Name: render.TigeraElasticsearchGatewaySecret, Namespace: common.OperatorNamespace()},
+				{Name: render.TigeraElasticsearchGatewaySecret, Namespace: render.ElasticsearchNamespace},
+
+				{Name: render.TigeraLinseedSecret, Namespace: common.OperatorNamespace()},
+				{Name: render.TigeraLinseedSecret, Namespace: render.ElasticsearchNamespace},
+			}
+			ExpectSecrets(ctx, cli, expected)
+
+			// Expect the trusted bundle to be provisioned in both the tigera-elasticsearch and tigera-kibana namespaces.
+			// The bundle should include the tigera-operator CA and external certificate
+			bundle := &corev1.ConfigMap{}
+			bundleKey := types.NamespacedName{Name: certificatemanagement.TrustedCertConfigMapName, Namespace: render.ElasticsearchNamespace}
+			Expect(cli.Get(ctx, bundleKey, bundle)).ShouldNot(HaveOccurred())
+
+			// For this test, we expect both the tigera-operator CA to be included in the bundle and the external certificates
+			rtest.ExpectBundleContents(bundle,
+				types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()},
+				types.NamespacedName{Name: logstorage.ExternalESPublicCertName, Namespace: common.OperatorNamespace()},
+				types.NamespacedName{Name: logstorage.ExternalKBPublicCertName, Namespace: common.OperatorNamespace()},
+			)
 		})
 	})
 })

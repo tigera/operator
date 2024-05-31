@@ -35,56 +35,57 @@ import (
 )
 
 var _ = Describe("ECK rendering tests", func() {
-	Context("zero-tenant rendering", func() {
-		var installation *operatorv1.InstallationSpec
-		var replicas int32
-		var cfg *eck.Configuration
-		eckPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/elastic-operator.json")
-		eckPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/elastic-operator_ocp.json")
+	var installation *operatorv1.InstallationSpec
+	var replicas int32
+	var cfg *eck.Configuration
 
-		expectedResources := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: eck.OperatorNamespace}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: eck.OperatorPolicyName, Namespace: eck.OperatorNamespace}},
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: eck.OperatorNamespace}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator"}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator", Namespace: eck.OperatorNamespace}},
-			&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: eck.OperatorName}},
-			&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: eck.OperatorName, Namespace: eck.OperatorNamespace}},
+	expectedResources := []client.Object{
+		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: eck.OperatorNamespace}},
+		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: eck.OperatorPolicyName, Namespace: eck.OperatorNamespace}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: eck.OperatorNamespace}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator"}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator", Namespace: eck.OperatorNamespace}},
+		&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: eck.OperatorName}},
+		&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: eck.OperatorName, Namespace: eck.OperatorNamespace}},
+	}
+
+	BeforeEach(func() {
+		logStorage := &operatorv1.LogStorage{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "tigera-secure",
+			},
+			Spec: operatorv1.LogStorageSpec{
+				Nodes: &operatorv1.Nodes{
+					Count:                1,
+					ResourceRequirements: nil,
+				},
+			},
+			Status: operatorv1.LogStorageStatus{
+				State: "",
+			},
 		}
 
-		BeforeEach(func() {
-			logStorage := &operatorv1.LogStorage{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tigera-secure",
-				},
-				Spec: operatorv1.LogStorageSpec{
-					Nodes: &operatorv1.Nodes{
-						Count:                1,
-						ResourceRequirements: nil,
-					},
-				},
-				Status: operatorv1.LogStorageStatus{
-					State: "",
-				},
-			}
+		installation = &operatorv1.InstallationSpec{
+			ControlPlaneReplicas: &replicas,
+			KubernetesProvider:   operatorv1.ProviderNone,
+			Registry:             "testregistry.com/",
+		}
 
-			installation = &operatorv1.InstallationSpec{
-				ControlPlaneReplicas: &replicas,
-				KubernetesProvider:   operatorv1.ProviderNone,
-				Registry:             "testregistry.com/",
-			}
+		cfg = &eck.Configuration{
+			LogStorage:   logStorage,
+			Installation: installation,
+			PullSecrets: []*corev1.Secret{
+				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+			},
+			Provider: operatorv1.ProviderNone,
+			UsePSP:   true,
+		}
+	})
 
-			cfg = &eck.Configuration{
-				LogStorage:   logStorage,
-				Installation: installation,
-				PullSecrets: []*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				},
-				Provider: operatorv1.ProviderNone,
-				UsePSP:   true,
-			}
-		})
+	Context("zero-tenant rendering", func() {
+		eckPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/elastic-operator.json")
+		eckPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/elastic-operator_ocp.json")
 
 		It("should render all supporting resources for ECK Operator", func() {
 			component := eck.ECK(cfg)
@@ -325,6 +326,47 @@ var _ = Describe("ECK rendering tests", func() {
 					}
 				})
 			})
+		})
+	})
+
+	Context("multi-tenant rendering", func() {
+
+		It("should render all supporting resources for ECK Operator", func() {
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-tenant",
+					Namespace: "test-tenant-ns",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "test-tenant",
+				},
+			}
+			component := eck.ECK(cfg)
+			createResources, _ := component.Objects()
+			rtest.ExpectResources(createResources, expectedResources)
+
+			// Check the namespaces.
+			namespace := rtest.GetResource(createResources, "tigera-eck-operator", "", "", "v1", "Namespace").(*corev1.Namespace)
+			Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
+			Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+			resultECK := rtest.GetResource(createResources, eck.OperatorName, eck.OperatorNamespace,
+				"apps", "v1", "StatefulSet").(*appsv1.StatefulSet)
+			Expect(resultECK.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(resultECK.Spec.Template.Spec.Containers[0].Args).To(ConsistOf([]string{
+				"manager",
+				"--namespaces=",
+				"--log-verbosity=0",
+				"--metrics-port=0",
+				"--container-registry=testregistry.com/",
+				"--max-concurrent-reconciles=3",
+				"--ca-cert-validity=8760h",
+				"--ca-cert-rotate-before=24h",
+				"--cert-validity=8760h",
+				"--cert-rotate-before=24h",
+				"--enable-webhook=false",
+				"--manage-webhook-certs=false",
+			}))
 		})
 	})
 })

@@ -919,3 +919,38 @@ func RemoveInstallationFinalizer(i *operatorv1.Installation, finalizer string) {
 		i.SetFinalizers(stringsutil.RemoveStringInSlice(finalizer, i.GetFinalizers()))
 	}
 }
+
+type LinseedToken struct {
+	secret   *corev1.Secret
+	metadata types.NamespacedName
+}
+
+func LinseedTokenFor(serviceAccountName string, namespace string) LinseedToken {
+	return LinseedToken{
+		metadata: types.NamespacedName{Name: fmt.Sprintf(render.LinseedTokenSecret, serviceAccountName), Namespace: namespace},
+	}
+}
+
+func (token LinseedToken) StoreSecret(secret *corev1.Secret) {
+	token.secret = secret
+}
+
+func (token LinseedToken) Secret() *corev1.Secret {
+	return token.secret
+}
+
+func (token LinseedToken) Name() string {
+	return token.metadata.Name
+}
+
+func (token LinseedToken) Namespace() string {
+	return token.metadata.Namespace
+}
+
+func (token LinseedToken) NamespaceName() types.NamespacedName {
+	return token.metadata
+}
+
+func LinseedTokenSecretName(serviceAccountName string) string {
+	return fmt.Sprintf(render.LinseedTokenSecret, serviceAccountName)
+}

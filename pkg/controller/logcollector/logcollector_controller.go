@@ -149,6 +149,15 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
 		}
 	}
+	for _, secretName := range []string{
+		utils.LinseedTokenSecretName(render.FluentdNodeName),
+		utils.LinseedTokenSecretName(render.FluentdNodeWindowsName),
+	} {
+		if err = utils.AddSecretsWatch(c, secretName, render.LogCollectorNamespace); err != nil {
+			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
+		}
+
+	}
 
 	for _, configMapName := range []string{render.FluentdFilterConfigMapName, relasticsearch.ClusterConfigConfigMapName} {
 		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
@@ -450,6 +459,19 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	fluentLinseedToken := utils.LinseedTokenFor(render.FluentdNodeName, render.LogCollectorNamespace)
+	fluentWindowsLinseedToken := utils.LinseedTokenFor(render.FluentdNodeWindowsName, render.LogCollectorNamespace)
+	if managedCluster {
+		for _, token := range []utils.LinseedToken{fluentLinseedToken, fluentLinseedToken} {
+			secret, err := utils.GetSecret(ctx, r.client, token.Name(), token.Namespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", token.NamespaceName()), err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			token.StoreSecret(secret)
+		}
+	}
+
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 
 	exportLogs := utils.IsFeatureActive(license, common.ExportLogsFeature)
@@ -589,6 +611,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		Tenant:                 tenant,
 		ExternalElastic:        r.externalElastic,
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
+		FluentDToken:           fluentLinseedToken.Secret(),
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -652,6 +675,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			UseSyslogCertificate:   useSyslogCertificate,
 			FluentdKeyPair:         fluentdKeyPair,
 			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
+			FluentDToken:           fluentWindowsLinseedToken.Secret(),
 		}
 		comp = render.Fluentd(fluentdCfg)
 

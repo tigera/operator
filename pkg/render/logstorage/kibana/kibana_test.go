@@ -155,7 +155,21 @@ var _ = Describe("Kibana rendering tests", func() {
 				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("ClusterRole"))
 				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("ClusterRoleBinding"))
 			}
+		})
 
+		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+			component := kibana.Kibana(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			role := rtest.GetResource(resources, "tigera-kibana", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"nonroot-v2"},
+			}))
 		})
 
 		It("should configures Kibana publicBaseUrl when BaseURL is specified", func() {
@@ -224,7 +238,7 @@ var _ = Describe("Kibana rendering tests", func() {
 
 			DescribeTable("should render allow-tigera policy",
 				func(scenario testutils.AllowTigeraScenario) {
-					if scenario.Openshift {
+					if scenario.OpenShift {
 						cfg.Provider = operatorv1.ProviderOpenShift
 					} else {
 						cfg.Provider = operatorv1.ProviderNone
@@ -239,8 +253,8 @@ var _ = Describe("Kibana rendering tests", func() {
 						Expect(policy).To(Equal(expectedPolicy))
 					}
 				},
-				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
 			)
 		})
 

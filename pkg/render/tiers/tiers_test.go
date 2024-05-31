@@ -67,7 +67,7 @@ var _ = Describe("Tiers rendering tests", func() {
 	BeforeEach(func() {
 		// Establish default config for test cases to override.
 		cfg = &tiers.Config{
-			Openshift:      false,
+			OpenShift:      false,
 			DNSEgressCIDRs: getDNSEgressCIDRs(testutils.IPV4),
 			CalicoNamespaces: []string{
 				common.CalicoNamespace,
@@ -97,7 +97,7 @@ var _ = Describe("Tiers rendering tests", func() {
 
 		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 			if name.Name == "allow-tigera.cluster-dns" &&
-				((scenario.Openshift && name.Namespace == "openshift-dns") || (!scenario.Openshift && name.Namespace == "kube-system")) {
+				((scenario.OpenShift && name.Namespace == "openshift-dns") || (!scenario.OpenShift && name.Namespace == "kube-system")) {
 				return testutils.SelectPolicyByProvider(scenario, clusterDNSPolicy, clusterDNSPolicyForOCP)
 			}
 
@@ -106,7 +106,7 @@ var _ = Describe("Tiers rendering tests", func() {
 
 		DescribeTable("should render allow-tigera network policy",
 			func(scenario testutils.AllowTigeraScenario) {
-				cfg.Openshift = scenario.Openshift
+				cfg.OpenShift = scenario.OpenShift
 
 				component := tiers.Tiers(cfg)
 				resourcesToCreate, _ := component.Objects()
@@ -123,10 +123,10 @@ var _ = Describe("Tiers rendering tests", func() {
 				}
 			},
 
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
 		)
 	})
 

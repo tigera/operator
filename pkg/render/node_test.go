@@ -47,8 +47,6 @@ import (
 )
 
 var (
-	openshift            = true
-	notOpenshift         = false
 	bgpEnabled           = operatorv1.BGPEnabled
 	bgpDisabled          = operatorv1.BGPDisabled
 	nonPrivilegedEnabled = operatorv1.NonPrivilegedEnabled
@@ -155,6 +153,21 @@ var _ = Describe("Node rendering tests", func() {
 				for _, r := range resources {
 					Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 				}
+			})
+
+			It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+				cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+
+				role := rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+					APIGroups:     []string{"security.openshift.io"},
+					Resources:     []string{"securitycontextconstraints"},
+					Verbs:         []string{"use"},
+					ResourceNames: []string{"privileged"},
+				}))
 			})
 
 			It("should render all resources for a default configuration", func() {

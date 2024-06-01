@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
@@ -382,6 +383,15 @@ func (mc *monitorComponent) prometheusOperatorClusterRole() *rbacv1.ClusterRole 
 		})
 	}
 
+	if mc.cfg.OpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: CalicoPrometheusOperator},
@@ -669,6 +679,15 @@ func (mc *monitorComponent) prometheusClusterRole() *rbacv1.ClusterRole {
 		})
 	}
 
+	if mc.cfg.OpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: PrometheusClusterRoleName},
@@ -707,6 +726,15 @@ func (mc *monitorComponent) prometheusServiceClusterRole() client.Object {
 			Resources: []string{"subjectaccessreviews"},
 			Verbs:     []string{"create"},
 		},
+	}
+
+	if mc.cfg.OpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
+		})
 	}
 
 	return &rbacv1.ClusterRole{

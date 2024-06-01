@@ -567,6 +567,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	packetcaptureapi, err := utils.GetPacketCaptureAPI(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying PacketCapture CR", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -589,6 +595,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		Tenant:                 tenant,
 		ExternalElastic:        r.externalElastic,
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
+		PacketCapture:          packetcaptureapi,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)

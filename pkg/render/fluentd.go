@@ -179,6 +179,8 @@ type FluentdConfiguration struct {
 
 	// EKSLogForwarderKeyPair contains the certificate presented by EKS LogForwarder when communicating with Linseed
 	EKSLogForwarderKeyPair certificatemanagement.KeyPairInterface
+
+	PacketCapture *operatorv1.PacketCaptureAPI
 }
 
 type fluentdComponent struct {
@@ -328,7 +330,10 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objs = append(objs, c.fluentdServiceAccount())
-	objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
+	if c.cfg.PacketCapture != nil {
+		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
+	}
+
 	objs = append(objs, c.daemonset())
 
 	return objs, toDelete

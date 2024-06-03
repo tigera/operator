@@ -149,6 +149,15 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
 		}
 	}
+	for _, secretName := range []string{
+		utils.LinseedTokenSecretName(render.FluentdNodeName),
+		utils.LinseedTokenSecretName(render.FluentdNodeWindowsName),
+	} {
+		if err = utils.AddSecretsWatch(c, secretName, render.LogCollectorNamespace); err != nil {
+			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
+		}
+
+	}
 
 	for _, configMapName := range []string{render.FluentdFilterConfigMapName, relasticsearch.ClusterConfigConfigMapName} {
 		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
@@ -410,11 +419,22 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// For standalone and management clusters, we just use Linseed's actual certificate.
 	linseedCertName := render.TigeraLinseedSecret
 	linseedCertNamespace := common.OperatorNamespace()
+	key := types.NamespacedName{Name: utils.LinseedTokenSecretName(render.FluentdNodeName), Namespace: render.LogCollectorNamespace}
+	fluentLinseedToken := corev1.Secret{}
 	var tenant *operatorv1.Tenant
 	if managedCluster {
 		// For managed clusters, we need to add the certificate of the Voltron endpoint. This certificate is copied from the
 		// management cluster into the managed cluster by kube-controllers.
 		linseedCertName = render.VoltronLinseedPublicCert
+		// Linseed will generate a token for fluentD pods to authenticate/authorize FluentD service account
+		if err = r.client.Get(ctx, key, &fluentLinseedToken); err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed token Secret %s", key), err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+
 	} else if multiTenantManagement {
 		// For multi-tenant management clusters, the linseed certificate isn't in the tigera-operator namespace. Instead, each Linseed has its own
 		// certificate in the namespace of the tenant it belongs to. We need to figure out which Linseed belongs to the management cluster itself,
@@ -589,6 +609,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		Tenant:                 tenant,
 		ExternalElastic:        r.externalElastic,
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
+		FluentDToken:           &fluentLinseedToken,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -635,6 +656,19 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if hasWindowsNodes {
+		// Linseed will generate a token for fluentD pods to authenticate/authorize FluentD service account
+		key := types.NamespacedName{Name: utils.LinseedTokenSecretName(render.FluentdNodeWindowsName), Namespace: render.LogCollectorNamespace}
+		fluentWindowsLinseedToken := corev1.Secret{}
+		if managedCluster {
+			if err = r.client.Get(ctx, key, &fluentWindowsLinseedToken); err != nil && !errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
+				return reconcile.Result{}, err
+			} else if errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceNotFound, fmt.Sprintf("Waiting for Linseed token Secret %s", key), err, reqLogger)
+				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			}
+		}
+
 		fluentdCfg = &render.FluentdConfiguration{
 			LogCollector:           instance,
 			ESClusterConfig:        esClusterConfig,
@@ -652,6 +686,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			UseSyslogCertificate:   useSyslogCertificate,
 			FluentdKeyPair:         fluentdKeyPair,
 			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
+			FluentDToken:           &fluentWindowsLinseedToken,
 		}
 		comp = render.Fluentd(fluentdCfg)
 

@@ -133,7 +133,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	secretsToWatch := []string{
 		render.TigeraElasticsearchGatewaySecret,
 		render.TigeraLinseedSecret,
-		render.LinseedTokenSecret,
+		render.TigeraLinseedTokenSecret,
 		monitor.PrometheusClientTLSSecretName,
 		render.ElasticsearchLinseedUserSecret,
 	}

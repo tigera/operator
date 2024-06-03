@@ -95,7 +95,7 @@ const (
 	fluentdWindowsName = "tigera-fluentd-windows"
 
 	FluentdNodeName        = "fluentd-node"
-	fluentdNodeWindowsName = "fluentd-node-windows"
+	FluentdNodeWindowsName = "fluentd-node-windows"
 
 	EKSLogForwarderName          = "eks-log-forwarder"
 	EKSLogForwarderTLSSecretName = "tigera-eks-log-forwarder-tls"
@@ -106,7 +106,7 @@ const (
 
 var FluentdSourceEntityRule = v3.EntityRule{
 	NamespaceSelector: fmt.Sprintf("name == '%s'", LogCollectorNamespace),
-	Selector:          networkpolicy.KubernetesAppSelector(FluentdNodeName, fluentdNodeWindowsName),
+	Selector:          networkpolicy.KubernetesAppSelector(FluentdNodeName, FluentdNodeWindowsName),
 }
 
 var EKSLogForwarderEntityRule = networkpolicy.CreateSourceEntityRule(LogCollectorNamespace, EKSLogForwarderName)
@@ -167,6 +167,10 @@ type FluentdConfiguration struct {
 	TrustedBundle   certificatemanagement.TrustedBundle
 	ManagedCluster  bool
 
+	// Linseed tokens that need to be mounted inside the containers for a managed cluster
+	// for authentication and authorization with the service
+	FluentDToken *corev1.Secret
+
 	// Set if running as a multi-tenant management cluster. Configures the management cluster's
 	// own fluentd daemonset.
 	Tenant          *operatorv1.Tenant
@@ -220,7 +224,7 @@ func (c *fluentdComponent) fluentdName() string {
 
 func (c *fluentdComponent) fluentdNodeName() string {
 	if c.cfg.OSType == rmeta.OSTypeWindows {
-		return fluentdNodeWindowsName
+		return FluentdNodeWindowsName
 	}
 	return FluentdNodeName
 }
@@ -513,6 +517,11 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	}
 	if c.cfg.Filters != nil {
 		annots[filterHashAnnotation] = rmeta.AnnotationHash(c.cfg.Filters)
+	}
+	if c.cfg.ManagedCluster {
+		if c.cfg.FluentDToken != nil {
+			annots[fmt.Sprintf("hash.operator.tigera.io/%s", c.cfg.FluentDToken.Name)] = rmeta.AnnotationHash(c.cfg.FluentDToken)
+		}
 	}
 	var initContainers []corev1.Container
 	if c.cfg.FluentdKeyPair != nil && c.cfg.FluentdKeyPair.UseCertificateManagement() {
@@ -1343,7 +1352,7 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 		Spec: v3.NetworkPolicySpec{
 			Order:                  &networkpolicy.HighPrecedenceOrder,
 			Tier:                   networkpolicy.TigeraComponentTierName,
-			Selector:               networkpolicy.KubernetesAppSelector(FluentdNodeName, fluentdNodeWindowsName),
+			Selector:               networkpolicy.KubernetesAppSelector(FluentdNodeName, FluentdNodeWindowsName),
 			ServiceAccountSelector: "",
 			Types:                  []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{

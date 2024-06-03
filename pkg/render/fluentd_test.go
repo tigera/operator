@@ -15,6 +15,8 @@
 package render_test
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -331,6 +333,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			TrustedBundle:  cfg.TrustedBundle,
 			UsePSP:         true,
 			ManagedCluster: true,
+			FluentDToken: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf(render.LinseedTokenSecret, render.FluentdNodeName),
+				Namespace: render.LogCollectorNamespace,
+			}},
 		}
 		component := render.Fluentd(managedCfg)
 		createResources, deleteResources := component.Objects()
@@ -365,6 +371,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			},
 			corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/tigera.io/linseed/token"},
 		))
+		annotations := ds.Spec.Template.Annotations
+		Expect(annotations).Should(HaveKey("hash.operator.tigera.io/fluentd-node-tigera-linseed-token"))
 
 		container := ds.Spec.Template.Spec.Containers[0]
 
@@ -521,6 +529,111 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		for _, expected := range expectedEnvs {
 			Expect(envs).To(ContainElement(expected))
 		}
+
+		container := ds.Spec.Template.Spec.Containers[0]
+
+		Expect(container.ReadinessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/readiness.sh`}))
+		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(60))
+
+		Expect(container.LivenessProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
+		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(60))
+
+		Expect(container.StartupProbe.Exec.Command).To(ConsistOf([]string{`c:\ruby\msys64\usr\bin\bash.exe`, `-lc`, `/c/bin/liveness.sh`}))
+		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(10))
+		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(60))
+		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
+
+		Expect(container.SecurityContext).To(BeNil())
+	})
+
+	It("should render for Windows nodes for a managed cluster", func() {
+		expectedResources := []struct {
+			name    string
+			ns      string
+			group   string
+			version string
+			kind    string
+		}{
+			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
+			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: render.FluentdMetricsServiceWindows, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
+			{name: "tigera-fluentd-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: "tigera-fluentd-windows", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "tigera-linseed", ns: "tigera-fluentd", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "fluentd-node-windows", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
+			{name: render.PacketCaptureAPIRole, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: render.PacketCaptureAPIRoleBinding, ns: render.LogCollectorNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+			{name: "fluentd-node-windows", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
+		}
+
+		cfg.OSType = rmeta.OSTypeWindows
+		// Should render the correct resources.
+		cfg.ManagedCluster = true
+		cfg.FluentDToken = &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf(render.LinseedTokenSecret, render.FluentdNodeWindowsName),
+			Namespace: render.LogCollectorNamespace,
+		}}
+
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(len(expectedResources)))
+
+		i := 0
+		for _, expectedRes := range expectedResources {
+			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			i++
+		}
+
+		ds := rtest.GetResource(resources, "fluentd-node-windows", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("c:/TigeraCalico"))
+
+		envs := ds.Spec.Template.Spec.Containers[0].Env
+
+		expectedEnvs := []corev1.EnvVar{
+			{Name: "LINSEED_ENABLED", Value: "true"},
+			{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc.cluster.local"},
+			{Name: "LINSEED_CA_PATH", Value: certificatemanagement.TrustedCertBundleMountPathWindows},
+			{Name: "TLS_KEY_PATH", Value: "c:/tigera-fluentd-prometheus-tls/tls.key"},
+			{Name: "TLS_CRT_PATH", Value: "c:/tigera-fluentd-prometheus-tls/tls.crt"},
+			{Name: "FLUENT_UID", Value: "0"},
+			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
+			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
+			{Name: "FLUENTD_ES_SECURE", Value: "true"},
+			{
+				Name: "NODENAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				},
+			},
+			{Name: "LINSEED_TOKEN", Value: "c:/var/run/secrets/tigera.io/linseed/token"},
+		}
+		for _, expected := range expectedEnvs {
+			Expect(envs).To(ContainElement(expected))
+		}
+
+		ds = rtest.GetResource(resources, "fluentd-node-windows", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		envs = ds.Spec.Template.Spec.Containers[0].Env
+
+		expectedEnvs = []corev1.EnvVar{
+			{Name: "FLUENT_UID", Value: "0"},
+			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
+			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
+			{Name: "FLUENTD_ES_SECURE", Value: "true"},
+			{
+				Name: "NODENAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				},
+			},
+		}
+		for _, expected := range expectedEnvs {
+			Expect(envs).To(ContainElement(expected))
+		}
+
+		annotations := ds.Spec.Template.Annotations
+		Expect(annotations).Should(HaveKey("hash.operator.tigera.io/fluentd-node-windows-tigera-linseed-token"))
 
 		container := ds.Spec.Template.Spec.Containers[0]
 

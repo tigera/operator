@@ -24,7 +24,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,7 +78,6 @@ var _ = Describe("Linseed rendering tests", func() {
 			{ClusterRoleName, "", &rbacv1.ClusterRoleBinding{}, nil},
 			{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 			{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
-			{"tigera-linseed", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 		}
 
 		BeforeEach(func() {
@@ -114,7 +112,6 @@ var _ = Describe("Linseed rendering tests", func() {
 				TokenKeyPair:                   tokenKP,
 				TrustedBundle:                  bundle,
 				ClusterDomain:                  clusterDomain,
-				UsePSP:                         true,
 				ESClusterConfig:                esClusterConfig,
 				Namespace:                      render.ElasticsearchNamespace,
 				BindNamespaces:                 []string{render.ElasticsearchNamespace},
@@ -196,18 +193,6 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(s.Data).To(Equal(cfg.ElasticClientSecret.Data))
 		})
 
-		It("should render properly when PSP is not supported by the cluster", func() {
-			cfg.UsePSP = false
-			component := Linseed(cfg)
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-
-			// Should not contain any PodSecurityPolicies
-			for _, r := range resources {
-				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
-			}
-		})
-
 		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 			cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 			component := Linseed(cfg)
@@ -237,7 +222,6 @@ var _ = Describe("Linseed rendering tests", func() {
 				TokenKeyPair:    tokenKP,
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
-				UsePSP:          true,
 				ESClusterConfig: esClusterConfig,
 				Namespace:       render.ElasticsearchNamespace,
 				BindNamespaces:  []string{render.ElasticsearchNamespace},
@@ -912,12 +896,6 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			Resources:     []string{"subjectaccessreviews"},
 			ResourceNames: []string{},
 			Verbs:         []string{"create"},
-		},
-		{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			ResourceNames: []string{"tigera-linseed"},
-			Verbs:         []string{"use"},
 		},
 		{
 			APIGroups: []string{"authentication.k8s.io"},

@@ -106,7 +106,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady 
 		status:         status.New(mgr.GetClient(), "authentication", opts.KubernetesVersion),
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: tierWatchReady,
-		usePSP:         opts.UsePSP,
 		multiTenant:    opts.MultiTenant,
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -163,7 +162,6 @@ type ReconcileAuthentication struct {
 	status         status.StatusManager
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
-	usePSP         bool
 	multiTenant    bool
 }
 
@@ -325,7 +323,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		DeleteDex:      disableDex,
 		TLSKeyPair:     tlsKeyPair,
 		TrustedBundle:  trustedBundle,
-		UsePSP:         r.usePSP,
 		Authentication: authentication,
 	}
 

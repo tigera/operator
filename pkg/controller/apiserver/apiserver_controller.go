@@ -97,7 +97,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		enterpriseCRDsExist: opts.EnterpriseCRDExists,
 		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
-		usePSP:              opts.UsePSP,
 		tierWatchReady:      &utils.ReadyFlag{},
 		multiTenant:         opts.MultiTenant,
 	}
@@ -194,7 +193,6 @@ type ReconcileAPIServer struct {
 	enterpriseCRDsExist bool
 	status              status.StatusManager
 	clusterDomain       string
-	usePSP              bool
 	tierWatchReady      *utils.ReadyFlag
 	multiTenant         bool
 }
@@ -382,7 +380,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		PullSecrets:                 pullSecrets,
 		OpenShift:                   r.provider.IsOpenShift(),
 		TrustedBundle:               trustedBundle,
-		UsePSP:                      r.usePSP,
 		MultiTenant:                 r.multiTenant,
 	}
 

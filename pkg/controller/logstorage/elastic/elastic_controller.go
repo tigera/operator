@@ -79,7 +79,6 @@ type ElasticSubController struct {
 	esCliCreator   utils.ElasticsearchClientCreator
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
-	usePSP         bool
 	multiTenant    bool
 }
 
@@ -100,7 +99,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		esCliCreator:   utils.NewElasticClient,
 		tierWatchReady: &utils.ReadyFlag{},
 		status:         status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
-		usePSP:         opts.UsePSP,
 		clusterDomain:  opts.ClusterDomain,
 		provider:       opts.DetectedProvider,
 		multiTenant:    opts.MultiTenant,
@@ -528,7 +526,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			PullSecrets:        pullSecrets,
 			Provider:           r.provider,
 			ElasticLicenseType: esLicenseType,
-			UsePSP:             r.usePSP,
 			ApplyTrial:         applyTrial,
 		}),
 		render.LogStorage(&render.ElasticsearchConfiguration{
@@ -546,7 +543,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			ElasticLicenseType:      esLicenseType,
 			TrustedBundle:           trustedBundle,
 			UnusedTLSSecret:         unusedTLSSecret,
-			UsePSP:                  r.usePSP,
 			KeyStoreSecret:          keyStoreSecret,
 		}),
 		kibana.Kibana(&kibana.Configuration{
@@ -561,7 +557,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			BaseURL:         baseURL,
 			TrustedBundle:   trustedBundle,
 			UnusedTLSSecret: unusedTLSSecret,
-			UsePSP:          r.usePSP,
 			Enabled:         kibanaEnabled,
 		}),
 	}

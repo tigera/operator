@@ -280,37 +280,6 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		Expect(elasticIPAnnotation).To(Equal("[\"1.2.3.4\",\"5.6.7.8\"]"))
 	})
 
-	It("should create service account, role, rolebinding if platform uses psp", func() {
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
-			{"egress-test", "test-ns", rbac, "v1", "Role"},
-			{"egress-test", "test-ns", rbac, "v1", "RoleBinding"},
-			{"tigera-egressgateway", "", "policy", "v1beta1", "PodSecurityPolicy"},
-			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
-		}
-
-		component := egressgateway.EgressGateway(&egressgateway.Config{
-			PullSecrets:  nil,
-			Installation: installation,
-			OSType:       rmeta.OSTypeLinux,
-			EgressGW:     egw,
-			VXLANVNI:     4097,
-			VXLANPort:    4790,
-			UsePSP:       true,
-		})
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
-	})
-
 	It("should create SecurityContextConstraints if platform is OpenShift", func() {
 		expectedResources := []struct {
 			name    string

@@ -42,7 +42,4 @@ type AddOptions struct {
 	// use external elasticsearch. When set, the operator will not install Elasticsearch
 	// and instead will configure the cluster to use an external Elasticsearch.
 	ElasticExternal bool
-
-	// Whether or not the cluster supports PodSecurityPolicies.
-	UsePSP bool
 }

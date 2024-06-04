@@ -58,7 +58,6 @@ type ESMetricsSubController struct {
 	status         status.StatusManager
 	provider       operatorv1.Provider
 	clusterDomain  string
-	usePSP         bool
 	multiTenant    bool
 	tierWatchReady *utils.ReadyFlag
 }
@@ -243,7 +242,6 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 		ClusterDomain:        r.clusterDomain,
 		ServerTLS:            serverKeyPair,
 		TrustedBundle:        trustedBundle,
-		UsePSP:               r.usePSP,
 		LogStorage:           logStorage,
 	}
 	esMetricsComponent := esmetrics.ElasticsearchMetrics(esMetricsCfg)

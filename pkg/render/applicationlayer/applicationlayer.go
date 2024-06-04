@@ -25,7 +25,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -34,11 +33,9 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -47,7 +44,6 @@ import (
 const (
 	APLName                          = "application-layer"
 	RoleName                         = "application-layer"
-	PodSecurityPolicyName            = "application-layer"
 	ApplicationLayerDaemonsetName    = "l7-log-collector"
 	L7CollectorContainerName         = "l7-collector"
 	ProxyContainerName               = "envoy-proxy"
@@ -106,9 +102,6 @@ type Config struct {
 	// envoy user-configurable overrides
 	UseRemoteAddressXFF bool
 	NumTrustedHopsXFF   int32
-
-	// Whether the cluster supports pod security policies.
-	UsePSP bool
 
 	ApplicationLayer *operatorv1.ApplicationLayer
 }
@@ -178,11 +171,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
 	}
 
-	if c.config.UsePSP || c.config.Installation.KubernetesProvider.IsOpenShift() {
+	if c.config.Installation.KubernetesProvider.IsOpenShift() {
 		objs = append(objs, c.role(), c.roleBinding())
-		if c.config.UsePSP {
-			objs = append(objs, c.podSecurityPolicy())
-		}
 	}
 
 	return objs, nil
@@ -541,32 +531,21 @@ func (c *component) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding 
 }
 
 func (c *component) role() *rbacv1.Role {
-	var rules []rbacv1.PolicyRule
-	if c.config.UsePSP {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{PodSecurityPolicyName},
-		})
-	}
-
-	if c.config.Installation.KubernetesProvider.IsOpenShift() {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{securitycontextconstraints.Privileged},
-		})
-	}
-
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      RoleName,
 			Namespace: common.CalicoNamespace,
 		},
-		Rules: rules,
+		Rules: []rbacv1.PolicyRule{
+			{
+
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{securitycontextconstraints.Privileged},
+			},
+		},
 	}
 }
 
@@ -590,20 +569,4 @@ func (c *component) roleBinding() *rbacv1.RoleBinding {
 			},
 		},
 	}
-}
-
-func (c *component) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy(PodSecurityPolicyName)
-	psp.Spec.Privileged = true
-	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
-	psp.Spec.RequiredDropCapabilities = nil
-	psp.Spec.AllowedCapabilities = []corev1.Capability{
-		"NET_ADMIN",
-		"NET_RAW",
-	}
-	psp.Spec.HostIPC = true
-	psp.Spec.HostNetwork = true
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.CSI, policyv1beta1.FlexVolume)
-	return psp
 }

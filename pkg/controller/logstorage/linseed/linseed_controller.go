@@ -66,7 +66,6 @@ type LinseedSubController struct {
 	clusterDomain   string
 	tierWatchReady  *utils.ReadyFlag
 	dpiAPIReady     *utils.ReadyFlag
-	usePSP          bool
 	multiTenant     bool
 	elasticExternal bool
 }
@@ -439,7 +438,6 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		ClusterDomain:                  r.clusterDomain,
 		KeyPair:                        linseedKeyPair,
 		TokenKeyPair:                   tokenKeyPair,
-		UsePSP:                         r.usePSP,
 		ESClusterConfig:                esClusterConfig,
 		HasDPIResource:                 hasDPIResource,
 		ManagementCluster:              managementCluster != nil,

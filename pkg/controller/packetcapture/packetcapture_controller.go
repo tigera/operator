@@ -113,7 +113,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady 
 		enterpriseCRDsExist: opts.EnterpriseCRDExists,
 		status:              status.New(mgr.GetClient(), ResourceName, opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
-		usePSP:              opts.UsePSP,
 		tierWatchReady:      tierWatchReady,
 		multiTenant:         opts.MultiTenant,
 	}
@@ -132,7 +131,6 @@ type ReconcilePacketCapture struct {
 	enterpriseCRDsExist bool
 	status              status.StatusManager
 	clusterDomain       string
-	usePSP              bool
 	tierWatchReady      *utils.ReadyFlag
 	multiTenant         bool
 }
@@ -288,7 +286,6 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		ClusterDomain:               r.clusterDomain,
 		ManagementClusterConnection: managementClusterConnection,
 		TrustedBundle:               trustedBundle,
-		UsePSP:                      r.usePSP,
 		PacketCaptureAPI:            packetcaptureapi,
 	}
 	pc := render.PacketCaptureAPI(packetCaptureApiCfg)

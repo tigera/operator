@@ -107,7 +107,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 		tierWatchReady:  tierWatchReady,
-		usePSP:          opts.UsePSP,
 		multiTenant:     opts.MultiTenant,
 		externalElastic: opts.ElasticExternal,
 	}
@@ -183,7 +182,6 @@ type ReconcileLogCollector struct {
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
-	usePSP          bool
 	multiTenant     bool
 	externalElastic bool
 }
@@ -590,7 +588,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		FluentdKeyPair:         fluentdKeyPair,
 		TrustedBundle:          trustedBundle,
 		ManagedCluster:         managedCluster,
-		UsePSP:                 r.usePSP,
 		UseSyslogCertificate:   useSyslogCertificate,
 		Tenant:                 tenant,
 		ExternalElastic:        r.externalElastic,
@@ -655,7 +652,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			OSType:                 rmeta.OSTypeWindows,
 			TrustedBundle:          trustedBundle,
 			ManagedCluster:         managedCluster,
-			UsePSP:                 r.usePSP,
 			UseSyslogCertificate:   useSyslogCertificate,
 			FluentdKeyPair:         fluentdKeyPair,
 			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,

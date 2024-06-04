@@ -22,8 +22,6 @@ import (
 	"net/url"
 	"strings"
 
-	rcomponents "github.com/tigera/operator/pkg/render/common/components"
-
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -48,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -55,6 +54,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -303,31 +303,12 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ECKOperatorNamespace, es.cfg.PullSecrets...)...)...)
 
-	toCreate = append(toCreate,
-		es.eckOperatorClusterRole(),
-		es.eckOperatorClusterRoleBinding(),
-		es.eckOperatorServiceAccount(),
-	)
+	toCreate = append(toCreate, es.eckOperatorServiceAccount(), es.eckOperatorClusterRole(), es.eckOperatorClusterRoleBinding())
+
 	// This is needed for the operator to be able to set privileged mode for pods.
 	// https://docs.docker.com/ee/ucp/authorization/#secure-kubernetes-defaults
-	if es.cfg.Provider == operatorv1.ProviderDockerEE {
+	if es.cfg.Provider.IsDockerEE() {
 		toCreate = append(toCreate, es.eckOperatorClusterAdminClusterRoleBinding())
-	}
-
-	if es.cfg.UsePSP {
-		toCreate = append(toCreate,
-			es.elasticsearchClusterRoleBinding(),
-			es.elasticsearchClusterRole(),
-			es.eckOperatorPodSecurityPolicy(),
-			es.elasticsearchPodSecurityPolicy(),
-		)
-		if es.cfg.KibanaEnabled {
-			toCreate = append(toCreate,
-				es.kibanaClusterRoleBinding(),
-				es.kibanaClusterRole(),
-				es.kibanaPodSecurityPolicy(),
-			)
-		}
 	}
 
 	if es.cfg.ApplyTrial {
@@ -354,6 +335,13 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 	toCreate = append(toCreate, es.elasticsearchCluster())
 
+	if es.cfg.UsePSP || es.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		toCreate = append(toCreate, es.elasticsearchClusterRole(), es.elasticsearchClusterRoleBinding())
+		if es.cfg.UsePSP {
+			toCreate = append(toCreate, es.eckOperatorPodSecurityPolicy(), es.elasticsearchPodSecurityPolicy())
+		}
+	}
+
 	if es.cfg.KibanaEnabled {
 		// Kibana CRs
 		// In order to use restricted, we need to change elastic-internal-init-config:
@@ -365,6 +353,13 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.kibanaAllowTigeraPolicy())
 		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(KibanaNamespace))
 		toCreate = append(toCreate, es.kibanaServiceAccount())
+
+		if es.cfg.UsePSP || es.cfg.Installation.KubernetesProvider.IsOpenShift() {
+			toCreate = append(toCreate, es.kibanaClusterRole(), es.kibanaClusterRoleBinding())
+			if es.cfg.UsePSP {
+				toCreate = append(toCreate, es.kibanaPodSecurityPolicy())
+			}
+		}
 
 		if len(es.cfg.PullSecrets) > 0 {
 			toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(KibanaNamespace, es.cfg.PullSecrets...)...)...)
@@ -1079,6 +1074,15 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 		})
 	}
 
+	if es.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1469,19 +1473,30 @@ func (es elasticsearchComponent) elasticEnterpriseTrial() *corev1.Secret {
 }
 
 func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {
+	var rules []rbacv1.PolicyRule
+	if es.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			// Allow access to the pod security policy in case this is enforced on the cluster
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{ElasticsearchObjectName},
+		})
+	}
+	if es.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.Privileged},
+		})
+	}
 	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ElasticsearchObjectName,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{ElasticsearchObjectName},
-			},
-		},
+		Rules: rules,
 	}
 }
 
@@ -1520,19 +1535,30 @@ func (es elasticsearchComponent) elasticsearchPodSecurityPolicy() *policyv1beta1
 }
 
 func (es elasticsearchComponent) kibanaClusterRole() *rbacv1.ClusterRole {
+	var rules []rbacv1.PolicyRule
+	if es.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			// Allow access to the pod security policy in case this is enforced on the cluster
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{KibanaObjectName},
+		})
+	}
+	if es.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
+		})
+	}
 	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: KibanaObjectName,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				// Allow access to the pod security policy in case this is enforced on the cluster
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{KibanaObjectName},
-			},
-		},
+		Rules: rules,
 	}
 }
 
@@ -1642,7 +1668,7 @@ func (es *elasticsearchComponent) eckOperatorAllowTigeraPolicy() *v3.NetworkPoli
 // Allow access to Elasticsearch client nodes from Kibana, ECK Operator and ES Gateway.
 func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, es.cfg.Provider == operatorv1.ProviderOpenShift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, es.cfg.Provider.IsOpenShift())
 	egressRules = append(egressRules, []v3.Rule{
 		{
 			Action:      v3.Allow,

@@ -387,7 +387,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		ClientTLSSecret:          clientTLSSecret,
 		ClusterDomain:            r.clusterDomain,
 		TrustedCertBundle:        trustedBundle,
-		Openshift:                r.provider == operatorv1.ProviderOpenShift,
+		OpenShift:                r.provider.IsOpenShift(),
 		KubeControllerPort:       kubeControllersMetricsPort,
 		UsePSP:                   r.usePSP,
 	}

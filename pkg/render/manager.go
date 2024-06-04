@@ -20,8 +20,6 @@ import (
 	"strconv"
 	"strings"
 
-	ocsv1 "github.com/openshift/api/security/v1"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -47,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
@@ -133,7 +132,7 @@ type ManagerConfiguration struct {
 	ESSecrets          []*corev1.Secret
 	ClusterConfig      *relasticsearch.ClusterConfig
 	PullSecrets        []*corev1.Secret
-	Openshift          bool
+	OpenShift          bool
 	Installation       *operatorv1.InstallationSpec
 	ManagementCluster  *operatorv1.ManagementCluster
 
@@ -235,7 +234,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs,
 		managerClusterRoleBinding(c.cfg.BindingNamespaces),
-		managerClusterRole(c.cfg.ManagementCluster != nil, false, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
+		managerClusterRole(false, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
 	)
 
 	if c.cfg.UsePSP {
@@ -253,11 +252,6 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.VoltronRouteConfig != nil {
 		objs = append(objs, c.cfg.VoltronRouteConfig.RoutesConfigMap(c.cfg.Namespace))
-	}
-
-	// If we're running on openshift, we need to add in an SCC.
-	if c.cfg.Openshift {
-		objs = append(objs, c.securityContextConstraints())
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.ESSecrets...)...)...)
@@ -718,7 +712,7 @@ func managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func managerClusterRole(managementCluster, managedCluster, usePSP bool, kubernetesProvider operatorv1.Provider) *rbacv1.ClusterRole {
+func managerClusterRole(managedCluster, usePSP bool, kubernetesProvider operatorv1.Provider) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -873,41 +867,18 @@ func managerClusterRole(managementCluster, managedCluster, usePSP bool, kubernet
 		)
 	}
 
-	if kubernetesProvider == operatorv1.ProviderOpenShift {
+	if kubernetesProvider.IsOpenShift() {
 		cr.Rules = append(cr.Rules,
 			rbacv1.PolicyRule{
 				APIGroups:     []string{"security.openshift.io"},
 				Resources:     []string{"securitycontextconstraints"},
 				Verbs:         []string{"use"},
-				ResourceNames: []string{PSSPrivileged},
+				ResourceNames: []string{securitycontextconstraints.NonRootV2},
 			},
 		)
 	}
 
 	return cr
-}
-
-// TODO: Can we get rid of this and instead just bind to default ones?
-func (c *managerComponent) securityContextConstraints() *ocsv1.SecurityContextConstraints {
-	privilegeEscalation := false
-	return &ocsv1.SecurityContextConstraints{
-		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
-		ObjectMeta:               metav1.ObjectMeta{Name: c.cfg.Namespace},
-		AllowHostDirVolumePlugin: true,
-		AllowHostIPC:             false,
-		AllowHostNetwork:         false,
-		AllowHostPID:             true,
-		AllowHostPorts:           false,
-		AllowPrivilegeEscalation: &privilegeEscalation,
-		AllowPrivilegedContainer: false,
-		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyRunAsAny},
-		RunAsUser:                ocsv1.RunAsUserStrategyOptions{Type: ocsv1.RunAsUserStrategyRunAsAny},
-		ReadOnlyRootFilesystem:   false,
-		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
-		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
-		Users:                    []string{fmt.Sprintf("system:serviceaccount:%s:tigera-manager", c.cfg.Namespace)},
-		Volumes:                  []ocsv1.FSType{"*"},
-	}
 }
 
 func (c *managerComponent) getTLSObjects() []client.Object {
@@ -966,7 +937,7 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,

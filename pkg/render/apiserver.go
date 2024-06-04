@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -115,7 +116,7 @@ type APIServerConfiguration struct {
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	TLSKeyPair                  certificatemanagement.KeyPairInterface
 	PullSecrets                 []*corev1.Secret
-	Openshift                   bool
+	OpenShift                   bool
 	TrustedBundle               certificatemanagement.TrustedBundle
 	MultiTenant                 bool
 
@@ -426,7 +427,7 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 
 func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -647,12 +648,12 @@ func (c *apiServerComponent) authClusterRole() (client.Object, client.Object) {
 		},
 	}
 
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift {
+	if c.cfg.OpenShift {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
 			Resources:     []string{"securitycontextconstraints"},
 			Verbs:         []string{"use"},
-			ResourceNames: []string{PSSPrivileged},
+			ResourceNames: []string{securitycontextconstraints.Privileged},
 		})
 	}
 
@@ -1029,7 +1030,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 func (c *apiServerComponent) hostNetwork() bool {
 	hostNetwork := c.cfg.ForceHostNetwork
-	if (c.cfg.Installation.KubernetesProvider == operatorv1.ProviderEKS || c.cfg.Installation.KubernetesProvider == operatorv1.ProviderTKG) &&
+	if (c.cfg.Installation.KubernetesProvider.IsEKS() || c.cfg.Installation.KubernetesProvider.IsTKG()) &&
 		c.cfg.Installation.CNI != nil &&
 		c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// Workaround the fact that webhooks don't work for non-host-networked pods
@@ -1089,7 +1090,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	// In case of OpenShift, apiserver needs privileged access to write audit logs to host path volume.
 	// Audit logs are owned by root on hosts so we need to be root user and group. Audit logs are supported only in Enterprise version.
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		apiServer.SecurityContext = securitycontext.NewRootContext(c.cfg.Openshift)
+		apiServer.SecurityContext = securitycontext.NewRootContext(c.cfg.OpenShift)
 	} else {
 		apiServer.SecurityContext = securitycontext.NewNonRootContext()
 	}

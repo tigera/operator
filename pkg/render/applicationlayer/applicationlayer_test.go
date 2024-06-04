@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -212,6 +213,21 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		for _, r := range resources {
 			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 		}
+	})
+
+	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+		component := applicationlayer.ApplicationLayer(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		role := rtest.GetResource(resources, "application-layer", "calico-system", "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
 	})
 
 	It("should render with custom l7 collector configuration", func() {

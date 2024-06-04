@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"strings"
 
-	ocsv1 "github.com/openshift/api/security/v1"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -30,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render/common/authentication"
@@ -40,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
 )
@@ -107,7 +107,7 @@ type ComplianceConfiguration struct {
 	Installation                *operatorv1.InstallationSpec
 	ESClusterConfig             *relasticsearch.ClusterConfig
 	PullSecrets                 []*corev1.Secret
-	Openshift                   bool
+	OpenShift                   bool
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	KeyValidatorConfig          authentication.KeyValidatorConfig
@@ -241,10 +241,6 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		)
 	}
 
-	if c.cfg.Openshift {
-		complianceObjs = append(complianceObjs, c.complianceBenchmarkerSecurityContextConstraints())
-	}
-
 	if c.cfg.UsePSP {
 		complianceObjs = append(complianceObjs,
 			c.complianceBenchmarkerPodSecurityPolicy(),
@@ -257,7 +253,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
 	// host path volumes requires cluster admin permissions.
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderDockerEE {
+	if c.cfg.Installation.KubernetesProvider.IsDockerEE() {
 		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
 	}
 
@@ -275,7 +271,6 @@ func (c *complianceComponent) Ready() bool {
 }
 
 var (
-	complianceBoolTrue       = true
 	complianceReplicas int32 = 1
 )
 
@@ -309,6 +304,15 @@ func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 			Resources:     []string{"podsecuritypolicies"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{ComplianceControllerName},
+		})
+	}
+
+	if c.cfg.OpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
 		})
 	}
 
@@ -542,6 +546,14 @@ func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRol
 			ResourceNames: []string{"compliance-reporter"},
 		})
 	}
+	if c.cfg.OpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.HostAccess},
+		})
+	}
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: ComplianceReporterServiceAccount},
@@ -668,7 +680,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 						},
 
 						// On OpenShift reporter needs privileged access to write compliance reports to host path volume
-						SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),
+						SecurityContext: securitycontext.NewRootContext(c.cfg.OpenShift),
 						VolumeMounts:    volumeMounts,
 					},
 				},
@@ -755,6 +767,14 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 		})
 	}
 
+	if c.cfg.OpenShift {
+		clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
+		})
+	}
 	return clusterRole
 }
 
@@ -970,6 +990,14 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 			ResourceNames: []string{ComplianceSnapshotterName},
 		})
 	}
+	if c.cfg.OpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
+		})
+	}
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: ComplianceSnapshotterServiceAccount},
@@ -1129,6 +1157,18 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 			ResourceNames: []string{"compliance-benchmarker"},
 		})
 	}
+
+	if c.cfg.OpenShift {
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{securitycontextconstraints.HostAccess},
+			},
+		)
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: ComplianceBenchmarkerServiceAccount},
@@ -1206,7 +1246,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 	}
 
 	// benchmarker needs an extra host path volume mount for GKE for CIS benchmarks
-	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderGKE {
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
 		volMounts = append(volMounts, corev1.VolumeMount{Name: "home-kubernetes", MountPath: "/home/kubernetes", ReadOnly: true})
 
 		vols = append(vols, corev1.Volume{
@@ -1283,29 +1323,6 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		Spec: appsv1.DaemonSetSpec{
 			Template: *podTemplate,
 		},
-	}
-}
-
-func (c *complianceComponent) complianceBenchmarkerSecurityContextConstraints() *ocsv1.SecurityContextConstraints {
-	return &ocsv1.SecurityContextConstraints{
-		TypeMeta:                 metav1.TypeMeta{Kind: "SecurityContextConstraints", APIVersion: "security.openshift.io/v1"},
-		ObjectMeta:               metav1.ObjectMeta{Name: ComplianceBenchmarkerServiceAccount},
-		AllowHostDirVolumePlugin: true,
-		AllowHostIPC:             false,
-		AllowHostNetwork:         false,
-		AllowHostPID:             true,
-		AllowHostPorts:           false,
-		AllowPrivilegeEscalation: &complianceBoolTrue,
-		AllowPrivilegedContainer: true,
-		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyRunAsAny},
-		RunAsUser:                ocsv1.RunAsUserStrategyOptions{Type: ocsv1.RunAsUserStrategyRunAsAny},
-		ReadOnlyRootFilesystem:   false,
-		SELinuxContext:           ocsv1.SELinuxContextStrategyOptions{Type: ocsv1.SELinuxStrategyMustRunAs},
-		SupplementalGroups:       ocsv1.SupplementalGroupsStrategyOptions{Type: ocsv1.SupplementalGroupsStrategyRunAsAny},
-		Users: []string{
-			fmt.Sprintf("system:serviceaccount:%s:tigera-compliance-benchmarker", ComplianceNamespace),
-		},
-		Volumes: []ocsv1.FSType{"*"},
 	}
 }
 
@@ -1627,7 +1644,7 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 		},
 	}
 
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 
 	if c.cfg.ManagementClusterConnection == nil {
 		egressRules = append(egressRules, v3.Rule{
@@ -1684,7 +1701,7 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 		},
 	}
 
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Openshift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 
 	egressRules = append(egressRules, []v3.Rule{
 		{

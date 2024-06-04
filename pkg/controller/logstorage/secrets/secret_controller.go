@@ -1,4 +1,4 @@
-// Copyright (c) 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 
 	"github.com/tigera/operator/pkg/common"
@@ -35,17 +47,6 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-
-	"github.com/go-logr/logr"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var log = logf.Log.WithName("controller_logstorage_secrets")
@@ -517,7 +518,7 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 }
 
 func (r *SecretSubController) isEKSLogForwardingEnabled(install *operatorv1.InstallationSpec) bool {
-	if install.KubernetesProvider == operatorv1.ProviderEKS {
+	if install.KubernetesProvider.IsEKS() {
 		instance := &operatorv1.LogCollector{}
 		err := r.client.Get(context.Background(), utils.DefaultTSEEInstanceKey, instance)
 		if err != nil {

@@ -24,7 +24,6 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -73,13 +72,12 @@ var _ = Describe("Dashboards rendering tests", func() {
 			{Name, render.ElasticsearchNamespace, &batchv1.Job{}, nil},
 			{Name, "", &rbacv1.ClusterRole{}, nil},
 			{Name, "", &rbacv1.ClusterRoleBinding{}, nil},
-			{Name, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 		}
 
 		BeforeEach(func() {
 			installation = &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
-				KubernetesProvider:   operatorv1.ProviderNone,
+				KubernetesProvider:   operatorv1.ProviderOpenShift,
 				Registry:             "testregistry.com/",
 			}
 
@@ -92,7 +90,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
 				TrustedBundle: bundle,
-				UsePSP:        true,
 				Namespace:     render.ElasticsearchNamespace,
 				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.svc",
 				KibanaScheme:  "https",
@@ -104,20 +101,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 			component := Dashboards(cfg)
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources)
-		})
-
-		It("should render properly when PSP is not supported by the cluster", func() {
-			cfg.UsePSP = false
-			component := Dashboards(cfg)
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-
-			// Should not contain any PodSecurityPolicies
-			for _, r := range resources {
-				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
-				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("ClusterRole"))
-				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("ClusterRoleBinding"))
-			}
 		})
 
 		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
@@ -600,16 +583,6 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	ExpectWithOffset(1, job.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/elasticsearch-secrets", Not(BeEmpty())))
 
 	// Check permissions
-	clusterRole := rtest.GetResource(resources, Name, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-	Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
-
-		{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			ResourceNames: []string{Name},
-			Verbs:         []string{"use"},
-		},
-	}))
 	clusterRoleBinding := rtest.GetResource(resources, Name, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 	Expect(clusterRoleBinding.RoleRef.Name).To(Equal(Name))
 	Expect(clusterRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{

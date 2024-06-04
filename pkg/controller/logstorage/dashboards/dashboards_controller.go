@@ -63,7 +63,6 @@ type DashboardsSubController struct {
 	status          status.StatusManager
 	provider        operatorv1.Provider
 	clusterDomain   string
-	usePSP          bool
 	multiTenant     bool
 	elasticExternal bool
 	tierWatchReady  *utils.ReadyFlag
@@ -349,7 +348,6 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		PullSecrets:                pullSecrets,
 		Namespace:                  helper.InstallNamespace(),
 		TrustedBundle:              trustedBundle,
-		UsePSP:                     d.usePSP,
 		IsManaged:                  managementClusterConnection != nil,
 		Tenant:                     tenant,
 		KibanaHost:                 kibanaHost,

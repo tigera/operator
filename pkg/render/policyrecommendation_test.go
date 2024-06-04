@@ -81,7 +81,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			Installation:                   &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
 			ManagedCluster:                 notManagedCluster,
 			PolicyRecommendationCertSecret: keyPair,
-			UsePSP:                         true,
 			Namespace:                      render.PolicyRecommendationNamespace,
 			BindingNamespaces:              []string{render.PolicyRecommendationNamespace},
 		}
@@ -107,7 +106,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			{name: "allow-tigera.default-deny", ns: "tigera-policy-recommendation", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "allow-tigera.tigera-policy-recommendation", ns: "tigera-policy-recommendation", group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "tigera-policy-recommendation", ns: "tigera-policy-recommendation", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "tigera-policy-recommendation", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -184,18 +182,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				Name:      render.PolicyRecommendationName,
 				Namespace: render.PolicyRecommendationNamespace,
 			}))
-	})
-
-	It("should render properly when PSP is not supported by the cluster", func() {
-		cfg.UsePSP = false
-		component := render.PolicyRecommendation(cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
-
-		// Should not contain any PodSecurityPolicies
-		for _, r := range resources {
-			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
-		}
 	})
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
@@ -420,7 +406,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				{name: "tigera-policy-recommendation-managed-cluster-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 				{name: "allow-tigera.tigera-policy-recommendation", ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 				{name: "tigera-policy-recommendation", ns: tenantANamespace, group: "apps", version: "v1", kind: "Deployment"},
-				{name: "tigera-policy-recommendation", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			}
 
 			Expect(len(tenantAResources)).To(Equal(len(tenantAExpectedResources)))
@@ -466,7 +451,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				{name: "tigera-policy-recommendation-managed-cluster-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 				{name: "allow-tigera.tigera-policy-recommendation", ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 				{name: "tigera-policy-recommendation", ns: tenantBNamespace, group: "apps", version: "v1", kind: "Deployment"},
-				{name: "tigera-policy-recommendation", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 			}
 
 			Expect(len(tenantBResources)).To(Equal(len(tenantBExpectedResources)))

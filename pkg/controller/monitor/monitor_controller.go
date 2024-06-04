@@ -109,7 +109,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 		prometheusReady: prometheusReady,
 		tierWatchReady:  tierWatchReady,
 		clusterDomain:   opts.ClusterDomain,
-		usePSP:          opts.UsePSP,
 		multiTenant:     opts.MultiTenant,
 	}
 
@@ -188,7 +187,6 @@ type ReconcileMonitor struct {
 	prometheusReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
 	clusterDomain   string
-	usePSP          bool
 	multiTenant     bool
 }
 
@@ -380,7 +378,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		TrustedCertBundle:        trustedBundle,
 		OpenShift:                r.provider.IsOpenShift(),
 		KubeControllerPort:       kubeControllersMetricsPort,
-		UsePSP:                   r.usePSP,
 	}
 
 	// Render prometheus component

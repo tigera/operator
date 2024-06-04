@@ -42,7 +42,6 @@ import (
 	"github.com/tigera/operator/test"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -83,7 +82,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsLayerTigera}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsViewDefault}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
-			&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"}},
 		}
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -340,12 +338,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Verbs:     []string{"list", "get", "watch", "update"},
 			},
 			{
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{"tigera-manager"},
-			},
-			{
 				APIGroups: []string{""},
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
@@ -486,7 +478,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsLayerTigera}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsViewDefault}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
-			&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.VoltronLinseedPublicCert, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 		}
 		rtest.ExpectResources(resources, expectedResources)
@@ -621,12 +612,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Verbs:     []string{"create"},
 			},
 			{
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{"tigera-manager"},
-			},
-			{
 				APIGroups: []string{""},
 				Resources: []string{"users", "groups", "serviceaccounts"},
 				Verbs:     []string{"impersonate"},
@@ -704,7 +689,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Installation:          i,
 			ESLicenseType:         render.ElasticsearchLicenseTypeUnknown,
 			Replicas:              &replicas,
-			UsePSP:                true,
 			InternalTLSKeyPair:    internalKp,
 			Namespace:             render.ManagerNamespace,
 			TruthNamespace:        common.OperatorNamespace(),
@@ -763,7 +747,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsLayerTigera}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsViewDefault}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
-			&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"}},
 		}
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -1017,7 +1000,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 				&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsLayerTigera}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
 				&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsViewDefault}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
-				&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"}},
 			}
 			rtest.ExpectResources(tenantAResources, expectedTenantAResources)
 
@@ -1043,7 +1025,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 				&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsLayerTigera}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
 				&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsViewDefault}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
-				&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"}},
 			}
 			rtest.ExpectResources(tenantBResources, expectedTenantBResources)
 		})
@@ -1337,7 +1318,6 @@ func renderObjects(roc renderConfig) []client.Object {
 		Compliance:              roc.compliance,
 		ComplianceLicenseActive: roc.complianceFeatureActive,
 		OpenShift:               roc.openshift,
-		UsePSP:                  true,
 		Namespace:               roc.ns,
 		BindingNamespaces:       roc.bindingNamespaces,
 		TruthNamespace:          common.OperatorNamespace(),

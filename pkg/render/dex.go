@@ -23,7 +23,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -38,7 +37,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -46,13 +44,12 @@ import (
 )
 
 const (
-	DexNamespace             = "tigera-dex"
-	DexObjectName            = "tigera-dex"
-	DexPodSecurityPolicyName = "tigera-dex"
-	DexPort                  = 5556
-	DexTLSSecretName         = "tigera-dex-tls"
-	DexClientId              = "tigera-manager"
-	DexPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "allow-tigera-dex"
+	DexNamespace     = "tigera-dex"
+	DexObjectName    = "tigera-dex"
+	DexPort          = 5556
+	DexTLSSecretName = "tigera-dex-tls"
+	DexClientId      = "tigera-manager"
+	DexPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "allow-tigera-dex"
 )
 
 var DexEntityRule = networkpolicy.CreateEntityRule(DexNamespace, DexObjectName, DexPort)
@@ -74,9 +71,6 @@ type DexComponentConfiguration struct {
 	DeleteDex     bool
 	TLSKeyPair    certificatemanagement.KeyPairInterface
 	TrustedBundle certificatemanagement.TrustedBundle
-
-	// Whether the cluster supports pod security policies.
-	UsePSP bool
 
 	Authentication *operatorv1.Authentication
 }
@@ -145,10 +139,6 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, certificatemanagement.CSRClusterRoleBinding(DexObjectName, DexNamespace))
 	}
 
-	if c.cfg.UsePSP {
-		objs = append(objs, c.podSecurityPolicy())
-	}
-
 	if c.cfg.DeleteDex {
 		return nil, objs
 	}
@@ -179,15 +169,6 @@ func (c *dexComponent) clusterRole() client.Object {
 			Resources: []string{"customresourcedefinitions"},
 			Verbs:     []string{"create"},
 		},
-	}
-
-	if c.cfg.UsePSP {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{DexPodSecurityPolicyName},
-		})
 	}
 
 	if c.cfg.OpenShift {
@@ -227,10 +208,6 @@ func (c *dexComponent) clusterRoleBinding() client.Object {
 			},
 		},
 	}
-}
-
-func (c *dexComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(DexPodSecurityPolicyName)
 }
 
 func (c *dexComponent) deployment() client.Object {

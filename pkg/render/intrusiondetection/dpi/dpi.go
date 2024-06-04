@@ -62,9 +62,6 @@ type DPIConfig struct {
 	HasNoDPIResource   bool
 	ClusterDomain      string
 	DPICertSecret      certificatemanagement.KeyPairInterface
-
-	// Whether the cluster supports pod security policies.
-	UsePSP bool
 }
 
 func DPI(cfg *DPIConfig) render.Component {
@@ -401,15 +398,6 @@ func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list", "get"},
 			},
 		},
-	}
-	if d.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		role.Rules = append(role.Rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{DeepPacketInspectionName},
-		})
 	}
 	if d.cfg.OpenShift {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{

@@ -215,7 +215,6 @@ func NewExternalESReconcilerWithShims(
 		client:        cli,
 		scheme:        scheme,
 		status:        status,
-		usePSP:        opts.UsePSP,
 		clusterDomain: opts.ClusterDomain,
 		provider:      opts.DetectedProvider,
 	}

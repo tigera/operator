@@ -23,7 +23,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -108,21 +107,7 @@ var _ = Describe("compliance rendering tests", func() {
 			OpenShift:          false,
 			ClusterDomain:      clusterDomain,
 			TrustedBundle:      bundle,
-			UsePSP:             true,
 			Namespace:          render.ComplianceNamespace,
-		}
-	})
-
-	It("should render properly when PSP is not supported by the cluster", func() {
-		cfg.UsePSP = false
-		component, err := render.Compliance(cfg)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
-
-		// Should not contain any PodSecurityPolicies
-		for _, r := range resources {
-			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
 		}
 	})
 
@@ -412,11 +397,6 @@ var _ = Describe("compliance rendering tests", func() {
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
-				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-server", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-snapshotter", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -446,12 +426,6 @@ var _ = Describe("compliance rendering tests", func() {
 					APIGroups: []string{"authentication.k8s.io"},
 					Resources: []string{"tokenreviews"},
 					Verbs:     []string{"create"},
-				},
-				{
-					APIGroups:     []string{"policy"},
-					Resources:     []string{"podsecuritypolicies"},
-					Verbs:         []string{"use"},
-					ResourceNames: []string{"compliance-server"},
 				},
 				{
 					APIGroups: []string{"linseed.tigera.io"},
@@ -569,11 +543,6 @@ var _ = Describe("compliance rendering tests", func() {
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
-				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-server", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-snapshotter", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -625,12 +594,6 @@ var _ = Describe("compliance rendering tests", func() {
 					APIGroups: []string{"authentication.k8s.io"},
 					Resources: []string{"tokenreviews"},
 					Verbs:     []string{"create"},
-				},
-				{
-					APIGroups:     []string{"policy"},
-					Resources:     []string{"podsecuritypolicies"},
-					Verbs:         []string{"use"},
-					ResourceNames: []string{"compliance-server"},
 				},
 				{
 					APIGroups: []string{"linseed.tigera.io"},
@@ -686,11 +649,6 @@ var _ = Describe("compliance rendering tests", func() {
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"tigera-linseed", ns, rbac, "v1", "RoleBinding"},
-				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-server", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-snapshotter", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -830,11 +788,6 @@ var _ = Describe("compliance rendering tests", func() {
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
-				{"compliance-benchmarker", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-controller", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-reporter", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-server", "", "policy", "v1beta1", "PodSecurityPolicy"},
-				{"compliance-snapshotter", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 
 			for i, expectedRes := range expectedResources {
@@ -1141,11 +1094,6 @@ var _ = Describe("compliance rendering tests", func() {
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "compliance", Namespace: tenantANamespace}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "compliance-server", Namespace: tenantANamespace}},
-				&v1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "compliance-benchmarker"}},
-				&v1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "compliance-controller"}},
-				&v1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "compliance-reporter"}},
-				&v1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "compliance-server"}},
-				&v1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "compliance-snapshotter"}},
 			}
 
 			rtest.ExpectResources(tenantAResources, tenantAExpectedResources)
@@ -1189,11 +1137,6 @@ var _ = Describe("compliance rendering tests", func() {
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "compliance", Namespace: tenantBNamespace}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "compliance-server", Namespace: tenantBNamespace}},
-				&v1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "compliance-benchmarker"}},
-				&v1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "compliance-controller"}},
-				&v1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "compliance-reporter"}},
-				&v1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "compliance-server"}},
-				&v1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "compliance-snapshotter"}},
 			}
 
 			rtest.ExpectResources(tenantBResources, tenantBExpectedResources)

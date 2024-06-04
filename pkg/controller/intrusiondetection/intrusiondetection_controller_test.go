@@ -108,7 +108,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			licenseAPIReady: &utils.ReadyFlag{},
 			dpiAPIReady:     &utils.ReadyFlag{},
 			tierWatchReady:  &utils.ReadyFlag{},
-			usePSP:          false,
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -320,7 +319,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				licenseAPIReady: readyFlag,
 				dpiAPIReady:     readyFlag,
 				tierWatchReady:  readyFlag,
-				usePSP:          false,
 			}
 		})
 

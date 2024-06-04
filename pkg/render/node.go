@@ -25,7 +25,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -40,7 +39,6 @@ import (
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -126,9 +124,6 @@ type NodeConfiguration struct {
 	// The bindMode read from the default BGPConfiguration. Used to trigger rolling updates
 	// should this value change.
 	BindMode string
-
-	// Whether the cluster supports pod security policies.
-	UsePSP bool
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -228,10 +223,6 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Installation.KubernetesProvider.IsDockerEE() {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
-	}
-
-	if c.cfg.UsePSP {
-		objs = append(objs, c.nodePodSecurityPolicy())
 	}
 
 	objs = append(objs, c.nodeDaemonset(cniConfig))
@@ -539,15 +530,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 		}
 		role.Rules = append(role.Rules, extraRules...)
-	}
-	if c.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		role.Rules = append(role.Rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{common.NodeDaemonSetName},
-		})
 	}
 	if c.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
@@ -1750,22 +1732,6 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 			},
 		},
 	}
-}
-
-func (c *nodeComponent) nodePodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy(common.NodeDaemonSetName)
-	psp.Spec.Privileged = true
-	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.HostNetwork = true
-	// CollectProcessPath feature in logCollectorSpec requires access to hostPID
-	// Hence setting hostPID to true in the calico-node PSP, for this feature
-	// to work with PSP turned on
-	if c.collectProcessPathEnabled() {
-		psp.Spec.HostPID = true
-	}
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	return psp
 }
 
 // hostPathInitContainer creates an init container that changes the permissions on hostPath volumes

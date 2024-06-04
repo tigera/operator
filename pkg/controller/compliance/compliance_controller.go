@@ -161,7 +161,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 		tierWatchReady:  tierWatchReady,
-		usePSP:          opts.UsePSP,
 		multiTenant:     opts.MultiTenant,
 		externalElastic: opts.ElasticExternal,
 	}
@@ -183,7 +182,6 @@ type ReconcileCompliance struct {
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
-	usePSP          bool
 	multiTenant     bool
 	externalElastic bool
 }
@@ -456,7 +454,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		KeyValidatorConfig:          keyValidatorConfig,
 		ClusterDomain:               r.clusterDomain,
 		HasNoLicense:                hasNoLicense,
-		UsePSP:                      r.usePSP,
 		Namespace:                   helper.InstallNamespace(),
 		Tenant:                      tenant,
 		Compliance:                  instance,

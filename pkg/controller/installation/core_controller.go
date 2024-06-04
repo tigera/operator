@@ -191,7 +191,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
-		usePSP:               opts.UsePSP,
 		tierWatchReady:       &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -363,7 +362,6 @@ type ReconcileInstallation struct {
 	migrationChecked     bool
 	clusterDomain        string
 	manageCRDs           bool
-	usePSP               bool
 	tierWatchReady       *utils.ReadyFlag
 }
 
@@ -1259,7 +1257,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		MigrateNamespaces: needNsMigration,
 		ClusterDomain:     r.clusterDomain,
 		FelixHealthPort:   *felixConfiguration.Spec.HealthPort,
-		UsePSP:            r.usePSP,
 	}
 	components = append(components, render.Typha(&typhaCfg))
 
@@ -1301,14 +1298,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		PrometheusServerTLS:     nodePrometheusTLS,
 		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
 		BindMode:                bgpConfiguration.Spec.BindMode,
-		UsePSP:                  r.usePSP,
 	}
 	components = append(components, render.Node(&nodeCfg))
 
 	csiCfg := render.CSIConfiguration{
 		Installation: &instance.Spec,
 		Terminating:  installationMarkedForDeletion,
-		UsePSP:       r.usePSP,
 		OpenShift:    instance.Spec.KubernetesProvider.IsOpenShift(),
 	}
 	components = append(components, render.CSI(&csiCfg))
@@ -1322,7 +1317,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ClusterDomain:               r.clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
 		Terminating:                 installationMarkedForDeletion,
-		UsePSP:                      r.usePSP,
 		MetricsServerTLS:            kubeControllerTLS,
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 		Namespace:                   common.CalicoNamespace,

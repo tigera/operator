@@ -31,7 +31,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -399,72 +398,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				Expect(initContainer_blue.Env).To(ContainElement(elem))
 			}
 
-		})
-
-		It("should use a single psp when EGW is created with on a psp cluster", func() {
-			mockStatus.On("AddDaemonsets", mock.Anything).Return()
-			mockStatus.On("AddDeployments", mock.Anything).Return()
-			mockStatus.On("IsAvailable").Return(true)
-			mockStatus.On("AddStatefulSets", mock.Anything).Return()
-			mockStatus.On("AddCronJobs", mock.Anything)
-			mockStatus.On("OnCRNotFound").Return()
-			mockStatus.On("ClearDegraded")
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("ReadyToMonitor")
-			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
-			logSeverity := operatorv1.LogLevelInfo
-			egw_red := &operatorv1.EgressGateway{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
-				Spec: operatorv1.EgressGatewaySpec{
-					LogSeverity: &logSeverity,
-					IPPools: []operatorv1.EgressGatewayIPPool{
-						{Name: "ippool-1", CIDR: ""},
-						{Name: "", CIDR: "1.2.4.0/24"},
-					},
-					ExternalNetworks: []string{"one", "two"},
-				},
-				Status: operatorv1.EgressGatewayStatus{
-					State: operatorv1.TigeraStatusReady,
-				},
-			}
-			Expect(c.Create(ctx, egw_red)).NotTo(HaveOccurred())
-
-			egw_blue := &operatorv1.EgressGateway{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-blue", Namespace: "calico-egress"},
-				Spec: operatorv1.EgressGatewaySpec{
-					LogSeverity: &logSeverity,
-					IPPools: []operatorv1.EgressGatewayIPPool{
-						{Name: "ippool-1", CIDR: ""},
-						{Name: "", CIDR: "1.2.4.0/24"},
-					},
-					ExternalNetworks: []string{"one", "two"},
-				},
-				Status: operatorv1.EgressGatewayStatus{
-					State: operatorv1.TigeraStatusReady,
-				},
-			}
-			Expect(c.Create(ctx, egw_blue)).NotTo(HaveOccurred())
-
-			r.usePSP = true
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			psp := policyv1beta1.PodSecurityPolicy{
-				TypeMeta: metav1.TypeMeta{Kind: "PodSecurityPolicy", APIVersion: "policy/v1beta1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tigera-egressgateway",
-				},
-			}
-			Expect(test.GetResource(c, &psp)).To(BeNil())
-
-			Expect(c.Delete(ctx, egw_red)).NotTo(HaveOccurred())
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(test.GetResource(c, &psp)).To(BeNil())
-
-			Expect(c.Delete(ctx, egw_blue)).NotTo(HaveOccurred())
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(test.GetResource(c, &psp)).NotTo(BeNil())
 		})
 
 		It("should use a single scc when EGW is created in openshift", func() {

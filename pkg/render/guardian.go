@@ -21,7 +21,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -35,7 +34,6 @@ import (
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -50,7 +48,6 @@ const (
 	GuardianClusterRoleName        = GuardianName
 	GuardianClusterRoleBindingName = GuardianName
 	GuardianDeploymentName         = GuardianName
-	GuardianPodSecurityPolicyName  = GuardianName
 	GuardianServiceName            = "tigera-guardian"
 	GuardianVolumeName             = "tigera-guardian-certs"
 	GuardianSecretName             = "tigera-managed-cluster-connection"
@@ -92,8 +89,6 @@ type GuardianConfiguration struct {
 	TrustedCertBundle certificatemanagement.TrustedBundle
 	TunnelCAType      operatorv1.CAType
 
-	// Whether the cluster supports pod security policies.
-	UsePSP                      bool
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 }
 
@@ -134,7 +129,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
 		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
 		managerServiceAccount(ManagerNamespace),
-		managerClusterRole(true, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
+		managerClusterRole(true, c.cfg.Installation.KubernetesProvider),
 		managerClusterRoleBinding([]string{ManagerNamespace}),
 
 		// Install default UI settings for this managed cluster.
@@ -144,9 +139,6 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterWideDefaultView(),
 	)
 
-	if c.cfg.UsePSP {
-		objs = append(objs, c.podSecurityPolicy())
-	}
 	return objs, nil
 }
 
@@ -204,10 +196,6 @@ func (c *GuardianComponent) serviceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func (c *GuardianComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(GuardianPodSecurityPolicyName)
-}
-
 func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 	policyRules := []rbacv1.PolicyRule{
 		{
@@ -215,16 +203,6 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"users", "groups", "serviceaccounts"},
 			Verbs:     []string{"impersonate"},
 		},
-	}
-
-	if c.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		policyRules = append(policyRules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{GuardianPodSecurityPolicyName},
-		})
 	}
 
 	if c.cfg.OpenShift {

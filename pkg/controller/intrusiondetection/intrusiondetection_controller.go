@@ -178,7 +178,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		tierWatchReady:  tierWatchReady,
 		multiTenant:     opts.MultiTenant,
 		elasticExternal: opts.ElasticExternal,
-		usePSP:          opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -201,7 +200,6 @@ type ReconcileIntrusionDetection struct {
 	tierWatchReady  *utils.ReadyFlag
 	multiTenant     bool
 	elasticExternal bool
-	usePSP          bool
 }
 
 func getIntrusionDetection(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.IntrusionDetection, error) {
@@ -534,7 +532,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			HasNoDPIResource:   hasNoDPIResource,
 			ClusterDomain:      r.clusterDomain,
 			DPICertSecret:      dpiKeyPair,
-			UsePSP:             r.usePSP,
 		})
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, dpiComponent); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)

@@ -19,7 +19,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -35,7 +34,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -44,13 +42,12 @@ import (
 )
 
 const (
-	ElasticsearchMetricsSecret                = "tigera-ee-elasticsearch-metrics-elasticsearch-access"
-	ElasticsearchMetricsServerTLSSecret       = "tigera-ee-elasticsearch-metrics-tls"
-	ElasticsearchMetricsName                  = "tigera-elasticsearch-metrics"
-	ElasticsearchMetricsRoleName              = "tigera-elasticsearch-metrics"
-	ElasticsearchMetricsPodSecurityPolicyName = "tigera-elasticsearch-metrics"
-	ElasticsearchMetricsPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-metrics"
-	ElasticsearchMetricsPort                  = 9081
+	ElasticsearchMetricsSecret          = "tigera-ee-elasticsearch-metrics-elasticsearch-access"
+	ElasticsearchMetricsServerTLSSecret = "tigera-ee-elasticsearch-metrics-tls"
+	ElasticsearchMetricsName            = "tigera-elasticsearch-metrics"
+	ElasticsearchMetricsRoleName        = "tigera-elasticsearch-metrics"
+	ElasticsearchMetricsPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-metrics"
+	ElasticsearchMetricsPort            = 9081
 )
 
 var ESMetricsSourceEntityRule = networkpolicy.CreateSourceEntityRule(render.ElasticsearchNamespace, ElasticsearchMetricsName)
@@ -69,9 +66,6 @@ type Config struct {
 	ClusterDomain        string
 	ServerTLS            certificatemanagement.KeyPairInterface
 	TrustedBundle        certificatemanagement.TrustedBundleRO
-
-	// Whether the cluster supports pod security policies.
-	UsePSP bool
 
 	LogStorage *operatorv1.LogStorage
 }
@@ -103,11 +97,8 @@ func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Ob
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...)...)
 	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount())
 
-	if e.cfg.UsePSP || e.cfg.Installation.KubernetesProvider.IsOpenShift() {
+	if e.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		toCreate = append(toCreate, e.metricsRole(), e.metricsRoleBinding())
-		if e.cfg.UsePSP {
-			toCreate = append(toCreate, e.metricsPodSecurityPolicy())
-		}
 	}
 	return toCreate, objsToDelete
 }
@@ -131,30 +122,20 @@ func (e *elasticsearchMetrics) SupportedOSType() rmeta.OSType {
 }
 
 func (e *elasticsearchMetrics) metricsRole() *rbacv1.Role {
-	var rules []rbacv1.PolicyRule
-	if e.cfg.UsePSP {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{ElasticsearchMetricsPodSecurityPolicyName},
-		})
-	}
-	if e.cfg.Installation.KubernetesProvider.IsOpenShift() {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{securitycontextconstraints.NonRootV2},
-		})
-	}
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchMetricsRoleName,
 			Namespace: render.ElasticsearchNamespace,
 		},
-		Rules: rules,
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{securitycontextconstraints.NonRootV2},
+			},
+		},
 	}
 }
 
@@ -178,10 +159,6 @@ func (e *elasticsearchMetrics) metricsRoleBinding() *rbacv1.RoleBinding {
 			},
 		},
 	}
-}
-
-func (e *elasticsearchMetrics) metricsPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(ElasticsearchMetricsPodSecurityPolicyName)
 }
 
 func (e *elasticsearchMetrics) metricsService() *corev1.Service {

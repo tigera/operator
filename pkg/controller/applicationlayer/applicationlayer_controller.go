@@ -89,7 +89,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		status:          status.New(mgr.GetClient(), "applicationlayer", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
-		usePSP:          opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -161,7 +160,6 @@ type ReconcileApplicationLayer struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
-	usePSP          bool
 }
 
 // Reconcile reads that state of the cluster for a ApplicationLayer object and makes changes
@@ -278,7 +276,6 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		ModSecurityConfigMap:   modSecurityRuleSet,
 		UseRemoteAddressXFF:    instance.Spec.EnvoySettings.UseRemoteAddress,
 		NumTrustedHopsXFF:      instance.Spec.EnvoySettings.XFFNumTrustedHops,
-		UsePSP:                 r.usePSP,
 		ApplicationLayer:       instance,
 	}
 	component := applicationlayer.ApplicationLayer(config)

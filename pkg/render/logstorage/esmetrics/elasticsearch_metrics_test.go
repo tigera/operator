@@ -60,7 +60,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 
 		BeforeEach(func() {
 			installation := &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderNone,
+				KubernetesProvider: operatorv1.ProviderOpenShift,
 				Registry:           "testregistry.com/",
 			}
 
@@ -87,7 +87,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 				ClusterDomain: "cluster.local",
 				ServerTLS:     secret,
 				TrustedBundle: bundle,
-				UsePSP:        true,
 			}
 		})
 
@@ -117,7 +116,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 				{ElasticsearchMetricsName, render.ElasticsearchNamespace, "", "v1", "ServiceAccount"},
 				{"tigera-elasticsearch-metrics", "tigera-elasticsearch", "rbac.authorization.k8s.io", "v1", "Role"},
 				{"tigera-elasticsearch-metrics", "tigera-elasticsearch", "rbac.authorization.k8s.io", "v1", "RoleBinding"},
-				{"tigera-elasticsearch-metrics", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			}
 			Expect(resources).To(HaveLen(len(expectedResources)))
 			for i, expectedRes := range expectedResources {
@@ -308,18 +306,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 			Expect(initContainer).NotTo(BeNil())
 			Expect(initContainer.Resources).To(Equal(esMetricsResources))
 
-		})
-
-		It("should render properly when PSP is not supported by the cluster", func() {
-			cfg.UsePSP = false
-			component := ElasticsearchMetrics(cfg)
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-
-			// Should not contain any PodSecurityPolicies
-			for _, r := range resources {
-				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
-			}
 		})
 
 		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {

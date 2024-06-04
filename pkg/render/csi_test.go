@@ -22,7 +22,6 @@ import (
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -149,52 +148,6 @@ var _ = Describe("CSI rendering tests", func() {
 		for _, container := range ds.Spec.Template.Spec.Containers {
 			Expect(strings.HasPrefix(container.Image, privateRegistry))
 		}
-	})
-
-	It("should render CSI's PSP and the corresponding clusterroles when UsePSP is set true", func() {
-		cfg.UsePSP = true
-		resources, _ := render.CSI(&cfg).Objects()
-
-		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-		Expect(ds).NotTo(BeNil())
-		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(Equal("csi-node-driver"))
-
-		serviceAccount := rtest.GetResource(resources, render.CSIDaemonSetName, render.CSIDaemonSetNamespace, "", "v1", "ServiceAccount")
-		Expect(serviceAccount).ToNot(BeNil())
-
-		psp := rtest.GetResource(resources, render.CSIDaemonSetName, "", "policy", "v1beta1", "PodSecurityPolicy").(*policyv1beta1.PodSecurityPolicy)
-		Expect(psp).ToNot(BeNil())
-		Expect(psp.Spec.Privileged).To(BeTrue())
-		Expect(*psp.Spec.AllowPrivilegeEscalation).To(BeTrue())
-		Expect(psp.Spec.RunAsUser.Rule).To(Equal(policyv1beta1.RunAsUserStrategyRunAsAny))
-
-		role := rtest.GetResource(resources, render.CSIDaemonSetName, render.CSIDaemonSetNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
-		Expect(role).ToNot(BeNil())
-		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{render.CSIDaemonSetName},
-		}))
-
-		roleBinding := rtest.GetResource(resources, render.CSIDaemonSetName, render.CSIDaemonSetNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(roleBinding).ToNot(BeNil())
-		Expect(roleBinding.Subjects).To(HaveLen(1))
-		Expect(roleBinding.Subjects).To(ContainElement(
-			rbacv1.Subject{
-				Kind:      "ServiceAccount",
-				Name:      render.CSIDaemonSetName,
-				Namespace: render.CSIDaemonSetNamespace,
-			},
-		))
-	})
-
-	It("should not add ServiceAccountName field when UsePSP is false", func() {
-		cfg.UsePSP = false
-		resources, _ := render.CSI(&cfg).Objects()
-
-		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(BeEmpty())
 	})
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {

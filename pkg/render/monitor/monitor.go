@@ -24,7 +24,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -42,7 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -59,11 +57,10 @@ const (
 
 	CalicoPrometheusOperator = "calico-prometheus-operator"
 
-	TigeraPrometheusObjectName            = "tigera-prometheus"
-	TigeraPrometheusDPRate                = "tigera-prometheus-dp-rate"
-	TigeraPrometheusRole                  = "tigera-prometheus-role"
-	TigeraPrometheusRoleBinding           = "tigera-prometheus-role-binding"
-	TigeraPrometheusPodSecurityPolicyName = "tigera-prometheus"
+	TigeraPrometheusObjectName  = "tigera-prometheus"
+	TigeraPrometheusDPRate      = "tigera-prometheus-dp-rate"
+	TigeraPrometheusRole        = "tigera-prometheus-role"
+	TigeraPrometheusRoleBinding = "tigera-prometheus-role-binding"
 
 	// TigeraExternalPrometheus is the name of the objects created when Monitor.Spec.ExternalPrometheus is enabled.
 	TigeraExternalPrometheus = "tigera-external-prometheus"
@@ -134,7 +131,6 @@ type Config struct {
 	TrustedCertBundle        certificatemanagement.TrustedBundle
 	OpenShift                bool
 	KubeControllerPort       int
-	UsePSP                   bool
 }
 
 type monitorComponent struct {
@@ -222,10 +218,6 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	if mc.cfg.KeyValidatorConfig != nil {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.cfg.KeyValidatorConfig.RequiredSecrets(common.TigeraPrometheusNamespace)...)...)
 		toCreate = append(toCreate, configmap.ToRuntimeObjects(mc.cfg.KeyValidatorConfig.RequiredConfigMaps(common.TigeraPrometheusNamespace)...)...)
-	}
-
-	if mc.cfg.UsePSP {
-		toCreate = append(toCreate, mc.prometheusOperatorPodSecurityPolicy())
 	}
 
 	if mc.cfg.Monitor.ExternalPrometheus != nil {
@@ -374,15 +366,6 @@ func (mc *monitorComponent) prometheusOperatorClusterRole() *rbacv1.ClusterRole 
 		},
 	}
 
-	if mc.cfg.UsePSP {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{TigeraPrometheusPodSecurityPolicyName},
-		})
-	}
-
 	if mc.cfg.OpenShift {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
@@ -416,10 +399,6 @@ func (mc *monitorComponent) prometheusOperatorClusterRoleBinding() *rbacv1.Clust
 			Name:     CalicoPrometheusOperator,
 		},
 	}
-}
-
-func (mc *monitorComponent) prometheusOperatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(TigeraPrometheusPodSecurityPolicyName)
 }
 
 func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
@@ -668,15 +647,6 @@ func (mc *monitorComponent) prometheusClusterRole() *rbacv1.ClusterRole {
 			NonResourceURLs: []string{"/metrics"},
 			Verbs:           []string{"get"},
 		},
-	}
-
-	if mc.cfg.UsePSP {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{TigeraPrometheusPodSecurityPolicyName},
-		})
 	}
 
 	if mc.cfg.OpenShift {

@@ -60,7 +60,6 @@ type ESKubeControllersController struct {
 	scheme          *runtime.Scheme
 	status          status.StatusManager
 	clusterDomain   string
-	usePSP          bool
 	elasticExternal bool
 	multiTenant     bool
 	tierWatchReady  *utils.ReadyFlag
@@ -345,7 +344,6 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 			hdler,
 			reqLogger,
 			gwTrustedBundle,
-			r.usePSP,
 		); err != nil {
 			return reconcile.Result{}, err
 		}

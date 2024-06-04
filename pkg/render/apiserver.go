@@ -22,7 +22,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -38,7 +37,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -121,9 +119,6 @@ type APIServerConfiguration struct {
 	OpenShift                   bool
 	TrustedBundle               certificatemanagement.TrustedBundle
 	MultiTenant                 bool
-
-	// Whether the cluster supports pod security policies.
-	UsePSP bool
 }
 
 type apiServerComponent struct {
@@ -196,9 +191,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.authReaderRoleBinding)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRole)
 	globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.webhookReaderClusterRoleBinding)
-	if c.cfg.UsePSP {
-		globalObjects, objsToDelete = populateLists(globalObjects, objsToDelete, c.apiServerPodSecurityPolicy)
-	}
 
 	// Namespaced objects that are common between Calico and Calico Enterprise. They don't need to be explicitly
 	// deleted, since they will be garbage collected on namespace deletion.
@@ -575,15 +567,6 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 				"patch",
 			},
 		},
-	}
-	if c.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{"calico-apiserver"},
-		})
 	}
 
 	return &rbacv1.ClusterRole{
@@ -1198,18 +1181,6 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 }
 
-// apiServerPodSecurityPolicy returns a PSP to create and a PSP to delete based on variant.
-//
-// Both Calico and Calico Enterprise, with different names.
-func (c *apiServerComponent) apiServerPodSecurityPolicy() (client.Object, client.Object) {
-	name, nameToDelete := c.resourceNameBasedOnVariant("tigera-apiserver", "calico-apiserver")
-	psp := podsecuritypolicy.NewBasePolicy(name)
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	pspToDelete := podsecuritypolicy.NewBasePolicy(nameToDelete)
-	return psp, pspToDelete
-}
-
 // networkPolicy returns a NP to allow traffic to the API server. This prevents it from
 // being cut off from the main API server. The enterprise equivalent is currently handled in manifests.
 //
@@ -1281,15 +1252,6 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"patch",
 			},
 		},
-	}
-	if c.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{"tigera-apiserver"},
-		})
 	}
 
 	return &rbacv1.ClusterRole{

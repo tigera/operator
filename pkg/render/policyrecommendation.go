@@ -22,7 +22,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,7 +35,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -48,10 +46,9 @@ import (
 const (
 	ElasticsearchPolicyRecommendationUserSecret = "tigera-ee-policy-recommendation-elasticsearch-access"
 
-	PolicyRecommendationName                  = "tigera-policy-recommendation"
-	PolicyRecommendationNamespace             = PolicyRecommendationName
-	PolicyRecommendationPodSecurityPolicyName = PolicyRecommendationName
-	PolicyRecommendationPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
+	PolicyRecommendationName       = "tigera-policy-recommendation"
+	PolicyRecommendationNamespace  = PolicyRecommendationName
+	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
 
 	PolicyRecommendationTLSSecretName                                   = "policy-recommendation-tls"
 	PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName = "tigera-policy-recommendation-managed-cluster-access"
@@ -72,8 +69,6 @@ type PolicyRecommendationConfiguration struct {
 	TrustedBundle                  certificatemanagement.TrustedBundleRO
 	PolicyRecommendationCertSecret certificatemanagement.KeyPairInterface
 
-	// Whether the cluster supports pod security policies.
-	UsePSP            bool
 	Namespace         string
 	BindingNamespaces []string
 
@@ -139,10 +134,6 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 		pr.deployment(),
 	)
 
-	if pr.cfg.UsePSP {
-		objs = append(objs, pr.podSecurityPolicy())
-	}
-
 	return objs, nil
 }
 
@@ -194,15 +185,6 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 		}...)
-	}
-
-	if pr.cfg.UsePSP {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{PolicyRecommendationPodSecurityPolicyName},
-		})
 	}
 
 	if pr.cfg.OpenShift {
@@ -295,9 +277,6 @@ func (pr *policyRecommendationComponent) multiTenantManagedClustersAccess() []cl
 	})
 
 	return objects
-}
-func (pr *policyRecommendationComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(PolicyRecommendationPodSecurityPolicyName)
 }
 
 // deployment returns the policy recommendation deployments. It assumes that this is defined for

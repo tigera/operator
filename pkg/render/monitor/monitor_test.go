@@ -101,7 +101,6 @@ var _ = Describe("monitor rendering tests", func() {
 			AlertmanagerConfigSecret: defaultAlertmanagerConfigSecret,
 			ClusterDomain:            "example.org",
 			TrustedCertBundle:        bundle,
-			UsePSP:                   true,
 		}
 	})
 
@@ -204,7 +203,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(ok).To(BeTrue())
 		promOperClusterRoleObj, ok := rtest.GetResource(toCreate, "calico-prometheus-operator", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(ok).To(BeTrue())
-		Expect(promOperClusterRoleObj.Rules).To(HaveLen(11))
+		Expect(promOperClusterRoleObj.Rules).To(HaveLen(10))
 		Expect(promOperClusterRoleObj.Rules[0]).To(Equal(rbacv1.PolicyRule{
 			APIGroups: []string{"monitoring.coreos.com"},
 			Resources: []string{
@@ -305,12 +304,6 @@ var _ = Describe("monitor rendering tests", func() {
 				"get",
 			},
 		}))
-		Expect(promOperClusterRoleObj.Rules[10]).To(Equal(rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{"tigera-prometheus"},
-		}))
 		promOperClusterRoleBindingObj, ok := rtest.GetResource(toCreate, "calico-prometheus-operator", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(ok).To(BeTrue())
 		Expect(promOperClusterRoleBindingObj.Subjects).To(HaveLen(1))
@@ -405,7 +398,7 @@ var _ = Describe("monitor rendering tests", func() {
 		// Prometheus ClusterRole
 		prometheusClusterRoleObj, ok := rtest.GetResource(toCreate, "prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(ok).To(BeTrue())
-		Expect(prometheusClusterRoleObj.Rules).To(HaveLen(5))
+		Expect(prometheusClusterRoleObj.Rules).To(HaveLen(4))
 		Expect(prometheusClusterRoleObj.Rules[0].APIGroups).To(HaveLen(1))
 		Expect(prometheusClusterRoleObj.Rules[0].APIGroups[0]).To(Equal(""))
 		Expect(prometheusClusterRoleObj.Rules[0].Resources).To(HaveLen(4))
@@ -439,14 +432,6 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusClusterRoleObj.Rules[3].NonResourceURLs[0]).To(Equal("/metrics"))
 		Expect(prometheusClusterRoleObj.Rules[3].Verbs).To(HaveLen(1))
 		Expect(prometheusClusterRoleObj.Rules[3].Verbs[0]).To(Equal("get"))
-		Expect(prometheusClusterRoleObj.Rules[4].APIGroups).To(HaveLen(1))
-		Expect(prometheusClusterRoleObj.Rules[4].APIGroups[0]).To(Equal("policy"))
-		Expect(prometheusClusterRoleObj.Rules[4].Resources).To(HaveLen(1))
-		Expect(prometheusClusterRoleObj.Rules[4].Resources[0]).To(Equal("podsecuritypolicies"))
-		Expect(prometheusClusterRoleObj.Rules[4].ResourceNames).To(HaveLen(1))
-		Expect(prometheusClusterRoleObj.Rules[4].ResourceNames[0]).To(Equal("tigera-prometheus"))
-		Expect(prometheusClusterRoleObj.Rules[4].Verbs).To(HaveLen(1))
-		Expect(prometheusClusterRoleObj.Rules[4].Verbs[0]).To(Equal("use"))
 
 		// Prometheus ClusterRoleBinding
 		prometheusClusterRolebindingObj, ok := rtest.GetResource(toCreate, "prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
@@ -614,18 +599,6 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(rolebindingObj.Subjects[0].Kind).To(Equal("ServiceAccount"))
 		Expect(rolebindingObj.Subjects[0].Name).To(Equal("tigera-operator"))
 		Expect(rolebindingObj.Subjects[0].Namespace).To(Equal(common.OperatorNamespace()))
-	})
-
-	It("should render properly when PSP is not supported by the cluster", func() {
-		cfg.UsePSP = false
-		component := monitor.Monitor(cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
-
-		// Should not contain any PodSecurityPolicies
-		for _, r := range resources {
-			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
-		}
 	})
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
@@ -1015,6 +988,5 @@ func expectedBaseResources() []resource {
 		{"fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 		{"tigera-api", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
 		{"calico-kube-controllers-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind},
-		{"tigera-prometheus", "", "policy", "v1beta1", "PodSecurityPolicy"},
 	}
 }

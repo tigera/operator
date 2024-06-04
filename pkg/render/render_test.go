@@ -88,7 +88,6 @@ func allCalicoComponents(
 		BirdTemplates:           bt,
 		MigrateNamespaces:       up,
 		FelixHealthPort:         9099,
-		UsePSP:                  true,
 	}
 	typhaCfg := &render.TyphaConfiguration{
 		K8sServiceEp:      k8sServiceEp,
@@ -97,7 +96,6 @@ func allCalicoComponents(
 		ClusterDomain:     clusterDomain,
 		MigrateNamespaces: up,
 		FelixHealthPort:   9099,
-		UsePSP:            true,
 	}
 	kcCfg := &kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sServiceEp,
@@ -106,7 +104,6 @@ func allCalicoComponents(
 		ManagementClusterConnection: managementClusterConnection,
 		ClusterDomain:               clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
-		UsePSP:                      true,
 		Namespace:                   common.CalicoNamespace,
 		BindingNamespaces:           []string{common.CalicoNamespace},
 	}
@@ -214,17 +211,17 @@ var _ = Describe("Rendering tests", func() {
 	It("should render all resources for a default configuration", func() {
 		// For this scenario, we expect the basic resources
 		// created by the controller without any optional ones. These include:
-		// - 6 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet, PodSecurityPolicy)
+		// - 5 node resources (ServiceAccount, ClusterRole, Binding, ConfigMap, DaemonSet)
 		// - 3 calico-cni-plugin resources (ServiceAccount, ClusterRole, ClusterRoleBinding)
 		// - 4 secrets for Typha comms (2 in operator namespace and 2 in calico namespace)
 		// - 1 ConfigMap for Typha comms (1 in calico namespace)
-		// - 7 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget, PodSecurityPolicy)
-		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, PodSecurityPolicy, Service, Secret)
+		// - 6 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget)
+		// - 5 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, Service, Secret)
 		// - 1 namespace
 		// - 2 Windows node resources (ConfigMap, DaemonSet)
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal(6 + 3 + 4 + 1 + 7 + 6 + 1 + 2))
+		Expect(componentCount(c)).To(Equal(5 + 3 + 4 + 1 + 6 + 5 + 1 + 2))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -237,7 +234,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal((6 + 3 + 4 + 1 + 7 + 6 + 1 + 2) + 1 + 1))
+		Expect(componentCount(c)).To(Equal((5 + 3 + 4 + 1 + 6 + 5 + 1 + 2) + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -267,7 +264,6 @@ var _ = Describe("Rendering tests", func() {
 			{common.TyphaDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{render.TyphaServiceName, common.CalicoNamespace, "", "v1", "Service"},
 			{common.TyphaDeploymentName, common.CalicoNamespace, "policy", "v1", "PodDisruptionBudget"},
-			{common.TyphaDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{common.TyphaDeploymentName, common.CalicoNamespace, "apps", "v1", "Deployment"},
 
 			// Node objects.
@@ -279,7 +275,6 @@ var _ = Describe("Rendering tests", func() {
 			{"calico-cni-plugin", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{"calico-node-metrics", common.CalicoNamespace, "", "v1", "Service"},
 			{"cni-config", common.CalicoNamespace, "", "v1", "ConfigMap"},
-			{common.NodeDaemonSetName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
 
 			// Kube-controllers objects.
@@ -287,7 +282,6 @@ var _ = Describe("Rendering tests", func() {
 			{common.KubeControllersDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
 			{common.KubeControllersDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
 			{common.KubeControllersDeploymentName, common.CalicoNamespace, "apps", "v1", "Deployment"},
-			{common.KubeControllersDeploymentName, "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
 
 			// Windows node objects.

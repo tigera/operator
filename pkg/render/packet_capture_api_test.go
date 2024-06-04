@@ -88,7 +88,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			KeyValidatorConfig: config,
 			ServerCertSecret:   secret,
 			OpenShift:          i.KubernetesProvider.IsOpenShift(),
-			UsePSP:             true,
 		}
 		pc := render.PacketCaptureAPI(cfg)
 		Expect(pc.ResolveImages(nil)).To(BeNil())
@@ -113,7 +112,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			{name: render.PacketCaptureClusterRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: render.PacketCaptureDeploymentName, ns: render.PacketCaptureNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: render.PacketCaptureServiceName, ns: render.PacketCaptureNamespace, group: "", version: "v1", kind: "Service"},
-			{name: "tigera-packetcapture", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 
 		return resources
@@ -328,12 +326,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				Resources: []string{"packetcaptures/status"},
 				Verbs:     []string{"update"},
 			},
-			{
-				APIGroups:     []string{"policy"},
-				ResourceNames: []string{"tigera-packetcapture"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-			},
 		}))
 		clusterRoleBinding := rtest.GetResource(resources, render.PacketCaptureClusterRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(clusterRoleBinding.RoleRef.Name).To(Equal(render.PacketCaptureClusterRoleName))
@@ -476,7 +468,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				PullSecrets:      pullSecrets,
 				Installation:     &installation,
 				ServerCertSecret: secret,
-				UsePSP:           true,
 			}
 
 			pcResources := corev1.ResourceRequirements{

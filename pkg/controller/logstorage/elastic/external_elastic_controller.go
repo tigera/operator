@@ -48,7 +48,6 @@ type ExternalESController struct {
 	status        status.StatusManager
 	provider      operatorv1.Provider
 	clusterDomain string
-	usePSP        bool
 }
 
 func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
@@ -64,7 +63,6 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
 		status:        status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
-		usePSP:        opts.UsePSP,
 		clusterDomain: opts.ClusterDomain,
 		provider:      opts.DetectedProvider,
 	}

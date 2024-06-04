@@ -414,17 +414,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}))
 	})
 
-	It("should render properly when PSP is not supported by the cluster", func() {
-		component := render.IntrusionDetection(cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
-
-		// Should not contain any PodSecurityPolicies
-		for _, r := range resources {
-			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
-		}
-	})
-
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 		cfg.OpenShift = true

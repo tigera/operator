@@ -21,7 +21,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -40,7 +39,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -54,14 +52,12 @@ const (
 	KubeControllerServiceAccount    = "calico-kube-controllers"
 	KubeControllerRole              = "calico-kube-controllers"
 	KubeControllerRoleBinding       = "calico-kube-controllers"
-	KubeControllerPodSecurityPolicy = "calico-kube-controllers"
 	KubeControllerMetrics           = "calico-kube-controllers-metrics"
 	KubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "kube-controller-access"
 
 	EsKubeController                     = "es-calico-kube-controllers"
 	EsKubeControllerRole                 = "es-calico-kube-controllers"
 	EsKubeControllerRoleBinding          = "es-calico-kube-controllers"
-	EsKubeControllerPodSecurityPolicy    = "es-calico-kube-controllers"
 	EsKubeControllerMetrics              = "es-calico-kube-controllers-metrics"
 	EsKubeControllerNetworkPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
 	MultiTenantManagedClustersAccessName = "es-calico-kube-controllers-managed-cluster-access"
@@ -96,8 +92,6 @@ type KubeControllersConfiguration struct {
 	KubeControllersGatewaySecret *corev1.Secret
 	TrustedBundle                certificatemanagement.TrustedBundleRO
 
-	// Whether the cluster supports pod security policies.
-	UsePSP           bool
 	MetricsServerTLS certificatemanagement.KeyPairInterface
 
 	// Namespace to be installed into.
@@ -310,10 +304,6 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.KubeControllersGatewaySecret)...)...)
 	}
 
-	if c.cfg.UsePSP {
-		objectsToCreate = append(objectsToCreate, c.controllersPodSecurityPolicy())
-	}
-
 	if c.cfg.MetricsPort != 0 {
 		objectsToCreate = append(objectsToCreate, c.prometheusService())
 	} else {
@@ -428,16 +418,6 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Resources: []string{"kubecontrollersconfigurations"},
 			Verbs:     []string{"get", "create", "update", "watch"},
 		},
-	}
-
-	if cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{kubeControllerName},
-		})
 	}
 
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {
@@ -782,10 +762,6 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 		am[render.ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.cfg.KubeControllersGatewaySecret.Data)
 	}
 	return am
-}
-
-func (c *kubeControllersComponent) controllersPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(c.kubeControllerName)
 }
 
 func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.VolumeMount {

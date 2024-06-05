@@ -1055,6 +1055,36 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			}))
 		})
 
+		It("should render cluster role with additional RBAC", func() {
+			resources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              compliance,
+				complianceFeatureActive: true,
+				ns:                      tenantANamespace,
+				bindingNamespaces:       []string{tenantANamespace},
+				tenant: &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tenantA",
+						Namespace: tenantANamespace,
+					},
+					Spec: operatorv1.TenantSpec{
+						ID: "tenant-a",
+					}},
+			})
+
+			clusterRole := rtest.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(clusterRole.Rules).To(ContainElements([]rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"authorization.k8s.io"},
+					Resources: []string{"localsubjectaccessreviews"},
+					Verbs:     []string{"create"},
+				},
+			},
+			))
+		})
+
 		It("should render multi-tenant environment variables", func() {
 			resources := renderObjects(renderConfig{
 				oidc:                    false,

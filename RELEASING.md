@@ -4,12 +4,12 @@
 
 For a major or minor release, you will need to create:
 
-- A new `release-vX.Y` branch based on the target minor version.  We always do releases from a release 
+- A new `release-vX.Y` branch based on the target minor version.  We always do releases from a release
   branch, not from master.
 - An empty commit on the master branch, tagged with the "dev" version for the next minor release.
   This ensures that `git describe --tags` (which is used to generate versions for CI builds) will
   produce a version that "makes sense" for master commits after the release branch is created.
-- A new GitHub milestone for the next minor release.  This ensures that new PRs get auto-added to 
+- A new GitHub milestone for the next minor release.  This ensures that new PRs get auto-added to
   the correct milestone.
 
 To create a new release branch:
@@ -20,17 +20,17 @@ To create a new release branch:
    ```sh
    git checkout <remote>/master -b release-vX.Y
    ```
-   
+
 3. Push the new branch to the repository:
 
    ```sh
    git push <remote> release-vX.Y
    ```
-   
+
 To create an empty commit and tag on master; run the following commands.  This will push directly to master,
 bypassing the normal PR process.  This is important to make sure that the tag is directly on the master branch.
 We create an empty commit because, when the release branch is created, it shares its commit history with master.
-So, if we tagged the tip of master, we'd also be tagging the tip of the release branch, which would give 
+So, if we tagged the tip of master, we'd also be tagging the tip of the release branch, which would give
 incorrect results for `git describe --tags` on the release branch.
 
    ```sh
@@ -41,8 +41,8 @@ incorrect results for `git describe --tags` on the release branch.
    git push <remote> vX.Y.0-0.dev
    ```
 
-*Note* that the tag should have the exact format `vX.Y.0-0.dev` where `X.Y` is the next minor version.  
-The `-0.dev` suffix was chosen to produce a semver-compliant version that is less than the 
+*Note* that the tag should have the exact format `vX.Y.0-0.dev` where `X.Y` is the next minor version.
+The `-0.dev` suffix was chosen to produce a semver-compliant version that is less than the
 first release version for the new minor version.
 
 Finally, create the next minor release's first milestone at https://github.com/tigera/operator/milestones.
@@ -109,7 +109,7 @@ git push --tags
 1. Run the following command to generate release notes for the release
 
    ```
-   GITHUB_TOKEN=<access-token> VERSION=<TAG> ./generate-release-notes.py
+   make release-notes VERSION=<TAG> GITHUB_TOKEN=<access-token>
    ```
 
 1. Go to https://github.com/tigera/operator/releases and edit the release tag to include the generated release notes, and update the title.

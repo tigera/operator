@@ -226,7 +226,11 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs,
 		managerClusterRoleBinding(c.cfg.BindingNamespaces),
+<<<<<<< HEAD
 		managerClusterRole(false, c.cfg.Installation.KubernetesProvider),
+=======
+		managerClusterRole(false, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
+>>>>>>> 801e9241... Grant ES Proxy rights to create LocalSubjectAccessReviews
 	)
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
@@ -683,7 +687,7 @@ func managerClusterRoleBinding(namespaces []string) client.Object {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider) *rbacv1.ClusterRole {
+func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -822,6 +826,16 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"list", "get", "watch", "update"},
+			},
+		)
+	}
+
+	if tenant.MultiTenant() {
+		cr.Rules = append(cr.Rules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"localsubjectaccessreviews"},
+				Verbs:     []string{"create"},
 			},
 		)
 	}

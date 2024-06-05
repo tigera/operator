@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,7 +42,4 @@ type AddOptions struct {
 	// use external elasticsearch. When set, the operator will not install Elasticsearch
 	// and instead will configure the cluster to use an external Elasticsearch.
 	ElasticExternal bool
-
-	// Whether or not the cluster supports PodSecurityPolicies.
-	UsePSP bool
 }

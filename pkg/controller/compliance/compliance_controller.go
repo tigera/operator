@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -161,7 +161,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 		tierWatchReady:  tierWatchReady,
-		usePSP:          opts.UsePSP,
 		multiTenant:     opts.MultiTenant,
 		externalElastic: opts.ElasticExternal,
 	}
@@ -183,7 +182,6 @@ type ReconcileCompliance struct {
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
-	usePSP          bool
 	multiTenant     bool
 	externalElastic bool
 }
@@ -456,7 +454,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		KeyValidatorConfig:          keyValidatorConfig,
 		ClusterDomain:               r.clusterDomain,
 		HasNoLicense:                hasNoLicense,
-		UsePSP:                      r.usePSP,
 		Namespace:                   helper.InstallNamespace(),
 		Tenant:                      tenant,
 		Compliance:                  instance,

@@ -24,7 +24,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -38,7 +37,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -50,7 +48,6 @@ const (
 	DeploymentName        = "tigera-secure-es-gateway"
 	ServiceAccountName    = "tigera-secure-es-gateway"
 	RoleName              = "tigera-secure-es-gateway"
-	PodSecurityPolicyName = "tigera-esgateway"
 	ServiceName           = "tigera-secure-es-gateway-http"
 	PolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "es-gateway-access"
 	ElasticsearchPortName = "es-gateway-elasticsearch-port"
@@ -85,9 +82,6 @@ type Config struct {
 	EsAdminUserName            string
 	Namespace                  string
 	TruthNamespace             string
-
-	// Whether the cluster supports pod security policies.
-	UsePSP bool
 }
 
 func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
@@ -127,9 +121,6 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	} else {
 		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.ESGatewayKeyPair.GetCertificatePEM(), elasticsearch.PublicCertSecret, e.cfg.TruthNamespace))
 	}
-	if e.cfg.UsePSP {
-		toCreate = append(toCreate, e.esGatewayPodSecurityPolicy())
-	}
 	// Create the deployment last to ensure all secrets have been created
 	toCreate = append(toCreate, e.esGatewayDeployment())
 	return toCreate, toDelete
@@ -151,15 +142,6 @@ func (e *esGateway) esGatewayRole() *rbacv1.Role {
 			ResourceNames: []string{},
 			Verbs:         []string{"get", "list", "watch"},
 		},
-	}
-
-	if e.cfg.UsePSP {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{PodSecurityPolicyName},
-		})
 	}
 
 	if e.cfg.Installation.KubernetesProvider.IsOpenShift() {
@@ -201,10 +183,6 @@ func (e *esGateway) esGatewayRoleBinding() *rbacv1.RoleBinding {
 			},
 		},
 	}
-}
-
-func (e *esGateway) esGatewayPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(PodSecurityPolicyName)
 }
 
 func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {

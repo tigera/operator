@@ -17,7 +17,6 @@ package render_test
 import (
 	"context"
 	"fmt"
-	"reflect"
 
 	v1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	. "github.com/onsi/ginkgo"
@@ -30,7 +29,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -131,7 +129,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 			installation := &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
-				KubernetesProvider:   operatorv1.ProviderNone,
+				KubernetesProvider:   operatorv1.ProviderOpenShift,
 				Registry:             "testregistry.com/",
 			}
 
@@ -147,11 +145,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				PullSecrets: []*corev1.Secret{
 					{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 				},
-				Provider:           operatorv1.ProviderNone,
+				Provider:           installation.KubernetesProvider,
 				ClusterDomain:      "cluster.local",
 				ElasticLicenseType: render.ElasticsearchLicenseTypeEnterpriseTrial,
 				TrustedBundle:      trustedBundle,
-				UsePSP:             true,
 				KibanaEnabled:      true,
 			}
 		})
@@ -173,15 +170,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		Context("Initial creation", func() {
 			It("should render properly when PSP is not supported by the cluster", func() {
-				cfg.UsePSP = false
 				component := render.LogStorage(cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
-				resources, _ := component.Objects()
-
-				// Should not contain any PodSecurityPolicies
-				for _, r := range resources {
-					Expect(reflect.TypeOf(r)).ToNot(Equal(reflect.TypeOf(&policyv1beta1.PodSecurityPolicy{})))
-				}
 			})
 
 			It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
@@ -226,13 +216,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator", Namespace: render.ECKOperatorNamespace}},
 					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
 					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
-					&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
-					&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.ECKOperatorName}},
 
 					// Kibana resources
 					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-kibana"}},
 					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-kibana"}},
-					&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-kibana"}},
 					&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: render.ECKOperatorName, Namespace: render.ECKOperatorNamespace}},
 					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaNamespace}},
 					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.KibanaPolicyName, Namespace: render.KibanaNamespace}},
@@ -250,7 +237,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch", Namespace: render.ElasticsearchNamespace}},
 					&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: common.OperatorNamespace()}},
 					&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
-					&policyv1beta1.PodSecurityPolicy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
 					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.EsManagerRole, Namespace: render.ElasticsearchNamespace}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.EsManagerRoleBinding, Namespace: render.ElasticsearchNamespace}},
 				}
@@ -265,7 +251,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.EsCuratorPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.EsCuratorServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{render.ElasticsearchCuratorUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-					{render.ESCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 				})
 
 				// Check the namespaces.
@@ -501,10 +486,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						Verbs:     []string{"get", "list", "watch"},
 					},
 					{
-						APIGroups:     []string{"policy"},
-						Resources:     []string{"podsecuritypolicies"},
+						APIGroups:     []string{"security.openshift.io"},
+						Resources:     []string{"securitycontextconstraints"},
 						Verbs:         []string{"use"},
-						ResourceNames: []string{"elastic-operator"},
+						ResourceNames: []string{"nonroot-v2"},
 					},
 				}))
 
@@ -533,15 +518,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
-					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.KibanaNamespace, "", &corev1.Namespace{}, nil},
 					{render.KibanaPolicyName, render.KibanaNamespace, &v3.NetworkPolicy{}, nil},
 					{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.KibanaNamespace, &v3.NetworkPolicy{}, nil},
 					{"tigera-kibana", render.KibanaNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-pull-secret", render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
@@ -555,7 +537,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.EsCuratorPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.EsCuratorServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{render.ElasticsearchCuratorUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-					{render.ESCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.ElasticsearchServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
 					{render.KibanaServiceName, render.KibanaNamespace, &corev1.Service{}, nil},
 				}
@@ -606,15 +587,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
-					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.KibanaNamespace, "", &corev1.Namespace{}, nil},
 					{render.KibanaPolicyName, render.KibanaNamespace, &v3.NetworkPolicy{}, nil},
 					{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.KibanaNamespace, &v3.NetworkPolicy{}, nil},
 					{"tigera-kibana", render.KibanaNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-pull-secret", render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
@@ -639,7 +617,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.EsCuratorPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.EsCuratorServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{render.ElasticsearchCuratorUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-					{render.ESCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 				})
 
 				resultES := rtest.GetResource(createResources, render.ElasticsearchName, render.ElasticsearchNamespace,
@@ -704,15 +681,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
-					{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{render.KibanaNamespace, "", &corev1.Namespace{}, nil},
 					{render.KibanaPolicyName, render.KibanaNamespace, &v3.NetworkPolicy{}, nil},
 					{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.KibanaNamespace, &v3.NetworkPolicy{}, nil},
 					{"tigera-kibana", render.KibanaNamespace, &corev1.ServiceAccount{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRole{}, nil},
 					{"tigera-kibana", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{"tigera-kibana", "", &policyv1beta1.PodSecurityPolicy{}, nil},
 					{"tigera-pull-secret", render.KibanaNamespace, &corev1.Secret{}, nil},
 					{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
 					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
@@ -731,7 +705,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{render.EsCuratorPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.EsCuratorServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 					{render.ElasticsearchCuratorUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-					{render.ESCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
 				})
 			})
 
@@ -1027,7 +1000,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Provider:           operatorv1.ProviderNone,
 				ClusterDomain:      "cluster.local",
 				ElasticLicenseType: render.ElasticsearchLicenseTypeEnterpriseTrial,
-				UsePSP:             true,
 				KibanaEnabled:      true,
 			}
 		})
@@ -1536,7 +1508,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				Provider:           operatorv1.ProviderNone,
 				ClusterDomain:      "cluster.local",
 				ElasticLicenseType: render.ElasticsearchLicenseTypeEnterpriseTrial,
-				UsePSP:             true,
 			}
 		})
 
@@ -1719,7 +1690,6 @@ var deleteLogStorageTests = func(managementCluster *operatorv1.ManagementCluster
 				Provider:           operatorv1.ProviderNone,
 				ClusterDomain:      "cluster.local",
 				ElasticLicenseType: render.ElasticsearchLicenseTypeEnterpriseTrial,
-				UsePSP:             true,
 			}
 		})
 		It("returns Elasticsearch and Kibana CR's to delete and keeps the finalizers on the LogStorage CR", func() {

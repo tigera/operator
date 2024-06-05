@@ -21,7 +21,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -37,7 +36,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -109,9 +107,6 @@ type ComplianceConfiguration struct {
 	ReporterKeyPair    certificatemanagement.KeyPairInterface
 	SnapshotterKeyPair certificatemanagement.KeyPairInterface
 	ControllerKeyPair  certificatemanagement.KeyPairInterface
-
-	// Whether the cluster supports pod security policies.
-	UsePSP bool
 
 	Namespace string
 
@@ -262,16 +257,6 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		)
 	}
 
-	if c.cfg.UsePSP {
-		complianceObjs = append(complianceObjs,
-			c.complianceBenchmarkerPodSecurityPolicy(),
-			c.complianceControllerPodSecurityPolicy(),
-			c.complianceReporterPodSecurityPolicy(),
-			c.complianceServerPodSecurityPolicy(),
-			c.complianceSnapshotterPodSecurityPolicy(),
-		)
-	}
-
 	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
 	// host path volumes requires cluster admin permissions.
 	if c.cfg.Installation.KubernetesProvider.IsDockerEE() && !c.cfg.Tenant.MultiTenant() {
@@ -314,16 +299,6 @@ func (c *complianceComponent) complianceControllerRole() *rbacv1.Role {
 			Resources: []string{"podtemplates"},
 			Verbs:     []string{"get"},
 		},
-	}
-
-	if c.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{ComplianceControllerName},
-		})
 	}
 
 	if c.cfg.OpenShift {
@@ -549,10 +524,6 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 	return d
 }
 
-func (c *complianceComponent) complianceControllerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(ComplianceControllerName)
-}
-
 func (c *complianceComponent) complianceReporterServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -597,15 +568,6 @@ func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRol
 			Verbs:     []string{"create"},
 		})
 
-	if c.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{"compliance-reporter"},
-		})
-	}
 	if c.cfg.OpenShift {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
@@ -765,13 +727,6 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 	return podtemplate
 }
 
-func (c *complianceComponent) complianceReporterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy("compliance-reporter")
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	return psp
-}
-
 func (c *complianceComponent) complianceServerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -830,16 +785,6 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 				Verbs:     []string{"get"},
 			},
 		},
-	}
-
-	if c.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		clusterRole.Rules = append(clusterRole.Rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{ComplianceServerName},
-		})
 	}
 
 	if c.cfg.OpenShift {
@@ -1052,10 +997,6 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	return d
 }
 
-func (c *complianceComponent) complianceServerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(ComplianceServerName)
-}
-
 func complianceAnnotations(c *complianceComponent) map[string]string {
 	annotations := c.cfg.TrustedBundle.HashAnnotations()
 	if c.cfg.ServerKeyPair != nil {
@@ -1108,15 +1049,6 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 		Verbs:     []string{"get", "create"},
 	})
 
-	if c.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{ComplianceSnapshotterName},
-		})
-	}
 	if c.cfg.OpenShift {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
@@ -1259,10 +1191,6 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 	return d
 }
 
-func (c *complianceComponent) complianceSnapshotterPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(ComplianceSnapshotterName)
-}
-
 func (c *complianceComponent) complianceBenchmarkerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -1294,16 +1222,6 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 		APIGroups: []string{"linseed.tigera.io"},
 		Resources: []string{"benchmarks"},
 		Verbs:     []string{"get", "create"}})
-
-	if c.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{"compliance-benchmarker"},
-		})
-	}
 
 	if c.cfg.OpenShift {
 		rules = append(rules,
@@ -1486,36 +1404,6 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		}
 	}
 	return ds
-}
-
-func (c *complianceComponent) complianceBenchmarkerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy("compliance-benchmarker")
-	psp.Spec.Volumes = append(psp.Spec.Volumes, policyv1beta1.HostPath)
-	psp.Spec.AllowedHostPaths = []policyv1beta1.AllowedHostPath{
-		{
-			PathPrefix: "/var/lib/etcd",
-			ReadOnly:   true,
-		},
-		{
-			PathPrefix: "/etc/systemd",
-			ReadOnly:   true,
-		},
-		{
-			PathPrefix: "/etc/kubernetes",
-			ReadOnly:   true,
-		},
-		{
-			PathPrefix: "/usr/bin",
-			ReadOnly:   true,
-		},
-		{
-			PathPrefix: "/var/lib/kubelet",
-			ReadOnly:   true,
-		},
-	}
-	psp.Spec.RunAsUser.Rule = policyv1beta1.RunAsUserStrategyRunAsAny
-	psp.Spec.HostPID = true
-	return psp
 }
 
 func (c *complianceComponent) complianceGlobalReportInventory() *v3.GlobalReportType {

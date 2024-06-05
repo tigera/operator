@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -60,7 +60,6 @@ type ESKubeControllersController struct {
 	scheme          *runtime.Scheme
 	status          status.StatusManager
 	clusterDomain   string
-	usePSP          bool
 	elasticExternal bool
 	multiTenant     bool
 	tierWatchReady  *utils.ReadyFlag
@@ -345,7 +344,6 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 			hdler,
 			reqLogger,
 			gwTrustedBundle,
-			r.usePSP,
 		); err != nil {
 			return reconcile.Result{}, err
 		}

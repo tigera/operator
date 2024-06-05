@@ -72,7 +72,7 @@ type NamespaceMigration interface {
 	NeedsCoreNamespaceMigration(ctx context.Context) (bool, error)
 	Run(ctx context.Context, log logr.Logger) error
 	NeedCleanup() bool
-	CleanupMigration(ctx context.Context) error
+	CleanupMigration(ctx context.Context, log logr.Logger) error
 }
 
 type CoreNamespaceMigration struct {
@@ -291,6 +291,11 @@ func (m *CoreNamespaceMigration) Run(ctx context.Context, log logr.Logger) error
 		return fmt.Errorf("failed to migrate all nodes: %s", err.Error())
 	}
 	log.V(1).Info("Nodes migrated")
+	err := m.waitForOperatorCalicoNodeDaemonsetReady(ctx, log)
+	if err != nil {
+		return fmt.Errorf("failed to wait for calico-node daemonset to be ready: %s", err.Error())
+	}
+	log.V(1).Info("calico-system/calico-node daemonset has been rolled out successfully")
 	if err := m.deleteKubeSystemCalicoNode(ctx); err != nil {
 		return fmt.Errorf("failed to delete kube-system node DaemonSet: %s", err.Error())
 	}
@@ -397,9 +402,14 @@ func (m *CoreNamespaceMigration) NeedCleanup() bool {
 
 // CleanupMigration ensures all labels used during the migration are removed
 // and any migration resources are stopped.
-func (m *CoreNamespaceMigration) CleanupMigration(ctx context.Context) error {
+func (m *CoreNamespaceMigration) CleanupMigration(ctx context.Context, log logr.Logger) error {
 	if m.migrationComplete {
 		return nil
+	}
+	// wait for calico-node rollout to avoid mass restart of calico-node pods
+	err := m.waitForOperatorCalicoNodeDaemonsetReady(ctx, log)
+	if err != nil {
+		return fmt.Errorf("failed to wait for calico-node daemonset to be ready: %s", err.Error())
 	}
 	if err := m.removeNodeMigrationLabelFromNodes(ctx); err != nil {
 		return fmt.Errorf("error cleaning up node labels: %s", err)
@@ -803,5 +813,26 @@ func (m *CoreNamespaceMigration) removeNodeLabel(ctx context.Context, nodeName, 
 
 		// no update needed
 		return true, nil
+	})
+}
+
+// waitForOperatorCalicoNodeDaemonsetReady waits until the 'new' calico-node daemonset in
+// the calico-system namespace is ready before continuing, it will wait up to
+// 1 minutes before returning with an error.
+func (m *CoreNamespaceMigration) waitForOperatorCalicoNodeDaemonsetReady(ctx context.Context, log logr.Logger) error {
+	return wait.PollUntilContextTimeout(ctx, 5*time.Second, 1*time.Minute, true, func(ctx context.Context) (bool, error) {
+		d, err := m.client.AppsV1().DaemonSets(common.CalicoNamespace).Get(ctx, nodeDaemonSetName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+		if d.Status.DesiredNumberScheduled == d.Status.UpdatedNumberScheduled &&
+			d.Status.DesiredNumberScheduled == d.Status.NumberReady &&
+			d.Status.DesiredNumberScheduled == d.Status.NumberAvailable {
+			// Expected replicas active
+			return true, nil
+		}
+		log.Info(fmt.Sprintf("waiting for calico-node to %d replicas, ready at %d, up-to-date at %d, available at %d",
+			d.Status.DesiredNumberScheduled, d.Status.NumberReady, d.Status.UpdatedNumberScheduled, d.Status.NumberAvailable))
+		return false, nil
 	})
 }

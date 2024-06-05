@@ -24,7 +24,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -39,19 +38,17 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 )
 
 const (
-	egwPortName                 = "health"
-	DefaultVXLANPort      int   = 4790
-	DefaultVXLANVNI       int   = 4097
-	DefaultHealthPort     int32 = 8080
-	OpenShiftSCCName            = "tigera-egressgateway"
-	podSecurityPolicyName       = "tigera-egressgateway"
+	egwPortName             = "health"
+	DefaultVXLANPort  int   = 4790
+	DefaultVXLANVNI   int   = 4097
+	DefaultHealthPort int32 = 8080
+	OpenShiftSCCName        = "tigera-egressgateway"
 )
 
 var log = logf.Log.WithName("render")
@@ -80,9 +77,7 @@ type Config struct {
 	VXLANPort       int
 	IptablesBackend string
 
-	OpenShift bool
-	// Whether the cluster supports pod security policies.
-	UsePSP            bool
+	OpenShift         bool
 	NamespaceAndNames []string
 }
 
@@ -111,18 +106,15 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	)
 
 	var objectsToDelete []client.Object
-	if c.config.UsePSP || c.config.OpenShift {
+	if c.config.OpenShift {
 		objectsToCreate = append(objectsToCreate, c.egwRole(), c.egwRoleBinding())
-		if c.config.UsePSP {
-			objectsToCreate = append(objectsToCreate, PodSecurityPolicy())
-		}
 		if c.config.OpenShift {
 			objectsToCreate = append(objectsToCreate, c.getSecurityContextConstraints())
 		}
 	} else {
 		// It is possible to have multiple egress gateway resources in different namespaces.
-		// We only delete namespaced role and role binding here. The cluster-level psp and scc
-		// are deleted in egressgateway_controller when no egress gateway is in the cluster.
+		// We only delete namespaced role and role binding here. The cluster-level scc
+		// is deleted in egressgateway_controller when no egress gateway is in the cluster.
 		objectsToDelete = append(objectsToDelete, c.egwRole(), c.egwRoleBinding())
 	}
 
@@ -321,32 +313,8 @@ func (c *component) egwPullSecrets() []*corev1.Secret {
 	return secrets
 }
 
-func PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy(podSecurityPolicyName)
-	psp.Spec.AllowedCapabilities = []corev1.Capability{"NET_ADMIN", "NET_RAW"}
-	psp.Spec.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
-	psp.Spec.HostIPC = true
-	psp.Spec.HostNetwork = true
-	psp.Spec.HostPID = true
-	psp.Spec.Privileged = true
-	psp.Spec.RunAsUser = policyv1beta1.RunAsUserStrategyOptions{
-		Rule: policyv1beta1.RunAsUserStrategyRunAsAny,
-	}
-	psp.Spec.SupplementalGroups = policyv1beta1.SupplementalGroupsStrategyOptions{
-		Rule: policyv1beta1.SupplementalGroupsStrategyRunAsAny,
-	}
-	psp.Spec.FSGroup = policyv1beta1.FSGroupStrategyOptions{
-		Rule: policyv1beta1.FSGroupStrategyRunAsAny,
-	}
-	psp.Spec.Volumes = []policyv1beta1.FSType{
-		policyv1beta1.CSI,
-		policyv1beta1.Projected,
-	}
-	return psp
-}
-
 func (c *component) egwRole() *rbacv1.Role {
-	role := &rbacv1.Role{
+	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.config.EgressGW.Name,
@@ -354,26 +322,13 @@ func (c *component) egwRole() *rbacv1.Role {
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				ResourceNames: []string{podSecurityPolicyName},
-				Verbs:         []string{"use"},
-			},
-		},
-	}
-
-	if c.config.OpenShift {
-		role.Rules = append(role.Rules,
-			rbacv1.PolicyRule{
 				APIGroups:     []string{"security.openshift.io"},
 				Resources:     []string{"securitycontextconstraints"},
 				Verbs:         []string{"use"},
 				ResourceNames: []string{OpenShiftSCCName},
 			},
-		)
+		},
 	}
-
-	return role
 }
 
 func (c *component) egwRoleBinding() *rbacv1.RoleBinding {

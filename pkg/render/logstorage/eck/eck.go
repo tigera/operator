@@ -20,7 +20,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,7 +33,6 @@ import (
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -64,9 +62,6 @@ type Configuration struct {
 	Provider           operatorv1.Provider
 	ElasticLicenseType render.ElasticsearchLicenseType
 	ApplyTrial         bool
-
-	// Whether the cluster supports pod security policies.
-	UsePSP bool
 }
 
 type eck struct {
@@ -115,9 +110,6 @@ func (e *eck) Objects() ([]client.Object, []client.Object) {
 	// https://docs.docker.com/ee/ucp/authorization/#secure-kubernetes-defaults
 	if e.cfg.Provider.IsDockerEE() {
 		toCreate = append(toCreate, e.operatorClusterAdminClusterRoleBinding())
-	}
-	if e.cfg.UsePSP {
-		toCreate = append(toCreate, e.operatorPodSecurityPolicy())
 	}
 
 	if e.cfg.ApplyTrial {
@@ -226,16 +218,6 @@ func (e *eck) operatorClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
-	}
-
-	if e.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{OperatorName},
-		})
 	}
 
 	if e.cfg.Installation.KubernetesProvider.IsOpenShift() {
@@ -405,10 +387,6 @@ func (e *eck) operatorStatefulSet() *appsv1.StatefulSet {
 		}
 	}
 	return s
-}
-
-func (e *eck) operatorPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(OperatorName)
 }
 
 // Applying this in the eck namespace will start a trial license for enterprise features.

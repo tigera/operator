@@ -46,7 +46,6 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crds"
 )
 
@@ -301,16 +300,6 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	cs, err := kubernetes.NewForConfig(cfg)
-	Expect(err).NotTo(HaveOccurred())
-
-	// Auto-detect whether the cluster supports PSP. Since we use a kind cluster
-	// from before v1.25, we expect this to be true. Once we update our kind
-	// version >= v1.25, we should instead expect this to return "false".
-	usePSP, err := utils.SupportsPodSecurityPolicies(cs)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(usePSP).To(BeTrue())
-
 	// Setup Scheme for all resources
 	err = apis.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
@@ -325,7 +314,6 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 		EnterpriseCRDExists: true,
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
-		UsePSP:              usePSP,
 		MultiTenant:         multiTenant,
 	})
 	Expect(err).NotTo(HaveOccurred())

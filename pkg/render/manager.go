@@ -22,7 +22,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -41,7 +40,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -158,8 +156,6 @@ type ManagerConfiguration struct {
 	ComplianceLicenseActive bool
 	ComplianceNamespace     string
 
-	// Whether the cluster supports pod security policies.
-	UsePSP            bool
 	Namespace         string
 	TruthNamespace    string
 	BindingNamespaces []string
@@ -230,12 +226,8 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs,
 		managerClusterRoleBinding(c.cfg.BindingNamespaces),
-		managerClusterRole(false, c.cfg.UsePSP, c.cfg.Installation.KubernetesProvider),
+		managerClusterRole(false, c.cfg.Installation.KubernetesProvider),
 	)
-
-	if c.cfg.UsePSP {
-		objs = append(objs, managerPodSecurityPolicy())
-	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs,
@@ -690,12 +682,8 @@ func managerClusterRoleBinding(namespaces []string) client.Object {
 	return rcomponents.ClusterRoleBinding(ManagerClusterRoleBinding, ManagerClusterRole, ManagerServiceAccount, namespaces)
 }
 
-func managerPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy("tigera-manager")
-}
-
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func managerClusterRole(managedCluster, usePSP bool, kubernetesProvider operatorv1.Provider) *rbacv1.ClusterRole {
+func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider) *rbacv1.ClusterRole {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -834,18 +822,6 @@ func managerClusterRole(managedCluster, usePSP bool, kubernetesProvider operator
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"list", "get", "watch", "update"},
-			},
-		)
-	}
-
-	if usePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		cr.Rules = append(cr.Rules,
-			rbacv1.PolicyRule{
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{"tigera-manager"},
 			},
 		)
 	}

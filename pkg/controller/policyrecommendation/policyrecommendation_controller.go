@@ -165,7 +165,6 @@ func newReconciler(
 		licenseAPIReady:          licenseAPIReady,
 		tierWatchReady:           tierWatchReady,
 		policyRecScopeWatchReady: policyRecScopeWatchReady,
-		usePSP:                   opts.UsePSP,
 		multiTenant:              opts.MultiTenant,
 		externalElastic:          opts.ElasticExternal,
 	}
@@ -190,7 +189,6 @@ type ReconcilePolicyRecommendation struct {
 	tierWatchReady           *utils.ReadyFlag
 	policyRecScopeWatchReady *utils.ReadyFlag
 	provider                 operatorv1.Provider
-	usePSP                   bool
 	multiTenant              bool
 	externalElastic          bool
 }
@@ -438,7 +436,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		ManagedCluster:                 isManagedCluster,
 		PullSecrets:                    pullSecrets,
 		OpenShift:                      r.provider.IsOpenShift(),
-		UsePSP:                         r.usePSP,
 		Namespace:                      helper.InstallNamespace(),
 		Tenant:                         tenant,
 		BindingNamespaces:              bindNamespaces,

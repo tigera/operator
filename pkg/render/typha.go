@@ -20,7 +20,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -33,7 +32,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/migration"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 )
@@ -71,9 +69,6 @@ type TyphaConfiguration struct {
 	// The health port that Felix is bound to. We configure Typha to bind to the port
 	// that is one less.
 	FelixHealthPort int
-
-	// Whether the cluster supports pod security policies.
-	UsePSP bool
 }
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
@@ -120,10 +115,6 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		c.typhaRoleBinding(),
 		c.typhaService(),
 		c.typhaPodDisruptionBudget(),
-	}
-
-	if c.cfg.UsePSP {
-		objs = append(objs, c.typhaPodSecurityPolicy())
 	}
 
 	// Add deployment last, as it may depend on the creation of previous objects in the list.
@@ -346,15 +337,6 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			},
 		}
 		role.Rules = append(role.Rules, extraRules...)
-	}
-	if c.cfg.UsePSP {
-		// Allow access to the pod security policy in case this is enforced on the cluster
-		role.Rules = append(role.Rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{common.TyphaDeploymentName},
-		})
 	}
 	if c.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
@@ -656,12 +638,6 @@ func (c *typhaComponent) typhaService() *corev1.Service {
 			},
 		},
 	}
-}
-
-func (c *typhaComponent) typhaPodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	psp := podsecuritypolicy.NewBasePolicy(common.TyphaDeploymentName)
-	psp.Spec.HostNetwork = true
-	return psp
 }
 
 // affinity sets the user-specified typha affinity if specified.

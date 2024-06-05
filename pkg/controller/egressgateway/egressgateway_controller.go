@@ -92,7 +92,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		status:          status.New(mgr.GetClient(), "egressgateway", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
-		usePSP:          opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -142,7 +141,6 @@ type ReconcileEgressGateway struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
-	usePSP          bool
 }
 
 // Reconcile reads that state of the cluster for an EgressGateway object and makes changes
@@ -165,9 +163,6 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		var objects []client.Object
 		if r.provider.IsOpenShift() {
 			objects = append(objects, egressgateway.SecurityContextConstraints())
-		}
-		if r.usePSP {
-			objects = append(objects, egressgateway.PodSecurityPolicy())
 		}
 		err := ch.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(objects...), r.status)
 		if err != nil {
@@ -406,7 +401,6 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 		VXLANPort:         egwVXLANPort,
 		VXLANVNI:          egwVXLANVNI,
 		IptablesBackend:   ipTablesBackend,
-		UsePSP:            r.usePSP,
 		OpenShift:         r.provider.IsOpenShift(),
 		NamespaceAndNames: namespaceAndNames,
 	}

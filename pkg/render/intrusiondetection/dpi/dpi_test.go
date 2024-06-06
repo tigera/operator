@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -221,7 +221,7 @@ var _ = Describe("DPI rendering tests", func() {
 			Installation:       installation,
 			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
-			Openshift:          false,
+			OpenShift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
 			ESClusterConfig:    esConfigMap,
@@ -275,7 +275,7 @@ var _ = Describe("DPI rendering tests", func() {
 			Installation:       installation,
 			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
-			Openshift:          false,
+			OpenShift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
 			ESClusterConfig:    esConfigMap,
@@ -322,7 +322,7 @@ var _ = Describe("DPI rendering tests", func() {
 			Installation:       installation,
 			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
-			Openshift:          false,
+			OpenShift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   false,
 			ESClusterConfig:    esConfigMap,
@@ -368,7 +368,7 @@ var _ = Describe("DPI rendering tests", func() {
 			Installation:       installation,
 			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
-			Openshift:          false,
+			OpenShift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   true,
 			ManagementCluster:  true,
@@ -415,7 +415,7 @@ var _ = Describe("DPI rendering tests", func() {
 		}
 
 		cfg.IntrusionDetection = ids2
-		cfg.Openshift = true
+		cfg.OpenShift = true
 		component := dpi.DPI(cfg)
 
 		resources, _ := component.Objects()
@@ -481,7 +481,7 @@ var _ = Describe("DPI rendering tests", func() {
 			Installation:       installation,
 			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
-			Openshift:          false,
+			OpenShift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   true,
 			ManagedCluster:     true,
@@ -518,7 +518,7 @@ var _ = Describe("DPI rendering tests", func() {
 			Installation:       installation,
 			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
-			Openshift:          false,
+			OpenShift:          false,
 			HasNoLicense:       false,
 			HasNoDPIResource:   true,
 			ManagementCluster:  true,
@@ -580,6 +580,22 @@ var _ = Describe("DPI rendering tests", func() {
 		}
 	})
 
+	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+		cfg.OpenShift = true
+		component := dpi.DPI(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		role := rtest.GetResource(resources, "tigera-dpi", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"privileged"},
+		}))
+	})
+
 	Context("allow-tigera rendering", func() {
 		policyName := types.NamespacedName{Name: "allow-tigera.tigera-dpi", Namespace: "tigera-dpi"}
 
@@ -596,7 +612,7 @@ var _ = Describe("DPI rendering tests", func() {
 		DescribeTable("should render allow-tigera policy",
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.ManagedCluster = scenario.ManagedCluster
-				cfg.Openshift = scenario.Openshift
+				cfg.OpenShift = scenario.OpenShift
 				component := dpi.DPI(cfg)
 				resources, _ := component.Objects()
 
@@ -604,10 +620,10 @@ var _ = Describe("DPI rendering tests", func() {
 				expectedPolicy := getExpectedPolicy(scenario)
 				Expect(policy).To(Equal(expectedPolicy))
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
 		)
 	})
 })

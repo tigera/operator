@@ -141,8 +141,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			IptablesBackend: "nft",
 		})
 		resources, resToBeDeleted := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-		Expect(len(resToBeDeleted)).To(Equal(len(expectedResToBeDeleted)))
+		Expect(resources).To(HaveLen(len(expectedResources)))
+		Expect(resToBeDeleted).To(HaveLen(len(expectedResToBeDeleted)))
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
@@ -273,7 +273,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			VXLANPort:    4790,
 		})
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(2))
+		Expect(resources).To(HaveLen(2))
 		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers[0].Resources).To(Equal(expectedResource))
 		elasticIPAnnotation := dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/awsElasticIPs"]
@@ -289,9 +289,9 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			kind    string
 		}{
 			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
-			{"tigera-egressgateway", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"egress-test", "test-ns", rbac, "v1", "Role"},
 			{"egress-test", "test-ns", rbac, "v1", "RoleBinding"},
+			{"tigera-egressgateway", "", "policy", "v1beta1", "PodSecurityPolicy"},
 			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
 		}
 
@@ -311,7 +311,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 	})
 
-	It("should create security context if platform is openshift", func() {
+	It("should create SecurityContextConstraints if platform is OpenShift", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -320,6 +320,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			kind    string
 		}{
 			{"egress-test", "test-ns", "", "v1", "ServiceAccount"},
+			{"egress-test", "test-ns", rbac, "v1", "Role"},
+			{"egress-test", "test-ns", rbac, "v1", "RoleBinding"},
 			{"tigera-egressgateway", "", "security.openshift.io", "v1", "SecurityContextConstraints"},
 			{"egress-test", "test-ns", "apps", "v1", "Deployment"},
 		}

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -329,7 +329,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 
 	dexComponentCfg := &render.DexComponentConfiguration{
 		PullSecrets:   pullSecrets,
-		Openshift:     r.provider == oprv1.ProviderOpenShift,
+		OpenShift:     r.provider.IsOpenShift(),
 		Installation:  install,
 		DexConfig:     dexCfg,
 		ClusterDomain: r.clusterDomain,

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -153,6 +153,21 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			}
 		})
 
+		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+			component := EsGateway(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			role := rtest.GetResource(resources, "tigera-secure-es-gateway", "tigera-elasticsearch", "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"nonroot-v2"},
+			}))
+		})
+
 		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
 			var replicas int32 = 1
 			installation.ControlPlaneReplicas = &replicas
@@ -218,7 +233,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 
 			DescribeTable("should render allow-tigera policy",
 				func(scenario testutils.AllowTigeraScenario) {
-					if scenario.Openshift {
+					if scenario.OpenShift {
 						cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 					} else {
 						cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
@@ -232,8 +247,8 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				},
 				// ES Gateway only renders in the presence of an LogStorage CR and absence of a ManagementClusterConnection CR, therefore
 				// does not have a config option for managed clusters.
-				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
 			)
 		})
 		It("should set the right env when FIPS mode is enabled", func() {

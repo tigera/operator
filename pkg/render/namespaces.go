@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,14 +15,14 @@
 package render
 
 import (
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 func Namespaces(cfg *NamespaceConfiguration) Component {
@@ -108,8 +108,9 @@ func CreateNamespace(name string, provider operatorv1.Provider, pss PodSecurityS
 
 	switch provider {
 	case operatorv1.ProviderOpenShift:
-		ns.Labels["openshift.io/run-level"] = "0"
 		ns.Annotations["openshift.io/node-selector"] = ""
+		ns.Annotations["security.openshift.io/scc.podSecurityLabelSync"] = "false"
+		ns.Labels["openshift.io/run-level"] = "0"
 	case operatorv1.ProviderAKS:
 		ns.Labels["control-plane"] = "true"
 	}

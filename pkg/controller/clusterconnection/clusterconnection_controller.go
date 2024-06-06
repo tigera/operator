@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -346,7 +347,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		URL:               managementClusterConnection.Spec.ManagementClusterAddr,
 		TunnelCAType:      managementClusterConnection.Spec.TLS.CA,
 		PullSecrets:       pullSecrets,
-		Openshift:         r.Provider == operatorv1.ProviderOpenShift,
+		OpenShift:         r.Provider.IsOpenShift(),
 		Installation:      instl,
 		TunnelSecret:      tunnelSecret,
 		TrustedCertBundle: trustedCertBundle,

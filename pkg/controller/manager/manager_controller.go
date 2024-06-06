@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -628,7 +628,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		TLSKeyPair:              tlsSecret,
 		VoltronLinseedKeyPair:   linseedVoltronServerCert,
 		PullSecrets:             pullSecrets,
-		Openshift:               r.provider == operatorv1.ProviderOpenShift,
+		OpenShift:               r.provider.IsOpenShift(),
 		Installation:            installation,
 		ManagementCluster:       managementCluster,
 		TunnelServerCert:        tunnelServerCert,

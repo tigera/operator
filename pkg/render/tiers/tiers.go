@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ func Tiers(cfg *Config) render.Component {
 }
 
 type Config struct {
-	Openshift      bool
+	OpenShift      bool
 	DNSEgressCIDRs DNSEgressCIDR
 
 	// CalicoNamespaces contains a list of namespaces running Calico components. This must be
@@ -106,7 +106,7 @@ func (t tiersComponent) allowTigeraTier() *v3.Tier {
 func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 	var dnsPolicySelector string
 	var dnsPolicyNamespace string
-	if t.cfg.Openshift {
+	if t.cfg.OpenShift {
 		dnsPolicySelector = "dns.operator.openshift.io/daemonset-dns == 'default'"
 		dnsPolicyNamespace = "openshift-dns"
 	} else {

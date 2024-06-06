@@ -17,10 +17,6 @@ package esmetrics
 import (
 	"fmt"
 
-	rcomponents "github.com/tigera/operator/pkg/render/common/components"
-
-	"github.com/tigera/operator/pkg/url"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
@@ -30,17 +26,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/url"
 )
 
 const (
@@ -103,12 +103,11 @@ func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Ob
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...)...)
 	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount())
 
-	if e.cfg.UsePSP {
-		toCreate = append(toCreate,
-			e.metricsRole(),
-			e.metricsRoleBinding(),
-			e.metricsPodSecurityPolicy(),
-		)
+	if e.cfg.UsePSP || e.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		toCreate = append(toCreate, e.metricsRole(), e.metricsRoleBinding())
+		if e.cfg.UsePSP {
+			toCreate = append(toCreate, e.metricsPodSecurityPolicy())
+		}
 	}
 	return toCreate, objsToDelete
 }
@@ -132,20 +131,30 @@ func (e *elasticsearchMetrics) SupportedOSType() rmeta.OSType {
 }
 
 func (e *elasticsearchMetrics) metricsRole() *rbacv1.Role {
+	var rules []rbacv1.PolicyRule
+	if e.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{ElasticsearchMetricsPodSecurityPolicyName},
+		})
+	}
+	if e.cfg.Installation.KubernetesProvider.IsOpenShift() {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.NonRootV2},
+		})
+	}
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchMetricsRoleName,
 			Namespace: render.ElasticsearchNamespace,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{ElasticsearchMetricsPodSecurityPolicyName},
-			},
-		},
+		Rules: rules,
 	}
 }
 
@@ -289,7 +298,7 @@ func (e *elasticsearchMetrics) allowTigeraPolicy() *v3.NetworkPolicy {
 			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
 		},
 	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Installation.KubernetesProvider == operatorv1.ProviderOpenShift)
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Installation.KubernetesProvider.IsOpenShift())
 	egressRules = append(egressRules,
 		v3.Rule{
 			Action:      v3.Allow,

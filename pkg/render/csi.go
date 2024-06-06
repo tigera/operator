@@ -33,6 +33,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 )
 
 const (
@@ -314,20 +315,30 @@ func (c *csiComponent) podSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
 }
 
 func (c *csiComponent) role() *rbacv1.Role {
+	var rules []rbacv1.PolicyRule
+	if c.cfg.UsePSP {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"policy"},
+			Resources:     []string{"podsecuritypolicies"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{CSIDaemonSetName},
+		})
+	}
+	if c.cfg.OpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.Privileged},
+		})
+	}
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CSIDaemonSetName,
 			Namespace: CSIDaemonSetNamespace,
 		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups:     []string{"policy"},
-				Resources:     []string{"podsecuritypolicies"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{CSIDaemonSetName},
-			},
-		},
+		Rules: rules,
 	}
 }
 
@@ -389,16 +400,11 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (c *csiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs := []client.Object{c.csiDriver(), c.csiDaemonset()}
 
-	// create PSP and corresponding clusterrole if it allows, clusterroles are currently
-	// only for attaching the PSP to CSI's DaemonSet, do not render them if the PSPs
-	// are also not rendered
-	if c.cfg.UsePSP {
-		objs = append(objs,
-			c.serviceAccount(),
-			c.role(),
-			c.roleBinding(),
-			c.podSecurityPolicy(),
-		)
+	if c.cfg.UsePSP || c.cfg.OpenShift {
+		objs = append(objs, c.serviceAccount(), c.role(), c.roleBinding())
+		if c.cfg.UsePSP {
+			objs = append(objs, c.podSecurityPolicy())
+		}
 	}
 
 	if c.cfg.Terminating || c.cfg.Installation.KubeletVolumePluginPath == "None" {

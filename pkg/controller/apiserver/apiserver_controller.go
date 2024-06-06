@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/validation"
@@ -385,7 +386,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		ManagementClusterConnection: managementClusterConnection,
 		TLSKeyPair:                  tlsSecret,
 		PullSecrets:                 pullSecrets,
-		Openshift:                   r.provider == operatorv1.ProviderOpenShift,
+		OpenShift:                   r.provider.IsOpenShift(),
 		TrustedBundle:               trustedBundle,
 		UsePSP:                      r.usePSP,
 		MultiTenant:                 r.multiTenant,
@@ -455,7 +456,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 		packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
 			PullSecrets:                 pullSecrets,
-			Openshift:                   r.provider == operatorv1.ProviderOpenShift,
+			OpenShift:                   r.provider.IsOpenShift(),
 			Installation:                installationSpec,
 			KeyValidatorConfig:          keyValidatorConfig,
 			ServerCertSecret:            packetCaptureCertSecret,

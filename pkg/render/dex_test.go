@@ -26,6 +26,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -355,6 +356,22 @@ var _ = Describe("dex rendering tests", func() {
 			}
 		})
 
+		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+			cfg.OpenShift = true
+			component := render.Dex(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			role := rtest.GetResource(resources, "tigera-dex", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"nonroot-v2"},
+			}))
+		})
+
 		It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
 			var replicas int32 = 1
 			cfg.Installation.ControlPlaneReplicas = &replicas
@@ -499,7 +516,7 @@ var _ = Describe("dex rendering tests", func() {
 
 			DescribeTable("should render allow-tigera policy",
 				func(scenario testutils.AllowTigeraScenario) {
-					cfg.Openshift = scenario.Openshift
+					cfg.OpenShift = scenario.OpenShift
 					component := render.Dex(cfg)
 					resources, _ := component.Objects()
 
@@ -508,8 +525,8 @@ var _ = Describe("dex rendering tests", func() {
 					Expect(policy).To(Equal(expectedPolicy))
 				},
 				// Dex only renders in the presence of an Authentication CR, therefore does not have a config option for managed clusters.
-				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
+				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
 			)
 		})
 	})

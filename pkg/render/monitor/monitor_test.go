@@ -628,6 +628,38 @@ var _ = Describe("monitor rendering tests", func() {
 		}
 	})
 
+	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+		cfg.OpenShift = true
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		role := rtest.GetResource(resources, "calico-prometheus-operator", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"nonroot-v2"},
+		}))
+
+		role = rtest.GetResource(resources, "prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"nonroot-v2"},
+		}))
+
+		role = rtest.GetResource(resources, "tigera-prometheus", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{"nonroot-v2"},
+		}))
+	})
+
 	It("Should render Prometheus resources when Dex is enabled", func() {
 		authentication := &operatorv1.Authentication{
 			Spec: operatorv1.AuthenticationSpec{
@@ -786,7 +818,7 @@ var _ = Describe("monitor rendering tests", func() {
 
 		DescribeTable("should render allow-tigera policy",
 			func(scenario testutils.AllowTigeraScenario) {
-				cfg.Openshift = scenario.Openshift
+				cfg.OpenShift = scenario.OpenShift
 				cfg.KubeControllerPort = 9094
 
 				component := monitor.MonitorPolicy(cfg)
@@ -798,10 +830,10 @@ var _ = Describe("monitor rendering tests", func() {
 					Expect(policy).To(Equal(expectedPolicy))
 				}
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, Openshift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, Openshift: true}),
+			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
 		)
 
 		It("prometheus policy should omit kube-controller egress rule when kube-controller port is 0", func() {

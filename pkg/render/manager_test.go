@@ -121,7 +121,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
 		Expect(manager.Env).Should(ContainElements(
-			corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: "true"},
 			corev1.EnvVar{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		))
 
@@ -206,12 +205,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}))
 	})
 
-	type managerComplianceExpectation struct {
-		managerFlag bool
-		voltronFlag bool
-	}
 	DescribeTable("should set container env appropriately when compliance is not fully available",
-		func(crPresent bool, licenseFeatureActive bool, scenario managerComplianceExpectation) {
+		func(crPresent bool, licenseFeatureActive bool, complianceEnabled bool) {
 			var complianceCR *operatorv1.Compliance
 			if crPresent {
 				complianceCR = &operatorv1.Compliance{}
@@ -227,16 +222,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			})
 
 			deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			manager := deployment.Spec.Template.Spec.Containers[2]
 			voltron := deployment.Spec.Template.Spec.Containers[1]
-			Expect(manager.Env).To(ContainElement(corev1.EnvVar{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(scenario.managerFlag)}))
-			Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(scenario.voltronFlag)}))
+			Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(complianceEnabled)}))
 		},
-		Entry("Both CR and license feature not present/active", false, false, managerComplianceExpectation{managerFlag: false, voltronFlag: false}),
-		Entry("CR not present, license feature active", false, true, managerComplianceExpectation{managerFlag: false, voltronFlag: false}),
-
-		// We expect the manager feature flag to be true in this case, since the CR is present. The manager will render an insufficient license state.
-		Entry("CR present, license feature not active", true, false, managerComplianceExpectation{managerFlag: true, voltronFlag: false}),
+		Entry("Both CR and license feature not present/active", false, false, false),
+		Entry("CR not present, license feature active", false, true, true),
+		Entry("CR present, license feature not active", true, false, false),
 	)
 
 	It("should render the correct ClusterRole", func() {

@@ -431,10 +431,6 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(KibanaEnabled(c.cfg.Tenant, c.cfg.Installation))},
-		// The manager supports two states of a product feature being unavailable: the product feature being feature-flagged off,
-		// and the current license not enabling the feature. The compliance flag that we set on the manager container is a feature
-		// flag, which we should set purely based on whether the compliance CR is present, ignoring the license status.
-		{Name: "ENABLE_COMPLIANCE_REPORTS", Value: strconv.FormatBool(c.cfg.Compliance != nil)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -522,7 +518,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: defaultForwardServer},
-		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.Compliance != nil && c.cfg.ComplianceLicenseActive)},
+		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.ComplianceLicenseActive)},
 		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 

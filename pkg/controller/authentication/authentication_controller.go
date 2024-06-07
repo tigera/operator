@@ -335,16 +335,19 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	components := []render.Component{
-		component,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.DexNamespace,
-			ServiceAccounts: []string{render.DexObjectName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(tlsKeyPair, true, true),
-			},
-			TrustedBundle: trustedBundle,
-		}),
+	components := []render.Component{component}
+
+	if !disableDex {
+		components = append(components,
+			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+				Namespace:       render.DexNamespace,
+				ServiceAccounts: []string{render.DexObjectName},
+				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+					rcertificatemanagement.NewKeyPairOption(tlsKeyPair, true, true),
+				},
+				TrustedBundle: trustedBundle,
+			}),
+		)
 	}
 
 	for _, comp := range components {

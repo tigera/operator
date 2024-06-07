@@ -402,8 +402,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 				{name: "allow-tigera.default-deny", ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-				{name: "tigera-policy-recommendation-managed-cluster-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-				{name: "tigera-policy-recommendation-managed-cluster-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+				{name: "tigera-policy-recommendation-managed-cluster-access", ns: tenantANamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+				{name: "tigera-policy-recommendation-managed-cluster-access", ns: tenantANamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 				{name: "allow-tigera.tigera-policy-recommendation", ns: tenantANamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 				{name: "tigera-policy-recommendation", ns: tenantANamespace, group: "apps", version: "v1", kind: "Deployment"},
 			}
@@ -447,8 +447,8 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 				{name: "tigera-policy-recommendation", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 				{name: "allow-tigera.default-deny", ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-				{name: "tigera-policy-recommendation-managed-cluster-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-				{name: "tigera-policy-recommendation-managed-cluster-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+				{name: "tigera-policy-recommendation-managed-cluster-access", ns: tenantBNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+				{name: "tigera-policy-recommendation-managed-cluster-access", ns: tenantBNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 				{name: "allow-tigera.tigera-policy-recommendation", ns: tenantBNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 				{name: "tigera-policy-recommendation", ns: tenantBNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			}
@@ -585,22 +585,22 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 
 			// Check that the cluster role allows the tigera-policy-recommendation from namesapce tigera-policy-recommendation
 			// to get managed clusters in order to bypass the authentication proxy in Voltron
-			clusterRoleManagedClusters := rtest.GetResource(createdResources, render.PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(clusterRoleManagedClusters.Rules).To(ContainElements(
+			roleManagedClusters := rtest.GetResource(createdResources, render.PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName, tenantANamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+			Expect(roleManagedClusters.Rules).To(ContainElements(
 				rbacv1.PolicyRule{
 					APIGroups: []string{"projectcalico.org"},
 					Resources: []string{"managedclusters"},
 					Verbs:     []string{"get"},
 				},
 			))
-			clusterRoleManagedClustersBinding := rtest.GetResource(createdResources, render.PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
-			Expect(clusterRoleManagedClustersBinding.RoleRef).To(Equal(
+			roleBindingManagedClusters := rtest.GetResource(createdResources, render.PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName, tenantANamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+			Expect(roleBindingManagedClusters.RoleRef).To(Equal(
 				rbacv1.RoleRef{
 					APIGroup: "rbac.authorization.k8s.io",
-					Kind:     "ClusterRole",
+					Kind:     "Role",
 					Name:     render.PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName,
 				}))
-			Expect(clusterRoleManagedClustersBinding.Subjects).To(ConsistOf(
+			Expect(roleBindingManagedClusters.Subjects).To(ConsistOf(
 				rbacv1.Subject{
 					Kind:      "ServiceAccount",
 					Name:      render.PolicyRecommendationName,

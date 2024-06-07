@@ -1080,8 +1080,8 @@ var _ = Describe("compliance rendering tests", func() {
 			tenantAExpectedResources := []client.Object{
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server", Namespace: tenantANamespace}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.MultiTenantComplianceManagedClustersAccessClusterRoleName}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.MultiTenantComplianceManagedClustersAccessClusterRoleName}},
+				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.MultiTenantComplianceManagedClustersAccessClusterRoleName, Namespace: tenantANamespace}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.MultiTenantComplianceManagedClustersAccessClusterRoleName, Namespace: tenantANamespace}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceSnapshotterServiceAccount}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceSnapshotterServiceAccount}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceBenchmarkerServiceAccount}},
@@ -1123,8 +1123,8 @@ var _ = Describe("compliance rendering tests", func() {
 			tenantBExpectedResources := []client.Object{
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server", Namespace: tenantBNamespace}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.MultiTenantComplianceManagedClustersAccessClusterRoleName}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.MultiTenantComplianceManagedClustersAccessClusterRoleName}},
+				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.MultiTenantComplianceManagedClustersAccessClusterRoleName, Namespace: tenantBNamespace}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.MultiTenantComplianceManagedClustersAccessClusterRoleName, Namespace: tenantBNamespace}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceSnapshotterServiceAccount}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceSnapshotterServiceAccount}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceBenchmarkerServiceAccount}},
@@ -1224,7 +1224,7 @@ var _ = Describe("compliance rendering tests", func() {
 			tenantACompliance, err := render.Compliance(cfg)
 			Expect(err).NotTo(HaveOccurred())
 			resources, _ := tenantACompliance.Objects()
-			cr := rtest.GetResource(resources, render.MultiTenantComplianceManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			cr := rtest.GetResource(resources, render.MultiTenantComplianceManagedClustersAccessClusterRoleName, tenantANamespace, rbacv1.GroupName, "v1", "Role").(*rbacv1.Role)
 			expectedRules := []rbacv1.PolicyRule{
 				{
 					APIGroups: []string{"projectcalico.org"},
@@ -1235,8 +1235,8 @@ var _ = Describe("compliance rendering tests", func() {
 				},
 			}
 			Expect(cr.Rules).To(ContainElements(expectedRules))
-			rb := rtest.GetResource(resources, render.MultiTenantComplianceManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
-			Expect(rb.RoleRef.Kind).To(Equal("ClusterRole"))
+			rb := rtest.GetResource(resources, render.MultiTenantComplianceManagedClustersAccessClusterRoleName, tenantANamespace, rbacv1.GroupName, "v1", "RoleBinding").(*rbacv1.RoleBinding)
+			Expect(rb.RoleRef.Kind).To(Equal("Role"))
 			Expect(rb.RoleRef.Name).To(Equal(render.MultiTenantComplianceManagedClustersAccessClusterRoleName))
 			Expect(rb.Subjects).To(ContainElements([]rbacv1.Subject{
 				{

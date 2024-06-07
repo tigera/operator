@@ -320,9 +320,9 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 
 func (c *kubeControllersComponent) multiTenantManagedClustersAccess() []client.Object {
 	var objects []client.Object
-	objects = append(objects, &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessName},
+	objects = append(objects, &rbacv1.Role{
+		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessName, Namespace: c.cfg.Namespace},
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -340,12 +340,12 @@ func (c *kubeControllersComponent) multiTenantManagedClustersAccess() []client.O
 	// In a multi-tenant setup ES-Kube-Controllers from the tenant's namespace impersonates service
 	// calico-kube-controllers from calico-system namespace. (This is done via an additional ClusterRole and a
 	// ClusterRoleBinding)
-	objects = append(objects, &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessName},
+	objects = append(objects, &rbacv1.RoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessName, Namespace: c.cfg.Namespace},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
+			Kind:     "Role",
 			Name:     MultiTenantManagedClustersAccessName,
 		},
 		Subjects: []rbacv1.Subject{

@@ -1269,8 +1269,9 @@ func (es elasticsearchComponent) kibanaCR() *kbv1.Kibana {
 
 	config := map[string]interface{}{
 		"elasticsearch.ssl.certificateAuthorities": []string{"/usr/share/kibana/config/elasticsearch-certs/tls.crt"},
-		"server":                          server,
-		"xpack.security.session.lifespan": "24h",
+		"server":                             server,
+		"xpack.security.session.lifespan":    "8h",
+		"xpack.security.session.idleTimeout": "30m",
 		"tigera": map[string]interface{}{
 			"enabled":        true,
 			"licenseEdition": "enterpriseEdition",

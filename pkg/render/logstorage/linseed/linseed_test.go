@@ -551,7 +551,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			component := Linseed(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
-			cr := rtest.GetResource(resources, MultiTenantManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			role := rtest.GetResource(resources, MultiTenantManagedClustersAccessClusterRoleName, tenant.Namespace, rbacv1.GroupName, "v1", "Role").(*rbacv1.Role)
 			expectedRules := []rbacv1.PolicyRule{
 				{
 					APIGroups: []string{"projectcalico.org"},
@@ -561,9 +561,9 @@ var _ = Describe("Linseed rendering tests", func() {
 					},
 				},
 			}
-			Expect(cr.Rules).To(ContainElements(expectedRules))
-			rb := rtest.GetResource(resources, MultiTenantManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
-			Expect(rb.RoleRef.Kind).To(Equal("ClusterRole"))
+			Expect(role.Rules).To(ContainElements(expectedRules))
+			rb := rtest.GetResource(resources, MultiTenantManagedClustersAccessClusterRoleName, tenant.Namespace, rbacv1.GroupName, "v1", "RoleBinding").(*rbacv1.RoleBinding)
+			Expect(rb.RoleRef.Kind).To(Equal("Role"))
 			Expect(rb.RoleRef.Name).To(Equal(MultiTenantManagedClustersAccessClusterRoleName))
 			Expect(rb.Subjects).To(ContainElements([]rbacv1.Subject{
 				{

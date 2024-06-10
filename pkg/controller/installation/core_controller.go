@@ -1271,6 +1271,39 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				canRemoveCNI = false
 			}
 		}
+	} else {
+		// In some rare scenarios, we can hit a deadlock where resources have been marked with a deletion timestamp but the operator
+		// does not recognize that it must remove their finalizers. This can happen if, for example, someone manually
+		// deletes a ServiceAccount instead of deleting the Installation object. In this case, we need
+		// to allow the deletion to complete so the operator can re-create the resources. Otherwise the objects will be stuck terminating forever.
+		toCheck := render.CalicoSystemFinalizedObjects()
+		needsCleanup := []client.Object{}
+		for _, obj := range toCheck {
+			if err := r.client.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, obj); err != nil {
+				if !apierrors.IsNotFound(err) {
+					r.status.SetDegraded(operator.ResourceReadError, "Error querying object", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+				// Not found - nothing to do.
+				continue
+			}
+			if obj.GetDeletionTimestamp() != nil {
+				// The object is marked for deletion, but the installation is not terminating. We need to remove the finalizers from this object
+				// so that it can be deleted and recreated.
+				reqLogger.Info("Object is marked for deletion but installation is not terminating",
+					"kind", obj.GetObjectKind(),
+					"name", obj.GetName(),
+					"namespace", obj.GetNamespace(),
+				)
+				obj.SetFinalizers(nil)
+				needsCleanup = append(needsCleanup, obj)
+			}
+		}
+		if len(needsCleanup) > 0 {
+			// Add a component to remove the finalizers from the objects that need it.
+			reqLogger.Info("Removing finalizers from objects that are wronly marked for deletion")
+			components = append(components, render.NewPassthrough(needsCleanup...))
+		}
 	}
 
 	// Fetch any existing default BGPConfiguration object.

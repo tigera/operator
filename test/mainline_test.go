@@ -45,8 +45,10 @@ import (
 	"github.com/tigera/operator/controllers"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/crds"
+	"github.com/tigera/operator/pkg/render"
 )
 
 const (
@@ -130,6 +132,32 @@ var _ = Describe("Mainline component function tests", func() {
 		}, 30*time.Second).Should(BeNil())
 
 		mgr = nil
+	})
+
+	It("should recreate resources with DeletionTimestamp set", func() {
+		// Reconcile as usual, allowing resources to be created.
+		operatorDone = createInstallation(c, mgr, shutdownContext, nil)
+		verifyCalicoHasDeployed(c)
+
+		// Delete a resource with a finalizer. This should set the DeletionTimestamp, but leave the
+		// resource in place. However, the operator should notice this an recreate the resource, thus
+		// clearing the DeletionTimestamp.
+		By("Deleting a resource with a finalizer")
+		sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName, Namespace: common.CalicoNamespace}}
+		err := c.Delete(context.Background(), sa)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Verifying the resource is recreated")
+		Eventually(func() error {
+			err := GetResource(c, sa)
+			if err != nil {
+				return err
+			}
+			if sa.DeletionTimestamp != nil {
+				return fmt.Errorf("ServiceAccount DeletionTimestamp is still set")
+			}
+			return nil
+		}, 10*time.Second).Should(BeNil())
 	})
 
 	Describe("Installing CRD", func() {

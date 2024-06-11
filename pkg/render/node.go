@@ -246,7 +246,7 @@ func (c *nodeComponent) Ready() bool {
 
 // CalicoSystemFinalizedObjects returns a list of objects that use the NodeFinalizer that should be
 // removed only after the CNI plugin is removed.
-func CalicoSystemFinalizedObjects() []client.Object {
+func CNIPluginFinalizedObjects() []client.Object {
 	return []client.Object{
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: CalicoNodeObjectName, Namespace: common.CalicoNamespace}},
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: CalicoCNIPluginObjectName, Namespace: common.CalicoNamespace}},

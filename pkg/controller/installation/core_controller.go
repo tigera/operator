@@ -1281,7 +1281,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// does not recognize that it must remove their finalizers. This can happen if, for example, someone manually
 		// deletes a ServiceAccount instead of deleting the Installation object. In this case, we need
 		// to allow the deletion to complete so the operator can re-create the resources. Otherwise the objects will be stuck terminating forever.
-		toCheck := render.CalicoSystemFinalizedObjects()
+		toCheck := render.CNIPluginFinalizedObjects()
 		needsCleanup := []client.Object{}
 		for _, obj := range toCheck {
 			if err := r.client.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, obj); err != nil {

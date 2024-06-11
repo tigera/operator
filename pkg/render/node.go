@@ -244,7 +244,7 @@ func (c *nodeComponent) Ready() bool {
 	return true
 }
 
-// CalicoSystemFinalizedObjects returns a list of objects that use the CNIFinalizer that should be
+// CalicoSystemFinalizedObjects returns a list of objects that use the NodeFinalizer that should be
 // removed only after the CNI plugin is removed.
 func CalicoSystemFinalizedObjects() []client.Object {
 	return []client.Object{

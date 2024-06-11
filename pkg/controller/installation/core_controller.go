@@ -26,11 +26,10 @@ import (
 	"strconv"
 	"strings"
 
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -194,6 +193,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		manageCRDs:           opts.ManageCRDs,
 		usePSP:               opts.UsePSP,
 		tierWatchReady:       &utils.ReadyFlag{},
+		newComponentHandler:  utils.NewComponentHandler,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -369,6 +369,9 @@ type ReconcileInstallation struct {
 	manageCRDs           bool
 	usePSP               bool
 	tierWatchReady       *utils.ReadyFlag
+
+	// newComponentHandler returns a new component handler. Useful stub for unit testing.
+	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -1350,7 +1353,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 					"name", obj.GetName(),
 					"namespace", obj.GetNamespace(),
 				)
-				obj.SetFinalizers(nil)
+				obj.SetFinalizers(stringsutil.RemoveStringInSlice(render.NodeFinalizer, obj.GetFinalizers()))
 				needsCleanup = append(needsCleanup, obj)
 			}
 		}
@@ -1442,7 +1445,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 			r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
@@ -1774,7 +1777,7 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant)...)...)
 	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
 	// Installation CR will not remove the CRDs.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if err := handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil); err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating CRD resource", err, log)
 		return err

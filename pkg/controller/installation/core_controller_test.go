@@ -181,6 +181,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
 				tierWatchReady:       ready,
+				newComponentHandler:  utils.NewComponentHandler,
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -592,6 +593,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:     true,
 				clusterDomain:        dns.DefaultClusterDomain,
 				tierWatchReady:       ready,
+				newComponentHandler:  utils.NewComponentHandler,
 			}
 			r.typhaAutoscaler.start(ctx)
 
@@ -809,6 +811,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
 				tierWatchReady:       ready,
+				newComponentHandler:  utils.NewComponentHandler,
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -1518,6 +1521,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:     true,
 				clusterDomain:        dns.DefaultClusterDomain,
 				tierWatchReady:       ready,
+				newComponentHandler:  utils.NewComponentHandler,
 			}
 			r.typhaAutoscaler.start(ctx)
 
@@ -1578,4 +1582,170 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 	})
+
+	Context("with a fake component handler", func() {
+		var componentHandler *fakeComponentHandler
+
+		BeforeEach(func() {
+			// The schema contains all objects that should be known to the fake client when the test runs.
+			scheme = runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+
+			// Create a client that will have a crud interface of k8s objects.
+			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+			ctx, cancel = context.WithCancel(context.Background())
+
+			// Create a fake clientset for the autoscaler.
+			var replicas int32 = 1
+			objs := []runtime.Object{
+				&corev1.Node{
+					TypeMeta: metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "node1",
+						Labels: map[string]string{"kubernetes.io/os": "linux"},
+					},
+					Spec: corev1.NodeSpec{},
+				},
+				&appsv1.Deployment{
+					TypeMeta:   metav1.TypeMeta{},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
+					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
+				},
+			}
+			cs = kfake.NewSimpleClientset(objs...)
+
+			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("AddCertificateSigningRequests", mock.Anything)
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("SetMetaData", mock.Anything).Return()
+
+			// Create the indexer and informer used by the typhaAutoscaler
+			nlw := test.NewNodeListWatch(cs)
+			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
+
+			go nodeIndexInformer.Run(ctx.Done())
+			for nodeIndexInformer.HasSynced() {
+				time.Sleep(100 * time.Millisecond)
+			}
+
+			componentHandler = newFakeComponentHandler()
+			r = ReconcileInstallation{
+				config:               nil, // there is no fake for config
+				client:               c,
+				scheme:               scheme,
+				autoDetectedProvider: operator.ProviderNone,
+				status:               mockStatus,
+				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				namespaceMigration:   &fakeNamespaceMigration{},
+				enterpriseCRDsExist:  true,
+				migrationChecked:     true,
+				tierWatchReady:       ready,
+				newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+					return componentHandler
+				},
+			}
+
+			r.typhaAutoscaler.start(ctx)
+			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+
+			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			// We start off with a 'standard' installation, with nothing special
+			Expect(c.Create(
+				ctx,
+				&operator.Installation{
+					ObjectMeta: metav1.ObjectMeta{Name: "default"},
+					Spec: operator.InstallationSpec{
+						Variant:               operator.TigeraSecureEnterprise,
+						Registry:              "some.registry.org/",
+						CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.GetCertificatePEM()},
+					},
+					Status: operator.InstallationStatus{
+						Variant: operator.TigeraSecureEnterprise,
+						Computed: &operator.InstallationSpec{
+							Registry: "my-reg",
+							// The test is provider agnostic.
+							KubernetesProvider: operator.ProviderNone,
+						},
+					},
+				})).NotTo(HaveOccurred())
+
+			// In most clusters, the IP pool controller is responsible for creating IP pools. The Installation controller waits for this,
+			// so we need to create those pools here.
+			pool := crdv1.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Name: "default-pool-v4"},
+				Spec: crdv1.IPPoolSpec{
+					CIDR:         "192.168.0.0/16",
+					NATOutgoing:  true,
+					BlockSize:    26,
+					NodeSelector: "all()",
+					VXLANMode:    crdv1.VXLANModeAlways,
+				},
+			}
+			Expect(c.Create(ctx, &pool)).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			cancel()
+		})
+
+		// This test ensures that all resources with the CNIFinalizer applied to them are also returned by
+		// render.CNIPluginFinalizedObjects.
+		It("should have the correct number of resources with CNIFinalizer", func() {
+			// Trigger a reconcile.
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Review the resources that were created to count the resources with a CNIFinalizer set.
+			numCreated := 0
+			for _, o := range componentHandler.objectsToCreate {
+				for _, f := range o.GetFinalizers() {
+					if f == render.CNIFinalizer {
+						numCreated++
+						break
+					}
+				}
+			}
+			Expect(numCreated).To(Equal(len(render.CNIPluginFinalizedObjects())))
+		})
+	})
 })
+
+func newFakeComponentHandler() *fakeComponentHandler {
+	return &fakeComponentHandler{
+		objectsToCreate: make([]client.Object, 0),
+		objectsToDelete: make([]client.Object, 0),
+	}
+}
+
+type fakeComponentHandler struct {
+	objectsToCreate []client.Object
+	objectsToDelete []client.Object
+}
+
+func (f *fakeComponentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, _ status.StatusManager) error {
+	c, d := component.Objects()
+	f.objectsToCreate = append(f.objectsToCreate, c...)
+	f.objectsToDelete = append(f.objectsToDelete, d...)
+	return nil
+}

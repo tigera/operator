@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	"github.com/go-logr/logr"
@@ -192,6 +193,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
+		newComponentHandler:  utils.NewComponentHandler,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -363,6 +365,9 @@ type ReconcileInstallation struct {
 	clusterDomain        string
 	manageCRDs           bool
 	tierWatchReady       *utils.ReadyFlag
+
+	// newComponentHandler returns a new component handler. Useful stub for unit testing.
+	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
 
 // getActivePools returns the full set of enabled IP pools in the cluster.
@@ -1295,7 +1300,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 					"name", obj.GetName(),
 					"namespace", obj.GetNamespace(),
 				)
-				obj.SetFinalizers(nil)
+				obj.SetFinalizers(stringsutil.RemoveStringInSlice(render.CNIFinalizer, obj.GetFinalizers()))
 				needsCleanup = append(needsCleanup, obj)
 			}
 		}
@@ -1384,7 +1389,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 			r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
@@ -1793,7 +1798,7 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant)...)...)
 	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
 	// Installation CR will not remove the CRDs.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if err := handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil); err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating CRD resource", err, log)
 		return err

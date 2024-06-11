@@ -1710,7 +1710,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		// This test ensures that all resources with the CNIFinalizer applied to them are also returned by
-		// render.CalicoSystemFinalizedObjects.
+		// render.CNIPluginFinalizedObjects.
 		It("should have the correct number of resources with CNIFinalizer", func() {
 			// Trigger a reconcile.
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1726,7 +1726,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					}
 				}
 			}
-			Expect(numCreated).To(Equal(len(render.CalicoSystemFinalizedObjects())))
+			Expect(numCreated).To(Equal(len(render.CNIPluginFinalizedObjects())))
 		})
 	})
 })

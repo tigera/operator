@@ -245,6 +245,19 @@ func (c *nodeComponent) Ready() bool {
 	return true
 }
 
+// CNIPluginFinalizedObjects returns a list of objects that use the CNIFinalizer that should be
+// removed only after the CNI plugin is removed.
+func CNIPluginFinalizedObjects() []client.Object {
+	return []client.Object{
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: CalicoNodeObjectName, Namespace: common.CalicoNamespace}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: CalicoCNIPluginObjectName, Namespace: common.CalicoNamespace}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: CalicoNodeObjectName}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: CalicoCNIPluginObjectName}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: CalicoNodeObjectName}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: CalicoCNIPluginObjectName}},
+	}
+}
+
 // nodeServiceAccount creates the node's service account.
 func (c *nodeComponent) nodeServiceAccount() *corev1.ServiceAccount {
 	finalizer := []string{}

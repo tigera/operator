@@ -26,11 +26,10 @@ import (
 	"strconv"
 	"strings"
 
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -194,6 +193,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		manageCRDs:           opts.ManageCRDs,
 		usePSP:               opts.UsePSP,
 		tierWatchReady:       &utils.ReadyFlag{},
+		newComponentHandler:  utils.NewComponentHandler,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -369,6 +369,9 @@ type ReconcileInstallation struct {
 	manageCRDs           bool
 	usePSP               bool
 	tierWatchReady       *utils.ReadyFlag
+
+	// newComponentHandler returns a new component handler. Useful stub for unit testing.
+	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -1326,6 +1329,39 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		} else {
 			reqLogger.Info("calico-kube-controller is still present, waiting for termination")
 		}
+	} else {
+		// In some rare scenarios, we can hit a deadlock where resources have been marked with a deletion timestamp but the operator
+		// does not recognize that it must remove their finalizers. This can happen if, for example, someone manually
+		// deletes a ServiceAccount instead of deleting the Installation object. In this case, we need
+		// to allow the deletion to complete so the operator can re-create the resources. Otherwise the objects will be stuck terminating forever.
+		toCheck := render.CNIPluginFinalizedObjects()
+		needsCleanup := []client.Object{}
+		for _, obj := range toCheck {
+			if err := r.client.Get(ctx, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}, obj); err != nil {
+				if !apierrors.IsNotFound(err) {
+					r.status.SetDegraded(operator.ResourceReadError, "Error querying object", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+				// Not found - nothing to do.
+				continue
+			}
+			if obj.GetDeletionTimestamp() != nil {
+				// The object is marked for deletion, but the installation is not terminating. We need to remove the finalizers from this object
+				// so that it can be deleted and recreated.
+				reqLogger.Info("Object is marked for deletion but installation is not terminating",
+					"kind", obj.GetObjectKind(),
+					"name", obj.GetName(),
+					"namespace", obj.GetNamespace(),
+				)
+				obj.SetFinalizers(stringsutil.RemoveStringInSlice(render.NodeFinalizer, obj.GetFinalizers()))
+				needsCleanup = append(needsCleanup, obj)
+			}
+		}
+		if len(needsCleanup) > 0 {
+			// Add a component to remove the finalizers from the objects that need it.
+			reqLogger.Info("Removing finalizers from objects that are wronly marked for deletion")
+			components = append(components, render.NewPassthrough(needsCleanup...))
+		}
 	}
 
 	// Fetch any existing default BGPConfiguration object.
@@ -1409,7 +1445,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 			r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
@@ -1741,7 +1777,7 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant)...)...)
 	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
 	// Installation CR will not remove the CRDs.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if err := handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil); err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating CRD resource", err, log)
 		return err

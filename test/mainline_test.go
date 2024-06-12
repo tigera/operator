@@ -139,7 +139,7 @@ var _ = Describe("Mainline component function tests", func() {
 
 	It("should recreate resources with DeletionTimestamp set", func() {
 		// Reconcile as usual, allowing resources to be created.
-		operatorDone = createInstallation(c, mgr, shutdownContext, nil)
+		operatorDone = installResourceCRD(c, mgr, shutdownContext, nil)
 		verifyCalicoHasDeployed(c)
 
 		// Delete a resource with a finalizer. This should set the DeletionTimestamp, but leave the

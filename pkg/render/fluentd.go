@@ -71,11 +71,7 @@ const (
 	EksLogForwarderAwsKey                    = "aws-key"
 	SplunkFluentdTokenSecretName             = "logcollector-splunk-credentials"
 	SplunkFluentdSecretTokenKey              = "token"
-	SplunkFluentdCertificateSecretName       = "logcollector-splunk-public-certificate"
 	SplunkFluentdSecretCertificateKey        = "ca.pem"
-	SplunkFluentdSecretsVolName              = "splunk-certificates"
-	SplunkFluentdDefaultCertDir              = "/etc/pki/splunk/"
-	SplunkFluentdDefaultCertPath             = SplunkFluentdDefaultCertDir + SplunkFluentdSecretCertificateKey
 	SysLogPublicCADir                        = "/etc/pki/tls/certs/"
 	SysLogPublicCertKey                      = "ca-bundle.crt"
 	SysLogPublicCAPath                       = SysLogPublicCADir + SysLogPublicCertKey
@@ -126,8 +122,7 @@ type S3Credential struct {
 }
 
 type SplunkCredential struct {
-	Token       []byte
-	Certificate []byte
+	Token []byte
 }
 
 func Fluentd(cfg *FluentdConfiguration) Component {
@@ -397,35 +392,18 @@ func (c *fluentdComponent) splunkCredentialSecret() []*corev1.Secret {
 	if c.cfg.SplkCredential == nil {
 		return nil
 	}
-	var splunkSecrets []*corev1.Secret
-	token := &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      SplunkFluentdTokenSecretName,
-			Namespace: LogCollectorNamespace,
-		},
-		Data: map[string][]byte{
-			SplunkFluentdSecretTokenKey: c.cfg.SplkCredential.Token,
-		},
-	}
-
-	splunkSecrets = append(splunkSecrets, token)
-
-	if len(c.cfg.SplkCredential.Certificate) != 0 {
-		certificate := &corev1.Secret{
+	return []*corev1.Secret{
+		&corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      SplunkFluentdCertificateSecretName,
+				Name:      SplunkFluentdTokenSecretName,
 				Namespace: LogCollectorNamespace,
 			},
 			Data: map[string][]byte{
-				SplunkFluentdSecretCertificateKey: c.cfg.SplkCredential.Certificate,
+				SplunkFluentdSecretTokenKey: c.cfg.SplkCredential.Token,
 			},
-		}
-		splunkSecrets = append(splunkSecrets, certificate)
+		},
 	}
-
-	return splunkSecrets
 }
 
 func (c *fluentdComponent) fluentdServiceAccount() *corev1.ServiceAccount {
@@ -586,14 +564,6 @@ func (c *fluentdComponent) container() corev1.Container {
 					SubPath:   FluentdFilterDNSName,
 				})
 		}
-	}
-
-	if c.cfg.SplkCredential != nil && len(c.cfg.SplkCredential.Certificate) != 0 {
-		volumeMounts = append(volumeMounts,
-			corev1.VolumeMount{
-				Name:      SplunkFluentdSecretsVolName,
-				MountPath: c.path(SplunkFluentdDefaultCertDir),
-			})
 	}
 
 	volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
@@ -803,11 +773,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				corev1.EnvVar{Name: "SPLUNK_PROTOCOL", Value: proto},
 				corev1.EnvVar{Name: "SPLUNK_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
 			)
-			if len(c.cfg.SplkCredential.Certificate) != 0 {
-				envs = append(envs,
-					corev1.EnvVar{Name: "SPLUNK_CA_FILE", Value: SplunkFluentdDefaultCertPath},
-				)
-			}
 		}
 	}
 
@@ -911,20 +876,6 @@ func (c *fluentdComponent) volumes() []corev1.Volume {
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: FluentdFilterConfigMapName,
-						},
-					},
-				},
-			})
-	}
-	if c.cfg.SplkCredential != nil && len(c.cfg.SplkCredential.Certificate) != 0 {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name: SplunkFluentdSecretsVolName,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: SplunkFluentdCertificateSecretName,
-						Items: []corev1.KeyToPath{
-							{Key: SplunkFluentdSecretCertificateKey, Path: SplunkFluentdSecretCertificateKey},
 						},
 					},
 				},

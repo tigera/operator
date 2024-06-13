@@ -877,92 +877,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}))
 	})
 
-	It("should render with splunk configuration with ca", func() {
-		cfg.SplkCredential = &render.SplunkCredential{
-			Token:       []byte("TokenForHEC"),
-			Certificate: []byte("Certificates"),
-		}
-		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
-			Splunk: &operatorv1.SplunkStoreSpec{
-				Endpoint: "https://1.2.3.4:8088",
-			},
-		}
-
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-fluentd", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: render.FluentdPolicyName, ns: render.LogCollectorNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-			{name: render.FluentdMetricsService, ns: render.LogCollectorNamespace, group: "", version: "v1", kind: "Service"},
-			{name: "logcollector-splunk-credentials", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
-			{name: "logcollector-splunk-public-certificate", ns: "tigera-fluentd", group: "", version: "v1", kind: "Secret"},
-			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-fluentd", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "fluentd-node", ns: "tigera-fluentd", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "fluentd-node", ns: "tigera-fluentd", group: "apps", version: "v1", kind: "DaemonSet"},
-		}
-
-		// Should render the correct resources.
-		component := render.Fluentd(cfg)
-		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-
-		i := 0
-		for _, expectedRes := range expectedResources {
-			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			i++
-		}
-
-		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
-
-		var volnames []string
-		for _, vol := range ds.Spec.Template.Spec.Volumes {
-			volnames = append(volnames, vol.Name)
-		}
-		Expect(volnames).To(ContainElement("splunk-certificates"))
-
-		envs := ds.Spec.Template.Spec.Containers[0].Env
-
-		expectedEnvs := []struct {
-			name       string
-			val        string
-			secretName string
-			secretKey  string
-		}{
-			{"SPLUNK_FLOW_LOG", "true", "", ""},
-			{"SPLUNK_AUDIT_LOG", "true", "", ""},
-			{"SPLUNK_DNS_LOG", "true", "", ""},
-			{"SPLUNK_HEC_HOST", "1.2.3.4", "", ""},
-			{"SPLUNK_HEC_PORT", "8088", "", ""},
-			{"SPLUNK_PROTOCOL", "https", "", ""},
-			{"SPLUNK_FLUSH_INTERVAL", "5s", "", ""},
-			{"SPLUNK_HEC_TOKEN", "", "logcollector-splunk-credentials", "token"},
-			{"SPLUNK_CA_FILE", "/etc/pki/splunk/ca.pem", "", ""},
-		}
-		for _, expected := range expectedEnvs {
-			if expected.val != "" {
-				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
-			} else {
-				Expect(envs).To(ContainElement(corev1.EnvVar{
-					Name: expected.name,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: expected.secretName},
-							Key:                  expected.secretKey,
-						},
-					},
-				}))
-			}
-		}
-	})
-
-	It("should render with splunk configuration without ca", func() {
+	It("should render with splunk configuration", func() {
 		cfg.SplkCredential = &render.SplunkCredential{
 			Token: []byte("TokenForHEC"),
 		}
@@ -994,14 +909,14 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
-		i := 0
-		for _, expectedRes := range expectedResources {
+		for i, expectedRes := range expectedResources {
 			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-			i++
 		}
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(3))
+
 		envs := ds.Spec.Template.Spec.Containers[0].Env
 
 		expectedEnvs := []struct {
@@ -1019,8 +934,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{"SPLUNK_FLUSH_INTERVAL", "5s", "", ""},
 			{"SPLUNK_HEC_TOKEN", "", "logcollector-splunk-credentials", "token"},
 		}
-
-		Expect(envs).NotTo(ContainElement(corev1.EnvVar{Name: "SPLUNK_CA_FILE", Value: "/etc/ssl/splunk/ca.pem"}))
 		for _, expected := range expectedEnvs {
 			if expected.val != "" {
 				Expect(envs).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))

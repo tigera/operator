@@ -71,11 +71,11 @@ const (
 	ManagerClusterSettingsLayerTigera = "cluster-settings.layer.tigera-infrastructure"
 	ManagerClusterSettingsViewDefault = "cluster-settings.view.default"
 
-	ElasticsearchManagerUserSecret                         = "tigera-ee-manager-elasticsearch-access"
-	TlsSecretHashAnnotation                                = "hash.operator.tigera.io/tls-secret"
-	KibanaTLSHashAnnotation                                = "hash.operator.tigera.io/kibana-secrets"
-	ElasticsearchUserHashAnnotation                        = "hash.operator.tigera.io/elasticsearch-user"
-	ManagerMultiTenantManagedClustersAccessClusterRoleName = "tigera-manager-managed-cluster-access"
+	ElasticsearchManagerUserSecret                                = "tigera-ee-manager-elasticsearch-access"
+	TlsSecretHashAnnotation                                       = "hash.operator.tigera.io/tls-secret"
+	KibanaTLSHashAnnotation                                       = "hash.operator.tigera.io/kibana-secrets"
+	ElasticsearchUserHashAnnotation                               = "hash.operator.tigera.io/elasticsearch-user"
+	ManagerMultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-manager-managed-cluster-access"
 )
 
 // ManagementClusterConnection configuration constants
@@ -977,23 +977,6 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 
 func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
 	var objects []client.Object
-	objects = append(objects, &rbacv1.Role{
-		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ManagerMultiTenantManagedClustersAccessClusterRoleName, Namespace: c.cfg.Namespace},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs: []string{
-					// The Authentication Proxy in Voltron checks if ESProxy (either using impersonation
-					// headers for tigera-manager service in tigera-manager namespace or
-					// the actual account in a single tenant setup) can get a managed clusters before sending the
-					// request down the tunnel
-					"get",
-				},
-			},
-		},
-	})
 
 	// In a single tenant setup we want to create a role that binds using service account
 	// tigera-manager from tigera-manager namespace. In a multi-tenant setup
@@ -1001,11 +984,11 @@ func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
 	// from tigera-manager namespace
 	objects = append(objects, &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ManagerMultiTenantManagedClustersAccessClusterRoleName, Namespace: c.cfg.Namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: ManagerMultiTenantManagedClustersAccessClusterRoleBindingName, Namespace: c.cfg.Namespace},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     ManagerMultiTenantManagedClustersAccessClusterRoleName,
+			Kind:     "ClusterRole",
+			Name:     MultiTenantManagedClustersAccessClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			// requests for ESProxy to managed clusters are done using service account tigera-manager

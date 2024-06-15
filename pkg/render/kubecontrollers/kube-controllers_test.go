@@ -42,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -1153,8 +1154,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				kind    string
 			}{
 				{name: kubecontrollers.EsKubeControllerNetworkPolicyName, ns: tenant.Namespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
-				{name: kubecontrollers.MultiTenantManagedClustersAccessName, ns: tenant.Namespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-				{name: kubecontrollers.MultiTenantManagedClustersAccessName, ns: tenant.Namespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+				{name: kubecontrollers.MultiTenantManagedClustersAccessRoleBindingName, ns: tenant.Namespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 				{name: kubecontrollers.KubeControllerServiceAccount, ns: tenant.Namespace, group: "", version: "v1", kind: "ServiceAccount"},
 				{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 				{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
@@ -1253,21 +1253,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 			}))
 
-			managedClusterAccessRole := rtest.GetResource(resources,
-				kubecontrollers.MultiTenantManagedClustersAccessName, tenant.Namespace, rbacv1.GroupName, "v1", "Role").(*rbacv1.Role)
-			expectedManagedClusterAccessRules := []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{"projectcalico.org"},
-					Resources: []string{"managedclusters"},
-					Verbs:     []string{"get"},
-				},
-			}
-			Expect(managedClusterAccessRole.Rules).To(ContainElements(expectedManagedClusterAccessRules))
-
 			managedClusterAccessRoleBinding := rtest.GetResource(resources,
-				kubecontrollers.MultiTenantManagedClustersAccessName,
+				kubecontrollers.MultiTenantManagedClustersAccessRoleBindingName,
 				tenant.Namespace, rbacv1.GroupName, "v1", "RoleBinding").(*rbacv1.RoleBinding)
-			Expect(managedClusterAccessRoleBinding.RoleRef.Name).To(Equal(kubecontrollers.MultiTenantManagedClustersAccessName))
+			Expect(managedClusterAccessRoleBinding.RoleRef.Name).To(Equal(render.MultiTenantManagedClustersAccessClusterRoleName))
 			Expect(managedClusterAccessRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",

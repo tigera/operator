@@ -1002,8 +1002,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerMultiTenantManagedClustersAccessClusterRoleName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerMultiTenantManagedClustersAccessClusterRoleName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerMultiTenantManagedClustersAccessClusterRoleBindingName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			}
@@ -1033,8 +1032,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerMultiTenantManagedClustersAccessClusterRoleName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerMultiTenantManagedClustersAccessClusterRoleName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerMultiTenantManagedClustersAccessClusterRoleBindingName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			}
@@ -1086,32 +1084,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					}},
 			})
 
-			clusterRole := rtest.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(clusterRole.Rules).To(ContainElements([]rbacv1.PolicyRule{
-				{
-					APIGroups: []string{"authorization.k8s.io"},
-					Resources: []string{"localsubjectaccessreviews"},
-					Verbs:     []string{"create"},
-				},
-			},
-			))
-
-			// Check that the cluster role allows the tigera-manager from namespace tigera-manager
-			// to get managed clusters in order to bypass the authentication proxy in Voltron
-			roleManagedClusters := rtest.GetResource(resources, render.ManagerMultiTenantManagedClustersAccessClusterRoleName, tenantANamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
-			Expect(roleManagedClusters.Rules).To(ContainElements(
-				rbacv1.PolicyRule{
-					APIGroups: []string{"projectcalico.org"},
-					Resources: []string{"managedclusters"},
-					Verbs:     []string{"get"},
-				},
-			))
-			roleBindingManagedClusters := rtest.GetResource(resources, render.ManagerMultiTenantManagedClustersAccessClusterRoleName, tenantANamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+			roleBindingManagedClusters := rtest.GetResource(resources, render.ManagerMultiTenantManagedClustersAccessClusterRoleBindingName, tenantANamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
 			Expect(roleBindingManagedClusters.RoleRef).To(Equal(
 				rbacv1.RoleRef{
 					APIGroup: "rbac.authorization.k8s.io",
-					Kind:     "Role",
-					Name:     render.ManagerMultiTenantManagedClustersAccessClusterRoleName,
+					Kind:     "ClusterRole",
+					Name:     render.MultiTenantManagedClustersAccessClusterRoleName,
 				}))
 			Expect(roleBindingManagedClusters.Subjects).To(ConsistOf(
 				rbacv1.Subject{

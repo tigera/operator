@@ -38,7 +38,7 @@ var DEBUG = 5
 // setupAWSSecurityGroups updates the master and worker security groups used in an
 // OpenShift AWS setup. It sets a time that should be checked before attempting
 // to do another call to setup.
-func SetupAWSSecurityGroups(ctx context.Context, client client.Client) error {
+func SetupAWSSecurityGroups(ctx context.Context, client client.Client, hostedOpenShift bool) error {
 	// Grab ConfigMap kube-system aws-creds
 	//		get aws_access_key_id and aws_secret_access_key
 	awsKeyId, awsSecret, err := getAWSCreds(ctx, client)
@@ -76,7 +76,14 @@ func SetupAWSSecurityGroups(ctx context.Context, client client.Client) error {
 	}
 
 	ec2Cli := ec2.New(sess)
+	if hostedOpenShift {
+		return setupHostedClusterSGs(ec2Cli, vpcId)
+	}
 
+	return setupClusterSGs(ec2Cli, vpcId)
+}
+
+func setupClusterSGs(ec2Cli *ec2.EC2, vpcId string) error {
 	// Get SG ids in VPC
 	// Get one with filter tag:Name with *-master-sg
 	// Get one with filter tag:Name with *-worker-sg
@@ -130,6 +137,36 @@ func SetupAWSSecurityGroups(ctx context.Context, client client.Client) error {
 		return fmt.Errorf("failed to update worker AWS SecurityGroup: %v", err)
 	}
 
+	return nil
+}
+
+func setupHostedClusterSGs(ec2Cli *ec2.EC2, vpcId string) error {
+	// On an OpenShift HCP hosted (guest) cluster, there are no master and worker
+	// security groups, there is only one sg named '*-default-sg'
+	defaultSg, err := getSGGroup(ec2Cli, vpcId, "*-default-sg")
+	if err != nil {
+		return fmt.Errorf("failed to get AWS SecurityGroups: %v", err)
+	}
+	src := []ingressSrc{
+		{
+			srcSGId:  aws.StringValue(defaultSg.GroupId),
+			protocol: "tcp",
+			port:     aws.Int64(179),
+		},
+		{
+			srcSGId:  aws.StringValue(defaultSg.GroupId),
+			protocol: "4",
+		},
+		{
+			srcSGId:  aws.StringValue(defaultSg.GroupId),
+			protocol: "tcp",
+			port:     aws.Int64(5473),
+		},
+	}
+	err = allowIngressToSG(ec2Cli, defaultSg, src)
+	if err != nil {
+		return fmt.Errorf("failed to update default AWS SecurityGroup: %v", err)
+	}
 	return nil
 }
 

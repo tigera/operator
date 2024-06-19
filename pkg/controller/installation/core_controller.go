@@ -1216,9 +1216,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
 	if openShiftOnAws {
+		// Detect if this cluster is an OpenShift HPC hosted cluster, as AWS
+		// security group setup is different in this case.
+		isHostedOpenShift, err := utils.IsHostedOpenShift(ctx, r.config)
+		if err != nil {
+			log.Info(err.Error())
+		}
 		awsSGSetupCfg := &render.AWSSGSetupConfiguration{
-			PullSecrets:  instance.Spec.ImagePullSecrets,
-			Installation: &instance.Spec,
+			PullSecrets:     instance.Spec.ImagePullSecrets,
+			Installation:    &instance.Spec,
+			HostedOpenShift: isHostedOpenShift,
 		}
 		awsSetup, err := render.AWSSecurityGroupSetup(awsSGSetupCfg)
 		if err != nil {

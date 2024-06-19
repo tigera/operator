@@ -209,7 +209,7 @@ func main() {
 	if sgSetup {
 		log.Info("Setting up AWS Security Groups")
 
-		err = awssgsetup.SetupAWSSecurityGroups(ctx, c)
+		err = awssgsetup.SetupAWSSecurityGroups(ctx, c, os.Getenv("HOSTED_OPENSHIFT") == "true")
 		if err != nil {
 			log.Error(err, "")
 			os.Exit(1)

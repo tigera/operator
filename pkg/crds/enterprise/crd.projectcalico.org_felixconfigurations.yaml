@@ -148,6 +148,10 @@ spec:
                 items:
                   type: string
                 type: array
+              bpfExportBufferSizeMB:
+                description: 'BPFExportBufferSizeMB in BPF mode, controls the buffer
+                  size used for sending BPF events to felix. [Default: 1]'
+                type: integer
               bpfExtToServiceConnmark:
                 description: 'BPFExtToServiceConnmark in BPF mode, control a 32bit
                   mark that is set on connections from an external client to a local

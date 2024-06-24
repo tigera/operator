@@ -48,14 +48,14 @@ import (
 )
 
 const (
-	DeploymentName                                  = "tigera-linseed"
-	ServiceAccountName                              = "tigera-linseed"
-	PolicyName                                      = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
-	PortName                                        = "tigera-linseed"
-	TargetPort                                      = 8444
-	Port                                            = 443
-	ClusterRoleName                                 = "tigera-linseed"
-	MultiTenantManagedClustersAccessClusterRoleName = "tigera-linseed-managed-cluster-access"
+	DeploymentName                                         = "tigera-linseed"
+	ServiceAccountName                                     = "tigera-linseed"
+	PolicyName                                             = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
+	PortName                                               = "tigera-linseed"
+	TargetPort                                             = 8444
+	Port                                                   = 443
+	ClusterRoleName                                        = "tigera-linseed"
+	MultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-linseed-managed-cluster-access"
 )
 
 func Linseed(c *Config) render.Component {
@@ -258,33 +258,17 @@ func (l *linseed) linseedClusterRoleBinding(namespaces []string) client.Object {
 
 func (l *linseed) multiTenantManagedClustersAccess() []client.Object {
 	var objects []client.Object
-	objects = append(objects, &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessClusterRoleName},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs: []string{
-					// The Authentication Proxy in Voltron checks if Linseed (either using impersonation headers for
-					// tigera-linseed service in tigera-elasticsearch namespace or the actual account in a single tenant
-					// setup) can get a managed clusters before sending the request down the tunnel
-					"get",
-				},
-			},
-		},
-	})
 
-	// In a single tenant setup we want to create a cluster role that binds using service account
+	// In a single tenant setup we want to create a role that binds using service account
 	// tigera-linseed from tigera-elasticsearch namespace. In a multi-tenant setup Linseed from the tenant's
 	// namespace impersonates service tigera-linseed from tigera-elasticsearch namespace
-	objects = append(objects, &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessClusterRoleName},
+	objects = append(objects, &rbacv1.RoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessClusterRoleBindingName, Namespace: l.cfg.Namespace},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     MultiTenantManagedClustersAccessClusterRoleName,
+			Name:     render.MultiTenantManagedClustersAccessClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			// requests for Linseed to managed clusters are done using service account tigera-linseed

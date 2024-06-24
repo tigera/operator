@@ -1179,11 +1179,10 @@ var _ = Describe("Manager controller tests", func() {
 				err = test.GetResource(c, &tenantBDeployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 
-				// Ensure a cluster role binding was created that binds both tenants, as well as the
-				// canonical manager service account.
+				// Ensure a cluster role binding was created that binds both tenants,
 				err = test.GetResource(c, &clusterRoleBinding)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
-				Expect(clusterRoleBinding.Subjects).To(HaveLen(3))
+				Expect(clusterRoleBinding.Subjects).To(HaveLen(2))
 			})
 
 			It("should apply TLSRoutes in from the manager namespace", func() {

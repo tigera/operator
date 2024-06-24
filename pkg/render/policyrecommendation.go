@@ -51,7 +51,7 @@ const (
 	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
 
 	PolicyRecommendationTLSSecretName                                   = "policy-recommendation-tls"
-	PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName = "tigera-policy-recommendation-managed-cluster-access"
+	PolicyRecommendationMultiTenantManagedClustersAccessRoleBindingName = "tigera-policy-recommendation-managed-cluster-access"
 )
 
 // Register secret/certs that need Server and Client Key usage
@@ -235,35 +235,18 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 
 func (pr *policyRecommendationComponent) multiTenantManagedClustersAccess() []client.Object {
 	var objects []client.Object
-	objects = append(objects, &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs: []string{
-					// The Authentication Proxy in Voltron checks if PolicyRecommendation (either using impersonation
-					// headers for tigera-policy-recommendation service in tigera-policy-recommendation namespace or
-					// the actual account in a single tenant setup) can get a managed clusters before sending the
-					// request down the tunnel
-					"get",
-				},
-			},
-		},
-	})
 
 	// In a single tenant setup we want to create a cluster role that binds using service account
 	// tigera-policy-recommendation from tigera-policy-recommendation namespace. In a multi-tenant setup
 	// PolicyRecommendation Controller from the tenant's namespace impersonates service tigera-policy-recommendation
 	// from tigera-policy-recommendation namespace
-	objects = append(objects, &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName},
+	objects = append(objects, &rbacv1.RoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationMultiTenantManagedClustersAccessRoleBindingName, Namespace: pr.cfg.Namespace},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     PolicyRecommendationMultiTenantManagedClustersAccessClusterRoleName,
+			Name:     MultiTenantManagedClustersAccessClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			// requests for policy recommendation to managed clusters are done using service account tigera-policy-recommendation

@@ -61,9 +61,10 @@ const (
 	APIServerK8sAppName                     = "calico-apiserver"
 	TigeraAPIServerQueryServerContainerName = "tigera-queryserver"
 
-	calicoAPIServerTLSSecretName = "calico-apiserver-certs"
-	tigeraAPIServerTLSSecretName = "tigera-apiserver-certs"
-	APIServerSecretsRBACName     = "tigera-extension-apiserver-secrets-access"
+	calicoAPIServerTLSSecretName                    = "calico-apiserver-certs"
+	tigeraAPIServerTLSSecretName                    = "tigera-apiserver-certs"
+	APIServerSecretsRBACName                        = "tigera-extension-apiserver-secrets-access"
+	MultiTenantManagedClustersAccessClusterRoleName = "tigera-managed-cluster-access"
 )
 
 var TigeraAPIServerEntityRule = v3.EntityRule{
@@ -242,6 +243,10 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
 			// per-tenant guardian certificates when creating ManagedClusters.
 			globalEnterpriseObjects = append(globalEnterpriseObjects, c.multiTenantSecretsRBAC()...)
+			// Multi-tenant management cluster components impersonate the single-tenant canonical service account
+			// in order to retrieve informations from the managed cluster. A cluster role will be created and each
+			// component will create a role binding in the tenant namespace
+			globalEnterpriseObjects = append(globalEnterpriseObjects, c.multiTenantManagedClusterAccessClusterRoles()...)
 		} else {
 			globalEnterpriseObjects = append(globalEnterpriseObjects, c.secretsRBAC()...)
 		}
@@ -249,6 +254,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// If we're not a management cluster, the API server doesn't need permissions to access secrets.
 		objsToDelete = append(objsToDelete, c.multiTenantSecretsRBAC()...)
 		objsToDelete = append(objsToDelete, c.secretsRBAC()...)
+		objsToDelete = append(objsToDelete, c.multiTenantManagedClusterAccessClusterRoles()...)
 	}
 
 	// Namespaced enterprise-only objects.
@@ -1877,4 +1883,26 @@ rules:
 			"config": defaultAuditPolicy,
 		},
 	}
+}
+
+func (c *apiServerComponent) multiTenantManagedClusterAccessClusterRoles() []client.Object {
+	var objects []client.Object
+	objects = append(objects, &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessClusterRoleName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs: []string{
+					// The Authentication Proxy in Voltron checks if Enterprise Components (using impersonation headers for
+					// the service in the canonical namespace) can get a managed clusters before sending the request down the tunnel.
+					// This ClusterRole will be assigned to each component using a RoleBinding in the canonical or tenant namespace.
+					"get",
+				},
+			},
+		},
+	})
+
+	return objects
 }

@@ -512,7 +512,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				TrustedBundle:   bundle,
 				ClusterDomain:   clusterDomain,
 				ESClusterConfig: esClusterConfig,
-				Namespace:       "tenant-test-tenant",
+				Namespace:       tenant.Namespace,
 				Tenant:          tenant,
 				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
 				ElasticPort:     "9200",
@@ -551,20 +551,9 @@ var _ = Describe("Linseed rendering tests", func() {
 			component := Linseed(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
-			cr := rtest.GetResource(resources, MultiTenantManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			expectedRules := []rbacv1.PolicyRule{
-				{
-					APIGroups: []string{"projectcalico.org"},
-					Resources: []string{"managedclusters"},
-					Verbs: []string{
-						"get",
-					},
-				},
-			}
-			Expect(cr.Rules).To(ContainElements(expectedRules))
-			rb := rtest.GetResource(resources, MultiTenantManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			rb := rtest.GetResource(resources, MultiTenantManagedClustersAccessClusterRoleBindingName, tenant.Namespace, rbacv1.GroupName, "v1", "RoleBinding").(*rbacv1.RoleBinding)
 			Expect(rb.RoleRef.Kind).To(Equal("ClusterRole"))
-			Expect(rb.RoleRef.Name).To(Equal(MultiTenantManagedClustersAccessClusterRoleName))
+			Expect(rb.RoleRef.Name).To(Equal(render.MultiTenantManagedClustersAccessClusterRoleName))
 			Expect(rb.Subjects).To(ContainElements([]rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
@@ -617,7 +606,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			resources, _ := component.Objects()
 			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Affinity).NotTo(BeNil())
-			Expect(d.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity(DeploymentName, "tenant-test-tenant")))
+			Expect(d.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity(DeploymentName, tenant.Namespace)))
 		})
 
 		It("should override resource request with the value from TenantSpec's linseedDeployment when available", func() {

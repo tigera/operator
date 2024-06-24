@@ -53,7 +53,7 @@ const (
 	ComplianceBenchmarkerName                                 = "compliance-benchmarker"
 	ComplianceAccessPolicyName                                = networkpolicy.TigeraComponentPolicyPrefix + "compliance-access"
 	ComplianceServerPolicyName                                = networkpolicy.TigeraComponentPolicyPrefix + ComplianceServerName
-	MultiTenantComplianceManagedClustersAccessClusterRoleName = "compliance-server-managed-cluster-access"
+	MultiTenantComplianceManagedClustersAccessRoleBindingName = "compliance-server-managed-cluster-access"
 
 	// ServiceAccount names.
 	ComplianceServerServiceAccount      = "tigera-compliance-server"
@@ -1788,35 +1788,18 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 
 func (c *complianceComponent) multiTenantManagedClustersAccess() []client.Object {
 	var objects []client.Object
-	objects = append(objects, &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantComplianceManagedClustersAccessClusterRoleName},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs: []string{
-					// The Authentication Proxy in Voltron checks if Compliance (either using impersonation
-					// headers for tigera-compliance-server service account in tigera-compliance namespace or
-					// the actual account in a single tenant setup) can get a managed clusters before sending the
-					// request down the tunnel
-					"get",
-				},
-			},
-		},
-	})
 
 	// In a single tenant setup we want to create a cluster role that binds using service account
 	// tigera-compliance-server from tigera-compliance namespace. In a multi-tenant setup
 	// Compliance server from the tenant's namespace impersonates service tigera-compliance-server
 	// from tigera-compliance namespace
-	objects = append(objects, &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantComplianceManagedClustersAccessClusterRoleName},
+	objects = append(objects, &rbacv1.RoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantComplianceManagedClustersAccessRoleBindingName, Namespace: c.cfg.Namespace},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     MultiTenantComplianceManagedClustersAccessClusterRoleName,
+			Name:     MultiTenantManagedClustersAccessClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			// requests for compliance to managed clusters are done using service account tigera-compliance-server

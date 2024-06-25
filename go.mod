@@ -38,8 +38,6 @@ require (
 	sigs.k8s.io/yaml v1.3.0
 )
 
-require github.com/openshift/client-go v0.0.0-20200521150516-05eb9880269c
-
 require (
 	github.com/BurntSushi/toml v1.0.0 // indirect
 	github.com/alessio/shellescape v1.4.1 // indirect

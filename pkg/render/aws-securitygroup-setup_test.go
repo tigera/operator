@@ -107,6 +107,7 @@ var _ = Describe("AWS SecurityGroup Setup rendering tests", func() {
 		}
 		Expect(job.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))
 	})
+
 	It("should render Setup Job env correctly when in an HCP hosted cluster", func() {
 		cfg.HostedOpenShift = true
 		component, err := AWSSecurityGroupSetup(cfg)

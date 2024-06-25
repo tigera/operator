@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"strings"
 
-	openshiftconfigv1client "github.com/openshift/client-go/config/clientset/versioned"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -244,20 +243,4 @@ func UseExternalElastic(config *corev1.ConfigMap) bool {
 		}
 	}
 	return false
-}
-
-// IsHostedOpenShift returns true if this cluster is an OpenShift HCP hosted cluster.
-func IsHostedOpenShift(ctx context.Context, config *rest.Config) (bool, error) {
-	openshiftConfigClient, err := openshiftconfigv1client.NewForConfig(config)
-	if err != nil {
-		return false, err
-	}
-	infrastructure, err := openshiftConfigClient.ConfigV1().Infrastructures().Get(ctx, "cluster", metav1.GetOptions{})
-	if err != nil {
-		return false, fmt.Errorf("unable to read openshift infrastructure: %w", err)
-	}
-	if infrastructure.Status.ControlPlaneTopology == "External" {
-		return true, nil
-	}
-	return false, nil
 }

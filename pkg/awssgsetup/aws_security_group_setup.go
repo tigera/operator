@@ -37,8 +37,9 @@ var DEBUG = 5
 
 // setupAWSSecurityGroups updates the master and worker security groups used in an
 // OpenShift AWS setup. It sets a time that should be checked before attempting
-// to do another call to setup.
-func SetupAWSSecurityGroups(ctx context.Context, client client.Client, hostedOpenShift bool) error {
+// to do another call to setup. 'hosted' should be true if this is an OpenShift
+// hosted control planes (HCP) hosted cluster.
+func SetupAWSSecurityGroups(ctx context.Context, client client.Client, hosted bool) error {
 	// Grab ConfigMap kube-system aws-creds
 	//		get aws_access_key_id and aws_secret_access_key
 	awsKeyId, awsSecret, err := getAWSCreds(ctx, client)
@@ -76,7 +77,7 @@ func SetupAWSSecurityGroups(ctx context.Context, client client.Client, hostedOpe
 	}
 
 	ec2Cli := ec2.New(sess)
-	if hostedOpenShift {
+	if hosted {
 		return setupHostedClusterSGs(ec2Cli, vpcId)
 	}
 

@@ -215,12 +215,20 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 	}
 
 	if r.autoDetectedProvider.IsOpenShift() {
-		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
+		// Watch for OpenShift network configuration as well. If we're running in OpenShift, we need to
 		// merge this configuration with our own and the write back the status object.
 		err = c.WatchObject(&configv1.Network{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			if !apierrors.IsNotFound(err) {
 				return fmt.Errorf("tigera-installation-controller failed to watch openshift network config: %w", err)
+			}
+		}
+		// Watch for OpenShift infrastructure configuration, we'll need to check this for special setup when
+		// running OpenShift on AWS and/or OpenShift Hosted Control Plane (HCP).
+		err = c.WatchObject(&configv1.Infrastructure{}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			if !apierrors.IsNotFound(err) {
+				return fmt.Errorf("tigera-installation-controller failed to watch openshift infrastructure config: %w", err)
 			}
 		}
 	}

@@ -57,6 +57,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -1610,10 +1611,14 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
 	updated := false
 
-	if fc.Spec.NFTablesEnabled == nil {
-		nftablesEnabled := true
-		fc.Spec.NFTablesEnabled = &nftablesEnabled
-		updated = true
+	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
+		usesNftables := *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables || *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPFNFT
+		if usesNftables && fc.Spec.NFTablesMode == nil {
+			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
+			nftablesMode := crdv1.NFTablesModeEnabled
+			fc.Spec.NFTablesMode = &nftablesMode
+			updated = true
+		}
 	}
 
 	switch install.Spec.CNI.Type {

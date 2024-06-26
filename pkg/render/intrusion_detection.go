@@ -544,7 +544,10 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 	containers := []corev1.Container{
 		intrusionDetectionContainer,
-		c.webhooksControllerContainer(),
+	}
+
+	if !c.cfg.Tenant.MultiTenant() {
+		containers = append(containers, c.webhooksControllerContainer())
 	}
 
 	return &corev1.PodTemplateSpec{

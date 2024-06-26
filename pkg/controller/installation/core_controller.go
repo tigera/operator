@@ -1214,9 +1214,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
 	// setup the security groups we need for IPIP, BGP, and Typha communication.
 	if openShiftOnAws {
+		// Detect if this cluster is an OpenShift HPC hosted cluster, as AWS
+		// security group setup is different in this case.
+		hostedOpenShift, err := isHostedOpenShift(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Error checking if in a hosted OpenShift HCP cluster on AWS", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 		awsSGSetupCfg := &render.AWSSGSetupConfiguration{
-			PullSecrets:  instance.Spec.ImagePullSecrets,
-			Installation: &instance.Spec,
+			PullSecrets:     instance.Spec.ImagePullSecrets,
+			Installation:    &instance.Spec,
+			HostedOpenShift: hostedOpenShift,
 		}
 		awsSetup, err := render.AWSSecurityGroupSetup(awsSGSetupCfg)
 		if err != nil {
@@ -1843,9 +1851,18 @@ func isOpenshiftOnAws(install *operator.Installation, ctx context.Context, clien
 	infra := configv1.Infrastructure{}
 	// If configured to run in openshift, then also fetch the openshift configuration API.
 	if err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, &infra); err != nil {
-		return false, fmt.Errorf("unable to read OpenShift infrastructure configuration: %s", err.Error())
+		return false, fmt.Errorf("unable to read OpenShift infrastructure configuration: %w", err)
 	}
 	return (infra.Status.PlatformStatus.Type == "AWS"), nil
+}
+
+// isHostedOpenShift returns true if this cluster is an OpenShift HCP hosted cluster.
+func isHostedOpenShift(ctx context.Context, client client.Client) (bool, error) {
+	infra := configv1.Infrastructure{}
+	if err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, &infra); err != nil {
+		return false, fmt.Errorf("unable to read OpenShift infrastructure configuration: %w", err)
+	}
+	return (infra.Status.ControlPlaneTopology == "External"), nil
 }
 
 func updateInstallationForAWSNode(i *operator.Installation, ds *appsv1.DaemonSet) error {

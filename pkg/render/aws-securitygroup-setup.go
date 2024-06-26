@@ -34,8 +34,9 @@ func AWSSecurityGroupSetup(cfg *AWSSGSetupConfiguration) (Component, error) {
 
 // AWSSGSetupConfiguration contains all the config information needed to render the component.
 type AWSSGSetupConfiguration struct {
-	PullSecrets  []corev1.LocalObjectReference
-	Installation *operatorv1.InstallationSpec
+	PullSecrets     []corev1.LocalObjectReference
+	Installation    *operatorv1.InstallationSpec
+	HostedOpenShift bool
 }
 
 type awsSGSetupComponent struct {
@@ -70,6 +71,27 @@ func (c *awsSGSetupComponent) Ready() bool {
 }
 
 func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
+	envVars := []corev1.EnvVar{
+		{
+			Name:  "OPENSHIFT",
+			Value: "true",
+		},
+		{
+			Name:  "REQUIRE_AWS",
+			Value: "true",
+		},
+		{
+			Name:  "KUBELET_KUBECONFIG",
+			Value: "/etc/kubernetes/kubeconfig",
+		},
+	}
+
+	if c.cfg.HostedOpenShift {
+		envVars = append(envVars, corev1.EnvVar{
+			Name:  "HOSTED_OPENSHIFT",
+			Value: "true",
+		})
+	}
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -97,20 +119,7 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 						Image:           c.image,
 						ImagePullPolicy: ImagePullPolicy(),
 						Args:            []string{"--aws-sg-setup"},
-						Env: []corev1.EnvVar{
-							{
-								Name:  "OPENSHIFT",
-								Value: "true",
-							},
-							{
-								Name:  "REQUIRE_AWS",
-								Value: "true",
-							},
-							{
-								Name:  "KUBELET_KUBECONFIG",
-								Value: "/etc/kubernetes/kubeconfig",
-							},
-						},
+						Env:             envVars,
 						SecurityContext: securitycontext.NewNonRootContext(),
 					}},
 				},

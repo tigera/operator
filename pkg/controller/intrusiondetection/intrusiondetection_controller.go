@@ -48,6 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -396,7 +397,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// intrusionDetectionKeyPair is the key pair intrusion detection presents to identify itself
-	intrusionDetectionKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.IntrusionDetectionTLSSecretName, helper.TruthNamespace(), []string{render.IntrusionDetectionTLSSecretName})
+	dnsNames := dns.GetServiceDNSNames(render.IntrusionDetectionTLSSecretName, helper.InstallNamespace(), r.clusterDomain)
+	intrusionDetectionKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.IntrusionDetectionTLSSecretName, helper.TruthNamespace(), dnsNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -489,15 +491,16 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	components := []render.Component{
-		intrusionDetectionComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       helper.InstallNamespace(),
+			TruthNamespace:  helper.TruthNamespace(),
 			ServiceAccounts: []string{render.IntrusionDetectionName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(intrusionDetectionCfg.IntrusionDetectionCertSecret, true, true),
 			},
 			TrustedBundle: bundleMaker,
 		}),
+		intrusionDetectionComponent,
 	}
 
 	if !r.multiTenant {

@@ -290,6 +290,10 @@ func (h *NetworkPolicyHelper) ComplianceReporterSourceEntityRule() v3.EntityRule
 	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-reporter")
 }
 
+func (h *NetworkPolicyHelper) IntrusionDetectionSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-intrusion-detection"), "intrusion-detection-controller")
+}
+
 const PrometheusSelector = "k8s-app == 'tigera-prometheus'"
 
 var PrometheusEntityRule = v3.EntityRule{

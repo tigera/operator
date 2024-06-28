@@ -56,6 +56,7 @@ var _ = Describe("CSI rendering tests", func() {
 		}{
 			{name: "csi.tigera.io", ns: "", group: "storage", version: "v1", kind: "CSIDriver"},
 			{name: "csi-node-driver", ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "csi-node-driver", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 		}
 
 		comp := render.CSI(&cfg)
@@ -115,6 +116,7 @@ var _ = Describe("CSI rendering tests", func() {
 		}{
 			{name: "csi.tigera.io", ns: "", group: "storage", version: "v1", kind: "CSIDriver"},
 			{name: "csi-node-driver", ns: "calico-system", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "csi-node-driver", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 		}
 		comp := render.CSI(&cfg)
 		Expect(comp.ResolveImages(nil)).To(BeNil())

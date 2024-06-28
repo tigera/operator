@@ -26,6 +26,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -51,10 +52,11 @@ const (
 	ElasticsearchIntrusionDetectionJobUserSecret = "tigera-ee-installer-elasticsearch-access"
 	ElasticsearchPerformanceHotspotsUserSecret   = "tigera-ee-performance-hotspots-elasticsearch-access"
 
-	IntrusionDetectionInstallerJobName     = "intrusion-detection-es-job-installer"
-	IntrusionDetectionControllerName       = "intrusion-detection-controller"
-	IntrusionDetectionControllerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + IntrusionDetectionControllerName
-	IntrusionDetectionInstallerPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
+	IntrusionDetectionInstallerJobName                     = "intrusion-detection-es-job-installer"
+	IntrusionDetectionControllerName                       = "intrusion-detection-controller"
+	IntrusionDetectionControllerPolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + IntrusionDetectionControllerName
+	IntrusionDetectionInstallerPolicyName                  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
+	MultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-intrusion-detection-managed-cluster-access"
 
 	ADAPIObjectName                 = "anomaly-detection-api"
 	IntrusionDetectionTLSSecretName = "intrusion-detection-tls"
@@ -177,6 +179,10 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		c.intrusionDetectionRoleBinding(),
 		c.intrusionDetectionDeployment(),
 	)
+
+	if c.cfg.Tenant.MultiTenant() {
+		objs = append(objs, c.multiTenantManagedClustersAccess()...)
+	}
 
 	objsToDelete := []client.Object{
 		// PSPs have been removed from the Kubernetes API since v1.25, so we can delete
@@ -372,6 +378,30 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		rules = append(rules, managementRule...)
 	}
 
+	if c.cfg.Tenant.MultiTenant() {
+		// These rules are used by Intrusion Detection Controller in a management cluster serving multiple tenants in order to appear to managed
+		// clusters as the expected serviceaccount. They're only needed when there are multiple tenants sharing the same
+		// management cluster.
+		rules = append(rules, []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts"},
+				Verbs:         []string{"impersonate"},
+				ResourceNames: []string{IntrusionDetectionControllerName},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+				ResourceNames: []string{
+					serviceaccount.AllServiceAccountsGroup,
+					"system:authenticated",
+					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, IntrusionDetectionNamespace),
+				},
+			},
+		}...)
+	}
+
 	if c.cfg.OpenShift {
 		sccName := securitycontextconstraints.NonRootV2
 		if c.syslogForwardingIsEnabled() {
@@ -468,6 +498,35 @@ func (c *intrusionDetectionComponent) intrusionDetectionRoleBinding() *rbacv1.Ro
 	}
 }
 
+func (c *intrusionDetectionComponent) multiTenantManagedClustersAccess() []client.Object {
+	var objects []client.Object
+
+	// In a single tenant setup we want to create a role that binds using service account
+	// intrusion-detection-controller from tigera-intrusion-detection namespace. In a multi-tenant setup
+	// IntrusionDetectionController from the tenant's namespace impersonates service intrusion-detection-controller
+	// from tigera-intrusion-detection namespace
+	objects = append(objects, &rbacv1.RoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessClusterRoleBindingName, Namespace: c.cfg.Namespace},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     MultiTenantManagedClustersAccessClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			// requests for Linseed to managed clusters are done using service account tigera-linseed
+			// from tigera-elasticsearch namespace regardless of tenancy mode (single tenant or multi-tenant)
+			{
+				Kind:      "ServiceAccount",
+				Name:      IntrusionDetectionControllerName,
+				Namespace: IntrusionDetectionNamespace,
+			},
+		},
+	})
+
+	return objects
+}
+
 func (c *intrusionDetectionComponent) intrusionDetectionDeployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
@@ -544,7 +603,10 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 
 	containers := []corev1.Container{
 		intrusionDetectionContainer,
-		c.webhooksControllerContainer(),
+	}
+
+	if !c.cfg.Tenant.MultiTenant() {
+		containers = append(containers, c.webhooksControllerContainer())
 	}
 
 	return &corev1.PodTemplateSpec{

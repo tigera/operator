@@ -277,11 +277,12 @@ func (c *csiComponent) csiTemplate() corev1.PodTemplateSpec {
 		Labels: templateLabels,
 	}
 	templateSpec := corev1.PodSpec{
-		Tolerations:      c.csiTolerations(),
-		Affinity:         c.csiAffinities(),
-		Containers:       c.csiContainers(),
-		ImagePullSecrets: c.cfg.Installation.ImagePullSecrets,
-		Volumes:          c.csiVolumes(),
+		Tolerations:        c.csiTolerations(),
+		Affinity:           c.csiAffinities(),
+		Containers:         c.csiContainers(),
+		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
+		Volumes:            c.csiVolumes(),
+		ServiceAccountName: CSIDaemonSetName,
 	}
 
 	return corev1.PodTemplateSpec{
@@ -405,10 +406,14 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (c *csiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	objs := []client.Object{c.csiDriver(), c.csiDaemonset()}
+	objs := []client.Object{
+		c.csiDriver(),
+		c.csiDaemonset(),
+		c.serviceAccount(),
+	}
 
 	if c.cfg.OpenShift {
-		objs = append(objs, c.serviceAccount(), c.role(), c.roleBinding())
+		objs = append(objs, c.role(), c.roleBinding())
 	}
 
 	if c.cfg.Terminating || c.cfg.Installation.KubeletVolumePluginPath == "None" {

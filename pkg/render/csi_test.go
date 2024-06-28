@@ -101,6 +101,7 @@ var _ = Describe("CSI rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
+		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(Equal(render.CSIDaemonSetName))
 	})
 
 	It("should render properly when KubeletVolumePluginPath is set to 'None'", func() {

@@ -56,6 +56,7 @@ var _ = Describe("CSI rendering tests", func() {
 		}{
 			{name: "csi.tigera.io", ns: "", group: "storage", version: "v1", kind: "CSIDriver"},
 			{name: "csi-node-driver", ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "csi-node-driver", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 		}
 
 		comp := render.CSI(&cfg)
@@ -101,6 +102,7 @@ var _ = Describe("CSI rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
+		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(Equal(render.CSIDaemonSetName))
 	})
 
 	It("should render properly when KubeletVolumePluginPath is set to 'None'", func() {
@@ -114,6 +116,7 @@ var _ = Describe("CSI rendering tests", func() {
 		}{
 			{name: "csi.tigera.io", ns: "", group: "storage", version: "v1", kind: "CSIDriver"},
 			{name: "csi-node-driver", ns: "calico-system", group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "csi-node-driver", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 		}
 		comp := render.CSI(&cfg)
 		Expect(comp.ResolveImages(nil)).To(BeNil())

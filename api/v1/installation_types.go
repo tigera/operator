@@ -422,6 +422,7 @@ const (
 // LinuxDataplaneOption controls which dataplane is to be used on Linux nodes.
 //
 // One of: Iptables, BPF, VPP, Nftables, BPFWithNftables
+// +kubebuilder:validation:Enum=Iptables;BPF;VPP;Nftables;BPFWithNftables
 type LinuxDataplaneOption string
 
 const (
@@ -453,7 +454,6 @@ type CalicoNetworkSpec struct {
 	// If not specified, iptables mode is used.
 	// Default: Iptables
 	// +optional
-	// +kubebuilder:validation:Enum=Iptables;BPF;VPP;Nftables
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
 
 	// WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it

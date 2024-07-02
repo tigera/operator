@@ -469,7 +469,7 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 		monitor.PrometheusClientTLSSecretName: common.OperatorNamespace(),
 
 		// Get certificate for es-proxy, which Linseed and es-gateway need to trust.
-		render.ManagerTLSSecretName: helper.TruthNamespace(),
+		render.ManagerInternalTLSSecretName: helper.TruthNamespace(),
 
 		// Get certificate for fluentd, which Linseed needs to trust in a standalone or management cluster.
 		render.FluentdPrometheusTLSSecretName: common.OperatorNamespace(),

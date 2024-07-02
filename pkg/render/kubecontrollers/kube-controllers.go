@@ -55,12 +55,12 @@ const (
 	KubeControllerMetrics           = "calico-kube-controllers-metrics"
 	KubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "kube-controller-access"
 
-	EsKubeController                     = "es-calico-kube-controllers"
-	EsKubeControllerRole                 = "es-calico-kube-controllers"
-	EsKubeControllerRoleBinding          = "es-calico-kube-controllers"
-	EsKubeControllerMetrics              = "es-calico-kube-controllers-metrics"
-	EsKubeControllerNetworkPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
-	MultiTenantManagedClustersAccessName = "es-calico-kube-controllers-managed-cluster-access"
+	EsKubeController                                = "es-calico-kube-controllers"
+	EsKubeControllerRole                            = "es-calico-kube-controllers"
+	EsKubeControllerRoleBinding                     = "es-calico-kube-controllers"
+	EsKubeControllerMetrics                         = "es-calico-kube-controllers-metrics"
+	EsKubeControllerNetworkPolicyName               = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
+	MultiTenantManagedClustersAccessRoleBindingName = "es-calico-kube-controllers-managed-cluster-access"
 
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
@@ -320,33 +320,17 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 
 func (c *kubeControllersComponent) multiTenantManagedClustersAccess() []client.Object {
 	var objects []client.Object
-	objects = append(objects, &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessName},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs: []string{
-					// The Authentication Proxy in Voltron checks if EsKubeControllers (using impersonation headers for
-					// calico-kube-controllers service in calico-system namespace) can get a managed clusters before
-					// sending the request down the tunnel.
-					"get",
-				},
-			},
-		},
-	})
 
 	// In a multi-tenant setup ES-Kube-Controllers from the tenant's namespace impersonates service
 	// calico-kube-controllers from calico-system namespace. (This is done via an additional ClusterRole and a
 	// ClusterRoleBinding)
-	objects = append(objects, &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessName},
+	objects = append(objects, &rbacv1.RoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessRoleBindingName, Namespace: c.cfg.Namespace},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     MultiTenantManagedClustersAccessName,
+			Name:     render.MultiTenantManagedClustersAccessClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			// requests for ES-Kube-Controllers to get managed clusters in Voltron are done using service account

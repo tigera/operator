@@ -2037,6 +2037,12 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	Context("multi-tenant", func() {
 		BeforeEach(func() {
 			cfg.MultiTenant = true
+			cfg.ManagementCluster = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
+			cfg.Installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				Registry:             "testregistry.com/",
+				Variant:              operatorv1.TigeraSecureEnterprise,
+			}
 		})
 
 		It("should not install tigera-network-admin and tigera-ui-user", func() {
@@ -2049,6 +2055,23 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Expect(obj).To(BeNil())
 			obj = rtest.GetResource(resources, "tigera-ui-user", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
 			Expect(obj).To(BeNil())
+		})
+
+		It("should create a cluster role that get managed clusters", func() {
+			component, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			resources, _ := component.Objects()
+			managedClusterAccessRole := rtest.GetResource(resources,
+				render.MultiTenantManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedManagedClusterAccessRules := []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"managedclusters"},
+					Verbs:     []string{"get"},
+				},
+			}
+			Expect(managedClusterAccessRole.Rules).To(ContainElements(expectedManagedClusterAccessRules))
 		})
 	})
 })

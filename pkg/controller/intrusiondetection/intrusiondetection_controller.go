@@ -491,6 +491,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	components := []render.Component{
+		intrusionDetectionComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       helper.InstallNamespace(),
 			TruthNamespace:  helper.TruthNamespace(),
@@ -500,7 +501,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			},
 			TrustedBundle: bundleMaker,
 		}),
-		intrusionDetectionComponent,
 	}
 
 	if !r.multiTenant {

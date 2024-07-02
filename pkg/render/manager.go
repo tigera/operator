@@ -71,10 +71,11 @@ const (
 	ManagerClusterSettingsLayerTigera = "cluster-settings.layer.tigera-infrastructure"
 	ManagerClusterSettingsViewDefault = "cluster-settings.view.default"
 
-	ElasticsearchManagerUserSecret  = "tigera-ee-manager-elasticsearch-access"
-	TlsSecretHashAnnotation         = "hash.operator.tigera.io/tls-secret"
-	KibanaTLSHashAnnotation         = "hash.operator.tigera.io/kibana-secrets"
-	ElasticsearchUserHashAnnotation = "hash.operator.tigera.io/elasticsearch-user"
+	ElasticsearchManagerUserSecret                                = "tigera-ee-manager-elasticsearch-access"
+	TlsSecretHashAnnotation                                       = "hash.operator.tigera.io/tls-secret"
+	KibanaTLSHashAnnotation                                       = "hash.operator.tigera.io/kibana-secrets"
+	ElasticsearchUserHashAnnotation                               = "hash.operator.tigera.io/elasticsearch-user"
+	ManagerMultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-manager-managed-cluster-access"
 )
 
 // ManagementClusterConnection configuration constants
@@ -228,6 +229,10 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterRoleBinding(c.cfg.BindingNamespaces),
 		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
 	)
+
+	if c.cfg.Tenant.MultiTenant() {
+		objs = append(objs, c.multiTenantManagedClustersAccess()...)
+	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs,
@@ -964,6 +969,35 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Egress:   egressRules,
 		},
 	}
+}
+
+func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
+	var objects []client.Object
+
+	// In a single tenant setup we want to create a role that binds using service account
+	// tigera-manager from tigera-manager namespace. In a multi-tenant setup
+	// ESProxy from the tenant's namespace impersonates service tigera-manager
+	// from tigera-manager namespace
+	objects = append(objects, &rbacv1.RoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: ManagerMultiTenantManagedClustersAccessClusterRoleBindingName, Namespace: c.cfg.Namespace},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     MultiTenantManagedClustersAccessClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			// requests for ESProxy to managed clusters are done using service account tigera-manager
+			// from tigera-manager namespace regardless of tenancy mode (single tenant or multi-tenant)
+			{
+				Kind:      "ServiceAccount",
+				Name:      ManagerServiceName,
+				Namespace: ManagerNamespace,
+			},
+		},
+	})
+
+	return objects
 }
 
 // managerClusterWideSettingsGroup returns a UISettingsGroup with the description "cluster-wide settings"

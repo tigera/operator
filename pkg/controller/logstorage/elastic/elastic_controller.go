@@ -680,7 +680,7 @@ func (r *ElasticSubController) checkOIDCUsersEsResource(ctx context.Context) err
 
 func (r *ElasticSubController) applyILMPolicies(ls *operatorv1.LogStorage, reqLogger logr.Logger, ctx context.Context) error {
 	// ES should be in ready phase when execution reaches here, apply ILM polices
-	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.ECKElasticEndpoint())
+	esClient, err := r.esCliCreator(r.client, ctx, relasticsearch.ECKElasticEndpoint(), false)
 	if err != nil {
 		return err
 	}

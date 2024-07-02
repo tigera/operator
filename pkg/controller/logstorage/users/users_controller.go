@@ -326,7 +326,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 }
 
 func (r *UserController) createUserLogin(ctx context.Context, elasticEndpoint string, secret *corev1.Secret, user *utils.User, reqLogger logr.Logger) error {
-	esClient, err := r.esClientFn(r.client, ctx, elasticEndpoint)
+	esClient, err := r.esClientFn(r.client, ctx, elasticEndpoint, r.elasticExternal)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to connect to Elasticsearch - failed to create the Elasticsearch client", err, reqLogger)
 		return err
@@ -406,7 +406,7 @@ func (r *UsersCleanupController) cleanupStaleUsers(ctx context.Context, logger l
 		}
 
 		// This tenant is terminating - clean up its Linseed user, if it exists.
-		esClient, err := r.esClientFn(r.client, ctx, t.Spec.Elastic.URL)
+		esClient, err := r.esClientFn(r.client, ctx, t.Spec.Elastic.URL, r.elasticExternal)
 		if err != nil {
 			return fmt.Errorf("failed to connect to Elasticsearch - failed to create the Elasticsearch client")
 		}

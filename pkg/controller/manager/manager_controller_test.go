@@ -433,21 +433,6 @@ var _ = Describe("Manager controller tests", func() {
 		BeforeEach(func() {
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
-			mockStatus.On("AddDaemonsets", mock.Anything).Return()
-			mockStatus.On("AddDeployments", mock.Anything).Return()
-			mockStatus.On("AddStatefulSets", mock.Anything).Return()
-			mockStatus.On("AddCronJobs", mock.Anything)
-			mockStatus.On("IsAvailable").Return(true)
-			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("ClearDegraded")
-			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", mock.Anything, mock.Anything).Return().Maybe()
-			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'calico-node-prometheus-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
-			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-packetcapture-server-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
-			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-secure-linseed-cert' to become available", mock.Anything, mock.Anything).Return().Maybe()
-			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret internal-manager-tls in namespace tigera-operator to be available", mock.Anything, mock.Anything).Return().Maybe()
-			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
-			mockStatus.On("ReadyToMonitor")
-			mockStatus.On("SetMetaData", mock.Anything).Return()
 
 			r = ReconcileManager{
 				client:          c,
@@ -464,9 +449,11 @@ var _ = Describe("Manager controller tests", func() {
 					State: operatorv1.TigeraStatusReady,
 				},
 			})).NotTo(HaveOccurred())
+
 			Expect(c.Create(ctx, &v3.Tier{
 				ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
 			})).NotTo(HaveOccurred())
+
 			licenseKey = &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Status: v3.LicenseKeyStatus{
@@ -495,43 +482,9 @@ var _ = Describe("Manager controller tests", func() {
 			}
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
-			compliance = &operatorv1.Compliance{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Status: operatorv1.ComplianceStatus{
-					State: operatorv1.TigeraStatusReady,
-				},
-			}
-			Expect(c.Create(ctx, compliance)).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
 			})).NotTo(HaveOccurred())
-
-			// Provision certificates that the controller will query as part of the test.
-			var err error
-			certificateManager, err = certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
-			Expect(err).NotTo(HaveOccurred())
-			caSecret := certificateManager.KeyPair().Secret(common.OperatorNamespace())
-			Expect(c.Create(ctx, caSecret)).NotTo(HaveOccurred())
-			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusServerTLSSecretName})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, linseedKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, queryServerKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			internalCertKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, internalCertKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-
-			Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
@@ -540,499 +493,589 @@ var _ = Describe("Manager controller tests", func() {
 				},
 				Data: map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterpriseTrial)},
 			})).NotTo(HaveOccurred())
-
-			Expect(c.Create(ctx, &operatorv1.Manager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tigera-secure",
-				},
-			})).NotTo(HaveOccurred())
-
-			// Mark that watches were successful.
-			r.licenseAPIReady.MarkAsReady()
-			r.tierWatchReady.MarkAsReady()
 		})
 
-		Context("image reconciliation", func() {
-			It("should use builtin images", func() {
-				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				d := appsv1.Deployment{
-					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-manager",
-						Namespace: render.ManagerNamespace,
-					},
-				}
-				Expect(test.GetResource(c, &d)).To(BeNil())
-				Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
-				mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
-				Expect(mgr).ToNot(BeNil())
-				Expect(mgr.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentManager.Image,
-						components.ComponentManager.Version)))
-				esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
-				Expect(esproxy).ToNot(BeNil())
-				Expect(esproxy.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentEsProxy.Image,
-						components.ComponentEsProxy.Version)))
-				vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
-				Expect(vltrn).ToNot(BeNil())
-				Expect(vltrn.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentManagerProxy.Image,
-						components.ComponentManagerProxy.Version)))
-			})
-			It("should use images from imageset", func() {
-				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-				Expect(c.Create(ctx, &operatorv1.ImageSet{
-					ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
-					Spec: operatorv1.ImageSetSpec{
-						Images: []operatorv1.Image{
-							{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
-							{Image: "tigera/es-proxy", Digest: "sha256:esproxyhash"},
-							{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
-							{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
-						},
-					},
-				})).ToNot(HaveOccurred())
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-				d := appsv1.Deployment{
-					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-manager",
-						Namespace: render.ManagerNamespace,
-					},
-				}
-				Expect(test.GetResource(c, &d)).To(BeNil())
-				Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
-				mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
-				Expect(mgr).ToNot(BeNil())
-				Expect(mgr.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentManager.Image,
-						"sha256:cnxmanagerhash")))
-				esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
-				Expect(esproxy).ToNot(BeNil())
-				Expect(esproxy.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentEsProxy.Image,
-						"sha256:esproxyhash")))
-				vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
-				Expect(vltrn).ToNot(BeNil())
-				Expect(vltrn.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentManagerProxy.Image,
-						"sha256:voltronhash")))
-			})
-		})
-
-		Context("allow-tigera reconciliation", func() {
-			var readyFlag *utils.ReadyFlag
+		Context("single-tenant", func() {
 			BeforeEach(func() {
-				mockStatus = &status.MockStatus{}
-				mockStatus.On("OnCRFound").Return()
-				mockStatus.On("SetMetaData", mock.Anything).Return()
-
-				readyFlag = &utils.ReadyFlag{}
-				readyFlag.MarkAsReady()
-				r = ReconcileManager{
-					client:          c,
-					scheme:          scheme,
-					provider:        operatorv1.ProviderNone,
-					status:          mockStatus,
-					licenseAPIReady: readyFlag,
-					tierWatchReady:  readyFlag,
-				}
-			})
-
-			It("should wait if allow-tigera tier is unavailable", func() {
-				test.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
-			})
-
-			It("should wait if tier watch is not ready", func() {
-				r.tierWatchReady = &utils.ReadyFlag{}
-				test.ExpectWaitForTierWatch(ctx, &r, mockStatus)
-			})
-		})
-
-		Context("compliance reconciliation", func() {
-			It("should degrade if license is not present", func() {
-				Expect(c.Delete(ctx, licenseKey)).NotTo(HaveOccurred())
-				mockStatus = &status.MockStatus{}
-				mockStatus.On("OnCRFound").Return()
-				mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "License not found", "licensekeies.projectcalico.org \"default\" not found", mock.Anything).Return()
-				mockStatus.On("SetMetaData", mock.Anything).Return()
-				r.status = mockStatus
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-
-				Expect(err).NotTo(HaveOccurred())
-				mockStatus.AssertExpectations(GinkgoT())
-			})
-
-			It("should degrade if compliance CR and compliance-enabled license is present, but compliance is not ready", func() {
-				compliance.Status.State = ""
-				Expect(c.Status().Update(ctx, compliance)).NotTo(HaveOccurred())
-				mockStatus = &status.MockStatus{}
-				mockStatus.On("OnCRFound").Return()
-				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return()
-				mockStatus.On("SetMetaData", mock.Anything).Return()
-				r.status = mockStatus
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-
-				Expect(err).NotTo(HaveOccurred())
-				mockStatus.AssertExpectations(GinkgoT())
-			})
-
-			DescribeTable("should not degrade when compliance CR or compliance license feature is not present/active", func(crPresent, licenseFeatureActive bool) {
-				mockStatus = &status.MockStatus{}
+				mockStatus.On("AddDaemonsets", mock.Anything).Return()
+				mockStatus.On("AddDeployments", mock.Anything).Return()
+				mockStatus.On("AddStatefulSets", mock.Anything).Return()
+				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("IsAvailable").Return(true)
 				mockStatus.On("OnCRFound").Return()
-				mockStatus.On("AddDeployments", mock.Anything)
 				mockStatus.On("ClearDegraded")
-				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'calico-node-prometheus-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-packetcapture-server-tls' to become available", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret 'tigera-secure-linseed-cert' to become available", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for secret internal-manager-tls in namespace tigera-operator to be available", mock.Anything, mock.Anything).Return().Maybe()
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 				mockStatus.On("ReadyToMonitor")
 				mockStatus.On("SetMetaData", mock.Anything).Return()
-				r.status = mockStatus
 
-				if !crPresent {
-					Expect(c.Delete(ctx, compliance)).NotTo(HaveOccurred())
+				compliance = &operatorv1.Compliance{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+					Status: operatorv1.ComplianceStatus{
+						State: operatorv1.TigeraStatusReady,
+					},
 				}
-				if !licenseFeatureActive {
-					licenseKey.Status.Features = []string{}
-					Expect(c.Update(ctx, licenseKey)).NotTo(HaveOccurred())
-				}
+				Expect(c.Create(ctx, compliance)).NotTo(HaveOccurred())
 
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-
-				// Expect no error, and no degraded status from compliance
+				// Provision certificates that the controller will query as part of the test.
+				var err error
+				certificateManager, err = certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
-				mockStatus.AssertExpectations(GinkgoT())
-			},
-				Entry("CR and license feature not present/active", false, false),
-				Entry("CR not present, license feature active", false, true),
-				Entry("CR present, license feature inactive", true, false),
-			)
-		})
+				caSecret := certificateManager.KeyPair().Secret(common.OperatorNamespace())
+				Expect(c.Create(ctx, caSecret)).NotTo(HaveOccurred())
+				complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+				pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+				promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusServerTLSSecretName})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+				linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, linseedKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+				queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, queryServerKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+				internalCertKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, internalCertKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
-		Context("Reconcile for Condition status", func() {
-			generation := int64(2)
-			It("should reconcile with creating new status condition with one item", func() {
-				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-				ts := &operatorv1.TigeraStatus{
-					ObjectMeta: metav1.ObjectMeta{Name: "manager"},
-					Spec:       operatorv1.TigeraStatusSpec{},
-					Status: operatorv1.TigeraStatusStatus{
-						Conditions: []operatorv1.TigeraStatusCondition{
-							{
-								Type:               operatorv1.ComponentAvailable,
-								Status:             operatorv1.ConditionTrue,
-								Reason:             string(operatorv1.AllObjectsAvailable),
-								Message:            "All Objects are available",
-								ObservedGeneration: generation,
-							},
-						},
-					},
-				}
-				Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
 
-				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-					Name:      "manager",
-					Namespace: "",
-				}})
-				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, false, "")
-				Expect(err).ShouldNot(HaveOccurred())
-
-				Expect(instance.Status.Conditions).To(HaveLen(1))
-				Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
-				Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-				Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
-				Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
-				Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
-			})
-			It("should reconcile with empty tigerastatus conditions ", func() {
-				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-				ts := &operatorv1.TigeraStatus{
-					ObjectMeta: metav1.ObjectMeta{Name: "manager"},
-					Spec:       operatorv1.TigeraStatusSpec{},
-					Status:     operatorv1.TigeraStatusStatus{},
-				}
-				Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
-
-				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-					Name:      "manager",
-					Namespace: "",
-				}})
-				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, false, "")
-				Expect(err).ShouldNot(HaveOccurred())
-
-				Expect(instance.Status.Conditions).To(HaveLen(0))
-			})
-
-			It("should reconcile with creating new status condition  with multiple conditions as true", func() {
-				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-				ts := &operatorv1.TigeraStatus{
-					ObjectMeta: metav1.ObjectMeta{Name: "manager"},
-					Spec:       operatorv1.TigeraStatusSpec{},
-					Status: operatorv1.TigeraStatusStatus{
-						Conditions: []operatorv1.TigeraStatusCondition{
-							{
-								Type:               operatorv1.ComponentAvailable,
-								Status:             operatorv1.ConditionTrue,
-								Reason:             string(operatorv1.AllObjectsAvailable),
-								Message:            "All Objects are available",
-								ObservedGeneration: generation,
-							},
-							{
-								Type:               operatorv1.ComponentProgressing,
-								Status:             operatorv1.ConditionTrue,
-								Reason:             string(operatorv1.ResourceNotReady),
-								Message:            "Progressing Installation.operatorv1.tigera.io",
-								ObservedGeneration: generation,
-							},
-							{
-								Type:               operatorv1.ComponentDegraded,
-								Status:             operatorv1.ConditionTrue,
-								Reason:             string(operatorv1.ResourceUpdateError),
-								Message:            "Error resolving ImageSet for components",
-								ObservedGeneration: generation,
-							},
-						},
-					},
-				}
-				Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
-
-				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-					Name:      "manager",
-					Namespace: "",
-				}})
-				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, false, "")
-				Expect(err).ShouldNot(HaveOccurred())
-
-				Expect(instance.Status.Conditions).To(HaveLen(3))
-				Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
-				Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-				Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
-				Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
-				Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
-
-				Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
-				Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-				Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
-				Expect(instance.Status.Conditions[1].Message).To(Equal("Progressing Installation.operatorv1.tigera.io"))
-				Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
-
-				Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
-				Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-				Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceUpdateError)))
-				Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
-				Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
-			})
-
-			It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
-				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-				ts := &operatorv1.TigeraStatus{
-					ObjectMeta: metav1.ObjectMeta{Name: "manager"},
-					Spec:       operatorv1.TigeraStatusSpec{},
-					Status: operatorv1.TigeraStatusStatus{
-						Conditions: []operatorv1.TigeraStatusCondition{
-							{
-								Type:               operatorv1.ComponentAvailable,
-								Status:             operatorv1.ConditionTrue,
-								Reason:             string(operatorv1.AllObjectsAvailable),
-								Message:            "All Objects are available",
-								ObservedGeneration: generation,
-							},
-							{
-								Type:               operatorv1.ComponentProgressing,
-								Status:             operatorv1.ConditionFalse,
-								Reason:             string(operatorv1.NotApplicable),
-								Message:            "Not Applicable",
-								ObservedGeneration: generation,
-							},
-							{
-								Type:               operatorv1.ComponentDegraded,
-								Status:             operatorv1.ConditionFalse,
-								Reason:             string(operatorv1.NotApplicable),
-								Message:            "Not Applicable",
-								ObservedGeneration: generation,
-							},
-						},
-					},
-				}
-				Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
-
-				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-					Name:      "manager",
-					Namespace: "",
-				}})
-				Expect(err).ShouldNot(HaveOccurred())
-				instance, err := GetManager(ctx, r.client, false, "")
-				Expect(err).ShouldNot(HaveOccurred())
-
-				Expect(instance.Status.Conditions).To(HaveLen(3))
-
-				Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
-				Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
-				Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
-				Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
-				Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
-
-				Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
-				Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionFalse)))
-				Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.NotApplicable)))
-				Expect(instance.Status.Conditions[1].Message).To(Equal("Not Applicable"))
-				Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
-
-				Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
-				Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionFalse)))
-				Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
-				Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
-				Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
-			})
-		})
-
-		Context("Multi-cluster reconciliation", func() {
-			It("Should reconcile multi-cluster setup for a management cluster for a single tenant", func() {
-				// Create the ManagementCluster CR needed to configure
-				// a management cluster for a multi-cluster setup
-				managementCluster := &operatorv1.ManagementCluster{
+				Expect(c.Create(ctx, &operatorv1.Manager{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "tigera-secure",
 					},
-				}
-				Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
+				})).NotTo(HaveOccurred())
 
-				// Create the Manager CR needed to jumpstart the reconciliation
-				// for the manager
-				err := c.Create(ctx, &operatorv1.Manager{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-secure",
-						Namespace: common.OperatorNamespace(),
-					},
+				// Mark that watches were successful.
+				r.licenseAPIReady.MarkAsReady()
+				r.tierWatchReady.MarkAsReady()
+			})
+
+			Context("image reconciliation", func() {
+				It("should use builtin images", func() {
+					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+
+					d := appsv1.Deployment{
+						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "tigera-manager",
+							Namespace: render.ManagerNamespace,
+						},
+					}
+					Expect(test.GetResource(c, &d)).To(BeNil())
+					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
+					Expect(mgr).ToNot(BeNil())
+					Expect(mgr.Image).To(Equal(
+						fmt.Sprintf("some.registry.org/%s:%s",
+							components.ComponentManager.Image,
+							components.ComponentManager.Version)))
+					esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
+					Expect(esproxy).ToNot(BeNil())
+					Expect(esproxy.Image).To(Equal(
+						fmt.Sprintf("some.registry.org/%s:%s",
+							components.ComponentEsProxy.Image,
+							components.ComponentEsProxy.Version)))
+					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
+					Expect(vltrn).ToNot(BeNil())
+					Expect(vltrn.Image).To(Equal(
+						fmt.Sprintf("some.registry.org/%s:%s",
+							components.ComponentManagerProxy.Image,
+							components.ComponentManagerProxy.Version)))
 				})
-				Expect(err).NotTo(HaveOccurred())
+				It("should use images from imageset", func() {
+					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+					Expect(c.Create(ctx, &operatorv1.ImageSet{
+						ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
+						Spec: operatorv1.ImageSetSpec{
+							Images: []operatorv1.Image{
+								{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
+								{Image: "tigera/es-proxy", Digest: "sha256:esproxyhash"},
+								{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
+								{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+							},
+						},
+					})).ToNot(HaveOccurred())
 
-				// Reconcile Manager
-				_, err = r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				deployment := appsv1.Deployment{
-					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-manager",
-						Namespace: render.ManagerNamespace,
-					},
-				}
-				clusterConnection := corev1.Secret{
-					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      render.VoltronTunnelSecretName,
-						Namespace: common.OperatorNamespace(),
-					},
-				}
-				clusterConnectionInManagerNs := corev1.Secret{
-					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      render.VoltronTunnelSecretName,
-						Namespace: render.ManagerNamespace,
-					},
-				}
-
-				// Ensure a deployment was created for the manager
-				err = test.GetResource(c, &deployment)
-				Expect(kerror.IsNotFound(err)).Should(BeFalse())
-
-				// Ensure the secret was created in tigera-operator namespace
-				// and that it configures voltron as a Subject Alternate Name
-				err = test.GetResource(c, &clusterConnection)
-				Expect(kerror.IsNotFound(err)).Should(BeFalse())
-				assertSANs(&clusterConnection, "voltron")
-
-				// Ensure the secret was created in tigera-manager namespace
-				// and that it configures voltron as a Subject Alternate Name
-				err = test.GetResource(c, &clusterConnectionInManagerNs)
-				Expect(kerror.IsNotFound(err)).Should(BeFalse())
-				assertSANs(&clusterConnectionInManagerNs, "voltron")
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+					d := appsv1.Deployment{
+						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "tigera-manager",
+							Namespace: render.ManagerNamespace,
+						},
+					}
+					Expect(test.GetResource(c, &d)).To(BeNil())
+					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
+					Expect(mgr).ToNot(BeNil())
+					Expect(mgr.Image).To(Equal(
+						fmt.Sprintf("some.registry.org/%s@%s",
+							components.ComponentManager.Image,
+							"sha256:cnxmanagerhash")))
+					esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
+					Expect(esproxy).ToNot(BeNil())
+					Expect(esproxy.Image).To(Equal(
+						fmt.Sprintf("some.registry.org/%s@%s",
+							components.ComponentEsProxy.Image,
+							"sha256:esproxyhash")))
+					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
+					Expect(vltrn).ToNot(BeNil())
+					Expect(vltrn.Image).To(Equal(
+						fmt.Sprintf("some.registry.org/%s@%s",
+							components.ComponentManagerProxy.Image,
+							"sha256:voltronhash")))
+				})
 			})
 
-			It("should upgrade a Voltron tunnel secret if previously owned by a different controller", func() {
-				// Older versions of the tigera-operator controlled this secret from the API server controller.
-				// However, only a single controller is allowed as an owner, so we need to properly clear the old
-				// one before setting the Manager CR as the new owner.
-				clusterConnection := corev1.Secret{
-					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      render.VoltronTunnelSecretName,
+			Context("allow-tigera reconciliation", func() {
+				var readyFlag *utils.ReadyFlag
+				BeforeEach(func() {
+					mockStatus = &status.MockStatus{}
+					mockStatus.On("OnCRFound").Return()
+					mockStatus.On("SetMetaData", mock.Anything).Return()
+
+					readyFlag = &utils.ReadyFlag{}
+					readyFlag.MarkAsReady()
+					r = ReconcileManager{
+						client:          c,
+						scheme:          scheme,
+						provider:        operatorv1.ProviderNone,
+						status:          mockStatus,
+						licenseAPIReady: readyFlag,
+						tierWatchReady:  readyFlag,
+					}
+				})
+
+				It("should wait if allow-tigera tier is unavailable", func() {
+					test.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+				})
+
+				It("should wait if tier watch is not ready", func() {
+					r.tierWatchReady = &utils.ReadyFlag{}
+					test.ExpectWaitForTierWatch(ctx, &r, mockStatus)
+				})
+			})
+
+			Context("compliance reconciliation", func() {
+				It("should degrade if license is not present", func() {
+					Expect(c.Delete(ctx, licenseKey)).NotTo(HaveOccurred())
+					mockStatus = &status.MockStatus{}
+					mockStatus.On("OnCRFound").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "License not found", "licensekeies.projectcalico.org \"default\" not found", mock.Anything).Return()
+					mockStatus.On("SetMetaData", mock.Anything).Return()
+					r.status = mockStatus
+
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+
+					Expect(err).NotTo(HaveOccurred())
+					mockStatus.AssertExpectations(GinkgoT())
+				})
+
+				It("should degrade if compliance CR and compliance-enabled license is present, but compliance is not ready", func() {
+					compliance.Status.State = ""
+					Expect(c.Status().Update(ctx, compliance)).NotTo(HaveOccurred())
+					mockStatus = &status.MockStatus{}
+					mockStatus.On("OnCRFound").Return()
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return()
+					mockStatus.On("SetMetaData", mock.Anything).Return()
+					r.status = mockStatus
+
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+
+					Expect(err).NotTo(HaveOccurred())
+					mockStatus.AssertExpectations(GinkgoT())
+				})
+
+				DescribeTable("should not degrade when compliance CR or compliance license feature is not present/active", func(crPresent, licenseFeatureActive bool) {
+					mockStatus = &status.MockStatus{}
+					mockStatus.On("IsAvailable").Return(true)
+					mockStatus.On("OnCRFound").Return()
+					mockStatus.On("AddDeployments", mock.Anything)
+					mockStatus.On("ClearDegraded")
+					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return().Maybe()
+					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+					mockStatus.On("ReadyToMonitor")
+					mockStatus.On("SetMetaData", mock.Anything).Return()
+					r.status = mockStatus
+
+					if !crPresent {
+						Expect(c.Delete(ctx, compliance)).NotTo(HaveOccurred())
+					}
+					if !licenseFeatureActive {
+						licenseKey.Status.Features = []string{}
+						Expect(c.Update(ctx, licenseKey)).NotTo(HaveOccurred())
+					}
+
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+
+					// Expect no error, and no degraded status from compliance
+					Expect(err).NotTo(HaveOccurred())
+					mockStatus.AssertExpectations(GinkgoT())
+				},
+					Entry("CR and license feature not present/active", false, false),
+					Entry("CR not present, license feature active", false, true),
+					Entry("CR present, license feature inactive", true, false),
+				)
+			})
+
+			Context("Reconcile for Condition status", func() {
+				generation := int64(2)
+				It("should reconcile with creating new status condition with one item", func() {
+					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+					ts := &operatorv1.TigeraStatus{
+						ObjectMeta: metav1.ObjectMeta{Name: "manager"},
+						Spec:       operatorv1.TigeraStatusSpec{},
+						Status: operatorv1.TigeraStatusStatus{
+							Conditions: []operatorv1.TigeraStatusCondition{
+								{
+									Type:               operatorv1.ComponentAvailable,
+									Status:             operatorv1.ConditionTrue,
+									Reason:             string(operatorv1.AllObjectsAvailable),
+									Message:            "All Objects are available",
+									ObservedGeneration: generation,
+								},
+							},
+						},
+					}
+					Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+
+					_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+						Name:      "manager",
+						Namespace: "",
+					}})
+					Expect(err).ShouldNot(HaveOccurred())
+					instance, err := GetManager(ctx, r.client, false, "")
+					Expect(err).ShouldNot(HaveOccurred())
+
+					Expect(instance.Status.Conditions).To(HaveLen(1))
+					Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+					Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+					Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+					Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+					Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+				})
+				It("should reconcile with empty tigerastatus conditions ", func() {
+					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+					ts := &operatorv1.TigeraStatus{
+						ObjectMeta: metav1.ObjectMeta{Name: "manager"},
+						Spec:       operatorv1.TigeraStatusSpec{},
+						Status:     operatorv1.TigeraStatusStatus{},
+					}
+					Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+
+					_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+						Name:      "manager",
+						Namespace: "",
+					}})
+					Expect(err).ShouldNot(HaveOccurred())
+					instance, err := GetManager(ctx, r.client, false, "")
+					Expect(err).ShouldNot(HaveOccurred())
+
+					Expect(instance.Status.Conditions).To(HaveLen(0))
+				})
+
+				It("should reconcile with creating new status condition  with multiple conditions as true", func() {
+					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+					ts := &operatorv1.TigeraStatus{
+						ObjectMeta: metav1.ObjectMeta{Name: "manager"},
+						Spec:       operatorv1.TigeraStatusSpec{},
+						Status: operatorv1.TigeraStatusStatus{
+							Conditions: []operatorv1.TigeraStatusCondition{
+								{
+									Type:               operatorv1.ComponentAvailable,
+									Status:             operatorv1.ConditionTrue,
+									Reason:             string(operatorv1.AllObjectsAvailable),
+									Message:            "All Objects are available",
+									ObservedGeneration: generation,
+								},
+								{
+									Type:               operatorv1.ComponentProgressing,
+									Status:             operatorv1.ConditionTrue,
+									Reason:             string(operatorv1.ResourceNotReady),
+									Message:            "Progressing Installation.operatorv1.tigera.io",
+									ObservedGeneration: generation,
+								},
+								{
+									Type:               operatorv1.ComponentDegraded,
+									Status:             operatorv1.ConditionTrue,
+									Reason:             string(operatorv1.ResourceUpdateError),
+									Message:            "Error resolving ImageSet for components",
+									ObservedGeneration: generation,
+								},
+							},
+						},
+					}
+					Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+
+					_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+						Name:      "manager",
+						Namespace: "",
+					}})
+					Expect(err).ShouldNot(HaveOccurred())
+					instance, err := GetManager(ctx, r.client, false, "")
+					Expect(err).ShouldNot(HaveOccurred())
+
+					Expect(instance.Status.Conditions).To(HaveLen(3))
+					Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+					Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+					Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+					Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+					Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+
+					Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
+					Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+					Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.ResourceNotReady)))
+					Expect(instance.Status.Conditions[1].Message).To(Equal("Progressing Installation.operatorv1.tigera.io"))
+					Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
+
+					Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
+					Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+					Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.ResourceUpdateError)))
+					Expect(instance.Status.Conditions[2].Message).To(Equal("Error resolving ImageSet for components"))
+					Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+				})
+
+				It("should reconcile with creating new status condition and toggle Available to true & others to false", func() {
+					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+					ts := &operatorv1.TigeraStatus{
+						ObjectMeta: metav1.ObjectMeta{Name: "manager"},
+						Spec:       operatorv1.TigeraStatusSpec{},
+						Status: operatorv1.TigeraStatusStatus{
+							Conditions: []operatorv1.TigeraStatusCondition{
+								{
+									Type:               operatorv1.ComponentAvailable,
+									Status:             operatorv1.ConditionTrue,
+									Reason:             string(operatorv1.AllObjectsAvailable),
+									Message:            "All Objects are available",
+									ObservedGeneration: generation,
+								},
+								{
+									Type:               operatorv1.ComponentProgressing,
+									Status:             operatorv1.ConditionFalse,
+									Reason:             string(operatorv1.NotApplicable),
+									Message:            "Not Applicable",
+									ObservedGeneration: generation,
+								},
+								{
+									Type:               operatorv1.ComponentDegraded,
+									Status:             operatorv1.ConditionFalse,
+									Reason:             string(operatorv1.NotApplicable),
+									Message:            "Not Applicable",
+									ObservedGeneration: generation,
+								},
+							},
+						},
+					}
+					Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+
+					_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+						Name:      "manager",
+						Namespace: "",
+					}})
+					Expect(err).ShouldNot(HaveOccurred())
+					instance, err := GetManager(ctx, r.client, false, "")
+					Expect(err).ShouldNot(HaveOccurred())
+
+					Expect(instance.Status.Conditions).To(HaveLen(3))
+
+					Expect(instance.Status.Conditions[0].Type).To(Equal("Ready"))
+					Expect(string(instance.Status.Conditions[0].Status)).To(Equal(string(operatorv1.ConditionTrue)))
+					Expect(instance.Status.Conditions[0].Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
+					Expect(instance.Status.Conditions[0].Message).To(Equal("All Objects are available"))
+					Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
+
+					Expect(instance.Status.Conditions[1].Type).To(Equal("Progressing"))
+					Expect(string(instance.Status.Conditions[1].Status)).To(Equal(string(operatorv1.ConditionFalse)))
+					Expect(instance.Status.Conditions[1].Reason).To(Equal(string(operatorv1.NotApplicable)))
+					Expect(instance.Status.Conditions[1].Message).To(Equal("Not Applicable"))
+					Expect(instance.Status.Conditions[1].ObservedGeneration).To(Equal(generation))
+
+					Expect(instance.Status.Conditions[2].Type).To(Equal("Degraded"))
+					Expect(string(instance.Status.Conditions[2].Status)).To(Equal(string(operatorv1.ConditionFalse)))
+					Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
+					Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
+					Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+				})
+			})
+
+			Context("Multi-cluster reconciliation", func() {
+				It("Should reconcile multi-cluster setup for a management cluster for a single tenant", func() {
+					// Create the ManagementCluster CR needed to configure
+					// a management cluster for a multi-cluster setup
+					managementCluster := &operatorv1.ManagementCluster{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "tigera-secure",
+						},
+					}
+					Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
+
+					// Create the Manager CR needed to jumpstart the reconciliation
+					// for the manager
+					err := c.Create(ctx, &operatorv1.Manager{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "tigera-secure",
+							Namespace: common.OperatorNamespace(),
+						},
+					})
+					Expect(err).NotTo(HaveOccurred())
+
+					// Reconcile Manager
+					_, err = r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+
+					deployment := appsv1.Deployment{
+						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "tigera-manager",
+							Namespace: render.ManagerNamespace,
+						},
+					}
+					clusterConnection := corev1.Secret{
+						TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.VoltronTunnelSecretName,
+							Namespace: common.OperatorNamespace(),
+						},
+					}
+					clusterConnectionInManagerNs := corev1.Secret{
+						TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.VoltronTunnelSecretName,
+							Namespace: render.ManagerNamespace,
+						},
+					}
+
+					// Ensure a deployment was created for the manager
+					err = test.GetResource(c, &deployment)
+					Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+					// Ensure the secret was created in tigera-operator namespace
+					// and that it configures voltron as a Subject Alternate Name
+					err = test.GetResource(c, &clusterConnection)
+					Expect(kerror.IsNotFound(err)).Should(BeFalse())
+					assertSANs(&clusterConnection, "voltron")
+
+					// Ensure the secret was created in tigera-manager namespace
+					// and that it configures voltron as a Subject Alternate Name
+					err = test.GetResource(c, &clusterConnectionInManagerNs)
+					Expect(kerror.IsNotFound(err)).Should(BeFalse())
+					assertSANs(&clusterConnectionInManagerNs, "voltron")
+				})
+
+				It("should upgrade a Voltron tunnel secret if previously owned by a different controller", func() {
+					// Older versions of the tigera-operator controlled this secret from the API server controller.
+					// However, only a single controller is allowed as an owner, so we need to properly clear the old
+					// one before setting the Manager CR as the new owner.
+					clusterConnection := corev1.Secret{
+						TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.VoltronTunnelSecretName,
+							Namespace: common.OperatorNamespace(),
+						},
+					}
+					clusterConnectionInManagerNs := clusterConnection
+					clusterConnectionInManagerNs.Namespace = render.ManagerNamespace
+
+					apiserver := &operatorv1.APIServer{
+						TypeMeta: metav1.TypeMeta{Kind: "APIServer", APIVersion: "operator.tigera.io/v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "tigera-secure",
+							UID:  "1234",
+						},
+					}
+					err := controllerutil.SetControllerReference(apiserver, &clusterConnection, scheme)
+					Expect(err).NotTo(HaveOccurred())
+					err = controllerutil.SetControllerReference(apiserver, &clusterConnectionInManagerNs, scheme)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(c.Create(ctx, &clusterConnection)).NotTo(HaveOccurred())
+					Expect(c.Create(ctx, &clusterConnectionInManagerNs)).NotTo(HaveOccurred())
+
+					// Run the controller. It should update the secret to be owned by the Manager CR.
+					// Create the ManagementCluster CR needed to configure
+					// a management cluster for a multi-cluster setup
+					managementCluster := &operatorv1.ManagementCluster{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "tigera-secure",
+						},
+					}
+					Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
+
+					// Create the Manager CR needed to jumpstart the reconciliation
+					// for the manager
+					manager := &operatorv1.Manager{
+						TypeMeta: metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "tigera-secure",
+							Namespace: common.OperatorNamespace(),
+						},
+					}
+					err = c.Create(ctx, manager)
+					Expect(err).NotTo(HaveOccurred())
+
+					// Reconcile Manager
+					_, err = r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+
+					// Check the owner reference on the secret has updated.
+					Expect(c.Get(ctx, types.NamespacedName{Name: render.VoltronTunnelSecretName, Namespace: common.OperatorNamespace()}, &clusterConnection)).NotTo(HaveOccurred())
+					Expect(len(clusterConnection.OwnerReferences)).To(Equal(1))
+					Expect(clusterConnection.OwnerReferences[0].Kind).To(Equal("Manager"))
+				})
+			})
+
+			Context("FIPS reconciliation", func() {
+				BeforeEach(func() {
+					fipsEnabled := operatorv1.FIPSModeEnabled
+					installation.Spec.FIPSMode = &fipsEnabled
+					Expect(c.Update(
+						ctx,
+						installation,
+					)).NotTo(HaveOccurred())
+				})
+				It("should not require presence of ElasticSearch ConfigMap", func() {
+					Expect(c.Delete(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+					elasticConfigMapKey := client.ObjectKey{
+						Name:      relasticsearch.ClusterConfigConfigMapName,
 						Namespace: common.OperatorNamespace(),
-					},
-				}
-				clusterConnectionInManagerNs := clusterConnection
-				clusterConnectionInManagerNs.Namespace = render.ManagerNamespace
+					}
+					elasticConfigMap := corev1.ConfigMap{}
+					Expect(c.Get(ctx, elasticConfigMapKey, &elasticConfigMap)).To(HaveOccurred())
 
-				apiserver := &operatorv1.APIServer{
-					TypeMeta: metav1.TypeMeta{Kind: "APIServer", APIVersion: "operator.tigera.io/v1"},
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "tigera-secure",
-						UID:  "1234",
-					},
-				}
-				err := controllerutil.SetControllerReference(apiserver, &clusterConnection, scheme)
-				Expect(err).NotTo(HaveOccurred())
-				err = controllerutil.SetControllerReference(apiserver, &clusterConnectionInManagerNs, scheme)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, &clusterConnection)).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, &clusterConnectionInManagerNs)).NotTo(HaveOccurred())
-
-				// Run the controller. It should update the secret to be owned by the Manager CR.
-				// Create the ManagementCluster CR needed to configure
-				// a management cluster for a multi-cluster setup
-				managementCluster := &operatorv1.ManagementCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "tigera-secure",
-					},
-				}
-				Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
-
-				// Create the Manager CR needed to jumpstart the reconciliation
-				// for the manager
-				manager := &operatorv1.Manager{
-					TypeMeta: metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-secure",
-						Namespace: common.OperatorNamespace(),
-					},
-				}
-				err = c.Create(ctx, manager)
-				Expect(err).NotTo(HaveOccurred())
-
-				// Reconcile Manager
-				_, err = r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// Check the owner reference on the secret has updated.
-				Expect(c.Get(ctx, types.NamespacedName{Name: render.VoltronTunnelSecretName, Namespace: common.OperatorNamespace()}, &clusterConnection)).NotTo(HaveOccurred())
-				Expect(len(clusterConnection.OwnerReferences)).To(Equal(1))
-				Expect(clusterConnection.OwnerReferences[0].Kind).To(Equal("Manager"))
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+				})
 			})
 		})
 
-		Context("Multi-tenant/namespaced reconciliation", func() {
+		Context("multi-tenant", func() {
 			tenantANamespace := "tenant-a"
 			tenantBNamespace := "tenant-b"
 			BeforeEach(func() {
+
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("SetMetaData", mock.Anything).Return()
+				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+				mockStatus.On("AddDeployments", mock.Anything).Return()
+				mockStatus.On("ReadyToMonitor")
+				mockStatus.On("ClearDegraded")
+				mockStatus.On("IsAvailable").Return(true)
+
 				r.multiTenant = true
+				r.licenseAPIReady.MarkAsReady()
+				r.tierWatchReady.MarkAsReady()
+
 				// Create the Tenant resources for tenant-a and tenant-b.
 				tenantA := &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1096,7 +1139,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			})
 
-			It("Should reconcile only if a namespace is provided.", func() {
+			It("should reconcile only if a namespace is provided", func() {
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
@@ -1241,30 +1284,6 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(tenantARoutes.Data).ToNot(BeEmpty())
 
 				Expect(kerror.IsNotFound(test.GetResource(c, &tenantBRoutes))).Should(BeTrue())
-			})
-
-		})
-
-		Context("FIPS reconciliation", func() {
-			BeforeEach(func() {
-				fipsEnabled := operatorv1.FIPSModeEnabled
-				installation.Spec.FIPSMode = &fipsEnabled
-				Expect(c.Update(
-					ctx,
-					installation,
-				)).NotTo(HaveOccurred())
-			})
-			It("should not require presence of ElasticSearch ConfigMap", func() {
-				Expect(c.Delete(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-				elasticConfigMapKey := client.ObjectKey{
-					Name:      relasticsearch.ClusterConfigConfigMapName,
-					Namespace: common.OperatorNamespace(),
-				}
-				elasticConfigMap := corev1.ConfigMap{}
-				Expect(c.Get(ctx, elasticConfigMapKey, &elasticConfigMap)).To(HaveOccurred())
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})
 	})

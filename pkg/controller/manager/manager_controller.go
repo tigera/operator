@@ -251,7 +251,7 @@ func GetManager(ctx context.Context, cli client.Client, mt bool, ns string) (*op
 func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Perform any common preparation that needs to be done for single-tenant and multi-tenant scenarios.
 	helper := utils.NewNamespaceHelper(r.multiTenant, render.ManagerNamespace, request.Namespace)
-	logc := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
+	logc := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace(), "multi-tenant", r.multiTenant)
 	logc.Info("Reconciling Manager")
 
 	// We skip requests without a namespace specified in multi-tenant setups.

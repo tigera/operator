@@ -370,6 +370,35 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			mockStatus.On("SetDegraded", mock.Anything, mock.Anything).Return()
 		})
 
+		It("should Reconcile intrusion detection controller deployment ", func() {
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			namespace := corev1.Namespace{
+				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			}
+			Expect(c.Get(ctx, client.ObjectKey{
+				Name: render.IntrusionDetectionNamespace,
+			}, &namespace)).NotTo(HaveOccurred())
+
+			tigeraCABundle := corev1.ConfigMap{
+				TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			}
+			Expect(c.Get(ctx, client.ObjectKey{
+				Name:      "tigera-ca-bundle",
+				Namespace: render.IntrusionDetectionNamespace,
+			}, &tigeraCABundle)).NotTo(HaveOccurred())
+
+			deployment := appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{},
+			}
+			Expect(c.Get(ctx, client.ObjectKey{
+				Name:      render.IntrusionDetectionControllerName,
+				Namespace: render.IntrusionDetectionNamespace,
+			}, &deployment)).NotTo(HaveOccurred())
+		})
+
 		It("should Reconcile with default values for intrusion detection resource", func() {
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())

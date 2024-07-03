@@ -124,7 +124,12 @@ type esClient struct {
 }
 
 func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEndpoint string, external bool) (ElasticClient, error) {
-	user, password, root, err := getClientCredentials(client, ctx)
+	// To create the elasticsearch client, we need a few things:
+	// - The elasticsearch endpoint itself. This varies for internal vs. external.
+	// - The root CA to use to validate the elasticsearch certificate.
+	// - The username and password to use to authenticate to elasticsearch.
+	// - If mTLS is enabled, the client certificate to present to elasticsearch.
+	user, password, root, err := getClientCredentials(ctx, client, external)
 	if err != nil {
 		return nil, err
 	}
@@ -144,10 +149,6 @@ func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEnd
 			return nil, err
 		}
 		clientCertificates = []tls.Certificate{cert}
-		root, err = getESRoots(ctx, client, logstorage.ExternalESPublicCertName)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	// If we're using mTLS, or internal ES, we need to provide a custom HTTP client.
@@ -577,7 +578,7 @@ func calculateRolloverAge(retention int) string {
 
 // getClientCredentials gets the client credentials used by the operator to talk to Elasticsearch. The operator
 // uses the ES admin credentials in order to provision users and ILM policies.
-func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
+func getClientCredentials(ctx context.Context, client client.Client, externalElastic bool) (string, string, *x509.CertPool, error) {
 	esSecret := &corev1.Secret{}
 	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchAdminUserSecret, Namespace: common.OperatorNamespace()}, esSecret); err != nil {
 		return "", "", nil, err
@@ -588,7 +589,11 @@ func getClientCredentials(client client.Client, ctx context.Context) (string, st
 	password := string(esSecret.Data[username])
 
 	// Determine the CA to use for validating the Elasticsearch server certificate.
-	roots, err := getESRoots(ctx, client, render.TigeraElasticsearchInternalCertSecret)
+	secretName := render.TigeraElasticsearchInternalCertSecret
+	if externalElastic {
+		secretName = render.TigeraElasticsearchInternalCertSecret
+	}
+	roots, err := getESRoots(ctx, client, secretName)
 	if err != nil {
 		return "", "", nil, err
 	}

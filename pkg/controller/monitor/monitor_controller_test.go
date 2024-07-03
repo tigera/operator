@@ -58,7 +58,7 @@ var _ = Describe("Monitor controller tests", func() {
 		scheme             *runtime.Scheme
 		installation       *operatorv1.Installation
 		certificateManager certificatemanager.CertificateManager
-		monitorCR *operatorv1.Monitor
+		monitorCR          *operatorv1.Monitor
 	)
 
 	BeforeEach(func() {

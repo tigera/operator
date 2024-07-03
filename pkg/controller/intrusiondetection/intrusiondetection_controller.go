@@ -471,7 +471,15 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		BindNamespaces:               namespaces,
 		Tenant:                       tenant,
 		ExternalElastic:              r.elasticExternal,
+		SyslogForwardingIsEnabled:    syslogForwardingIsEnabled(lc),
 	}
+	intrusionDetectionNamespaceComponent := render.IntrusionDetectionNamespaceComponent(&render.IntrusionDetectionNamespaceConfiguration{
+		KubernetesProvider:        network.KubernetesProvider,
+		Namespace:                 helper.InstallNamespace(),
+		Tenant:                    tenant,
+		HasNoLicense:              hasNoLicense,
+		SyslogForwardingIsEnabled: syslogForwardingIsEnabled(lc),
+	})
 	intrusionDetectionComponent := render.IntrusionDetection(intrusionDetectionCfg)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, intrusionDetectionComponent); err != nil {
@@ -491,7 +499,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	components := []render.Component{
-		intrusionDetectionComponent,
+		intrusionDetectionNamespaceComponent,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       helper.InstallNamespace(),
 			TruthNamespace:  helper.TruthNamespace(),
@@ -501,6 +509,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			},
 			TrustedBundle: bundleMaker,
 		}),
+		intrusionDetectionComponent,
 	}
 
 	if !r.multiTenant {
@@ -580,6 +589,26 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+// Determine whether this component's configuration has syslog forwarding enabled or not.
+// Look inside LogCollector spec for whether or not Syslog log type SyslogLogIDSEvents
+// exists. If it does, then we need to turn on forwarding for IDS event logs.
+func syslogForwardingIsEnabled(logCollector *operatorv1.LogCollector) bool {
+	if logCollector != nil && logCollector.Spec.AdditionalStores != nil {
+		syslog := logCollector.Spec.AdditionalStores.Syslog
+		if syslog != nil {
+			if syslog.LogTypes != nil {
+				for _, t := range syslog.LogTypes {
+					switch t {
+					case operatorv1.SyslogLogIDSEvents:
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
 }
 
 // fillDefaults updates the IntrusionDetection resource with defaults if

@@ -15,6 +15,7 @@
 package monitor
 
 import (
+	"bytes"
 	"context"
 
 	. "github.com/onsi/ginkgo"
@@ -29,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -42,18 +44,23 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Monitor controller tests", func() {
-	var cli client.Client
-	var ctx context.Context
-	var mockStatus *status.MockStatus
-	var r ReconcileMonitor
-	var scheme *runtime.Scheme
-	var installation *operatorv1.Installation
-	var monitorCR *operatorv1.Monitor
+	var (
+		cli                client.Client
+		ctx                context.Context
+		mockStatus         *status.MockStatus
+		r                  ReconcileMonitor
+		scheme             *runtime.Scheme
+		installation       *operatorv1.Installation
+		certificateManager certificatemanager.CertificateManager
+		monitorCR          *operatorv1.Monitor
+	)
 
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
@@ -118,9 +125,10 @@ var _ = Describe("Monitor controller tests", func() {
 
 		// Create a certificate manager and provision the CA to unblock the controller. Generally this would be done by
 		// the cluster CA controller and is a prerequisite for the monitor controller to function.
-		cm, err := certificatemanager.Create(cli, &installation.Spec, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		var err error
+		certificateManager, err = certificatemanager.Create(cli, &installation.Spec, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
-		Expect(cli.Create(ctx, cm.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		// Mark that watches were successful.
 		r.prometheusReady.MarkAsReady()
@@ -156,6 +164,28 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+		})
+
+		It("should create Prometheus related resources even when a cert with missing key usages is configured for other components", func() {
+			By("Creating a fluentd certificate secret without all necessary usages")
+			cryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
+			Expect(err).NotTo(HaveOccurred())
+			tlsCfg, err := cryptoCA.MakeServerCertForDuration(sets.NewString("test"), tls.DefaultCertificateDuration, tls.SetServerAuth)
+			Expect(err).NotTo(HaveOccurred())
+			keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
+			Expect(tlsCfg.WriteCertConfig(crtContent, keyContent)).NotTo(HaveOccurred())
+			privateKeyPEM, certificatePEM := keyContent.Bytes(), crtContent.Bytes()
+			fluentdCert, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			fluentdSecret := fluentdCert.Secret(common.OperatorNamespace())
+			fluentdSecret.Data[corev1.TLSCertKey] = certificatePEM
+			fluentdSecret.Data[corev1.TLSPrivateKeyKey] = privateKeyPEM
+			Expect(err).NotTo(HaveOccurred())
+			Expect(r.client.Create(ctx, fluentdSecret)).NotTo(HaveOccurred())
+
+			By("reconciling the controller after a bad secret was created, we expect no problems, because bad secrets should be skipped")
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("should render allow-tigera policy when tier and policy watch are ready", func() {

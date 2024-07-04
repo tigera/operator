@@ -308,8 +308,15 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		if err == nil {
 			trustedBundle.AddCertificates(certificate)
 		} else {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error fetching TLS certificate", err, reqLogger)
-			return reconcile.Result{}, err
+			if certificatemanager.IsCertExtKeyUsageError(err) {
+				// This secret is missing required key usages. Another controller will need to replace this secret with a
+				// new valid secret, before this controller will read and use it. The other controller may depend on this
+				// controller completing successfully. Therefore, we skip and continue.
+				log.Info(fmt.Sprintf("skipping %s/%s secret it will be added when it is updated: %s", common.OperatorNamespace(), certificateName, err))
+			} else {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error fetching TLS certificate", err, reqLogger)
+				return reconcile.Result{}, err
+			}
 		}
 	}
 	certificateManager.AddToStatusManager(r.status, common.TigeraPrometheusNamespace)

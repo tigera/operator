@@ -469,7 +469,7 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 		monitor.PrometheusClientTLSSecretName: common.OperatorNamespace(),
 
 		// Get certificate for es-proxy, which Linseed and es-gateway need to trust.
-		render.ManagerTLSSecretName: helper.TruthNamespace(),
+		render.ManagerInternalTLSSecretName: helper.TruthNamespace(),
 
 		// Get certificate for fluentd, which Linseed needs to trust in a standalone or management cluster.
 		render.FluentdPrometheusTLSSecretName: common.OperatorNamespace(),
@@ -521,8 +521,15 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 		certNamespace := certs[certName]
 		cert, err := cm.GetCertificate(r.client, certName, certNamespace)
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, log)
-			return nil, err
+			if certificatemanager.IsCertExtKeyUsageError(err) {
+				// This secret is missing required key usages. Another controller will need to replace this secret with a
+				// new valid secret, before this controller will read and use it. The other controller may depend on this
+				// controller completing successfully. Therefore, we skip and continue.
+				log.Info(fmt.Sprintf("skipping %s/%s secret it will be added when it is updated: %s", common.OperatorNamespace(), certName, err))
+			} else {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, log)
+				return nil, err
+			}
 		} else if cert == nil {
 			msg := fmt.Sprintf("%s/%s secret not available yet, will add it if/when it becomes available", certNamespace, certName)
 			log.Info(msg)

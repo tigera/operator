@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -109,7 +110,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		resources, _ := component.Objects()
 
 		expected := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-intrusion-detection"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
@@ -277,11 +277,11 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}
 		cfg.OpenShift = false
 
+		cfg.SyslogForwardingIsEnabled = true
 		component := render.IntrusionDetection(cfg)
 		resources, _ := component.Objects()
 
 		expected := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-intrusion-detection"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
@@ -355,7 +355,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		resources, _ := component.Objects()
 
 		expected := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-intrusion-detection"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
@@ -509,7 +508,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		toCreate, toRemove := component.Objects()
 
 		expected := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-intrusion-detection"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
@@ -721,6 +719,32 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 	})
 
+	It("should NOT render impersonation permissions as part of intrusion detection ClusterRole", func() {
+		component := render.IntrusionDetection(cfg)
+		Expect(component).NotTo(BeNil())
+		resources, _ := component.Objects()
+		cr := rtest.GetResource(resources, render.IntrusionDetectionControllerName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		expectedRules := []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts"},
+				Verbs:         []string{"impersonate"},
+				ResourceNames: []string{render.IntrusionDetectionControllerName},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+				ResourceNames: []string{
+					serviceaccount.AllServiceAccountsGroup,
+					"system:authenticated",
+					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.IntrusionDetectionNamespace),
+				},
+			},
+		}
+		Expect(cr.Rules).NotTo(ContainElements(expectedRules))
+	})
+
 	Context("multi-tenant rendering", func() {
 		tenantANamespace := "tenant-a-ns"
 		tenantBNamespace := "tenant-b-ns"
@@ -752,6 +776,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
 				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-intrusion-detection-managed-cluster-access", Namespace: tenantANamespace}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
 			}
 			rtest.ExpectResources(toCreate, expected)
@@ -816,6 +841,58 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", tenantANamespace)}))
 
 		})
+
+		It("should render impersonation permissions as part of tigera-intrusion-detection ClusterRole", func() {
+			component := render.IntrusionDetection(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			cr := rtest.GetResource(resources, render.IntrusionDetectionControllerName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedRules := []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"serviceaccounts"},
+					Verbs:         []string{"impersonate"},
+					ResourceNames: []string{render.IntrusionDetectionControllerName},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"groups"},
+					Verbs:     []string{"impersonate"},
+					ResourceNames: []string{
+						serviceaccount.AllServiceAccountsGroup,
+						"system:authenticated",
+						fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, render.IntrusionDetectionNamespace),
+					},
+				},
+			}
+			Expect(cr.Rules).To(ContainElements(expectedRules))
+		})
+
+		It("should render managed cluster permissions as part of tigera-intrusion-detection-managed-clusters-access ClusterRole", func() {
+			component := render.IntrusionDetection(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			rb := rtest.GetResource(resources, render.MultiTenantManagedClustersAccessClusterRoleBindingName, tenantA.Namespace, rbacv1.GroupName, "v1", "RoleBinding").(*rbacv1.RoleBinding)
+			Expect(rb.RoleRef.Kind).To(Equal("ClusterRole"))
+			Expect(rb.RoleRef.Name).To(Equal(render.MultiTenantManagedClustersAccessClusterRoleName))
+			Expect(rb.Subjects).To(ContainElements([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      render.IntrusionDetectionControllerName,
+					Namespace: render.IntrusionDetectionNamespace,
+				},
+			}))
+		})
+
+		It("should render NOT render web hooks inside the management cluster", func() {
+			component := render.IntrusionDetection(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			deployment := rtest.GetResource(resources, render.IntrusionDetectionControllerName, tenantA.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(deployment.Spec.Template.Spec.Containers[0].Name).To(Equal("controller"))
+		})
+
 	})
 })
 

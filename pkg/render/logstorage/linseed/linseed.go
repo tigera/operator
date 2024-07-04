@@ -620,7 +620,7 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      render.IntrusionDetectionSourceEntityRule,
+			Source:      networkpolicyHelper.IntrusionDetectionSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{

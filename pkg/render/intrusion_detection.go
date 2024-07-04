@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -95,15 +95,16 @@ func IntrusionDetection(cfg *IntrusionDetectionConfiguration) Component {
 
 // IntrusionDetectionConfiguration contains all the config information needed to render the component.
 type IntrusionDetectionConfiguration struct {
-	IntrusionDetection *operatorv1.IntrusionDetection
-	LogCollector       *operatorv1.LogCollector
-	Installation       *operatorv1.InstallationSpec
-	PullSecrets        []*corev1.Secret
-	OpenShift          bool
-	ClusterDomain      string
-	ESLicenseType      ElasticsearchLicenseType
-	ManagedCluster     bool
-	ManagementCluster  bool
+	IntrusionDetection        *operatorv1.IntrusionDetection
+	LogCollector              *operatorv1.LogCollector
+	Installation              *operatorv1.InstallationSpec
+	PullSecrets               []*corev1.Secret
+	OpenShift                 bool
+	ClusterDomain             string
+	ESLicenseType             ElasticsearchLicenseType
+	ManagedCluster            bool
+	ManagementCluster         bool
+	SyslogForwardingIsEnabled bool
 
 	HasNoLicense                 bool
 	TrustedCertBundle            certificatemanagement.TrustedBundleRO
@@ -149,18 +150,9 @@ func (c *intrusionDetectionComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Object) {
-	// Configure pod security standard. If syslog forwarding is enabled, we
-	// need hostpath volumes which require a privileged PSS.
-	pss := PSSRestricted
-	if c.syslogForwardingIsEnabled() {
-		pss = PSSPrivileged
-	}
-
 	objs := []client.Object{}
-	if !c.cfg.Tenant.MultiTenant() {
-		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
-		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, PodSecurityStandard(pss)))
 
+	if !c.cfg.Tenant.MultiTenant() {
 		// GlobalAlertTemplates are not used in multi-tenant management clusters.
 		objs = append(objs, c.globalAlertTemplates()...)
 	}
@@ -374,7 +366,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 
 	if c.cfg.OpenShift {
 		sccName := securitycontextconstraints.NonRootV2
-		if c.syslogForwardingIsEnabled() {
+		if c.cfg.SyslogForwardingIsEnabled {
 			sccName = securitycontextconstraints.Privileged
 		}
 		rules = append(rules, rbacv1.PolicyRule{
@@ -503,7 +495,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 	}
 	// If syslog forwarding is enabled then set the necessary hostpath volume to write
 	// logs for Fluentd to access.
-	if c.syslogForwardingIsEnabled() {
+	if c.cfg.SyslogForwardingIsEnabled {
 		dirOrCreate := corev1.HostPathDirectoryOrCreate
 		volumes = append(volumes, corev1.Volume{
 			Name: "var-log-calico",
@@ -659,7 +651,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	// write logs for Fluentd.
 	volumeMounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
 	volumeMounts = append(volumeMounts, c.cfg.IntrusionDetectionCertSecret.VolumeMount(c.SupportedOSType()))
-	if c.syslogForwardingIsEnabled() {
+	if c.cfg.SyslogForwardingIsEnabled {
 		envs = append(envs,
 			corev1.EnvVar{Name: "IDS_ENABLE_EVENT_FORWARDING", Value: "true"},
 		)
@@ -700,26 +692,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		SecurityContext: sc,
 		VolumeMounts:    volumeMounts,
 	}
-}
-
-// Determine whether this component's configuration has syslog forwarding enabled or not.
-// Look inside LogCollector spec for whether or not Syslog log type SyslogLogIDSEvents
-// exists. If it does, then we need to turn on forwarding for IDS event logs.
-func (c *intrusionDetectionComponent) syslogForwardingIsEnabled() bool {
-	if c.cfg.LogCollector != nil && c.cfg.LogCollector.Spec.AdditionalStores != nil {
-		syslog := c.cfg.LogCollector.Spec.AdditionalStores.Syslog
-		if syslog != nil {
-			if syslog.LogTypes != nil {
-				for _, t := range syslog.LogTypes {
-					switch t {
-					case operatorv1.SyslogLogIDSEvents:
-						return true
-					}
-				}
-			}
-		}
-	}
-	return false
 }
 
 func syslogEventsForwardingVolumeMount() corev1.VolumeMount {
@@ -1242,4 +1214,55 @@ func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRoleBinding() 
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-psp"},
 	}
+}
+
+func IntrusionDetectionNamespaceComponent(cfg *IntrusionDetectionNamespaceConfiguration) Component {
+	return &intrusionDetectionNamespaceComponent{
+		cfg: cfg,
+	}
+}
+
+type intrusionDetectionNamespaceComponent struct {
+	cfg *IntrusionDetectionNamespaceConfiguration
+}
+
+func (c *intrusionDetectionNamespaceComponent) Ready() bool {
+	return true
+}
+
+type IntrusionDetectionNamespaceConfiguration struct {
+	Tenant                    *operatorv1.Tenant
+	SyslogForwardingIsEnabled bool
+	Namespace                 string
+	KubernetesProvider        operatorv1.Provider
+	HasNoLicense              bool
+}
+
+func (c *intrusionDetectionNamespaceComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	return nil
+}
+
+func (c *intrusionDetectionNamespaceComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
+}
+
+func (c *intrusionDetectionNamespaceComponent) Objects() ([]client.Object, []client.Object) {
+	// Configure pod security standard. If syslog forwarding is enabled, we
+	// need hostpath volumes which require a privileged PSS.
+	pss := PSSRestricted
+	if c.cfg.SyslogForwardingIsEnabled {
+		pss = PSSPrivileged
+	}
+
+	objs := []client.Object{}
+	if !c.cfg.Tenant.MultiTenant() {
+		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
+		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.KubernetesProvider, PodSecurityStandard(pss)))
+	}
+
+	if c.cfg.HasNoLicense {
+		return nil, objs
+	}
+
+	return objs, nil
 }

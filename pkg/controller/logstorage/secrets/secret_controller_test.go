@@ -15,6 +15,7 @@
 package secrets
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -32,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -46,6 +48,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/logstorage"
@@ -125,12 +128,13 @@ func NewMultiTenantSecretControllerWithShims(
 
 var _ = Describe("LogStorage Secrets controller", func() {
 	var (
-		cli        client.Client
-		readyFlag  *utils.ReadyFlag
-		scheme     *runtime.Scheme
-		ctx        context.Context
-		install    *operatorv1.Installation
-		mockStatus *status.MockStatus
+		cli                client.Client
+		readyFlag          *utils.ReadyFlag
+		scheme             *runtime.Scheme
+		ctx                context.Context
+		install            *operatorv1.Installation
+		mockStatus         *status.MockStatus
+		certificateManager certificatemanager.CertificateManager
 	)
 
 	BeforeEach(func() {
@@ -179,9 +183,10 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		mockStatus.On("ClearDegraded")
 
 		// Create a CA secret for the test, and create its KeyPair.
-		cm, err := certificatemanager.Create(cli, &install.Spec, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		var err error
+		certificateManager, err = certificatemanager.Create(cli, &install.Spec, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).ShouldNot(HaveOccurred())
-		Expect(cli.Create(ctx, cm.KeyPair().Secret(common.OperatorNamespace()))).ShouldNot(HaveOccurred())
+		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).ShouldNot(HaveOccurred())
 	})
 
 	It("should wait for the cluster CA to be provisioned", func() {
@@ -256,6 +261,37 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		// For this test, we only expect the tigera-operator CA to be included in the bundle as we haven't created any of the
 		// other upstream certificates this controller monitors yet.
 		rtest.ExpectBundleContents(bundleKibana, types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()})
+	})
+
+	It("should not trip up when a cert with missing key usages is configured for other components", func() {
+
+		// Create a LogStorage instance with a default configuration.
+		ls := &operatorv1.LogStorage{}
+		ls.Name = "tigera-secure"
+		ls.Status.State = operatorv1.TigeraStatusReady
+		CreateLogStorage(cli, ls)
+
+		By("Creating a fluentd certificate secret without all necessary usages")
+		cryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
+		Expect(err).NotTo(HaveOccurred())
+		tlsCfg, err := cryptoCA.MakeServerCertForDuration(sets.NewString("test"), tls.DefaultCertificateDuration, tls.SetServerAuth)
+		Expect(err).NotTo(HaveOccurred())
+		keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
+		Expect(tlsCfg.WriteCertConfig(crtContent, keyContent)).NotTo(HaveOccurred())
+		privateKeyPEM, certificatePEM := keyContent.Bytes(), crtContent.Bytes()
+		fluentdCert, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+		fluentdSecret := fluentdCert.Secret(common.OperatorNamespace())
+		fluentdSecret.Data[corev1.TLSCertKey] = certificatePEM
+		fluentdSecret.Data[corev1.TLSPrivateKeyKey] = privateKeyPEM
+		Expect(err).NotTo(HaveOccurred())
+		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(r.client.Create(ctx, fluentdSecret)).NotTo(HaveOccurred())
+
+		By("reconciling the controller after a bad secret was created, we expect no problems, because bad secrets should be skipped")
+		_, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("test that LogStorage reconciles if the user-supplied certs have any DNS names", func() {

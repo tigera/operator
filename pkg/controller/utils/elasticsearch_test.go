@@ -20,15 +20,30 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	elastic "github.com/olivere/elastic/v7"
-
+	"github.com/olivere/elastic/v7"
+	apps "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage"
+	"github.com/tigera/operator/pkg/tls"
 )
 
 const (
@@ -39,6 +54,99 @@ const (
 var newPolicies bool
 var updateToReadonly bool
 var _ = Describe("Elasticsearch tests", func() {
+	Context("Create elasticsearch client", func() {
+		var (
+			c      client.Client
+			ctx    context.Context
+			scheme *runtime.Scheme
+		)
+
+		BeforeEach(func() {
+			// Create a Kubernetes client.
+			scheme = runtime.NewScheme()
+			err := apis.AddToScheme(scheme)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+
+			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+			ctx = context.Background()
+
+			Expect(c.Create(ctx, &operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			})).ShouldNot(HaveOccurred())
+		})
+
+		It("creates an client for internal elastic", func() {
+			Expect(c.Create(ctx, &v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Namespace: common.OperatorNamespace(), Name: render.ElasticsearchAdminUserSecret},
+				Data:       map[string][]byte{"elastic": []byte("anyPass")},
+			})).ShouldNot(HaveOccurred())
+
+			esInternalCert, err := secret.CreateTLSSecret(
+				nil,
+				render.TigeraElasticsearchInternalCertSecret,
+				common.OperatorNamespace(),
+				"tls.key",
+				"tls.crt",
+				tls.DefaultCertificateDuration,
+				nil,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, esInternalCert)).ShouldNot(HaveOccurred())
+
+			mockServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writer.WriteHeader(http.StatusOK)
+			}))
+			defer mockServer.Close()
+
+			_, err = NewElasticClient(c, ctx, mockServer.URL, false)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("creates an client for external elastic", func() {
+			Expect(c.Create(ctx, &v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Namespace: common.OperatorNamespace(), Name: render.ElasticsearchAdminUserSecret},
+				Data:       map[string][]byte{"tigera-mgmt": []byte("anyPass")},
+			})).ShouldNot(HaveOccurred())
+
+			esExternalCert, err := secret.CreateTLSSecret(
+				nil,
+				logstorage.ExternalESPublicCertName,
+				common.OperatorNamespace(),
+				"tls.key",
+				"tls.crt",
+				tls.DefaultCertificateDuration,
+				nil,
+				"elastic.tigera.io",
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, esExternalCert)).ShouldNot(HaveOccurred())
+
+			clientCert, err := secret.CreateTLSSecret(
+				nil,
+				logstorage.ExternalCertsSecret,
+				common.OperatorNamespace(),
+				"client.key",
+				"client.crt",
+				tls.DefaultCertificateDuration,
+				nil,
+			)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(c.Create(ctx, clientCert)).ShouldNot(HaveOccurred())
+
+			mockServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writer.WriteHeader(http.StatusOK)
+			}))
+			defer mockServer.Close()
+
+			_, err = NewElasticClient(c, ctx, mockServer.URL, true)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
 	Context("ILM", func() {
 		var (
 			eClient     *esClient

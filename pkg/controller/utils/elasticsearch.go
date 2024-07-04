@@ -584,15 +584,25 @@ func getClientCredentials(ctx context.Context, client client.Client, externalEla
 		return "", "", nil, err
 	}
 
-	// Extract the password from the secret. The username is always "elastic".
-	username := "elastic"
-	password := string(esSecret.Data[username])
+	// Extract the username and password from the secret
+	var username, password string
+	if len(esSecret.Data) != 1 {
+		return "", "", nil, fmt.Errorf("secret does not contain only 1 entry for credentials")
+	}
+	for k, v := range esSecret.Data {
+		username = k
+		password = string(v)
+	}
+	if username == "" || password == "" {
+		return "", "", nil, fmt.Errorf("username or password is empty")
+	}
 
 	// Determine the CA to use for validating the Elasticsearch server certificate.
 	secretName := render.TigeraElasticsearchInternalCertSecret
 	if externalElastic {
 		secretName = logstorage.ExternalESPublicCertName
 	}
+
 	roots, err := getESRoots(ctx, client, secretName)
 	if err != nil {
 		return "", "", nil, err

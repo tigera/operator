@@ -48,6 +48,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/logstorage"
@@ -273,7 +274,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		By("Creating a fluentd certificate secret without all necessary usages")
 		cryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
 		Expect(err).NotTo(HaveOccurred())
-		tlsCfg, err := cryptoCA.MakeServerCertForDuration(sets.NewString("test"), rmeta.DefaultCertificateDuration, tls.SetServerAuth)
+		tlsCfg, err := cryptoCA.MakeServerCertForDuration(sets.NewString("test"), tls.DefaultCertificateDuration, tls.SetServerAuth)
 		Expect(err).NotTo(HaveOccurred())
 		keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
 		Expect(tlsCfg.WriteCertConfig(crtContent, keyContent)).NotTo(HaveOccurred())

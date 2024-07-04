@@ -591,7 +591,7 @@ func getClientCredentials(ctx context.Context, client client.Client, externalEla
 	// Determine the CA to use for validating the Elasticsearch server certificate.
 	secretName := render.TigeraElasticsearchInternalCertSecret
 	if externalElastic {
-		secretName = render.TigeraElasticsearchInternalCertSecret
+		secretName = logstorage.ExternalESPublicCertName
 	}
 	roots, err := getESRoots(ctx, client, secretName)
 	if err != nil {

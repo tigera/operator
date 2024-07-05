@@ -424,6 +424,15 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
+	// Determine the namespaces to which we must bind the cluster role.
+	// For multi-tenant, the cluster role will be bind to the service account in the tenant namespace
+	// For single-tenant or zero-tenant, the cluster role will be bind to the service account in the tigera-policy-recommendation
+	// namespace
+	bindNamespaces, err := helper.TenantNamespaces(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -455,6 +464,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		ClusterDomain:               r.clusterDomain,
 		HasNoLicense:                hasNoLicense,
 		Namespace:                   helper.InstallNamespace(),
+		BindingNamespaces:           bindNamespaces,
 		Tenant:                      tenant,
 		Compliance:                  instance,
 		ExternalElastic:             r.externalElastic,

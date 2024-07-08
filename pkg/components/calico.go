@@ -59,14 +59,14 @@ var (
 	}
 
 	ComponentCalicoNode = component{
-		Version:  "nft",
-		Image:    "caseydavenport/node",
+		Version:  "master",
+		Image:    "calico/node",
 		Registry: "",
 	}
 
 	ComponentCalicoNodeFIPS = component{
-		Version:  "nft-fips",
-		Image:    "caseydavenport/node",
+		Version:  "master-fips",
+		Image:    "calico/node",
 		Registry: "",
 	}
 
@@ -77,14 +77,14 @@ var (
 	}
 
 	ComponentCalicoTypha = component{
-		Version:  "nft",
-		Image:    "caseydavenport/typha",
+		Version:  "master",
+		Image:    "calico/typha",
 		Registry: "",
 	}
 
 	ComponentCalicoTyphaFIPS = component{
-		Version:  "nft-fips",
-		Image:    "caseydavenport/typha",
+		Version:  "master-fips",
+		Image:    "calico/typha",
 		Registry: "",
 	}
 

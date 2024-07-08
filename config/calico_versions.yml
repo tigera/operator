@@ -4,11 +4,9 @@ components:
   libcalico-go:
     version: master
   typha:
-    image: caseydavenport/typha
-    version: nft
+    version: master
   calico/node:
-    image: caseydavenport/node
-    version: nft
+    version: master
   calico/cni:
     version: master
   calico/node-windows:

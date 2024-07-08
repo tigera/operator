@@ -1146,6 +1146,69 @@ var _ = Describe("compliance rendering tests", func() {
 			}
 		})
 
+		It("should bind multiple tenant to clusterrole", func() {
+			cfg.Namespace = tenantANamespace
+			cfg.ExternalElastic = true
+			cfg.BindingNamespaces = []string{tenantANamespace}
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tenantA",
+					Namespace: tenantANamespace,
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a-id",
+				},
+			}
+			tenantACompliance, err := render.Compliance(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			tenantAResources, _ := tenantACompliance.Objects()
+
+			rbTenantA := rtest.GetResource(tenantAResources, render.ComplianceServerServiceAccount, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(rbTenantA.RoleRef.Kind).To(Equal("ClusterRole"))
+			Expect(rbTenantA.RoleRef.Name).To(Equal(render.ComplianceServerServiceAccount))
+			Expect(rbTenantA.Subjects).To(ContainElements([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      render.ComplianceServerServiceAccount,
+					Namespace: tenantANamespace,
+				},
+			}))
+
+			cfg.Namespace = tenantBNamespace
+			cfg.BindingNamespaces = []string{tenantANamespace, tenantBNamespace}
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tenantB",
+					Namespace: tenantBNamespace,
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-b-id",
+				},
+			}
+			tenantBCompliance, err := render.Compliance(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			tenantBResources, _ := tenantBCompliance.Objects()
+
+			rbAllTenants := rtest.GetResource(tenantBResources, render.ComplianceServerServiceAccount, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(rbAllTenants.RoleRef.Kind).To(Equal("ClusterRole"))
+			Expect(rbAllTenants.RoleRef.Name).To(Equal(render.ComplianceServerServiceAccount))
+			Expect(rbAllTenants.Subjects).To(ContainElements([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      render.ComplianceServerServiceAccount,
+					Namespace: tenantANamespace,
+				},
+				{
+					Kind:      "ServiceAccount",
+					Name:      render.ComplianceServerServiceAccount,
+					Namespace: tenantBNamespace,
+				},
+			}))
+
+		})
+
 		It("should render multi-tenant environment variables", func() {
 			cfg.Namespace = tenantANamespace
 			cfg.ExternalElastic = true

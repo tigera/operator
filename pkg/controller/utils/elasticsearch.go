@@ -32,6 +32,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
@@ -109,7 +110,7 @@ func GetElasticsearchClusterConfig(ctx context.Context, cli client.Client) (*rel
 	return relasticsearch.NewClusterConfigFromConfigMap(configMap)
 }
 
-type ElasticsearchClientCreator func(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) (ElasticClient, error)
+type ElasticsearchClientCreator func(client client.Client, ctx context.Context, elasticHTTPSEndpoint string, external bool) (ElasticClient, error)
 
 type ElasticClient interface {
 	SetILMPolicies(context.Context, *operatorv1.LogStorage) error
@@ -122,25 +123,59 @@ type esClient struct {
 	client *elastic.Client
 }
 
-func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEndpoint string) (ElasticClient, error) {
-	user, password, root, err := getClientCredentials(client, ctx)
+func NewElasticClient(client client.Client, ctx context.Context, elasticHTTPSEndpoint string, external bool) (ElasticClient, error) {
+	// To create the elasticsearch client, we need a few things:
+	// - The elasticsearch endpoint itself. This varies for internal vs. external.
+	// - The root CA to use to validate the elasticsearch certificate.
+	// - The username and password to use to authenticate to elasticsearch.
+	// - If mTLS is enabled, the client certificate to present to elasticsearch.
+	user, password, root, err := getClientCredentials(ctx, client, external)
 	if err != nil {
 		return nil, err
 	}
 
-	// We must disable keep alive since we create a new client instead of persisting the client and reusing it.
-	// If we don't do this, the connections are, by default, kept around in an established state. If we don't do this,
-	// we end up leaking memory as the connections hold references to certs and other http resources.
-	//
-	// This is probably better than reusing the client (even though that's normally recommended) for a couple of
-	// reasons:
-	// - We should not actually be reconciling this logic often, this, for the most part, is initial setup logic. We might
-	//   want to look into how we can avoid creating Elasticsearch resources on every reconcile (possibly by hashing the
-	//   contents of what we created already and comparing that hash to what we want to create).
-	// - Reusing the client across the controllers / recreating the client only when credentials or root cert changes
-	//   could be little more difficult and possibly error-prone, leading to a regression where we leak resources again.
+	var clientCertificates []tls.Certificate
+	if external {
+		// mTLS is enabled. We need to provide a client certificate.
+		certSecret, err := GetSecret(ctx, client, logstorage.ExternalCertsSecret, common.OperatorNamespace())
+		if err != nil {
+			return nil, err
+		}
+		if certSecret == nil {
+			return nil, fmt.Errorf("mTLS is enabled but no client certificate was provided")
+		}
+		cert, err := tls.X509KeyPair(certSecret.Data["client.crt"], certSecret.Data["client.key"])
+		if err != nil {
+			return nil, err
+		}
+		clientCertificates = []tls.Certificate{cert}
+	}
+
+	// If we're using mTLS, or internal ES, we need to provide a custom HTTP client.
+	tlsClientConfig := &tls.Config{}
+	if len(clientCertificates) > 0 {
+		tlsClientConfig.Certificates = clientCertificates
+	}
+	if root != nil {
+		tlsClientConfig.RootCAs = root
+	}
+
 	h := &http.Client{
-		Transport: &http.Transport{DisableKeepAlives: true, TLSClientConfig: &tls.Config{RootCAs: root}},
+		Transport: &http.Transport{
+			// We must disable keep alive since we create a new client instead of persisting the client and reusing it.
+			// If we don't do this, the connections are, by default, kept around in an established state. If we don't do this,
+			// we end up leaking memory as the connections hold references to certs and other http resources.
+			//
+			// This is probably better than reusing the client (even though that's normally recommended) for a couple of
+			// reasons:
+			// - We should not actually be reconciling this logic often, this, for the most part, is initial setup logic. We might
+			//   want to look into how we can avoid creating Elasticsearch resources on every reconcile (possibly by hashing the
+			//   contents of what we created already and comparing that hash to what we want to create).
+			// - Reusing the client across the controllers / recreating the client only when credentials or root cert changes
+			//   could be little more difficult and possibly error-prone, leading to a regression where we leak resources again.
+			DisableKeepAlives: true,
+			TLSClientConfig:   tlsClientConfig,
+		},
 	}
 
 	options := []elastic.ClientOptionFunc{
@@ -543,18 +578,32 @@ func calculateRolloverAge(retention int) string {
 
 // getClientCredentials gets the client credentials used by the operator to talk to Elasticsearch. The operator
 // uses the ES admin credentials in order to provision users and ILM policies.
-func getClientCredentials(client client.Client, ctx context.Context) (string, string, *x509.CertPool, error) {
+func getClientCredentials(ctx context.Context, client client.Client, externalElastic bool) (string, string, *x509.CertPool, error) {
 	esSecret := &corev1.Secret{}
 	if err := client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchAdminUserSecret, Namespace: common.OperatorNamespace()}, esSecret); err != nil {
 		return "", "", nil, err
 	}
 
-	// Extract the password from the secret. The username is always "elastic".
-	username := "elastic"
-	password := string(esSecret.Data[username])
+	// Extract the username and password from the secret
+	var username, password string
+	if len(esSecret.Data) != 1 {
+		return "", "", nil, fmt.Errorf("secret does not contain only 1 entry for credentials")
+	}
+	for k, v := range esSecret.Data {
+		username = k
+		password = string(v)
+	}
+	if username == "" || password == "" {
+		return "", "", nil, fmt.Errorf("username or password is empty")
+	}
 
 	// Determine the CA to use for validating the Elasticsearch server certificate.
-	roots, err := getESRoots(ctx, client)
+	secretName := render.TigeraElasticsearchInternalCertSecret
+	if externalElastic {
+		secretName = logstorage.ExternalESPublicCertName
+	}
+
+	roots, err := getESRoots(ctx, client, secretName)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -563,7 +612,7 @@ func getClientCredentials(client client.Client, ctx context.Context) (string, st
 }
 
 // getESRoots returns the root certificates used to validate the Elasticsearch server certificate.
-func getESRoots(ctx context.Context, client client.Client) (*x509.CertPool, error) {
+func getESRoots(ctx context.Context, client client.Client, secretName string) (*x509.CertPool, error) {
 	instance := &operator.Installation{}
 	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
 		return nil, err
@@ -577,7 +626,7 @@ func getESRoots(ctx context.Context, client client.Client) (*x509.CertPool, erro
 	} else {
 		// Otherwise, load the CA from the Elasticsearch internal cert secret.
 		esPublicCert := &corev1.Secret{}
-		if err := client.Get(ctx, types.NamespacedName{Name: render.TigeraElasticsearchInternalCertSecret, Namespace: common.OperatorNamespace()}, esPublicCert); err != nil {
+		if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: common.OperatorNamespace()}, esPublicCert); err != nil {
 			return nil, err
 		}
 		var exists bool

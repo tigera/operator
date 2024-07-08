@@ -30,7 +30,7 @@ type MockESClient struct {
 	mock.Mock
 }
 
-func MockESCLICreator(_ client.Client, ctx context.Context, _ string) (utils.ElasticClient, error) {
+func MockESCLICreator(_ client.Client, ctx context.Context, _ string, _ bool) (utils.ElasticClient, error) {
 	if esCli := ctx.Value(MockESClientKey("mockESClient")); esCli != nil {
 		return esCli.(*MockESClient), nil
 	}

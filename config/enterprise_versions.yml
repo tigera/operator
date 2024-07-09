@@ -2,7 +2,7 @@
 title: master
 components:
   libcalico-go:
-    version: master
+    version: release-calient-v3.20-1
   cnx-manager:
     image: tigera/cnx-manager
     version: master

@@ -108,7 +108,8 @@ type ComplianceConfiguration struct {
 	SnapshotterKeyPair certificatemanagement.KeyPairInterface
 	ControllerKeyPair  certificatemanagement.KeyPairInterface
 
-	Namespace string
+	Namespace         string
+	BindingNamespaces []string
 
 	// Whether to run the rendered components in multi-tenant, single-tenant, or zero-tenant mode
 	Tenant          *operatorv1.Tenant
@@ -843,22 +844,7 @@ func (c *complianceComponent) complianceServerManagedClusterRole() *rbacv1.Clust
 }
 
 func (c *complianceComponent) complianceServerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     ComplianceServerServiceAccount,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      ComplianceServerServiceAccount,
-				Namespace: c.cfg.Namespace,
-			},
-		},
-	}
+	return rcomponents.ClusterRoleBinding(ComplianceServerServiceAccount, ComplianceServerServiceAccount, ComplianceServerServiceAccount, c.cfg.BindingNamespaces)
 }
 
 func (c *complianceComponent) complianceServerService() *corev1.Service {

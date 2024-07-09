@@ -61,7 +61,7 @@ const (
 	TLSAnnotationHash = "hash.operator.tigera.io/kb-secrets"
 
 	TimeFilter         = "_g=(time:(from:now-24h,to:now))"
-	FlowsDashboardName = "Calico Enterprise Flow Logs"
+	FlowsDashboardName = "Calico Flow Logs"
 )
 
 var (

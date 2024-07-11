@@ -6852,6 +6852,11 @@ func (in *TenantSpec) DeepCopyInto(out *TenantSpec) {
 		*out = new(LinseedDeployment)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ESKubeControllerDeployment != nil {
+		in, out := &in.ESKubeControllerDeployment, &out.ESKubeControllerDeployment
+		*out = new(CalicoKubeControllersDeployment)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.DashboardsJob != nil {
 		in, out := &in.DashboardsJob, &out.DashboardsJob
 		*out = new(DashboardsJob)

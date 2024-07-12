@@ -112,4 +112,101 @@ var _ = Describe("imageset tests", func() {
 			Entry("Enterprise variant", operator.TigeraSecureEnterprise),
 		)
 	})
+
+	Context("Test imageset variant handling", func() {
+		DescribeTable("", func(v operator.ProductVariant) {
+			isName := fmt.Sprintf("calico-%s", components.CalicoRelease)
+			nonVariantISName := fmt.Sprintf("enterprise-%s", components.EnterpriseRelease)
+			isNameWrongVer := "calico-wrong"
+			if v == operator.TigeraSecureEnterprise {
+				isName = fmt.Sprintf("enterprise-%s", components.EnterpriseRelease)
+				nonVariantISName = fmt.Sprintf("calico-%s", components.CalicoRelease)
+				isNameWrongVer = "enterprise-wrong"
+			}
+			isSpec := operator.ImageSetSpec{
+				Images: []operator.Image{
+					{Image: "calico/cni", Digest: "sha256:xxxxxxxxx"},
+					{Image: "tigera/cni", Digest: "sha256:xxxxxxxxx"},
+					{Image: "calico/typha", Digest: "sha256:xxxxxxxxx"},
+				},
+			}
+			c := fake.NewClientBuilder().WithScheme(kscheme.Scheme).WithObjects(
+				&operator.ImageSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: isNameWrongVer,
+					},
+					Spec: isSpec,
+				},
+			).Build()
+			// Expect this to error because the ImageSet doesn't have the correct
+			// version
+			Expect(ApplyImageSet(context.Background(), c, v)).ToNot(BeNil())
+
+			// With only a variant ImageSet check this returns false
+			x, err := DoesNonVariantImageSetExist(context.Background(), c, v)
+			Expect(err).To(BeNil())
+			Expect(x).To(BeFalse())
+
+			c = fake.NewClientBuilder().WithScheme(kscheme.Scheme).WithObjects().Build()
+			// With no ImageSet check this returns false
+			x, err = DoesNonVariantImageSetExist(context.Background(), c, v)
+			Expect(err).To(BeNil())
+			Expect(x).To(BeFalse())
+
+			c = fake.NewClientBuilder().WithScheme(kscheme.Scheme).WithObjects(
+				&operator.ImageSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nonVariantISName,
+					},
+					Spec: isSpec,
+				},
+			).Build()
+			// Having an ImageSet for the other variant should not produce
+			// an error
+			Expect(ApplyImageSet(context.Background(), c, v)).To(BeNil())
+
+			// With a non-variant ImageSet check this returns true
+			x, err = DoesNonVariantImageSetExist(context.Background(), c, v)
+			Expect(err).To(BeNil())
+			Expect(x).To(BeTrue())
+
+			c = fake.NewClientBuilder().WithScheme(kscheme.Scheme).WithObjects(
+				&operator.ImageSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nonVariantISName,
+					},
+					Spec: isSpec,
+				},
+				&operator.ImageSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: isNameWrongVer,
+					},
+					Spec: isSpec,
+				},
+			).Build()
+			// Expect this to error because the ImageSet doesn't have the correct
+			// version
+			Expect(ApplyImageSet(context.Background(), c, v)).ToNot(BeNil())
+
+			c = fake.NewClientBuilder().WithScheme(kscheme.Scheme).WithObjects(
+				&operator.ImageSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: isName,
+					},
+					Spec: isSpec,
+				},
+				&operator.ImageSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: isNameWrongVer,
+					},
+					Spec: isSpec,
+				},
+			).Build()
+			// Expect no error because a correct ImageSet exists
+			Expect(ApplyImageSet(context.Background(), c, v)).To(BeNil())
+		},
+			Entry("Calico variant", operator.Calico),
+			Entry("Enterprise variant", operator.TigeraSecureEnterprise),
+		)
+	})
 })

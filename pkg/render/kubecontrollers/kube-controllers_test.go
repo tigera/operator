@@ -1265,5 +1265,41 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				},
 			}))
 		})
+
+		It("should override resource request with the value from TenantSpec's esKubeControllerDeployment when available", func() {
+			overwrites := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+			esKubeControllerDeployment := &operatorv1.CalicoKubeControllersDeployment{
+				Spec: &operatorv1.CalicoKubeControllersDeploymentSpec{
+					Template: &operatorv1.CalicoKubeControllersDeploymentPodTemplateSpec{
+						Spec: &operatorv1.CalicoKubeControllersDeploymentPodSpec{
+							Containers: []operatorv1.CalicoKubeControllersDeploymentContainer{{
+								Name:      "es-calico-kube-controllers",
+								Resources: &overwrites,
+							}},
+						},
+					},
+				},
+			}
+			tenantCfg.Tenant.Spec.ESKubeControllerDeployment = esKubeControllerDeployment
+			component := kubecontrollers.NewElasticsearchKubeControllers(&tenantCfg)
+			resources, _ := component.Objects()
+
+			d := rtest.GetResource(resources, kubecontrollers.EsKubeController, tenantCfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("es-calico-kube-controllers"))
+			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(overwrites))
+		})
+
 	})
 })

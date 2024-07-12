@@ -82,11 +82,13 @@ func (r *ClusterCAController) Reconcile(ctx context.Context, request reconcile.R
 	logc := r.log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	// Get Installation resource.
-	instance := &operatorv1.Installation{}
-	if err := r.client.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+	_, instance, err := utils.GetInstallation(ctx, r.client)
+	if err != nil {
 		if errors.IsNotFound(err) {
-			return reconcile.Result{}, nil
+			logc.Info("Installation not found")
+			return reconcile.Result{}, err
 		}
+		logc.Error(err, "Error querying installation")
 		return reconcile.Result{}, err
 	}
 
@@ -97,7 +99,7 @@ func (r *ClusterCAController) Reconcile(ctx context.Context, request reconcile.R
 		certificatemanager.AllowCACreation(),
 		certificatemanager.WithLogger(logc),
 	}
-	cm, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace(), opts...)
+	cm, err := certificatemanager.Create(r.client, instance, r.clusterDomain, common.OperatorNamespace(), opts...)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -108,7 +110,13 @@ func (r *ClusterCAController) Reconcile(ctx context.Context, request reconcile.R
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{rcertificatemanagement.NewKeyPairOption(cm.KeyPair(), true, false)},
 	})
 
-	hdler := utils.NewComponentHandler(logc, r.client, r.scheme, instance)
+	ownerResource := &operatorv1.Installation{}
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, ownerResource); err != nil {
+		logc.Error(err, "An error occurred when querying the Installation resource")
+		return reconcile.Result{}, err
+	}
+
+	hdler := utils.NewComponentHandler(logc, r.client, r.scheme, ownerResource)
 	if err = hdler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 		return reconcile.Result{}, err
 	}

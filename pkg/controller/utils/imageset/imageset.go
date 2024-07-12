@@ -27,6 +27,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 )
 
+const (
+	enterprisePrefix = "enterprise"
+	calicoPrefix     = "calico"
+)
+
 // ApplyImageSet gets the appropriate ImageSet, validates the ImageSet, and calls ResolveImages
 // passing in the ImageSet on each of the comps.
 func ApplyImageSet(ctx context.Context, c client.Client, v operator.ProductVariant, comps ...render.Component) error {
@@ -47,11 +52,19 @@ func AddImageSetWatch(c ctrlruntime.Controller) error {
 	return c.WatchObject(&operator.ImageSet{}, &handler.EnqueueRequestForObject{})
 }
 
-func getSetName(v operator.ProductVariant) string {
+func variantPrefix(v operator.ProductVariant) string {
 	if v == operator.TigeraSecureEnterprise {
-		return fmt.Sprintf("enterprise-%s", components.EnterpriseRelease)
+		return enterprisePrefix
 	}
-	return fmt.Sprintf("calico-%s", components.CalicoRelease)
+	return calicoPrefix
+}
+
+func getSetName(v operator.ProductVariant) string {
+	variantVersion := components.CalicoRelease
+	if v == operator.TigeraSecureEnterprise {
+		variantVersion = components.EnterpriseRelease
+	}
+	return fmt.Sprintf("%s-%s", variantPrefix(v), variantVersion)
 }
 
 // GetImageSet finds the ImageSet for specified variant.
@@ -72,14 +85,55 @@ func GetImageSet(ctx context.Context, cli client.Client, v operator.ProductVaria
 	}
 
 	setName := getSetName(v)
+	vp := variantPrefix(v)
+	variantISExists := false
 
 	for _, is := range isl.Items {
+		if strings.HasPrefix(is.Name, vp) {
+			variantISExists = true
+		}
 		if is.Name == setName {
 			return &is, nil
 		}
 	}
 
-	return nil, fmt.Errorf("ImageSets exist but none with the expected name %s", setName)
+	if variantISExists {
+		return nil, fmt.Errorf("ImageSets exist but none with the expected name %s", setName)
+	} else {
+		return nil, nil
+	}
+}
+
+// ImageSets are optional by default. Once an ImageSet is specified for the ProductVariant,
+// it is required to have an ImageSet for the specific ProductVariant and version of the
+// product. ImageSets for other ProductVariants are ignored since they are not for the
+// configured variant. Users may have used the incorrect variant or had a typo when creating
+// the ImageSet, so we can use this function to check if there are any ImageSets for different
+// variants.
+func DoesNonVariantImageSetExist(ctx context.Context, cli client.Client, v operator.ProductVariant) (bool, error) {
+	isl := &operator.ImageSetList{}
+
+	// List the ImageSets because if any exist then we will require the
+	// existence of one for the expected version of the operator running
+	// and the variant configured.
+	err := cli.List(ctx, isl)
+	if err != nil {
+		return false, fmt.Errorf("failed to get imageset list: %s", err)
+	}
+
+	if len(isl.Items) == 0 {
+		// No ImageSets and that is fine
+		return false, nil
+	}
+
+	vp := variantPrefix(v)
+
+	for _, is := range isl.Items {
+		if !strings.HasPrefix(is.Name, vp) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ValidateImageSet validates that all the images in an ImageSet are images the operator uses

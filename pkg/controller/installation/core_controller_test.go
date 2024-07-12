@@ -429,6 +429,41 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(inst.Status.ImageSet).To(Equal("enterprise-" + components.EnterpriseRelease))
 		})
 
+		It("should error if correct variant imageset with wrong version", func() {
+			mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+			imageSet := &operator.ImageSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-wrong"},
+			}
+			Expect(c.Create(ctx, imageSet)).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+		})
+		It("should succeed if other variant imageset exists", func() {
+			imageSet := &operator.ImageSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-versiondoesntmatter"},
+			}
+			Expect(c.Create(ctx, imageSet)).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			d := appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "calico-kube-controllers",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(test.GetResource(c, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
+			Expect(controller).ToNot(BeNil())
+			Expect(controller.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentTigeraKubeControllers.Image,
+					components.ComponentTigeraKubeControllers.Version)))
+		})
+
 		It("should update version", func() {
 			instance := &operator.Installation{}
 			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())

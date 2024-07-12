@@ -665,7 +665,11 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		render.SetClusterCriticalPod(&d.Spec.Template)
 	}
 
-	if overrides := c.cfg.Installation.CalicoKubeControllersDeployment; overrides != nil {
+	if c.cfg.Tenant.MultiTenant() {
+		if overrides := c.cfg.Tenant.Spec.ESKubeControllerDeployment; overrides != nil {
+			rcomp.ApplyDeploymentOverrides(&d, overrides)
+		}
+	} else if overrides := c.cfg.Installation.CalicoKubeControllersDeployment; overrides != nil {
 		rcomp.ApplyDeploymentOverrides(&d, overrides)
 	}
 	return &d

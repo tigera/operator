@@ -1384,6 +1384,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	if imageSet == nil {
+		// There is no imageSet for the configured variant, but check to see if there are any
+		// ImageSets with a different variant so we can give the user some kind of indication
+		// to why an existing ImageSet is being ignored.
+		nvis, err := imageset.DoesNonVariantImageSetExist(ctx, r.client, instance.Spec.Variant)
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Error checking for non-variant ImageSet", err, reqLogger)
+			return reconcile.Result{}, err
+		} else {
+			if nvis {
+				reqLogger.Info("An ImageSet exists for a different variant")
+			}
+		}
+	}
+
 	if err = imageset.ValidateImageSet(imageSet); err != nil {
 		r.status.SetDegraded(operator.ResourceValidationError, "Error validating ImageSet", err, reqLogger)
 		return reconcile.Result{}, err

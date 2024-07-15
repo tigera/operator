@@ -2748,20 +2748,12 @@ var _ = Describe("Node rendering tests", func() {
       "type": "portmap"
     },
     {
-      "sysctl": [
+      "sysctl":
 		  {
-			"key": "net.ipv4.tcp_keepalive_intvl",
-			"value": "15"
+			"net.ipv4.tcp_keepalive_intvl": "15",
+			"net.ipv4.tcp_keepalive_probes": "6",
+			"net.ipv4.tcp_keepalive_time": "40"
 		  },
-		  {
-			"key": "net.ipv4.tcp_keepalive_probes",
-			"value": "6"
-		  },
-		  {
-			"key": "net.ipv4.tcp_keepalive_time",
-		    "value": "40"
-		  }
-		],
       "type": "tuning"
 	}
   ]

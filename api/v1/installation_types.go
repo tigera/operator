@@ -421,8 +421,8 @@ const (
 
 // LinuxDataplaneOption controls which dataplane is to be used on Linux nodes.
 //
-// One of: Iptables, BPF, VPP, Nftables, BPFWithNftables
-// +kubebuilder:validation:Enum=Iptables;BPF;VPP;Nftables;BPFWithNftables
+// One of: Iptables, BPF, VPP, Nftables
+// +kubebuilder:validation:Enum=Iptables;BPF;VPP;Nftables;
 type LinuxDataplaneOption string
 
 const (
@@ -430,7 +430,6 @@ const (
 	LinuxDataplaneBPF      LinuxDataplaneOption = "BPF"
 	LinuxDataplaneVPP      LinuxDataplaneOption = "VPP"
 	LinuxDataplaneNftables LinuxDataplaneOption = "Nftables"
-	LinuxDataplaneBPFNFT   LinuxDataplaneOption = "BPFWithNftables"
 )
 
 // +kubebuilder:validation:Enum=HNS;Disabled

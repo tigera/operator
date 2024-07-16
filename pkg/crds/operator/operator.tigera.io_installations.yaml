@@ -1144,7 +1144,6 @@ spec:
                     - BPF
                     - VPP
                     - Nftables
-                    - BPFWithNftables
                     type: string
                   linuxPolicySetupTimeoutSeconds:
                     description: |-
@@ -8522,7 +8521,6 @@ spec:
                         - BPF
                         - VPP
                         - Nftables
-                        - BPFWithNftables
                         type: string
                       linuxPolicySetupTimeoutSeconds:
                         description: |-

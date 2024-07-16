@@ -282,15 +282,14 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 
 	// Create Elasticsearch secrets.
-	esTrustedBundle := elasticKeys.trustedBundle(clusterCM)
-	if err = hdler.CreateOrUpdateOrDelete(ctx, elasticKeys.component(esTrustedBundle), r.status); err != nil {
+	if err = hdler.CreateOrUpdateOrDelete(ctx, elasticKeys.component(), r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	if kibanaEnabled {
 		// Render the key pair and trusted bundle into the Kibana namespace.
-		if err = hdler.CreateOrUpdateOrDelete(ctx, elasticKeys.kibanaComponent(esTrustedBundle), r.status); err != nil {
+		if err = hdler.CreateOrUpdateOrDelete(ctx, elasticKeys.kibanaComponent(elasticKeys.trustedBundle(clusterCM)), r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
@@ -559,7 +558,7 @@ func (c *elasticKeyPairCollection) trustedBundle(cm certificatemanager.Certifica
 	return cm.CreateTrustedBundle(certs...)
 }
 
-func (c *elasticKeyPairCollection) component(bundle certificatemanagement.TrustedBundle) render.Component {
+func (c *elasticKeyPairCollection) component() render.Component {
 	return rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:      render.ElasticsearchNamespace,
 		TruthNamespace: common.OperatorNamespace(),
@@ -571,7 +570,9 @@ func (c *elasticKeyPairCollection) component(bundle certificatemanagement.Truste
 			// enabled. Instead, it will be replaced with a dummy secret that serves merely to pass ECK's validation checks.
 			rcertificatemanagement.NewKeyPairOption(c.elastic, true, c.elastic != nil && !c.elastic.UseCertificateManagement()),
 		},
-		TrustedBundle: bundle,
+		// The trusted bundle in the tigera-elasticserach namespace is created by the keyPairCollection.
+		// We must ensure that it's only created once, to prevent fighting.
+		TrustedBundle: nil,
 	})
 }
 

@@ -1164,16 +1164,26 @@ var _ = Describe("compliance rendering tests", func() {
 
 			tenantAResources, _ := tenantACompliance.Objects()
 
-			rbTenantA := rtest.GetResource(tenantAResources, render.ComplianceServerServiceAccount, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
-			Expect(rbTenantA.RoleRef.Kind).To(Equal("ClusterRole"))
-			Expect(rbTenantA.RoleRef.Name).To(Equal(render.ComplianceServerServiceAccount))
-			Expect(rbTenantA.Subjects).To(ContainElements([]rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      render.ComplianceServerServiceAccount,
-					Namespace: tenantANamespace,
-				},
-			}))
+			expectedClusterRoleBindings := []string{
+				render.ComplianceBenchmarkerServiceAccount,
+				render.ComplianceControllerServiceAccount,
+				render.ComplianceReporterServiceAccount,
+				render.ComplianceServerServiceAccount,
+				render.ComplianceSnapshotterServiceAccount}
+
+			for _, name := range expectedClusterRoleBindings {
+				assertClusterRoleBindingHasSubjects(tenantAResources,
+					name,
+					name,
+					[]rbacv1.Subject{
+						{
+							Kind:      "ServiceAccount",
+							Name:      name,
+							Namespace: tenantANamespace,
+						},
+					},
+				)
+			}
 
 			cfg.Namespace = tenantBNamespace
 			cfg.BindingNamespaces = []string{tenantANamespace, tenantBNamespace}
@@ -1191,22 +1201,24 @@ var _ = Describe("compliance rendering tests", func() {
 
 			tenantBResources, _ := tenantBCompliance.Objects()
 
-			rbAllTenants := rtest.GetResource(tenantBResources, render.ComplianceServerServiceAccount, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
-			Expect(rbAllTenants.RoleRef.Kind).To(Equal("ClusterRole"))
-			Expect(rbAllTenants.RoleRef.Name).To(Equal(render.ComplianceServerServiceAccount))
-			Expect(rbAllTenants.Subjects).To(ContainElements([]rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      render.ComplianceServerServiceAccount,
-					Namespace: tenantANamespace,
-				},
-				{
-					Kind:      "ServiceAccount",
-					Name:      render.ComplianceServerServiceAccount,
-					Namespace: tenantBNamespace,
-				},
-			}))
-
+			for _, name := range expectedClusterRoleBindings {
+				assertClusterRoleBindingHasSubjects(tenantBResources,
+					name,
+					name,
+					[]rbacv1.Subject{
+						{
+							Kind:      "ServiceAccount",
+							Name:      name,
+							Namespace: tenantANamespace,
+						},
+						{
+							Kind:      "ServiceAccount",
+							Name:      name,
+							Namespace: tenantBNamespace,
+						},
+					},
+				)
+			}
 		})
 
 		It("should render multi-tenant environment variables", func() {
@@ -1299,6 +1311,7 @@ var _ = Describe("compliance rendering tests", func() {
 
 		It("should render linseed API permissions as part of tigera-compliance-snapshotter ClusterRole", func() {
 			cfg.Namespace = tenantANamespace
+			cfg.BindingNamespaces = []string{tenantANamespace}
 			cfg.ExternalElastic = true
 			cfg.Tenant = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1337,6 +1350,7 @@ var _ = Describe("compliance rendering tests", func() {
 
 		It("should render linseed API permissions as part of tigera-compliance-benchmarker ClusterRole", func() {
 			cfg.Namespace = tenantANamespace
+			cfg.BindingNamespaces = []string{tenantANamespace}
 			cfg.ExternalElastic = true
 			cfg.Tenant = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1375,6 +1389,7 @@ var _ = Describe("compliance rendering tests", func() {
 
 		It("should render linseed API permissions as part of tigera-compliance-controller ClusterRole", func() {
 			cfg.Namespace = tenantANamespace
+			cfg.BindingNamespaces = []string{tenantANamespace}
 			cfg.ExternalElastic = true
 			cfg.Tenant = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1413,6 +1428,7 @@ var _ = Describe("compliance rendering tests", func() {
 
 		It("should render linseed API permissions as part of tigera-compliance-reporter ClusterRole", func() {
 			cfg.Namespace = tenantANamespace
+			cfg.BindingNamespaces = []string{tenantANamespace}
 			cfg.ExternalElastic = true
 			cfg.Tenant = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1518,3 +1534,10 @@ var _ = Describe("compliance rendering tests", func() {
 		})
 	})
 })
+
+func assertClusterRoleBindingHasSubjects(tenantResources []client.Object, clusterRoleBinding string, clusterRole string, subjects []rbacv1.Subject) {
+	tenantRBAC := rtest.GetResource(tenantResources, clusterRoleBinding, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+	Expect(tenantRBAC.RoleRef.Kind).To(Equal("ClusterRole"))
+	Expect(tenantRBAC.RoleRef.Name).To(Equal(clusterRole))
+	Expect(tenantRBAC.Subjects).To(ContainElements(subjects))
+}

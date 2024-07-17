@@ -1627,13 +1627,18 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
 	updated := false
 
-	if install.Spec.CalicoNetwork.LinuxDataplane != nil &&
-		*install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables &&
-		fc.Spec.NFTablesMode == nil {
-		// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
-		nftablesMode := crdv1.NFTablesModeEnabled
-		fc.Spec.NFTablesMode = &nftablesMode
-		updated = true
+	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
+		if *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables && fc.Spec.NFTablesMode == nil {
+			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
+			nftablesMode := crdv1.NFTablesModeEnabled
+			fc.Spec.NFTablesMode = &nftablesMode
+			updated = true
+		} else if *install.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneNftables && fc.Spec.NFTablesMode != nil {
+			// The operator is configured to use another dataplane. Disable nftables.
+			nftablesMode := crdv1.NFTablesModeDisabled
+			fc.Spec.NFTablesMode = &nftablesMode
+			updated = true
+		}
 	}
 
 	switch install.Spec.CNI.Type {

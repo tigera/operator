@@ -1110,8 +1110,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Set any non-default FelixConfiguration values that we need.
-	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 		return r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger)
+	})
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Configure nftables mode on FelixConfiguration.
+	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+		return r.setNftablesMode(ctx, instance, fc, reqLogger)
 	})
 	if err != nil {
 		return reconcile.Result{}, err
@@ -1622,11 +1630,12 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 	}, nil
 }
 
-// setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
-// based on the install config.
-func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
+func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
 	updated := false
 
+	// Set the FelixConfiguration nftables dataplane mode based on the operator configuration. We do this unconditonally because
+	// we don't need to handle upgrades from versions that were previously FelixConfiguration only - nftables mode has always
+	// been controlled by the operator.
 	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
 		if *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables {
 			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
@@ -1640,6 +1649,16 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 			updated = true
 		}
 	}
+	if updated {
+		reqLogger.Info("Patching nftables mode", "nftablesMode", *fc.Spec.NFTablesMode)
+	}
+	return updated, nil
+}
+
+// setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
+// based on the install config.
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
+	updated := false
 
 	switch install.Spec.CNI.Type {
 	// If we're using the AWS CNI plugin we need to ensure the route tables that calico-node

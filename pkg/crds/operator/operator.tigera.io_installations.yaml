@@ -1144,6 +1144,7 @@ spec:
                     - Iptables
                     - BPF
                     - VPP
+                    - Nftables
                     type: string
                   linuxPolicySetupTimeoutSeconds:
                     description: |-
@@ -8521,6 +8522,7 @@ spec:
                         - Iptables
                         - BPF
                         - VPP
+                        - Nftables
                         type: string
                       linuxPolicySetupTimeoutSeconds:
                         description: |-

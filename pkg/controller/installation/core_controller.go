@@ -1633,7 +1633,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 			nftablesMode := crdv1.NFTablesModeEnabled
 			fc.Spec.NFTablesMode = &nftablesMode
 			updated = true
-		} else if *install.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneNftables && fc.Spec.NFTablesMode != nil {
+		} else if *install.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneNftables {
 			// The operator is configured to use another dataplane. Disable nftables.
 			nftablesMode := crdv1.NFTablesModeDisabled
 			fc.Spec.NFTablesMode = &nftablesMode

@@ -57,6 +57,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -1109,8 +1110,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Set any non-default FelixConfiguration values that we need.
-	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 		return r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger)
+	})
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Configure nftables mode on FelixConfiguration.
+	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+		return r.setNftablesMode(ctx, instance, fc, reqLogger)
 	})
 	if err != nil {
 		return reconcile.Result{}, err
@@ -1634,6 +1643,31 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		NodeCommonName:  nodeCommonName,
 		NodeURISAN:      nodeURISAN,
 	}, nil
+}
+
+func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
+	updated := false
+
+	// Set the FelixConfiguration nftables dataplane mode based on the operator configuration. We do this unconditonally because
+	// we don't need to handle upgrades from versions that were previously FelixConfiguration only - nftables mode has always
+	// been controlled by the operator.
+	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
+		if *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables {
+			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
+			nftablesMode := crdv1.NFTablesModeEnabled
+			fc.Spec.NFTablesMode = &nftablesMode
+			updated = true
+		} else {
+			// The operator is configured to use another dataplane. Disable nftables.
+			nftablesMode := crdv1.NFTablesModeDisabled
+			fc.Spec.NFTablesMode = &nftablesMode
+			updated = true
+		}
+	}
+	if updated {
+		reqLogger.Info("Patching nftables mode", "nftablesMode", *fc.Spec.NFTablesMode)
+	}
+	return updated, nil
 }
 
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed

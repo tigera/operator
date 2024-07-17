@@ -342,6 +342,9 @@ type FelixConfigurationSpec struct {
 	// BPFKubeProxyEndpointSlicesEnabled in BPF mode, controls whether Felix's
 	// embedded kube-proxy accepts EndpointSlices or not.
 	BPFKubeProxyEndpointSlicesEnabled *bool `json:"bpfKubeProxyEndpointSlicesEnabled,omitempty" validate:"omitempty"`
+	// BPFHostConntrackBypass Controls whether to bypass Linux conntrack in BPF mode for
+	// workloads and services. [Default: true - bypass Linux conntrack]
+	BPFHostConntrackBypass *bool `json:"bpfHostConntrackBypass,omitempty"`
 
 	// RouteSource configures where Felix gets its routing information.
 	// - WorkloadIPs: use workload endpoints to construct routes.

@@ -1723,6 +1723,16 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		updated = true
 	}
 
+	vxlanPort := 4798
+	if install.Spec.KubernetesProvider == operator.ProviderDockerEE {
+		fc.Spec.VXLANPort = &vxlanPort
+		// Set bpfHostConntrackBypass to false for eBPF dataplane to work with MKE
+		if install.Spec.BPFEnabled() {
+			disableBPFHostConntrackBypass(fc)
+		}
+		updated = true
+	}
+
 	if install.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Some platforms need a different default setting for dnsTrustedServers, because their DNS service is not named "kube-dns".
 		dnsService := ""

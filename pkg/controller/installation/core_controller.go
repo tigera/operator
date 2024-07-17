@@ -1110,16 +1110,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Set any non-default FelixConfiguration values that we need.
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
-		return r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger)
-	})
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Configure nftables mode on FelixConfiguration.
 	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
-		return r.setNftablesMode(ctx, instance, fc, reqLogger)
+		// Configure defaults.
+		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger)
+		if err != nil {
+			return false, err
+		}
+
+		// Configure nftables mode.
+		u2, err := r.setNftablesMode(ctx, instance, fc, reqLogger)
+		if err != nil {
+			return false, err
+		}
+		return u || u2, nil
 	})
 	if err != nil {
 		return reconcile.Result{}, err

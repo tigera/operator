@@ -376,22 +376,7 @@ func (c *complianceComponent) complianceControllerRoleBinding() *rbacv1.RoleBind
 }
 
 func (c *complianceComponent) complianceControllerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceControllerServiceAccount},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     ComplianceControllerServiceAccount,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      ComplianceControllerServiceAccount,
-				Namespace: c.cfg.Namespace,
-			},
-		},
-	}
+	return rcomponents.ClusterRoleBinding(ComplianceControllerServiceAccount, ComplianceControllerServiceAccount, ComplianceControllerServiceAccount, c.cfg.BindingNamespaces)
 }
 
 // This clusterRoleBinding is only needed in DockerEE since a pod starting pods with host path volumes requires cluster admin permissions.
@@ -585,22 +570,7 @@ func (c *complianceComponent) complianceReporterClusterRole() *rbacv1.ClusterRol
 }
 
 func (c *complianceComponent) complianceReporterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceReporterServiceAccount},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     ComplianceReporterServiceAccount,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      ComplianceReporterServiceAccount,
-				Namespace: c.cfg.Namespace,
-			},
-		},
-	}
+	return rcomponents.ClusterRoleBinding(ComplianceReporterServiceAccount, ComplianceReporterServiceAccount, ComplianceReporterServiceAccount, c.cfg.BindingNamespaces)
 }
 
 func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplate {
@@ -1051,22 +1021,7 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 }
 
 func (c *complianceComponent) complianceSnapshotterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceSnapshotterServiceAccount},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     ComplianceSnapshotterServiceAccount,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      ComplianceSnapshotterServiceAccount,
-				Namespace: c.cfg.Namespace,
-			},
-		},
-	}
+	return rcomponents.ClusterRoleBinding(ComplianceSnapshotterServiceAccount, ComplianceSnapshotterServiceAccount, ComplianceSnapshotterServiceAccount, c.cfg.BindingNamespaces)
 }
 
 func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployment {
@@ -1228,22 +1183,7 @@ func (c *complianceComponent) complianceBenchmarkerClusterRole() *rbacv1.Cluster
 }
 
 func (c *complianceComponent) complianceBenchmarkerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceBenchmarkerServiceAccount},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     ComplianceBenchmarkerServiceAccount,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      ComplianceBenchmarkerServiceAccount,
-				Namespace: c.cfg.Namespace,
-			},
-		},
-	}
+	return rcomponents.ClusterRoleBinding(ComplianceBenchmarkerServiceAccount, ComplianceBenchmarkerServiceAccount, ComplianceBenchmarkerServiceAccount, c.cfg.BindingNamespaces)
 }
 
 func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet {

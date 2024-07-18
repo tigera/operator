@@ -922,8 +922,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			Expect(fc.Spec.VXLANPort).NotTo(BeNil())
-			Expect(*fc.Spec.VXLANPort).To(Equal(4798))
+			Expect(fc.Spec.VXLANVNI).NotTo(BeNil())
+			Expect(*fc.Spec.VXLANVNI).To(Equal(10000))
 		})
 
 		It("should set bpfHostConntrackByPass to false when provider is DockerEE and BPF enabled", func() {

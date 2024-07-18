@@ -960,6 +960,36 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
 		})
 
+		It("should set vxlanPort to 4798 when provider is DockerEE", func() {
+			cr.Spec.KubernetesProvider = operator.ProviderDockerEE
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.VXLANVNI).NotTo(BeNil())
+			Expect(*fc.Spec.VXLANVNI).To(Equal(10000))
+		})
+
+		It("should set bpfHostConntrackByPass to false when provider is DockerEE and BPF enabled", func() {
+			cr.Spec.KubernetesProvider = operator.ProviderDockerEE
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFHostConntrackBypass).NotTo(BeNil())
+			Expect(*fc.Spec.BPFHostConntrackBypass).To(BeFalse())
+		})
+
 		It("should set BPFEnabled to ture on FelixConfiguration if BPF is enabled on installation", func() {
 			createNodeDaemonSet()
 

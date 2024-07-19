@@ -391,8 +391,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	components := []render.Component{
 		component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       rmeta.APIServerNamespace(variant),
-			ServiceAccounts: []string{render.APIServerServiceAccountName(variant)},
+			Namespace:       rmeta.APIServerNamespace(installationSpec.Variant),
+			ServiceAccounts: []string{render.APIServerServiceAccountName(installationSpec.Variant)},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelCAKeyPair, false, true),

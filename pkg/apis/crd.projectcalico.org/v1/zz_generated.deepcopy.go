@@ -628,6 +628,11 @@ func (in *FelixConfigurationSpec) DeepCopyInto(out *FelixConfigurationSpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.BPFHostConntrackBypass != nil {
+		in, out := &in.BPFHostConntrackBypass, &out.BPFHostConntrackBypass
+		*out = new(bool)
+		**out = **in
+	}
 	if in.RouteTableRange != nil {
 		in, out := &in.RouteTableRange, &out.RouteTableRange
 		*out = new(RouteTableRange)

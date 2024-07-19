@@ -392,6 +392,7 @@ var _ = Describe("apiserver controller tests", func() {
 				provider:            operatorv1.ProviderNone,
 				enterpriseCRDsExist: false,
 				status:              mockStatus,
+				tierWatchReady:      ready,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 

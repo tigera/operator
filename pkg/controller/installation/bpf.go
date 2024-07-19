@@ -118,3 +118,8 @@ func bpfEnabledOnDaemonsetWithEnvVar(ds *appsv1.DaemonSet) (bool, error) {
 func bpfEnabledOnFelixConfig(fc *crdv1.FelixConfiguration) bool {
 	return fc.Spec.BPFEnabled != nil && *fc.Spec.BPFEnabled
 }
+
+func disableBPFHostConntrackBypass(fc *crdv1.FelixConfiguration) {
+	hostConntrackBypassDisabled := false
+	fc.Spec.BPFHostConntrackBypass = &hostConntrackBypassDisabled
+}

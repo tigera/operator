@@ -646,6 +646,19 @@ func (c *apiServerComponent) authClusterRole() (client.Object, client.Object) {
 				"watch",
 			},
 		},
+		{
+			APIGroups: []string{
+				"",
+			},
+			Resources: []string{
+				"users",
+				"groups",
+				"serviceaccounts",
+			},
+			Verbs: []string{
+				"impersonate",
+			},
+		},
 	}
 
 	if c.cfg.OpenShift {

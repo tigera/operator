@@ -378,6 +378,29 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(0))
 		})
+
+		It("should create the cert secrets in the correct namespace when migrating from calico to enterprise", func() {
+			Expect(netv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			installation.Spec.Variant = operatorv1.TigeraSecureEnterprise
+			installation.Status.Variant = operatorv1.Calico
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: false,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+
+			Expect(err).ShouldNot(HaveOccurred())
+
+			certSecret := corev1.Secret{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-apiserver-certs", Namespace: "tigera-system"}, &certSecret)).ToNot(HaveOccurred())
+		})
 	})
 
 	Context("Reconcile for Condition status", func() {

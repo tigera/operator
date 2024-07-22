@@ -243,7 +243,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query for the installation object.
-	variant, installationSpec, err := utils.GetInstallation(context.Background(), r.client)
+	_, installationSpec, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -252,11 +252,11 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if variant == "" {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation to be ready", nil, reqLogger)
+	if installationSpec.Variant == "" {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	ns := rmeta.APIServerNamespace(variant)
+	ns := rmeta.APIServerNamespace(installationSpec.Variant)
 
 	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
@@ -286,7 +286,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	includeV3NetworkPolicy := false
-	if variant == operatorv1.TigeraSecureEnterprise {
+	if installationSpec.Variant == operatorv1.TigeraSecureEnterprise {
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
@@ -391,8 +391,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	components := []render.Component{
 		component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       rmeta.APIServerNamespace(variant),
-			ServiceAccounts: []string{render.APIServerServiceAccountName(variant)},
+			Namespace:       rmeta.APIServerNamespace(installationSpec.Variant),
+			ServiceAccounts: []string{render.APIServerServiceAccountName(installationSpec.Variant)},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelCAKeyPair, false, true),
@@ -408,7 +408,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		components = append(components, render.APIServerPolicy(&apiServerCfg))
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, installationSpec.Variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}

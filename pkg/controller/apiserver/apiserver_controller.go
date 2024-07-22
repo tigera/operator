@@ -252,6 +252,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	if installationSpec.Variant == "" {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation to be ready", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
 	ns := rmeta.APIServerNamespace(installationSpec.Variant)
 
 	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace())

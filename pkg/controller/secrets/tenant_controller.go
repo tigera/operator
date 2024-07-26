@@ -28,7 +28,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/linseed"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
@@ -46,12 +45,11 @@ import (
 // TenantControllers runs in multi-tenant mode and provisions a CA per-tenant, as well as generating
 // a trusted bundle to place in each tenant's namespace.
 type TenantController struct {
-	client          client.Client
-	scheme          *runtime.Scheme
-	status          status.StatusManager
-	clusterDomain   string
-	log             logr.Logger
-	elasticExternal bool
+	client        client.Client
+	scheme        *runtime.Scheme
+	status        status.StatusManager
+	clusterDomain string
+	log           logr.Logger
 }
 
 func AddTenantController(mgr manager.Manager, opts options.AddOptions) error {
@@ -60,12 +58,11 @@ func AddTenantController(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	r := &TenantController{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		clusterDomain:   opts.ClusterDomain,
-		elasticExternal: opts.ElasticExternal,
-		status:          status.New(mgr.GetClient(), "secrets", opts.KubernetesVersion),
-		log:             logf.Log.WithName("controller_tenant_secrets"),
+		client:        mgr.GetClient(),
+		scheme:        mgr.GetScheme(),
+		clusterDomain: opts.ClusterDomain,
+		status:        status.New(mgr.GetClient(), "secrets", opts.KubernetesVersion),
+		log:           logf.Log.WithName("controller_tenant_secrets"),
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -208,12 +205,6 @@ func (r *TenantController) upstreamCertificates(cm certificatemanager.Certificat
 	toQuery := map[string]string{
 		// By default, we only need the operator's CA cert.
 		certificatemanagement.CASecretName: common.OperatorNamespace(),
-	}
-
-	if r.elasticExternal {
-		// If configured to use external Elasticsearch, get the Elasticsearch and Kibana public certs.
-		toQuery[logstorage.ExternalESPublicCertName] = common.OperatorNamespace()
-		toQuery[logstorage.ExternalKBPublicCertName] = common.OperatorNamespace()
 	}
 
 	// Query each certificate.

@@ -52,7 +52,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls"
@@ -263,7 +262,6 @@ var _ = Describe("LogStorage Secrets controller", func() {
 	})
 
 	It("should not trip up when a cert with missing key usages is configured for other components", func() {
-
 		// Create a LogStorage instance with a default configuration.
 		ls := &operatorv1.LogStorage{}
 		ls.Name = "tigera-secure"
@@ -610,12 +608,6 @@ var _ = Describe("LogStorage Secrets controller", func() {
 			}
 			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
 
-			// Create the external ES and Kibana public certificates, used for external ES.
-			externalESSecret := rtest.CreateCertSecret(logstorage.ExternalESPublicCertName, common.OperatorNamespace(), "external.es.com")
-			Expect(cli.Create(ctx, externalESSecret)).ShouldNot(HaveOccurred())
-			externalKibanaSecret := rtest.CreateCertSecret(logstorage.ExternalKBPublicCertName, common.OperatorNamespace(), "external.kb.com")
-			Expect(cli.Create(ctx, externalKibanaSecret)).ShouldNot(HaveOccurred())
-
 			// Create a per-tenant CA secret for the test, and create its KeyPair.
 			cm, err := certificatemanager.Create(cli,
 				&install.Spec,
@@ -645,8 +637,6 @@ var _ = Describe("LogStorage Secrets controller", func() {
 				// These are created in BeforeEach.
 				{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()},
 				{Name: certificatemanagement.TenantCASecretName, Namespace: tenantNS},
-				{Name: logstorage.ExternalESPublicCertName, Namespace: common.OperatorNamespace()},
-				{Name: logstorage.ExternalKBPublicCertName, Namespace: common.OperatorNamespace()},
 
 				// These are created by the controller.
 				{Name: render.TigeraLinseedSecret, Namespace: tenantNS},

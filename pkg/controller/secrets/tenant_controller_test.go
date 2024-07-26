@@ -37,7 +37,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/dns"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -112,12 +111,6 @@ var _ = Describe("Tenant controller", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(cli.Create(ctx, cm.KeyPair().Secret(common.OperatorNamespace()))).ShouldNot(HaveOccurred())
 
-		// Create the external ES and Kibana public certificates, used for external ES.
-		externalESSecret := rtest.CreateCertSecret(logstorage.ExternalESPublicCertName, common.OperatorNamespace(), "external.es.com")
-		Expect(cli.Create(ctx, externalESSecret)).ShouldNot(HaveOccurred())
-		externalKibanaSecret := rtest.CreateCertSecret(logstorage.ExternalKBPublicCertName, common.OperatorNamespace(), "external.kb.com")
-		Expect(cli.Create(ctx, externalKibanaSecret)).ShouldNot(HaveOccurred())
-
 		// Create the tenant Namespace.
 		tenantNS = "tenant-namespace"
 		Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: tenantNS}})).ShouldNot(HaveOccurred())
@@ -174,10 +167,6 @@ var _ = Describe("Tenant controller", func() {
 			// Should include both the per-tenant and cluster-scoped CA certs.
 			types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()},
 			types.NamespacedName{Name: certificatemanagement.TenantCASecretName, Namespace: tenantNS},
-
-			// Should include public certs for external ES and Kibana.
-			types.NamespacedName{Name: logstorage.ExternalESPublicCertName, Namespace: common.OperatorNamespace()},
-			types.NamespacedName{Name: logstorage.ExternalKBPublicCertName, Namespace: common.OperatorNamespace()},
 		)
 
 		// A trusted bundle ConfigMap with system roots should also have been created.

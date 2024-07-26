@@ -272,32 +272,27 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	// - Zero-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a single trusted bundle in each.
 	// - Single-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a single trusted bundle in each.
 	//
-	// External ES modes:
-	// - Single-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a single trusted bundle in each.
-	// - Multi-tenant: nothing installed in tigera-elasticsearch Namespace. The trusted bundle isn't created by this controller, but per-tenant keypairs are.
-	if !r.elasticExternal {
-		// This branch provisions the necessary KeyPairs for the internal ES cluster and Kibana, and installs a trusted bundle into tigera-kibana.
-		// The trusted bundle for the tigera-elasticsearch namespace will be created further below as part of generateTigeraSecrets(), as it
-		// needs to include the public certificates from other Tigera components.
+	// This branch provisions the necessary KeyPairs for the internal ES cluster and Kibana, and installs a trusted bundle into tigera-kibana.
+	// The trusted bundle for the tigera-elasticsearch namespace will be created further below as part of generateTigeraSecrets(), as it
+	// needs to include the public certificates from other Tigera components.
 
-		// Generate Elasticsearch / Kibana secrets for the tigera-elasticsearch and tigera-kibana namespaces.
-		elasticKeys, err := r.generateInternalElasticSecrets(reqLogger, kibanaEnabled, operatorSigner)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+	// Generate Elasticsearch / Kibana secrets for the tigera-elasticsearch and tigera-kibana namespaces.
+	elasticKeys, err := r.generateInternalElasticSecrets(reqLogger, kibanaEnabled, operatorSigner)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
-		// Create Elasticsearch keypair into the tigera-elasticsearch Namespace.
-		if err = hdler.CreateOrUpdateOrDelete(ctx, elasticKeys.internalESComponent(), r.status); err != nil {
+	// Create Elasticsearch keypair into the tigera-elasticsearch Namespace.
+	if err = hdler.CreateOrUpdateOrDelete(ctx, elasticKeys.internalESComponent(), r.status); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if kibanaEnabled {
+		// Render the key pair and trusted bundle into the Kibana namespace.
+		if err = hdler.CreateOrUpdateOrDelete(ctx, elasticKeys.internalKibanaComponent(elasticKeys.trustedBundle(operatorSigner)), r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
-		}
-
-		if kibanaEnabled {
-			// Render the key pair and trusted bundle into the Kibana namespace.
-			if err = hdler.CreateOrUpdateOrDelete(ctx, elasticKeys.internalKibanaComponent(elasticKeys.trustedBundle(operatorSigner)), r.status); err != nil {
-				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-				return reconcile.Result{}, err
-			}
 		}
 	}
 	reqLogger.Info("Rendering secrets for Tigera ES components")

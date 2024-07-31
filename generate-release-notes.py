@@ -31,7 +31,7 @@ def issues_in_milestone():
             # Found the milestone in this repo - look for issues (but only
             # ones that have been closed!)
             issues = []
-            for i in repo.get_issues(milestone=m, state="closed"):
+            for i in repo.get_issues(milestone=m, state="closed", labels=['release-note-required']):
                 pr = i.as_pull_request()
                 if pr.merged:
                     # Filter out PRs which are closed but not merged.

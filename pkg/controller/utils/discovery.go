@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -94,6 +95,12 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 		return platform, nil
 	}
 
+	if openshift, err := isOpenshift(clientset); err != nil {
+		return operatorv1.ProviderNone, fmt.Errorf("failed to check if Openshift is the provider: %s", err)
+	} else if openshift {
+		return operatorv1.ProviderOpenShift, nil
+	}
+
 	// We failed to determine the platform based on API groups. Some platforms can be detected in other ways, though.
 	if dockeree, err := isDockerEE(ctx, clientset); err != nil {
 		return operatorv1.ProviderNone, fmt.Errorf("failed to check if Docker EE is the provider: %s", err)
@@ -119,6 +126,22 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 	return operatorv1.ProviderNone, nil
 }
 
+func isOpenshift(c kubernetes.Interface) (bool, error) {
+	resources, err := c.Discovery().ServerResourcesForGroupVersion("config.openshift.io/v1")
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	for _, resource := range resources.APIResources {
+		if resource.Kind == "ClusterVersion" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // autodetectFromGroup auto detects the platform based on the API groups that are present.
 func autodetectFromGroup(c kubernetes.Interface) (operatorv1.Provider, error) {
 	groups, err := c.Discovery().ServerGroups()
@@ -126,11 +149,6 @@ func autodetectFromGroup(c kubernetes.Interface) (operatorv1.Provider, error) {
 		return operatorv1.ProviderNone, err
 	}
 	for _, g := range groups.Groups {
-		if g.Name == "config.openshift.io" {
-			// Running on OpenShift.
-			return operatorv1.ProviderOpenShift, nil
-		}
-
 		if g.Name == "networking.gke.io" {
 			// Running on GKE.
 			return operatorv1.ProviderGKE, nil

@@ -140,7 +140,8 @@ DOCKER_RUN := $(CONTAINERIZED) $(CALICO_BUILD)
 BUILD_IMAGE?=tigera/operator
 BUILD_INIT_IMAGE?=tigera/operator-init
 
-BINDIR?=build/_output/bin
+BUILD_DIR?=build/_output
+BINDIR?=$(BUILD_DIR)/bin
 
 IMAGE_REGISTRY?=quay.io
 PUSH_IMAGE_PREFIXES?=quay.io/
@@ -263,7 +264,7 @@ $(BINDIR)/kind:
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c "GOBIN=/go/src/$(PACKAGE_NAME)/$(BINDIR) go install sigs.k8s.io/kind"
 
 clean:
-	rm -rf build/_output
+	rm -rf $(BUILD_DIR)
 	rm -rf build/init/bin
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
@@ -808,8 +809,8 @@ BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
-BUNDLE_CRD_DIR ?= build/_output/bundle/$(VERSION)/crds
-BUNDLE_DEPLOY_DIR ?= build/_output/bundle/$(VERSION)/deploy
+BUNDLE_CRD_DIR ?= $(BUILD_DIR)/bundle/$(VERSION)/crds
+BUNDLE_DEPLOY_DIR ?= $(BUILD_DIR)/bundle/$(VERSION)/deploy
 
 ## Create an operator bundle image.
 # E.g., make bundle VERSION=1.13.1 PREV_VERSION=1.13.0 CHANNELS=release-v1.13 DEFAULT_CHANNEL=release-v1.13
@@ -940,3 +941,99 @@ define github_pr_add_comment
 	$(eval JSON := {"body":"$(3)"})
 	$(call github_call_api,POST,$(1)/issues/$(2)/comments,$(JSON))
 endef
+
+#####################################
+#####################################
+# ImageSet utility targets
+.PHONY: clean-imageset
+clean-imageset:
+	rm -f $(BUILD_DIR)/*imageset*
+
+
+ifdef VERSION
+OPERATOR_IMAGE ?= $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION)
+else
+OPERATOR_IMAGE ?= $(BUILD_IMAGE):latest
+endif
+CRANE_IMAGE ?= calico/go-build:master
+
+$(BINDIR)/crane:
+	mkdir -p $(BINDIR)/
+	$(eval crane_container := $(shell docker create $(CRANE_IMAGE)))
+	docker cp $(crane_container):/usr/local/bin/crane $(BINDIR)/crane
+	docker rm $(crane_container)
+
+define imageset_header
+apiVersion: operator.tigera.io/v1
+kind: ImageSet
+metadata:
+endef
+export imageset_header
+
+ifeq ($(OLD_STYLE_PRINT_IMAGE),true)
+calico_img_filter=list | grep -e /calico/ -e tigera/operator
+enterprise_img_filter=list | grep -v -e calico
+else
+calico_img_filter=listcalico
+enterprise_img_filter=listenterprise
+endif
+
+# This gen-imageset target only creates an ImageSet for the built-in registries and cannot be used
+# to generate an ImageSet for an alternate registry.
+.PHONY: gen-imageset gen-enterprise-imageset gen-calico-imageset
+gen-imageset: gen-enterprise-imageset gen-calico-imageset
+	@cat $(BUILD_DIR)/imageset-enterprise.yaml > $(BUILD_DIR)/imageset.yaml
+	@echo "---" >> $(BUILD_DIR)/imageset.yaml
+	@cat $(BUILD_DIR)/imageset-calico.yaml >> $(BUILD_DIR)/imageset.yaml
+	@echo Imageset written to file $(BUILD_DIR)/imageset.yaml
+
+.PHONY: gen-enterprise-imageset
+gen-enterprise-imageset: $(BINDIR)/crane
+	$(eval IMAGESET_VER = $(shell docker run $(OPERATOR_IMAGE) --version 2>/dev/null | \
+		grep "Enterprise:" | sed -e 's/Enterprise://'))
+	@echo Enterprise version: $(IMAGESET_VER)
+	@echo "$$imageset_header" > $(BUILD_DIR)/imageset-enterprise.yaml
+	@echo "  name: enterprise-$(IMAGESET_VER)" >> $(BUILD_DIR)/imageset-enterprise.yaml
+	@echo "spec:" >> $(BUILD_DIR)/imageset-enterprise.yaml
+	@echo "  images:" >> $(BUILD_DIR)/imageset-enterprise.yaml
+	@docker run $(OPERATOR_IMAGE) --print-images=$(enterprise_img_filter) | \
+	  grep -v "Failed to read" | \
+	  grep -v -e fips | \
+	while read -r line; do \
+	  echo "Adding digest for $${line}"; \
+	  digest=$$($(BINDIR)/crane digest $${line}); \
+	  echo "  - image: \"$$(echo $${line} | sed -e 's|^.*/\([^/]*/[^/]*\):.*$$|\1|')\"" >> $(BUILD_DIR)/imageset-enterprise.yaml; \
+	  echo "    digest: $${digest}" >> $(BUILD_DIR)/imageset-enterprise.yaml; \
+	done
+
+.PHONY: gen-calico-imageset
+gen-calico-imageset: $(BINDIR)/crane
+	$(eval IMAGESET_VER = $(shell docker run $(OPERATOR_IMAGE) --version 2>/dev/null | \
+		grep "Calico:" | sed -e 's/Calico://'))
+	@echo Calico version: $(IMAGESET_VER)
+	@echo "$$imageset_header" > $(BUILD_DIR)/imageset-calico.yaml
+	@echo "  name: calico-$(IMAGESET_VER)" >> $(BUILD_DIR)/imageset-calico.yaml
+	@echo "spec:" >> $(BUILD_DIR)/imageset-calico.yaml
+	@echo "  images:" >> $(BUILD_DIR)/imageset-calico.yaml
+	docker run $(OPERATOR_IMAGE) --print-images=$(calico_img_filter) | \
+	  grep -v "Failed to read" | \
+	  grep -v -e fips | \
+	while read -r line; do \
+	  echo "Adding digest for $${line}"; \
+	  digest=$$($(BINDIR)/crane digest $${line}); \
+	  echo "  - image: \"$$(echo $${line} | sed -e 's|^.*/\([^/]*/[^/]*\):.*$$|\1|')\"" >> $(BUILD_DIR)/imageset-calico.yaml; \
+	  echo "    digest: $${digest}" >> $(BUILD_DIR)/imageset-calico.yaml; \
+	done
+ifeq ($(OLD_STYLE_PRINT_IMAGE),true)
+	@docker run $(OPERATOR_IMAGE) --print-images=list | \
+	  grep -v -e "Failed to read" -e fips | \
+	  grep -e 'tigera/key-cert-provisioner' | \
+	while read -r line; do \
+	  echo "Adding digest for $${line}"; \
+	  digest=$$($(BINDIR)/crane digest $${line}); \
+	  echo "  - image: \"$$(echo $${line} | sed -e 's|^.*/\([^/]*/[^/]*\):.*$$|\1|')\"" >> $(BUILD_DIR)/imageset-calico.yaml; \
+	  echo "    digest: $${digest}" >> $(BUILD_DIR)/imageset-calico.yaml; \
+	done
+endif
+
+### End of ImageSet utilities

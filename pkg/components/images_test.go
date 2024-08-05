@@ -27,7 +27,7 @@ import (
 var _ = Describe("test GetReference", func() {
 	Context("No registry override", func() {
 		DescribeTable("should render",
-			func(c component, registry, image string) {
+			func(c Component, registry, image string) {
 				Expect(GetReference(c, "", "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, "calico/node"),
@@ -41,7 +41,7 @@ var _ = Describe("test GetReference", func() {
 
 	Context("UseDefault for registry and imagepath", func() {
 		DescribeTable("should render",
-			func(c component, registry, image string) {
+			func(c Component, registry, image string) {
 				ud := "UseDefault"
 				Expect(GetReference(c, ud, ud, "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
 			},
@@ -56,7 +56,7 @@ var _ = Describe("test GetReference", func() {
 
 	Context("registry override", func() {
 		DescribeTable("should render",
-			func(c component, image string) {
+			func(c Component, image string) {
 				Expect(GetReference(c, "quay.io/", "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", "quay.io/", image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, "calico/node"),
@@ -70,7 +70,7 @@ var _ = Describe("test GetReference", func() {
 
 	Context("image prefix override", func() {
 		DescribeTable("should render",
-			func(c component, image string) {
+			func(c Component, image string) {
 				Expect(GetReference(c, "quay.io/", "", "prefix-", nil)).To(Equal(fmt.Sprintf("quay.io/%s:%s", image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, "calico/prefix-node"),
@@ -84,7 +84,7 @@ var _ = Describe("test GetReference", func() {
 
 	Context("imagepath override", func() {
 		DescribeTable("should render",
-			func(c component, registry, image string) {
+			func(c Component, registry, image string) {
 				Expect(GetReference(c, "", "userpath", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, "userpath/node"),
@@ -97,7 +97,7 @@ var _ = Describe("test GetReference", func() {
 	})
 	Context("registry and imagepath override", func() {
 		DescribeTable("should render",
-			func(c component, image string) {
+			func(c Component, image string) {
 				Expect(GetReference(c, "quay.io/extra/", "userpath", "", nil)).To(Equal(fmt.Sprintf("quay.io/extra/%s:%s", image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, "userpath/node"),
@@ -110,7 +110,7 @@ var _ = Describe("test GetReference", func() {
 	})
 	Context("with an ImageSet", func() {
 		DescribeTable("should render",
-			func(c component, image, hash string) {
+			func(c Component, image, hash string) {
 				is := &op.ImageSet{
 					Spec: op.ImageSetSpec{
 						Images: []op.Image{

@@ -139,18 +139,24 @@ func main() {
 		os.Exit(0)
 	}
 	if printImages != "" {
+		var cmpnts []components.Component
 		if strings.ToLower(printImages) == "list" {
-			cmpnts := components.CalicoImages
+			cmpnts = components.CalicoImages
 			cmpnts = append(cmpnts, components.EnterpriseImages...)
-
-			for _, x := range cmpnts {
-				ref, _ := components.GetReference(x, "", "", "", nil)
-				fmt.Println(ref)
-			}
-			os.Exit(0)
+		} else if strings.ToLower(printImages) == "listcalico" {
+			cmpnts = components.CalicoImages
+		} else if strings.ToLower(printImages) == "listenterprise" {
+			cmpnts = components.EnterpriseImages
+		} else {
+			fmt.Println("Invalid option for --print-images flag", printImages)
+			os.Exit(1)
 		}
-		fmt.Println("Invalid option for --print-images flag", printImages)
-		os.Exit(1)
+		cmpnts = append(cmpnts, components.ComponentOperatorInit)
+		for _, x := range cmpnts {
+			ref, _ := components.GetReference(x, "", "", "", nil)
+			fmt.Println(ref)
+		}
+		os.Exit(0)
 	}
 	if printCalicoCRDs != "" {
 		if err := showCRDs(operatorv1.Calico, printCalicoCRDs); err != nil {

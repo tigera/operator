@@ -53,14 +53,26 @@ var _ = Describe("provider discovery", func() {
 		Expect(p).To(Equal(operatorv1.ProviderDockerEE))
 	})
 
-	It("should detect openshift based on API resource config.openshift.io existence", func() {
+	It("should detect openshift based on API resource clusterversion.config.openshift.io existence", func() {
 		c := fake.NewSimpleClientset()
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "config.openshift.io/v1",
+			APIResources: []metav1.APIResource{{SingularName: "clusterversion", Name: "clusterversions", Kind: "ClusterVersion"}},
 		}}
 		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderOpenShift))
+	})
+
+	It("should detect non-openshift based on API resource clusterversion.config.openshift.io absense, however some other config.openshift.io resources are present", func() {
+		c := fake.NewSimpleClientset()
+		c.Resources = []*metav1.APIResourceList{{
+			GroupVersion: "config.openshift.io/v1",
+			APIResources: []metav1.APIResource{{SingularName: "dummy", Name: "dummies", Kind: "Dummy"}},
+		}}
+		p, e := AutoDiscoverProvider(context.Background(), c)
+		Expect(e).To(BeNil())
+		Expect(p).To(Equal(operatorv1.ProviderNone))
 	})
 
 	It("should detect GKE based on API resource networking.gke.io existence", func() {

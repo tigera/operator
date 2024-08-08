@@ -20,7 +20,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 )
 
-type component struct {
+type Component struct {
 	// Image is the full image path and name for this component (e.g., tigera/cnx-node, calico/cni)
 	Image   string
 	Version string
@@ -34,7 +34,7 @@ type component struct {
 const UseDefault = "UseDefault"
 
 // GetReference returns the fully qualified image to use, including registry and version.
-func GetReference(c component, registry, imagePath, imagePrefix string, is *operator.ImageSet) (string, error) {
+func GetReference(c Component, registry, imagePath, imagePrefix string, is *operator.ImageSet) (string, error) {
 	// If a user did not supply a registry, use the default registry
 	// based on component
 	if registry == "" || registry == UseDefault {

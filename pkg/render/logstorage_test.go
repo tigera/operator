@@ -495,20 +495,20 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(nodeSelectors["k2"]).To(Equal("v2"))
 		})
 
+		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+			component := render.LogStorage(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
 
-	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
-		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
-		component := render.LogStorage(cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
-
-		role := rtest.GetResource(resources, "tigera-elasticsearch", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{"privileged"},
-		}))
+			role := rtest.GetResource(resources, "tigera-elasticsearch", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{"privileged"},
+			}))
+		})
 	})
 
 	Context("Managed cluster", func() {

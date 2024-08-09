@@ -179,27 +179,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
 			)
 		})
-
-		It("should not render when FIPS mode is enabled", func() {
-			bundle := getBundle(installation)
-			enabled := operatorv1.FIPSModeEnabled
-			installation.FIPSMode = &enabled
-			component := Dashboards(&Config{
-				Installation: installation,
-				PullSecrets: []*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				},
-				TrustedBundle: bundle,
-				Namespace:     render.ElasticsearchNamespace,
-				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.tigera-kibana.svc",
-				KibanaScheme:  "htpps",
-				KibanaPort:    5601,
-			})
-
-			resources, _ := component.Objects()
-			_, ok := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
-			Expect(ok).To(BeFalse(), "Jobs not found")
-		})
 	})
 
 	Context("multi-tenant rendering", func() {

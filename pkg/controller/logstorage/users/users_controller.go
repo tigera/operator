@@ -66,6 +66,7 @@ type UsersCleanupController struct {
 	scheme          *runtime.Scheme
 	esClientFn      utils.ElasticsearchClientCreator
 	elasticExternal bool
+	multiTenant     bool
 }
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
@@ -357,13 +358,49 @@ func (r *UsersCleanupController) Reconcile(ctx context.Context, request reconcil
 		request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - Cleanup")
 
-	// Wait for Elasticsearch to be installed and available.
-	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
-	if err != nil {
+	// We skip requests without a namespace specified in multi-tenant setups.
+	if r.multiTenant && request.Namespace == "" {
+		return reconcile.Result{}, nil
+	}
+
+	// Check if this is a tenant-scoped request.
+	_, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	if errors.IsNotFound(err) {
+		reqLogger.Info("No Tenant in this Namespace, skip")
+		return reconcile.Result{}, nil
+	} else if err != nil {
 		return reconcile.Result{}, err
 	}
-	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+
+	// Get LogStorage resource.
+	logStorage := &operatorv1.LogStorage{}
+	err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, logStorage)
+	if err != nil {
+		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
+		// there are still "LogStorage" related items that need to be set up
+		if !errors.IsNotFound(err) {
+			return reconcile.Result{}, err
+		}
+		reqLogger.Info("Logstorage is not found")
 		return reconcile.Result{}, nil
+	}
+
+	// Wait for the initializing controller to indicate that the LogStorage object is actionable.
+	if logStorage.Status.State != operatorv1.TigeraStatusReady {
+		reqLogger.Info("Logstorage is not marked as ready")
+		return reconcile.Result{}, nil
+	}
+
+	if !r.elasticExternal {
+		// Wait for Elasticsearch to be installed and available.
+		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
+			reqLogger.Info("Elasticsearch is not ready")
+			return reconcile.Result{}, nil
+		}
 	}
 
 	// Clean up any stale users that may have been left behind by a previous tenant

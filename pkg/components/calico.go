@@ -22,119 +22,119 @@ import "github.com/tigera/operator/version"
 var (
 	CalicoRelease string = "master"
 
-	ComponentCalicoCNI = component{
+	ComponentCalicoCNI = Component{
 		Version:  "master",
 		Image:    "calico/cni",
 		Registry: "",
 	}
 
-	ComponentCalicoCNIFIPS = component{
+	ComponentCalicoCNIFIPS = Component{
 		Version:  "master-fips",
 		Image:    "calico/cni",
 		Registry: "",
 	}
 
-	ComponentCalicoCNIWindows = component{
+	ComponentCalicoCNIWindows = Component{
 		Version:  "master",
 		Image:    "calico/cni-windows",
 		Registry: "",
 	}
 
-	ComponentCalicoCSRInitContainer = component{
+	ComponentCalicoCSRInitContainer = Component{
 		Version:  "master",
 		Image:    "calico/key-cert-provisioner",
 		Registry: "",
 	}
 
-	ComponentCalicoKubeControllers = component{
+	ComponentCalicoKubeControllers = Component{
 		Version:  "master",
 		Image:    "calico/kube-controllers",
 		Registry: "",
 	}
 
-	ComponentCalicoKubeControllersFIPS = component{
+	ComponentCalicoKubeControllersFIPS = Component{
 		Version:  "master-fips",
 		Image:    "calico/kube-controllers",
 		Registry: "",
 	}
 
-	ComponentCalicoNode = component{
+	ComponentCalicoNode = Component{
 		Version:  "master",
 		Image:    "calico/node",
 		Registry: "",
 	}
 
-	ComponentCalicoNodeFIPS = component{
+	ComponentCalicoNodeFIPS = Component{
 		Version:  "master-fips",
 		Image:    "calico/node",
 		Registry: "",
 	}
 
-	ComponentCalicoNodeWindows = component{
+	ComponentCalicoNodeWindows = Component{
 		Version:  "master",
 		Image:    "calico/node-windows",
 		Registry: "",
 	}
 
-	ComponentCalicoTypha = component{
+	ComponentCalicoTypha = Component{
 		Version:  "master",
 		Image:    "calico/typha",
 		Registry: "",
 	}
 
-	ComponentCalicoTyphaFIPS = component{
+	ComponentCalicoTyphaFIPS = Component{
 		Version:  "master-fips",
 		Image:    "calico/typha",
 		Registry: "",
 	}
 
-	ComponentCalicoFlexVolume = component{
+	ComponentCalicoFlexVolume = Component{
 		Version:  "master",
 		Image:    "calico/pod2daemon-flexvol",
 		Registry: "",
 	}
 
-	ComponentCalicoAPIServer = component{
+	ComponentCalicoAPIServer = Component{
 		Version:  "master",
 		Image:    "calico/apiserver",
 		Registry: "",
 	}
 
-	ComponentCalicoAPIServerFIPS = component{
+	ComponentCalicoAPIServerFIPS = Component{
 		Version:  "master-fips",
 		Image:    "calico/apiserver",
 		Registry: "",
 	}
 
-	ComponentCalicoCSI = component{
+	ComponentCalicoCSI = Component{
 		Version:  "master",
 		Image:    "calico/csi",
 		Registry: "",
 	}
 
-	ComponentCalicoCSIFIPS = component{
+	ComponentCalicoCSIFIPS = Component{
 		Version:  "master-fips",
 		Image:    "calico/csi",
 		Registry: "",
 	}
 
-	ComponentCalicoCSIRegistrar = component{
+	ComponentCalicoCSIRegistrar = Component{
 		Version:  "master",
 		Image:    "calico/node-driver-registrar",
 		Registry: "",
 	}
 
-	ComponentCalicoCSIRegistrarFIPS = component{
+	ComponentCalicoCSIRegistrarFIPS = Component{
 		Version:  "master-fips",
 		Image:    "calico/node-driver-registrar",
 		Registry: "",
 	}
-	ComponentOperatorInit = component{
+	ComponentOperatorInit = Component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
 	}
 
-	CalicoImages = []component{
+	CalicoImages = []Component{
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
 		ComponentCalicoCNIWindows,
@@ -147,7 +147,6 @@ var (
 		ComponentCalicoTypha,
 		ComponentCalicoTyphaFIPS,
 		ComponentCalicoFlexVolume,
-		ComponentOperatorInit,
 		ComponentCalicoAPIServer,
 		ComponentCalicoAPIServerFIPS,
 		ComponentCalicoCSI,

@@ -20,345 +20,345 @@ package components
 var (
 	EnterpriseRelease string = "{{ .Title }}"
 {{ with index .Components "cnx-apiserver" }}
-	ComponentAPIServer = component{
+	ComponentAPIServer = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "compliance-benchmarker" }}
-	ComponentComplianceBenchmarker = component{
+	ComponentComplianceBenchmarker = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "compliance-controller" }}
-	ComponentComplianceController = component{
+	ComponentComplianceController = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "compliance-reporter" }}
-	ComponentComplianceReporter = component{
+	ComponentComplianceReporter = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "compliance-server" }}
-	ComponentComplianceServer = component{
+	ComponentComplianceServer = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "compliance-snapshotter" }}
-	ComponentComplianceSnapshotter = component{
+	ComponentComplianceSnapshotter = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "key-cert-provisioner" }}
-	ComponentTigeraCSRInitContainer = component{
+	ComponentTigeraCSRInitContainer = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "deep-packet-inspection" }}
-	ComponentDeepPacketInspection = component{
+	ComponentDeepPacketInspection = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "eck-elasticsearch" }}
-	ComponentEckElasticsearch = component{
+	ComponentEckElasticsearch = Component{
 		Version:  "{{ .Version }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "eck-kibana" }}
-	ComponentEckKibana = component{
+	ComponentEckKibana = Component{
 		Version:  "{{ .Version }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "elastic-tsee-installer" }}
-	ComponentElasticTseeInstaller = component{
+	ComponentElasticTseeInstaller = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.elasticsearch }}
-	ComponentElasticsearch = component{
+	ComponentElasticsearch = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.elasticsearch }}
-	ComponentElasticsearchFIPS = component{
+	ComponentElasticsearchFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "eck-elasticsearch-operator" }}
-	ComponentECKElasticsearchOperator = component{
+	ComponentECKElasticsearchOperator = Component{
 		Version:  "{{ .Version }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "elasticsearch-operator" }}
-	ComponentElasticsearchOperator = component{
+	ComponentElasticsearchOperator = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "es-proxy" }}
-	ComponentEsProxy = component{
+	ComponentEsProxy = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "es-gateway" }}
-	ComponentESGateway = component{
+	ComponentESGateway = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "linseed" }}
-	ComponentLinseed = component{
+	ComponentLinseed = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.fluentd }}
-	ComponentFluentd = component{
+	ComponentFluentd = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "fluentd-windows" }}
-	ComponentFluentdWindows = component{
+	ComponentFluentdWindows = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.guardian }}
-	ComponentGuardian = component{
+	ComponentGuardian = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "intrusion-detection-controller" }}
-	ComponentIntrusionDetectionController = component{
+	ComponentIntrusionDetectionController = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "security-event-webhooks-processor" }}
-	ComponentSecurityEventWebhooksProcessor = component{
+	ComponentSecurityEventWebhooksProcessor = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.kibana }}
-	ComponentKibana = component{
+	ComponentKibana = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "cnx-manager" }}
-	ComponentManager = component{
+	ComponentManager = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "dex" }}
-	ComponentDex = component{
+	ComponentDex = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.voltron }}
-	ComponentManagerProxy = component{
+	ComponentManagerProxy = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "packetcapture" }}
-	ComponentPacketCapture = component{
+	ComponentPacketCapture = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "policy-recommendation" }}
-	ComponentPolicyRecommendation = component{
+	ComponentPolicyRecommendation = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "egress-gateway" }}
-	ComponentEgressGateway = component{
+	ComponentEgressGateway = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "l7-collector" }}
-	ComponentL7Collector = component{
+	ComponentL7Collector = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "envoy" }}
-	ComponentEnvoyProxy = component{
+	ComponentEnvoyProxy = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "dikastes" }}
-	ComponentDikastes = component{
+	ComponentDikastes = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "coreos-prometheus" }}
-	ComponentCoreOSPrometheus = component{
+	ComponentCoreOSPrometheus = Component{
 		Version:  "{{ .Version }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "prometheus" }}
-	ComponentPrometheus = component{
+	ComponentPrometheus = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "tigera-prometheus-service" }}
-	ComponentTigeraPrometheusService = component{
+	ComponentTigeraPrometheusService = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "coreos-alertmanager" }}
-	ComponentCoreOSAlertmanager = component{
+	ComponentCoreOSAlertmanager = Component{
 		Version:  "{{ .Version }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "alertmanager" }}
-	ComponentPrometheusAlertmanager = component{
+	ComponentPrometheusAlertmanager = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "cnx-queryserver" }}
-	ComponentQueryServer = component{
+	ComponentQueryServer = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "cnx-kube-controllers" }}
-	ComponentTigeraKubeControllers = component{
+	ComponentTigeraKubeControllers = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "cnx-node" }}
-	ComponentTigeraNode = component{
+	ComponentTigeraNode = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "cnx-node-windows" }}
-	ComponentTigeraNodeWindows = component{
+	ComponentTigeraNodeWindows = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.typha }}
-	ComponentTigeraTypha = component{
+	ComponentTigeraTypha = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "tigera-cni" }}
-	ComponentTigeraCNI = component{
+	ComponentTigeraCNI = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "tigera-cni" }}
-	ComponentTigeraCNIFIPS = component{
+	ComponentTigeraCNIFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "tigera-cni-windows" }}
-	ComponentTigeraCNIWindows = component{
+	ComponentTigeraCNIWindows = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "elasticsearch-metrics" }}
-	ComponentElasticsearchMetrics = component{
+	ComponentElasticsearchMetrics = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "flexvol" }}
-	ComponentTigeraFlexVolume = component{
+	ComponentTigeraFlexVolume = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "csi" }}
-	ComponentTigeraCSI = component{
+	ComponentTigeraCSI = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar" }}
-	ComponentTigeraCSINodeDriverRegistrar = component{
+	ComponentTigeraCSINodeDriverRegistrar = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -366,7 +366,7 @@ var (
 {{- end }}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
-	EnterpriseImages = []component{
+	EnterpriseImages = []Component{
 		ComponentAPIServer,
 		ComponentComplianceBenchmarker,
 		ComponentComplianceController,

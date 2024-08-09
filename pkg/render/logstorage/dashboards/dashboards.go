@@ -120,7 +120,7 @@ func (d *dashboards) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (d *dashboards) Objects() (objsToCreate, objsToDelete []client.Object) {
-	if d.cfg.IsManaged || operatorv1.IsFIPSModeEnabled(d.cfg.Installation.FIPSMode) {
+	if d.cfg.IsManaged {
 		return nil, d.resources()
 	}
 

@@ -90,12 +90,6 @@ var (
 		Registry: "",
 	}
 
-	ComponentElasticsearchFIPS = Component{
-		Version:  "master-fips",
-		Image:    "tigera/elasticsearch",
-		Registry: "",
-	}
-
 	ComponentECKElasticsearchOperator = Component{
 		Version:  "2.6.1",
 		Registry: "",
@@ -279,12 +273,6 @@ var (
 		Registry: "",
 	}
 
-	ComponentTigeraCNIFIPS = Component{
-		Version:  "master-fips",
-		Image:    "tigera/cni",
-		Registry: "",
-	}
-
 	ComponentTigeraCNIWindows = Component{
 		Version:  "master",
 		Image:    "tigera/cni-windows",
@@ -327,7 +315,6 @@ var (
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
-		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
 		ComponentEsProxy,
 		ComponentFluentd,
@@ -353,7 +340,6 @@ var (
 		ComponentTigeraNodeWindows,
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
-		ComponentTigeraCNIFIPS,
 		ComponentTigeraCNIWindows,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,

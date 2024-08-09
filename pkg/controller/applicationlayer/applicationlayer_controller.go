@@ -232,12 +232,6 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, nil
 	}
 
-	if operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
-		msg := errors.New("ApplicationLayer features cannot be used in combination with FIPSMode=Enabled")
-		r.status.SetDegraded(operatorv1.ResourceValidationError, msg.Error(), nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
-
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)

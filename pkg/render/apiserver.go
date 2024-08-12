@@ -217,8 +217,8 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
 		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider, PSSPrivileged),
-		c.tigeraCustomResourcesClusterRole(),
-		c.tigeraCustomResourcesClusterRoleBinding(),
+		c.tigeraApiServerClusterRole(),
+		c.tigeraApiServerClusterRoleBinding(),
 		c.tierGetterClusterRole(),
 		c.kubeControllerMgrTierGetterClusterRoleBinding(),
 		c.uisettingsgroupGetterClusterRole(),
@@ -279,6 +279,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// Explicitly delete any global OSS objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalCalicoObjects...)
+
+		// Explicitly delete any renamed/deprecated objects.
+		objsToDelete = append(objsToDelete, c.getDeprecatedResources()...)
 	} else {
 		// Create any Calico-only objects
 		globalObjects = append(globalObjects, globalCalicoObjects...)
@@ -1214,10 +1217,10 @@ func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
 	}
 }
 
-// tigeraCustomResourcesClusterRole creates a clusterrole that gives permissions to access backing CRDs
+// tigeraApiServerClusterRole creates a clusterrole that gives permissions to access backing CRDs
 //
 // Calico Enterprise only
-func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterRole {
+func (c *apiServerComponent) tigeraApiServerClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		{
 			// Calico Enterprise backing storage.
@@ -1258,26 +1261,31 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRole() *rbacv1.ClusterR
 				"patch",
 			},
 		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authorizationreviews"},
+			Verbs:     []string{"create"},
+		},
 	}
 
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-crds",
+			Name: "tigera-apiserver",
 		},
 		Rules: rules,
 	}
 }
 
-// tigeraCustomResourcesClusterRoleBinding creates a clusterrolebinding that applies tigeraCustomResourcesClusterRole to
+// tigeraApiServerClusterRoleBinding creates a clusterrolebinding that applies tigeraApiServerClusterRole to
 // the tigera-apiserver service account.
 //
 // Calico Enterprise only
-func (c *apiServerComponent) tigeraCustomResourcesClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *apiServerComponent) tigeraApiServerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-apiserver-access-tigera-crds",
+			Name: "tigera-apiserver",
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -1288,7 +1296,7 @@ func (c *apiServerComponent) tigeraCustomResourcesClusterRoleBinding() *rbacv1.C
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
-			Name:     "tigera-crds",
+			Name:     "tigera-apiserver",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}
@@ -1905,4 +1913,24 @@ func (c *apiServerComponent) multiTenantManagedClusterAccessClusterRoles() []cli
 	})
 
 	return objects
+}
+
+func (c *apiServerComponent) getDeprecatedResources() []client.Object {
+	renamedRscList := []client.Object{}
+
+	renamedRscList = append(renamedRscList, &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-apiserver",
+		},
+	})
+
+	renamedRscList = append(renamedRscList, &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-apiserver",
+		},
+	})
+
+	return renamedRscList
 }

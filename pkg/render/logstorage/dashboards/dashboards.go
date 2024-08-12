@@ -120,7 +120,7 @@ func (d *dashboards) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (d *dashboards) Objects() (objsToCreate, objsToDelete []client.Object) {
-	if d.cfg.IsManaged || operatorv1.IsFIPSModeEnabled(d.cfg.Installation.FIPSMode) {
+	if d.cfg.IsManaged {
 		return nil, d.resources()
 	}
 
@@ -220,10 +220,6 @@ func (d *dashboards) Job() *batchv1.Job {
 		{
 			Name:  "KB_CA_CERT",
 			Value: d.cfg.TrustedBundle.MountPath(),
-		},
-		{
-			Name:  "FIPS_MODE_ENABLED",
-			Value: operatorv1.IsFIPSModeEnabledString(d.cfg.Installation.FIPSMode),
 		},
 		relasticsearch.ElasticUserEnvVar(ElasticCredentialsSecret),
 		relasticsearch.ElasticPasswordEnvVar(ElasticCredentialsSecret),

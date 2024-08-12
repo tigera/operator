@@ -369,7 +369,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	kibanaEnabled := !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && !r.multiTenant
+	kibanaEnabled := !r.multiTenant
 
 	// Wait for dependencies to exist.
 	if elasticKeyPair == nil {
@@ -384,8 +384,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	// Define variables to be filled in below, conditional on cluster type.
 	var esLicenseType render.ElasticsearchLicenseType
 	var clusterConfig *relasticsearch.ClusterConfig
-	var applyTrial bool
-	var keyStoreSecret *corev1.Secret
 	var esAdminUserSecret *corev1.Secret
 
 	flowShards := logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
@@ -400,26 +398,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get storage class", err, reqLogger)
 		return reconcile.Result{}, err
-	}
-
-	if operatorv1.IsFIPSModeEnabled(install.FIPSMode) {
-		applyTrial, err = r.applyElasticTrialSecret(ctx, install)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get eck trial license", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		keyStoreSecret = &corev1.Secret{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: render.ElasticsearchKeystoreSecret, Namespace: render.ElasticsearchNamespace}, keyStoreSecret); err != nil {
-			if errors.IsNotFound(err) {
-				// We need to render a new one.
-				keyStoreSecret = render.CreateElasticsearchKeystoreSecret()
-			} else {
-				log.Error(err, "failed to read the Elasticsearch keystore secret")
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read the Elasticsearch keystore secret", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
 	}
 
 	// Get the admin user secret to copy to the operator namespace.
@@ -527,7 +505,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			PullSecrets:        pullSecrets,
 			Provider:           r.provider,
 			ElasticLicenseType: esLicenseType,
-			ApplyTrial:         applyTrial,
 		}),
 		render.LogStorage(&render.ElasticsearchConfiguration{
 			LogStorage:              ls,
@@ -544,7 +521,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			ElasticLicenseType:      esLicenseType,
 			TrustedBundle:           trustedBundle,
 			UnusedTLSSecret:         unusedTLSSecret,
-			KeyStoreSecret:          keyStoreSecret,
 		}),
 		kibana.Kibana(&kibana.Configuration{
 			LogStorage:      ls,
@@ -726,22 +702,4 @@ func (r *ElasticSubController) getKibanaService(ctx context.Context) (*corev1.Se
 		return nil, err
 	}
 	return &svc, nil
-}
-
-// applyElasticTrialSecret returns true if we want to apply a new trial license.
-// Overwriting an existing trial license will invalidate the old trial, and revert the cluster back to basic. When a user
-// installs a valid Elastic license, the trial will be ignored.
-func (r *ElasticSubController) applyElasticTrialSecret(ctx context.Context, installation *operatorv1.InstallationSpec) (bool, error) {
-	if !operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
-		return false, nil
-	}
-	// FIPS mode is a licensed feature for Elasticsearch.
-	if err := r.client.Get(ctx, types.NamespacedName{Name: eck.EnterpriseTrial, Namespace: eck.OperatorNamespace}, &corev1.Secret{}); err != nil {
-		if errors.IsNotFound(err) {
-			return true, nil
-		} else {
-			return false, err
-		}
-	}
-	return false, nil
 }

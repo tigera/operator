@@ -236,33 +236,6 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
 			)
 		})
-		It("should set the right env when FIPS mode is enabled", func() {
-			kp, bundle := getTLS(installation)
-			enabled := operatorv1.FIPSModeEnabled
-			installation.FIPSMode = &enabled
-			component := EsGateway(&Config{
-				Installation: installation,
-				PullSecrets: []*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				},
-				ESGatewayKeyPair: kp,
-				TrustedBundle:    bundle,
-				KubeControllersUserSecrets: []*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersUserSecret, Namespace: common.OperatorNamespace()}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, Namespace: render.ElasticsearchNamespace}},
-					{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, Namespace: render.ElasticsearchNamespace}},
-				},
-				ClusterDomain:   clusterDomain,
-				EsAdminUserName: "elastic",
-				Namespace:       render.ElasticsearchNamespace,
-				TruthNamespace:  common.OperatorNamespace(),
-			})
-
-			resources, _ := component.Objects()
-			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(ok).To(BeTrue())
-			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "ES_GATEWAY_FIPS_MODE_ENABLED", Value: "true"}))
-		})
 	})
 })
 

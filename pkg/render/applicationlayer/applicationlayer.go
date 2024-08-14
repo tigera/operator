@@ -59,6 +59,8 @@ const (
 	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/modsecurity-ruleset"
 	CalicoLogsVolumeName             = "var-log-calico"
 	CalicologsVolumePath             = "/var/log/calico"
+	CalicoSocketsVolumeName          = "tigera-run-calico"
+	CalicoSocketsVolumePath          = "/var/run/calico"
 )
 
 func ApplicationLayer(
@@ -91,6 +93,9 @@ type Config struct {
 
 	// Optional config for ALP
 	ALPEnabled bool
+
+	// SidecarInjectionEnabled
+	SidecarInjectionEnabled bool
 
 	// Calculated internal fields.
 	proxyImage      string
@@ -150,7 +155,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.serviceAccount())
 
 	c.config.dikastesEnabled = false
-	if c.config.WAFEnabled || c.config.ALPEnabled {
+	if c.config.WAFEnabled || c.config.ALPEnabled || c.config.SidecarInjectionEnabled {
 		c.config.dikastesEnabled = true
 	}
 
@@ -311,6 +316,22 @@ func (c *component) containers() []corev1.Container {
 			)
 		}
 
+		if c.config.SidecarInjectionEnabled {
+			commandArgs = append(
+				commandArgs,
+				"--sidecar-uds", filepath.Join(),
+			)
+			volMounts = append(
+				volMounts,
+				[]corev1.VolumeMount{
+					{
+						Name:      CalicoSocketsVolumeName,
+						MountPath: CalicoSocketsVolumePath,
+					},
+				}...,
+			)
+		}
+
 		dikastes := corev1.Container{
 			Name:            DikastesContainerName,
 			Image:           c.config.dikastesImage,
@@ -423,6 +444,19 @@ func (c *component) volumes() []corev1.Volume {
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: ModSecurityRulesetConfigMapName,
 						},
+					},
+				},
+			})
+		}
+
+		if c.config.SidecarInjectionEnabled {
+			hostPathDirectoryOrCreate := corev1.HostPathDirectoryOrCreate
+			volumes = append(volumes, corev1.Volume{
+				Name: CalicoSocketsVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: CalicoSocketsVolumePath,
+						Type: &hostPathDirectoryOrCreate,
 					},
 				},
 			})

@@ -255,6 +255,11 @@ spec:
                     format: int64
                     type: integer
                 type: object
+              sidecarInjection:
+                description: |-
+                  SidecarInjection controls whether or not sidecar injection is enabled for the cluster.
+                  When enabled, sidecar containers can be injected into pods to provide additional L7 functionality.
+                type: string
               webApplicationFirewall:
                 description: |-
                   WebApplicationFirewall controls whether or not ModSecurity enforcement is enabled for the cluster.

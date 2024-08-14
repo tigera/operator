@@ -215,6 +215,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentL7AdmssCtrl = Component{
+		Version:  "master",
+		Image:    "tigera/l7-admission-controller",
+		Registry: "",
+	}
+
 	ComponentCoreOSPrometheus = Component{
 		Version:  "v2.48.1",
 		Registry: "",

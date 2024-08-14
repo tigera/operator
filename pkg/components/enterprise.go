@@ -215,6 +215,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentL7AdmissionController = Component{
+		Version:  "master",
+		Image:    "tigera/l7-admission-controller",
+		Registry: "",
+	}
+
 	ComponentCoreOSPrometheus = Component{
 		Version:  "v2.48.1",
 		Registry: "",
@@ -359,6 +365,7 @@ var (
 		ComponentESGateway,
 		ComponentLinseed,
 		ComponentDikastes,
+		ComponentL7AdmissionController,
 		ComponentTigeraFlexVolume,
 		ComponentTigeraCSI,
 		ComponentTigeraCSINodeDriverRegistrar,

@@ -265,18 +265,19 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	lcSpec := instance.Spec.LogCollection
 	config := &applicationlayer.Config{
-		PullSecrets:            pullSecrets,
-		Installation:           installation,
-		OsType:                 rmeta.OSTypeLinux,
-		WAFEnabled:             r.isWAFEnabled(&instance.Spec),
-		LogsEnabled:            r.isLogsCollectionEnabled(&instance.Spec),
-		ALPEnabled:             r.isALPEnabled(&instance.Spec),
-		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
-		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
-		ModSecurityConfigMap:   modSecurityRuleSet,
-		UseRemoteAddressXFF:    instance.Spec.EnvoySettings.UseRemoteAddress,
-		NumTrustedHopsXFF:      instance.Spec.EnvoySettings.XFFNumTrustedHops,
-		ApplicationLayer:       instance,
+		PullSecrets:             pullSecrets,
+		Installation:            installation,
+		OsType:                  rmeta.OSTypeLinux,
+		WAFEnabled:              r.isWAFEnabled(&instance.Spec),
+		LogsEnabled:             r.isLogsCollectionEnabled(&instance.Spec),
+		ALPEnabled:              r.isALPEnabled(&instance.Spec),
+		SidecarInjectionEnabled: r.isSidecarInjectionEnabled(&instance.Spec),
+		LogRequestsPerInterval:  lcSpec.LogRequestsPerInterval,
+		LogIntervalSeconds:      lcSpec.LogIntervalSeconds,
+		ModSecurityConfigMap:    modSecurityRuleSet,
+		UseRemoteAddressXFF:     instance.Spec.EnvoySettings.UseRemoteAddress,
+		NumTrustedHopsXFF:       instance.Spec.EnvoySettings.XFFNumTrustedHops,
+		ApplicationLayer:        instance,
 	}
 	component := applicationlayer.ApplicationLayer(config)
 
@@ -465,6 +466,11 @@ func (r *ReconcileApplicationLayer) isALPEnabled(applicationLayerSpec *operatorv
 func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
 	return applicationLayerSpec.WebApplicationFirewall != nil &&
 		*applicationLayerSpec.WebApplicationFirewall == operatorv1.WAFEnabled
+}
+
+func (r *ReconcileApplicationLayer) isSidecarInjectionEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
+	return applicationLayerSpec.SidecarInjection != nil &&
+		*applicationLayerSpec.SidecarInjection == operatorv1.SidecarEnabled
 }
 
 func (r *ReconcileApplicationLayer) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigurationSpec, al *operatorv1.ApplicationLayer) string {

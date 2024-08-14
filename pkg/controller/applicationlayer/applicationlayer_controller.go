@@ -265,18 +265,19 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	lcSpec := instance.Spec.LogCollection
 	config := &applicationlayer.Config{
-		PullSecrets:            pullSecrets,
-		Installation:           installation,
-		OsType:                 rmeta.OSTypeLinux,
-		WAFEnabled:             r.isWAFEnabled(&instance.Spec),
-		LogsEnabled:            r.isLogsCollectionEnabled(&instance.Spec),
-		ALPEnabled:             r.isALPEnabled(&instance.Spec),
-		LogRequestsPerInterval: lcSpec.LogRequestsPerInterval,
-		LogIntervalSeconds:     lcSpec.LogIntervalSeconds,
-		ModSecurityConfigMap:   modSecurityRuleSet,
-		UseRemoteAddressXFF:    instance.Spec.EnvoySettings.UseRemoteAddress,
-		NumTrustedHopsXFF:      instance.Spec.EnvoySettings.XFFNumTrustedHops,
-		ApplicationLayer:       instance,
+		PullSecrets:             pullSecrets,
+		Installation:            installation,
+		OsType:                  rmeta.OSTypeLinux,
+		WAFEnabled:              r.isWAFEnabled(&instance.Spec),
+		LogsEnabled:             r.isLogsCollectionEnabled(&instance.Spec),
+		ALPEnabled:              r.isALPEnabled(&instance.Spec),
+		SidecarInjectionEnabled: r.isSidecarInjectionEnabled(&instance.Spec),
+		LogRequestsPerInterval:  lcSpec.LogRequestsPerInterval,
+		LogIntervalSeconds:      lcSpec.LogIntervalSeconds,
+		ModSecurityConfigMap:    modSecurityRuleSet,
+		UseRemoteAddressXFF:     instance.Spec.EnvoySettings.UseRemoteAddress,
+		NumTrustedHopsXFF:       instance.Spec.EnvoySettings.XFFNumTrustedHops,
+		ApplicationLayer:        instance,
 	}
 	component := applicationlayer.ApplicationLayer(config)
 
@@ -380,9 +381,14 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 		log.Info("L7 ALP found enabled")
 		atLeastOneFeatureDetected = true
 	}
+
+	if *al.Spec.SidecarInjection == operatorv1.SidecarEnabled {
+		log.Info("L7 SidecarInjection found enabled")
+		atLeastOneFeatureDetected = true
+	}
 	// If ApplicationLayer spec exists then one of its features should be set.
 	if !atLeastOneFeatureDetected {
-		return errors.New("at least one of webApplicationFirewall, policy.Mode or logCollection.collectLogs must be specified in ApplicationLayer resource")
+		return errors.New("at least one of webApplicationFirewall, policy.Mode, logCollection.collectLogs or sidecarInjection must be specified in ApplicationLayer resource")
 	}
 
 	return nil
@@ -465,6 +471,11 @@ func (r *ReconcileApplicationLayer) isALPEnabled(applicationLayerSpec *operatorv
 func (r *ReconcileApplicationLayer) isWAFEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
 	return applicationLayerSpec.WebApplicationFirewall != nil &&
 		*applicationLayerSpec.WebApplicationFirewall == operatorv1.WAFEnabled
+}
+
+func (r *ReconcileApplicationLayer) isSidecarInjectionEnabled(applicationLayerSpec *operatorv1.ApplicationLayerSpec) bool {
+	return applicationLayerSpec.SidecarInjection != nil &&
+		*applicationLayerSpec.SidecarInjection == operatorv1.SidecarEnabled
 }
 
 func (r *ReconcileApplicationLayer) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigurationSpec, al *operatorv1.ApplicationLayer) string {

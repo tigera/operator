@@ -65,6 +65,7 @@ const (
 	tigeraAPIServerTLSSecretName                    = "tigera-apiserver-certs"
 	APIServerSecretsRBACName                        = "tigera-extension-apiserver-secrets-access"
 	MultiTenantManagedClustersAccessClusterRoleName = "tigera-managed-cluster-access"
+	L7AdmssCtrlContainerName                        = "calico-l7admssctrl"
 )
 
 var TigeraAPIServerEntityRule = v3.EntityRule{
@@ -113,6 +114,7 @@ type APIServerConfiguration struct {
 	Installation                *operatorv1.InstallationSpec
 	APIServer                   *operatorv1.APIServerSpec
 	ForceHostNetwork            bool
+	ApplicationLayer            *operatorv1.ApplicationLayer
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	TLSKeyPair                  certificatemanagement.KeyPairInterface
@@ -126,6 +128,7 @@ type apiServerComponent struct {
 	cfg              *APIServerConfiguration
 	apiServerImage   string
 	queryServerImage string
+	l7AdmssCtrlImage string
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -143,6 +146,12 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
+		}
+		if c.isSidecarInjectionEnabled() {
+			c.l7AdmssCtrlImage, err = components.GetReference(components.ComponentL7AdmissionController, reg, path, prefix, is)
+			if err != nil {
+				errMsgs = append(errMsgs, err.Error())
+			}
 		}
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
@@ -928,6 +937,14 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		c.cfg.TLSKeyPair.HashAnnotationKey(): c.cfg.TLSKeyPair.HashAnnotationValue(),
 	}
 
+	containers := []corev1.Container{
+		c.apiServerContainer(),
+	}
+
+	if c.isSidecarInjectionEnabled() {
+		containers = append(containers, c.l7AdmssCtrlContainer())
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -960,10 +977,8 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
-					Containers: []corev1.Container{
-						c.apiServerContainer(),
-					},
-					Volumes: c.apiServerVolumes(),
+					Containers:         containers,
+					Volumes:            c.apiServerVolumes(),
 				},
 			},
 		},
@@ -1905,4 +1920,37 @@ func (c *apiServerComponent) multiTenantManagedClusterAccessClusterRoles() []cli
 	})
 
 	return objects
+}
+
+func (c *apiServerComponent) isSidecarInjectionEnabled() bool {
+	return c.cfg.ApplicationLayer != nil &&
+		c.cfg.ApplicationLayer.Spec.SidecarInjection != nil &&
+		*c.cfg.ApplicationLayer.Spec.SidecarInjection == operatorv1.SidecarEnabled
+}
+
+func (c *apiServerComponent) l7AdmssCtrlContainer() corev1.Container {
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+	}
+
+	l7AdmssCtrl := corev1.Container{
+		Name:            L7AdmssCtrlContainerName,
+		Image:           c.l7AdmssCtrlImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		VolumeMounts:    volumeMounts,
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   "/readyz",
+					Port:   intstr.FromInt(APIServerPort),
+					Scheme: corev1.URISchemeHTTPS,
+				},
+			},
+			// We expect the readiness probe to contact kube-apiserver.
+			// A longer period is chosen to minimize load.
+			PeriodSeconds: 60,
+		},
+	}
+
+	return l7AdmssCtrl
 }

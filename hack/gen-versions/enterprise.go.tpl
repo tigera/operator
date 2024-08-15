@@ -247,6 +247,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "l7-admission-controller" }}
+	ComponentL7AdmissionController = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = Component{
 		Version:  "{{ .Version }}",
@@ -409,6 +416,7 @@ var (
 		ComponentESGateway,
 		ComponentLinseed,
 		ComponentDikastes,
+		ComponentL7AdmissionController,
 		ComponentTigeraFlexVolume,
 		ComponentTigeraCSI,
 		ComponentTigeraCSINodeDriverRegistrar,

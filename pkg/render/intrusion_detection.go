@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -205,7 +206,6 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 
 	objs = append(objs,
 		c.intrusionDetectionServiceAccount(),
-		c.intrusionDetectionJobServiceAccount(),
 		c.intrusionDetectionClusterRole(),
 		c.intrusionDetectionClusterRoleBinding(),
 		c.intrusionDetectionRole(),
@@ -269,6 +269,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	if !c.cfg.ManagedCluster {
 		idsObjs := []client.Object{
 			c.intrusionDetectionElasticsearchAllowTigeraPolicy(),
+			c.intrusionDetectionJobServiceAccount(),
 			c.intrusionDetectionElasticsearchJob(),
 		}
 
@@ -292,6 +293,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		// For managed clusters, we must create a role binding to allow Linseed to
 		// manage access token secrets in our namespace.
 		objs = append(objs, c.externalLinseedRoleBinding())
+		objsToDelete = append(objsToDelete, c.intrusionDetectionElasticsearchJob(), c.intrusionDetectionJobServiceAccount())
 	} else {
 		// We can delete the role binding for management and standalone clusters, since
 		// for these cluster types normal serviceaccount tokens are used.

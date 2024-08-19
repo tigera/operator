@@ -212,9 +212,6 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Determine if Kibana is enabled for this cluster.
-	kibanaEnabled := !operatorv1.IsFIPSModeEnabled(install.FIPSMode) && !r.multiTenant
-
 	// Check if there is a management cluster connection. ManagementClusterConnection is a managed cluster only resource.
 	if err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, &operatorv1.ManagementClusterConnection{}); err == nil {
 		// LogStorage isn't valid for managed clusters.
@@ -248,7 +245,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if kibanaEnabled {
+	if !r.multiTenant {
 		// Create the Namespace.
 		kbNamespace := render.CreateNamespace(kibana.Namespace, install.KubernetesProvider, render.PSSBaseline)
 		if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(kbNamespace), r.status); err != nil {

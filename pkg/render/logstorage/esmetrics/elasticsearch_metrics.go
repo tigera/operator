@@ -239,7 +239,6 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 								e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()),
 							),
 							Env: []corev1.EnvVar{
-								{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
 								relasticsearch.ElasticUsernameEnvVar(ElasticsearchMetricsSecret),
 								relasticsearch.ElasticPasswordEnvVar(ElasticsearchMetricsSecret),
 								relasticsearch.ElasticHostEnvVar(esHost),

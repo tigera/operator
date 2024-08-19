@@ -5648,6 +5648,7 @@ spec:
               fipsMode:
                 description: |-
                   FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
+                  Only supported for Variant=Calico.
                   Default: Disabled
                 enum:
                 - Enabled
@@ -13100,6 +13101,7 @@ spec:
                   fipsMode:
                     description: |-
                       FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
+                      Only supported for Variant=Calico.
                       Default: Disabled
                     enum:
                     - Enabled

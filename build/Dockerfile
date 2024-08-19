@@ -14,7 +14,7 @@
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:8.9 AS ubi
 
-FROM scratch as source
+FROM scratch AS source
 
 ARG TARGETARCH
 

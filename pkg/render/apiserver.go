@@ -1537,8 +1537,8 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		},
 		// Allow the user to read services to view WAF configuration.
 		{
-			APIGroups: []string{""},
-			Resources: []string{"services"},
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		// Allow the user to read felixconfigurations to detect if wireguard and/or other features are enabled.
@@ -1703,10 +1703,10 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
-		// Allow the user to read services to view WAF configuration.
+		// Allow the user to read deployments to view WAF configuration.
 		{
-			APIGroups: []string{""},
-			Resources: []string{"services"},
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
 			Verbs:     []string{"get", "list", "watch", "patch"},
 		},
 		// Allow the user to read felixconfigurations to detect if wireguard and/or other features are enabled.

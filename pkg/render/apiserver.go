@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -65,6 +66,10 @@ const (
 	tigeraAPIServerTLSSecretName                    = "tigera-apiserver-certs"
 	APIServerSecretsRBACName                        = "tigera-extension-apiserver-secrets-access"
 	MultiTenantManagedClustersAccessClusterRoleName = "tigera-managed-cluster-access"
+	L7AdmssCtrlContainerName                        = "calico-l7admssctrl"
+
+	// Sidecar
+	SidecarMutatingWebhookConfigName = "tigera-sidecar-webhook-configuration"
 )
 
 var TigeraAPIServerEntityRule = v3.EntityRule{
@@ -113,6 +118,7 @@ type APIServerConfiguration struct {
 	Installation                *operatorv1.InstallationSpec
 	APIServer                   *operatorv1.APIServerSpec
 	ForceHostNetwork            bool
+	ApplicationLayer            *operatorv1.ApplicationLayer
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	TLSKeyPair                  certificatemanagement.KeyPairInterface
@@ -126,6 +132,7 @@ type apiServerComponent struct {
 	cfg              *APIServerConfiguration
 	apiServerImage   string
 	queryServerImage string
+	l7AdmssCtrlImage string
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -143,6 +150,12 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
+		}
+		if c.isSidecarInjectionEnabled() {
+			c.l7AdmssCtrlImage, err = components.GetReference(components.ComponentL7AdmissionController, reg, path, prefix, is)
+			if err != nil {
+				errMsgs = append(errMsgs, err.Error())
+			}
 		}
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
@@ -263,6 +276,11 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	if c.cfg.TrustedBundle != nil {
 		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.cfg.TrustedBundle.ConfigMap(QueryserverNamespace))
+	}
+	if c.isSidecarInjectionEnabled() {
+		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.sidecarMutatingWbhConfig())
+	} else {
+		objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: SidecarMutatingWebhookConfigName}})
 	}
 
 	// Global OSS-only objects.
@@ -931,6 +949,14 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		c.cfg.TLSKeyPair.HashAnnotationKey(): c.cfg.TLSKeyPair.HashAnnotationValue(),
 	}
 
+	containers := []corev1.Container{
+		c.apiServerContainer(),
+	}
+
+	if c.isSidecarInjectionEnabled() {
+		containers = append(containers, c.l7AdmssCtrlContainer())
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -963,10 +989,8 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
-					Containers: []corev1.Container{
-						c.apiServerContainer(),
-					},
-					Volumes: c.apiServerVolumes(),
+					Containers:         containers,
+					Volumes:            c.apiServerVolumes(),
 				},
 			},
 		},
@@ -992,6 +1016,63 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	return d
+}
+
+// apiServer creates a MutatingWebhookConfiguration for sidecars.
+func (c *apiServerComponent) sidecarMutatingWbhConfig() *admregv1.MutatingWebhookConfiguration {
+	var cacert []byte
+
+	svcpath := "/sidecar-webhook"
+	svcref := admregv1.ServiceReference{
+		Name:      QueryserverServiceName,
+		Namespace: QueryserverNamespace,
+		Path:      &svcpath,
+	}
+	failpol := admregv1.Fail
+	labelsel := metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"applicationlayer.projectcalico.org/sidecar": "true",
+		},
+	}
+	rules := []admregv1.RuleWithOperations{
+		admregv1.RuleWithOperations{
+			Rule: admregv1.Rule{
+				APIGroups:   []string{""},
+				APIVersions: []string{"v1"},
+				Resources:   []string{"pod"},
+			},
+			Operations: []admregv1.OperationType{admregv1.Create},
+		},
+	}
+	sidefx := admregv1.SideEffectClassNone
+	if c.cfg.TLSKeyPair.UseCertificateManagement() {
+		cacert = c.cfg.TLSKeyPair.GetIssuer().GetCertificatePEM()
+	} else {
+		cacert = c.cfg.Installation.CertificateManagement.CACert
+	}
+	mwc := admregv1.MutatingWebhookConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "MutatingWebhookConfiguration",
+			APIVersion: "admissionregistration.k8s.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{Name: SidecarMutatingWebhookConfigName},
+		Webhooks: []admregv1.MutatingWebhook{
+			admregv1.MutatingWebhook{
+				AdmissionReviewVersions: []string{"v1"},
+				ClientConfig: admregv1.WebhookClientConfig{
+					Service:  &svcref,
+					CABundle: cacert,
+				},
+				Name:           "sidecar.projectcalico.org",
+				FailurePolicy:  &failpol,
+				ObjectSelector: &labelsel,
+				Rules:          rules,
+				SideEffects:    &sidefx,
+			},
+		},
+	}
+
+	return &mwc
 }
 
 func (c *apiServerComponent) hostNetwork() bool {
@@ -1941,4 +2022,37 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 	})
 
 	return renamedRscList
+}
+
+func (c *apiServerComponent) isSidecarInjectionEnabled() bool {
+	return c.cfg.ApplicationLayer != nil &&
+		c.cfg.ApplicationLayer.Spec.SidecarInjection != nil &&
+		*c.cfg.ApplicationLayer.Spec.SidecarInjection == operatorv1.SidecarEnabled
+}
+
+func (c *apiServerComponent) l7AdmssCtrlContainer() corev1.Container {
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+	}
+
+	l7AdmssCtrl := corev1.Container{
+		Name:            L7AdmssCtrlContainerName,
+		Image:           c.l7AdmssCtrlImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		VolumeMounts:    volumeMounts,
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   "/readyz",
+					Port:   intstr.FromInt(APIServerPort),
+					Scheme: corev1.URISchemeHTTPS,
+				},
+			},
+			// We expect the readiness probe to contact kube-apiserver.
+			// A longer period is chosen to minimize load.
+			PeriodSeconds: 60,
+		},
+	}
+
+	return l7AdmssCtrl
 }

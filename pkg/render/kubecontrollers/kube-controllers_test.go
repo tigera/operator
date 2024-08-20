@@ -996,6 +996,21 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
 	})
 
+	It("should not add the KUBERNETES_SERVICE_... variables on Talos using KubePrism", func() {
+		k8sServiceEp.Host = "localhost"
+		k8sServiceEp.Port = "7445"
+		instance.KubernetesProvider = operatorv1.ProviderTalos
+
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		depResource := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+		Expect(depResource).ToNot(BeNil())
+		deployment := depResource.(*appsv1.Deployment)
+		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
+	})
+
 	It("should add prometheus annotations to metrics service", func() {
 		for _, variant := range []operatorv1.ProductVariant{operatorv1.Calico, operatorv1.TigeraSecureEnterprise} {
 			cfg.Installation.Variant = variant

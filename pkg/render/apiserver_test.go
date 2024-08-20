@@ -824,6 +824,40 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 
+	It("should not set KUBERENETES_SERVICE_... variables if not host networked on Talos with KubePrism", func() {
+		cfg.K8SServiceEndpoint.Host = "localhost"
+		cfg.K8SServiceEndpoint.Port = "7445"
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderTalos
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		deploymentResource := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
+		Expect(deploymentResource).ToNot(BeNil())
+
+		deployment := deploymentResource.(*appsv1.Deployment)
+		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
+	})
+
+	It("should set KUBERENETES_SERVICE_... variables if not host networked on Talos with non-KubePrism address", func() {
+		cfg.K8SServiceEndpoint.Host = "k8shost"
+		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderTalos
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		deploymentResource := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
+		Expect(deploymentResource).ToNot(BeNil())
+
+		deployment := deploymentResource.(*appsv1.Deployment)
+		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
+	})
+
 	It("should render an API server with custom configuration with MCM enabled at startup", func() {
 		cfg.ManagementCluster = managementCluster
 		component, err := render.APIServer(cfg)

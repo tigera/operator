@@ -1100,6 +1100,12 @@ spec:
                             DisableBGPExport specifies whether routes from this IP pool's CIDR are exported over BGP.
                             Default: false
                           type: boolean
+                        disableNewAllocations:
+                          description: |-
+                            DisableNewAllocations specifies whether or not new IP allocations are allowed from this pool.
+                            This is useful when you want to prevent new pods from receiving IP addresses from this pool, without
+                            impacting any existing pods that have already been assigned addresses from this pool.
+                          type: boolean
                         encapsulation:
                           description: |-
                             Encapsulation specifies the encapsulation type that will be used with
@@ -8477,6 +8483,12 @@ spec:
                               description: |-
                                 DisableBGPExport specifies whether routes from this IP pool's CIDR are exported over BGP.
                                 Default: false
+                              type: boolean
+                            disableNewAllocations:
+                              description: |-
+                                DisableNewAllocations specifies whether or not new IP allocations are allowed from this pool.
+                                This is useful when you want to prevent new pods from receiving IP addresses from this pool, without
+                                impacting any existing pods that have already been assigned addresses from this pool.
                               type: boolean
                             encapsulation:
                               description: |-

@@ -192,7 +192,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Labels).To(HaveLen(1))
 	})
 
-	It("should assume ownership of legacy default IP pools", func() {
+	It("FOCUS should assume ownership of legacy default IP pools", func() {
 		// Create an IP pool directly - this simulates a pre-existing IP pool created by Calico prior to
 		// the operator supporting direct IP pool management.
 		ipPool := crdv1.IPPool{

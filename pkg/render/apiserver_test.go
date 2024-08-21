@@ -1344,6 +1344,11 @@ var (
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"felixconfigurations"},
 			Verbs:     []string{"get", "list"},
@@ -1469,6 +1474,11 @@ var (
 		{
 			APIGroups: []string{"apps"},
 			Resources: []string{"deployments"},
+			Verbs:     []string{"get", "list", "watch", "patch"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch", "patch"},
 		},
 		{

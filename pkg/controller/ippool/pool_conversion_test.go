@@ -20,7 +20,10 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 )
 
-var true_ = true
+var (
+	true_  = true
+	false_ = false
+)
 
 var _ = table.DescribeTable("IPPool operator.tigera.io <-> crd.projectcalico.org/v1 conversion tests",
 	func(input operator.IPPool) {
@@ -35,12 +38,25 @@ var _ = table.DescribeTable("IPPool operator.tigera.io <-> crd.projectcalico.org
 	},
 
 	table.Entry("Fully-specified pool", operator.IPPool{
-		CIDR:             "172.16.0.0/16",
-		Encapsulation:    operator.EncapsulationVXLANCrossSubnet,
-		NATOutgoing:      operator.NATOutgoingEnabled,
-		NodeSelector:     "foo == 'bar'",
-		BlockSize:        &twentySix,
-		DisableBGPExport: &true_,
-		AllowedUses:      []operator.IPPoolAllowedUse{operator.IPPoolAllowedUseWorkload},
+		CIDR:                  "172.16.0.0/16",
+		Encapsulation:         operator.EncapsulationVXLANCrossSubnet,
+		NATOutgoing:           operator.NATOutgoingEnabled,
+		NodeSelector:          "foo == 'bar'",
+		BlockSize:             &twentySix,
+		DisableBGPExport:      &true_,
+		DisableNewAllocations: &true_,
+		AllowedUses:           []operator.IPPoolAllowedUse{operator.IPPoolAllowedUseWorkload},
+	}),
+
+	// Test fields that implicitly default to false when they are explicitly set to false.
+	table.Entry("Explicitly false fields", operator.IPPool{
+		CIDR:                  "172.16.0.0/16",
+		Encapsulation:         operator.EncapsulationIPIPCrossSubnet,
+		NATOutgoing:           operator.NATOutgoingDisabled,
+		NodeSelector:          "",
+		BlockSize:             &twentySix,
+		DisableBGPExport:      &false_,
+		DisableNewAllocations: &false_,
+		AllowedUses:           nil,
 	}),
 )

@@ -342,7 +342,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		if !found {
 			// This pool needs to be deleted. We only ever send deletes via the API server,
 			// since deletion requires rather complex logic. If the API server isn't available,
-			// we'll instead just mark the pool as disabled temporarily.
+			// we won't delete the pool and will mark the controller as degraded.
 			reqLogger.WithValues("cidr", cidr, "valid", installation.Spec.CalicoNetwork.IPPools).Info("Pool needs to be deleted")
 			if apiAvailable {
 				// v3 API is available - send a delete request.

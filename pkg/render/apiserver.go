@@ -1315,7 +1315,7 @@ func (c *apiServerComponent) tierGetterClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-tier-getter",
+			Name: "calico-tier-getter",
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -1336,11 +1336,11 @@ func (c *apiServerComponent) kubeControllerMgrTierGetterClusterRoleBinding() *rb
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-tier-getter",
+			Name: "calico-tier-getter",
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
-			Name:     "tigera-tier-getter",
+			Name:     "calico-tier-getter",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 		Subjects: []rbacv1.Subject{
@@ -1789,7 +1789,7 @@ func (c *apiServerComponent) calicoPolicyPassthruClusterRolebinding() *rbacv1.Cl
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-tiered-policy-passthrough",
+			Name: "calico-tiered-policy-passthrough",
 		},
 		Subjects: []rbacv1.Subject{
 			{

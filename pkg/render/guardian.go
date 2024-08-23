@@ -18,6 +18,10 @@ package render
 
 import (
 	"net"
+	"net/url"
+
+	operatorurl "github.com/tigera/operator/pkg/url"
+	"golang.org/x/net/http/httpproxy"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -82,6 +86,7 @@ func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 // GuardianConfiguration contains all the config information needed to render the component.
 type GuardianConfiguration struct {
 	URL               string
+	HTTPProxyConfig   *httpproxy.Config
 	PullSecrets       []*corev1.Secret
 	OpenShift         bool
 	Installation      *operatorv1.InstallationSpec
@@ -378,8 +383,36 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 		},
 	}...)
 
-	// Assumes address has the form "host:port", required by net.Dial for TCP.
-	host, port, err := net.SplitHostPort(cfg.URL)
+	var proxyURL *url.URL
+	var err error
+	if cfg.HTTPProxyConfig != nil && cfg.HTTPProxyConfig.HTTPSProxy != "" {
+		targetURL := &url.URL{
+			// The scheme should be HTTPS, as we are establishing an mTLS session with the target.
+			Scheme: "https",
+
+			// We expect `target` to be of the form host:port.
+			Host: cfg.URL,
+		}
+
+		proxyURL, err = cfg.HTTPProxyConfig.ProxyFunc()(targetURL)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var tunnelDestinationHostPort string
+	if proxyURL != nil {
+		proxyHostPort, err := operatorurl.ParseHostPortFromHTTPProxyURL(proxyURL)
+		if err != nil {
+			return nil, err
+		}
+		tunnelDestinationHostPort = proxyHostPort
+	} else {
+		// cfg.URL has host:port form
+		tunnelDestinationHostPort = cfg.URL
+	}
+
+	host, port, err := net.SplitHostPort(tunnelDestinationHostPort)
 	if err != nil {
 		return nil, err
 	}

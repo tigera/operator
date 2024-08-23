@@ -567,6 +567,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 				"ipamblocks",
 				"blockaffinities",
 				"ipamconfigs",
+				"tiers",
 			},
 			Verbs: []string{
 				"get",
@@ -1231,7 +1232,6 @@ func (c *apiServerComponent) tigeraApiServerClusterRole() *rbacv1.ClusterRole {
 				"stagedkubernetesnetworkpolicies",
 				"stagednetworkpolicies",
 				"stagedglobalnetworkpolicies",
-				"tiers",
 				"licensekeys",
 				"alertexceptions",
 				"globalalerts",
@@ -1980,6 +1980,24 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 			Name: "tigera-apiserver-access-tigera-crds",
 		},
 	})
+
+	// The following resources were not presetn in Calico OSS, so there is no need to clean up in OSS.
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// Renamed ClusterRoleBinging tigera-tier-getter to calico-tier-getter since Tier is available in OSS
+		renamedRscList = append(renamedRscList, &rbacv1.ClusterRoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "tigera-tier-getter",
+			},
+		})
+		// Renamed ClusterRole tigera-tier-getter to calico-tier-getter since Tier is available in OSS
+		renamedRscList = append(renamedRscList, &rbacv1.ClusterRole{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "tigera-tier-getter",
+			},
+		})
+	}
 
 	return renamedRscList
 }

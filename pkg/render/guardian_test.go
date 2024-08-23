@@ -15,10 +15,14 @@
 package render_test
 
 import (
+	"fmt"
+	"net"
+	"net/url"
+	"strconv"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -47,7 +51,7 @@ var _ = Describe("Rendering tests", func() {
 	var g render.Component
 	var resources []client.Object
 
-	createGuardianConfig := func(i operatorv1.InstallationSpec, addr string, openshift bool) *render.GuardianConfiguration {
+	createGuardianConfig := func(i operatorv1.InstallationSpec, addr string, proxyAddr string, openshift bool) *render.GuardianConfiguration {
 		secret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -86,7 +90,7 @@ var _ = Describe("Rendering tests", func() {
 
 	Context("Guardian component", func() {
 		renderGuardian := func(i operatorv1.InstallationSpec) {
-			cfg = createGuardianConfig(i, "127.0.0.1:1234", false)
+			cfg = createGuardianConfig(i, "127.0.0.1:1234", "", false)
 			g = render.Guardian(cfg)
 			Expect(g.ResolveImages(nil)).To(BeNil())
 			resources, _ = g.Objects()
@@ -193,8 +197,8 @@ var _ = Describe("Rendering tests", func() {
 		guardianPolicy := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian.json")
 		guardianPolicyForOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian_ocp.json")
 
-		renderGuardianPolicy := func(addr string, openshift bool) {
-			cfg := createGuardianConfig(operatorv1.InstallationSpec{Registry: "my-reg/"}, addr, openshift)
+		renderGuardianPolicy := func(addr string, proxyAddr string, openshift bool) {
+			cfg := createGuardianConfig(operatorv1.InstallationSpec{Registry: "my-reg/"}, addr, proxyAddr, openshift)
 			g, err := render.GuardianPolicy(cfg)
 			Expect(err).NotTo(HaveOccurred())
 			resources, _ = g.Objects()
@@ -213,7 +217,7 @@ var _ = Describe("Rendering tests", func() {
 
 			DescribeTable("should render allow-tigera policy",
 				func(scenario testutils.AllowTigeraScenario) {
-					renderGuardianPolicy("127.0.0.1:1234", scenario.OpenShift)
+					renderGuardianPolicy("127.0.0.1:1234", "", scenario.OpenShift)
 					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
 					expectedPolicy := getExpectedPolicy(policyName, scenario)
 					Expect(policy).To(Equal(expectedPolicy))
@@ -224,13 +228,72 @@ var _ = Describe("Rendering tests", func() {
 
 			// The test matrix above validates against an IP-based management cluster address.
 			// Validate policy adaptation for domain-based management cluster address here.
-			It("should adapt Guardian policy if ManagementClusterAddr is domain-based", func() {
-				renderGuardianPolicy("mydomain.io:8080", false)
+
+			DescribeTable("should adapt Guardian policy based on destination type", func(destAddr, proxyAddr string) {
+				renderGuardianPolicy(destAddr, proxyAddr, false)
 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(HaveLen(7))
 				managementClusterEgressRule := policy.Spec.Egress[5]
-				Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{"mydomain.io"}))
-				Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(8080)))
-			})
+
+				isProxied := proxyAddr != ""
+				var expectedHost string
+				var expectedPortString string
+				if isProxied {
+					uri, err := url.ParseRequestURI(proxyAddr)
+					Expect(err).NotTo(HaveOccurred())
+					expectedPortString = uri.Port()
+					if expectedPortString == "" {
+						expectedHost = uri.Host
+						if uri.Scheme == "http" {
+							expectedPortString = "80"
+						} else if uri.Scheme == "https" {
+							expectedPortString = "443"
+						}
+					} else {
+						host, port, err := net.SplitHostPort(uri.Host)
+						Expect(err).NotTo(HaveOccurred())
+						expectedHost = host
+						expectedPortString = port
+					}
+				} else {
+					host, port, err := net.SplitHostPort(destAddr)
+					Expect(err).NotTo(HaveOccurred())
+					expectedHost = host
+					expectedPortString = port
+				}
+				expectedPort, err := strconv.ParseUint(expectedPortString, 10, 16)
+				Expect(err).NotTo(HaveOccurred())
+
+				if net.ParseIP(expectedHost) != nil {
+					// Host is an IP.
+					Expect(managementClusterEgressRule.Destination.Nets).To(HaveLen(1))
+					Expect(managementClusterEgressRule.Destination.Nets[0]).To(Equal(fmt.Sprintf("%s/32", expectedHost)))
+					Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(uint16(expectedPort))))
+				} else {
+					// Host is a domain name.
+					Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{expectedHost}))
+					Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(uint16(expectedPort))))
+				}
+			},
+				Entry("domain host:port, no proxy", "mydomain.io:8080", ""),
+				Entry("domain host:port, http proxy domain host", "mydomain.io:8080", "http://myproxy.io/"),
+				Entry("domain host:port, https proxy domain host", "mydomain.io:8080", "https://myproxy.io/"),
+				Entry("domain host:port, http proxy domain host:port", "mydomain.io:8080", "http://myproxy.io:9000/"),
+				Entry("domain host:port, https proxy domain host:port", "mydomain.io:8080", "https://myproxy.io:9000/"),
+				Entry("domain host:port, http proxy ip host", "mydomain.io:8080", "http://10.0.0.1/"),
+				Entry("domain host:port, https proxy ip host", "mydomain.io:8080", "https://10.0.0.1/"),
+				Entry("domain host:port, http proxy ip host:port", "mydomain.io:8080", "http://10.0.0.1:9000/"),
+				Entry("domain host:port, https proxy ip host:port", "mydomain.io:8080", "https://10.0.0.1:9000/"),
+				Entry("ip host:port, no proxy", "192.168.0.01:8080", ""),
+				Entry("ip host:port, http proxy domain host", "192.168.0.01:8080", "http://myproxy.io/"),
+				Entry("ip host:port, https proxy domain host", "192.168.0.01:8080", "https://myproxy.io/"),
+				Entry("ip host:port, http proxy domain host:port", "192.168.0.01:8080", "http://myproxy.io:9000/"),
+				Entry("ip host:port, https proxy domain host:port", "192.168.0.01:8080", "https://myproxy.io:9000/"),
+				Entry("ip host:port, http proxy ip host", "192.168.0.01:8080", "http://10.0.0.1/"),
+				Entry("ip host:port, https proxy ip host", "192.168.0.01:8080", "https://10.0.0.1/"),
+				Entry("ip host:port, http proxy ip host:port", "192.168.0.01:8080", "http://10.0.0.1:9000/"),
+				Entry("ip host:port, https proxy ip host:port", "192.168.0.01:8080", "https://10.0.0.1:9000/"),
+			)
 		})
 	})
 })

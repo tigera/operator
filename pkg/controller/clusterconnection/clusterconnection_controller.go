@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/tigera/operator/pkg/url"
+
 	"github.com/go-logr/logr"
 
 	corev1 "k8s.io/api/core/v1"
@@ -122,6 +124,9 @@ func newReconciler(
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: tierWatchReady,
 	}
+	if opts.HTTPProxyConfig != nil {
+		c.httpsProxy = opts.HTTPProxyConfig.HTTPSProxy
+	}
 	c.status.Run(opts.ShutdownContext)
 	return c
 }
@@ -184,6 +189,7 @@ type ReconcileConnection struct {
 	Provider       operatorv1.Provider
 	status         status.StatusManager
 	clusterDomain  string
+	httpsProxy     string
 	tierWatchReady *utils.ReadyFlag
 }
 
@@ -345,7 +351,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		// The Tier has been created, which means that this controller's reconciliation should no longer be a dependency
 		// of the License being deployed. If NetworkPolicy requires license features, it should now be safe to validate
 		// License presence and sufficiency.
-		if networkPolicyRequiresEgressAccessControl(managementClusterConnection, log) {
+		if networkPolicyRequiresEgressAccessControl(managementClusterConnection.Spec.ManagementClusterAddr, r.httpsProxy, log) {
 			license, err := utils.FetchLicenseKey(ctx, r.Client)
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
@@ -366,6 +372,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,
+		HTTPSProxyURL:               r.httpsProxy,
 		TunnelCAType:                managementClusterConnection.Spec.TLS.CA,
 		PullSecrets:                 pullSecrets,
 		OpenShift:                   r.Provider.IsOpenShift(),
@@ -417,23 +424,43 @@ func fillDefaults(mcc *operatorv1.ManagementClusterConnection) {
 	}
 }
 
-func networkPolicyRequiresEgressAccessControl(connection *operatorv1.ManagementClusterConnection, log logr.Logger) bool {
-	if clusterAddrHasDomain, err := managementClusterAddrHasDomain(connection); err == nil && clusterAddrHasDomain {
-		return true
-	} else {
+func networkPolicyRequiresEgressAccessControl(target string, httpsProxyURL string, log logr.Logger) bool {
+	var destinationHostPort string
+	if httpsProxyURL != "" {
+		// HTTPS proxy is specified as a URL.
+		proxyHostPort, err := url.ParseHostPortFromHTTPProxyURL(httpsProxyURL)
 		if err != nil {
 			log.Error(err, fmt.Sprintf(
-				"Failed to parse ManagementClusterAddr. Assuming %s does not require license feature %s",
+				"Failed to parse HTTP Proxy URL (%s). Assuming %s does not require license feature %s",
+				httpsProxyURL,
 				render.GuardianPolicyName,
 				common.EgressAccessControlFeature,
 			))
+			return false
 		}
+
+		destinationHostPort = proxyHostPort
+	} else {
+		// Target is already specified as host:port.
+		destinationHostPort = target
+	}
+
+	// Determine if the host in the host:port is a domain name.
+	hostPortHasDomain, err := hostPortUsesDomainName(destinationHostPort)
+	if err != nil {
+		log.Error(err, fmt.Sprintf(
+			"Failed to parse resolved host:port (%s) for remote tunnel endpoint. Assuming %s does not require license feature %s",
+			destinationHostPort,
+			render.GuardianPolicyName,
+			common.EgressAccessControlFeature,
+		))
 		return false
 	}
+	return hostPortHasDomain
 }
 
-func managementClusterAddrHasDomain(connection *operatorv1.ManagementClusterConnection) (bool, error) {
-	host, _, err := net.SplitHostPort(connection.Spec.ManagementClusterAddr)
+func hostPortUsesDomainName(hostPort string) (bool, error) {
+	host, _, err := net.SplitHostPort(hostPort)
 	if err != nil {
 		return false, err
 	}

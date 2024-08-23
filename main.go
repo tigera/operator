@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/net/http/httpproxy"
+
 	"github.com/cloudflare/cfssl/log"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -435,6 +437,7 @@ func main() {
 		ShutdownContext:     ctx,
 		MultiTenant:         multiTenant,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
+		HTTPProxyConfig:     httpproxy.FromEnvironment(),
 	}
 
 	// Before we start any controllers, make sure our options are valid.

@@ -254,6 +254,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 					"ipreservations",
 					"networkpolicies",
 					"networksets",
+					"tiers",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},
@@ -276,6 +277,14 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 					"ippools",
 				},
 				Verbs: []string{"create", "update"},
+			},
+			{
+				// Calico creates some tiers on startup.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"tiers",
+				},
+				Verbs: []string{"create"},
 			},
 			{
 				// Calico monitors nodes for some networking configuration.
@@ -311,7 +320,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
-				// Tigera Secure needs to be able to read licenses, tiers, and config.
+				// Tigera Secure needs to be able to read licenses, and config.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"licensekeys",
@@ -319,21 +328,12 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 					"stagedglobalnetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
-					"tiers",
 					"packetcaptures",
 					"deeppacketinspections",
 					"externalnetworks",
 					"egressgatewaypolicies",
 				},
 				Verbs: []string{"get", "list", "watch"},
-			},
-			{
-				// Tigera Secure creates some tiers on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"tiers",
-				},
-				Verbs: []string{"create"},
 			},
 		}
 		role.Rules = append(role.Rules, extraRules...)

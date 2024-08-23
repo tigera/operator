@@ -402,6 +402,12 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Resources: []string{"kubecontrollersconfigurations"},
 			Verbs:     []string{"get", "create", "update", "watch"},
 		},
+		{
+			// calico-kube-controllers requires tiers create
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"tiers"},
+			Verbs:     []string{"create"},
+		},
 	}
 
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {
@@ -428,12 +434,6 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch", "list"},
-		},
-		{
-			// calico-kube-controllers requires tiers create
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"tiers"},
-			Verbs:     []string{"create"},
 		},
 		{
 			// Needed to validate the license

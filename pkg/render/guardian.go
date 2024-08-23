@@ -19,6 +19,8 @@ package render
 import (
 	"net"
 
+	"github.com/tigera/operator/pkg/url"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -82,6 +84,7 @@ func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 // GuardianConfiguration contains all the config information needed to render the component.
 type GuardianConfiguration struct {
 	URL               string
+	HTTPSProxyURL     string
 	PullSecrets       []*corev1.Secret
 	OpenShift         bool
 	Installation      *operatorv1.InstallationSpec
@@ -378,8 +381,20 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 		},
 	}...)
 
-	// Assumes address has the form "host:port", required by net.Dial for TCP.
-	host, port, err := net.SplitHostPort(cfg.URL)
+	var tunnelDestinationHostPort string
+	if cfg.HTTPSProxyURL != "" {
+		proxyHostPort, err := url.ParseHostPortFromHTTPProxyURL(cfg.HTTPSProxyURL)
+		if err != nil {
+			return nil, err
+		}
+
+		tunnelDestinationHostPort = proxyHostPort
+	} else {
+		// cfg.URL has host:port form
+		tunnelDestinationHostPort = cfg.URL
+	}
+
+	host, port, err := net.SplitHostPort(tunnelDestinationHostPort)
 	if err != nil {
 		return nil, err
 	}

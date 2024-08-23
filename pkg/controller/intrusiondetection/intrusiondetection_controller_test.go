@@ -675,4 +675,66 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(*ids.Spec.ComponentResources[0].ResourceRequirements.Limits.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryLimit)))
 		})
 	})
+
+	Context("Multi-tenant mode", func() {
+		var tenantANamespace = "tenantANamespace"
+
+		BeforeEach(func() {
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("SetMetaData", mock.Anything).Return()
+
+			// Update the reconciler to run in external ES mode for these tests.
+			r.elasticExternal = true
+			r.multiTenant = true
+
+			// Create the Tenant resources for tenant-a
+			tenantA := &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "default",
+					Namespace: tenantANamespace,
+				},
+				Spec: operatorv1.TenantSpec{ID: "tenant-a"},
+			}
+			Expect(c.Create(ctx, tenantA)).NotTo(HaveOccurred())
+
+			err := c.Create(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Namespace: tenantANamespace}})
+			Expect(err).NotTo(HaveOccurred())
+
+			certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
+			tenantABundle, err := certificateManagerTenantA.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, tenantABundle.ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
+
+			linseedTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantANamespace, []string{render.TigeraLinseedSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, linseedTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
+
+			Expect(c.Delete(ctx, &v3.DeepPacketInspection{ObjectMeta: metav1.ObjectMeta{Name: "test-dpi", Namespace: "test-dpi-ns"}})).ShouldNot(HaveOccurred())
+		})
+
+		It("should Reconcile with default values for DPI", func() {
+			clusterRole := rbacv1.ClusterRole{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: dpi.DeepPacketInspectionLinseedRBACName,
+				},
+			}
+			clusterRoleBinding := rbacv1.ClusterRoleBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: dpi.DeepPacketInspectionLinseedRBACName,
+				},
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = test.GetResource(c, &clusterRole)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = test.GetResource(c, &clusterRoleBinding)
+			Expect(err).ShouldNot(HaveOccurred())
+		})
+	})
 })

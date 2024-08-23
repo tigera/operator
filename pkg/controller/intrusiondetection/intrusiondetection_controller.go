@@ -513,8 +513,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	if !r.multiTenant {
-		// DPI is only supported in single-tenant / zero-tenant clusters.
-
 		// FIXME: core controller creates TyphaNodeTLSConfig, this controller should only get it.
 		// But changing the call from GetOrCreateTyphaNodeTLSConfig() to GetTyphaNodeTLSConfig()
 		// makes tests fail, this needs to be looked at.
@@ -559,6 +557,18 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}))
+	} else {
+		dpiComponent := dpi.DPI(&dpi.DPIConfig{
+			IntrusionDetection: instance,
+			Installation:       network,
+			PullSecrets:        pullSecrets,
+			OpenShift:          r.provider.IsOpenShift(),
+			ManagedCluster:     isManagedCluster,
+			ManagementCluster:  isManagementCluster,
+			ClusterDomain:      r.clusterDomain,
+			Tenant:             tenant,
+		})
+		components = append(components, dpiComponent)
 	}
 
 	for _, comp := range components {

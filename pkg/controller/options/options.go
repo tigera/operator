@@ -19,6 +19,7 @@ import (
 
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"golang.org/x/net/http/httpproxy"
 )
 
 // AddOptions are passed to controllers when added to the controller manager. They
@@ -42,4 +43,6 @@ type AddOptions struct {
 	// use external elasticsearch. When set, the operator will not install Elasticsearch
 	// and instead will configure the cluster to use an external Elasticsearch.
 	ElasticExternal bool
+
+	HTTPProxyConfig *httpproxy.Config
 }

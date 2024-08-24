@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
+	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -358,25 +359,7 @@ func (d *dpiComponent) dpiClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 }
 
 func (d *dpiComponent) dpiLinseedAccessClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   DeepPacketInspectionLinseedRBACName,
-			Labels: map[string]string{},
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     DeepPacketInspectionLinseedRBACName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      DeepPacketInspectionName,
-				Namespace: DeepPacketInspectionNamespace,
-			},
-		},
-	}
+	return rcomponents.ClusterRoleBinding(DeepPacketInspectionLinseedRBACName, DeepPacketInspectionLinseedRBACName, DeepPacketInspectionNamespace, d.cfg.BindingNamespaces)
 }
 
 func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {

@@ -619,6 +619,45 @@ var _ = Describe("DPI rendering tests", func() {
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
 		)
 	})
+
+	Context("multi-tenant", func() {
+		It("should render RBAC to allow Linseed access", func() {
+			cfg.Tenant = &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tenantA",
+					Namespace: "tenantANamespace",
+				},
+				Spec: operatorv1.TenantSpec{
+					ID: "tenant-a-id",
+				},
+			}
+			dpiComponent := dpi.DPI(cfg)
+
+			resources, _ := dpiComponent.Objects()
+
+			cr := rtest.GetResource(resources, dpi.DeepPacketInspectionLinseedRBACName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			expectedRules := []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"linseed.tigera.io"},
+					Resources: []string{"events"},
+					Verbs: []string{
+						"create",
+					},
+				},
+			}
+			Expect(cr.Rules).To(ContainElements(expectedRules))
+			rb := rtest.GetResource(resources, dpi.DeepPacketInspectionLinseedRBACName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(rb.RoleRef.Kind).To(Equal("ClusterRole"))
+			Expect(rb.RoleRef.Name).To(Equal(dpi.DeepPacketInspectionLinseedRBACName))
+			Expect(rb.Subjects).To(ContainElements([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      dpi.DeepPacketInspectionName,
+					Namespace: dpi.DeepPacketInspectionNamespace,
+				},
+			}))
+		})
+	})
 })
 
 func validateDPIComponents(resources []client.Object, openshift bool) {

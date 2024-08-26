@@ -1981,7 +1981,7 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 		},
 	})
 
-	// The following resources were not presetn in Calico OSS, so there is no need to clean up in OSS.
+	// The following resources were not present in Calico OSS, so there is no need to clean up in OSS.
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Renamed ClusterRoleBinging tigera-tier-getter to calico-tier-getter since Tier is available in OSS
 		renamedRscList = append(renamedRscList, &rbacv1.ClusterRoleBinding{

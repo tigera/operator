@@ -1339,6 +1339,11 @@ var (
 			Verbs:     []string{"get"},
 		},
 		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
 			APIGroups: []string{"apps"},
 			Resources: []string{"deployments"},
 			Verbs:     []string{"get", "list", "watch"},
@@ -1467,8 +1472,13 @@ var (
 			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
 		{
-			APIGroups: []string{"apps"},
-			Resources: []string{"deployments"},
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "watch", "patch"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "watch", "patch"},
 		},
 		{

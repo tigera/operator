@@ -665,6 +665,11 @@ type IPPool struct {
 	// +kubebuilder:default:=false
 	DisableBGPExport *bool `json:"disableBGPExport,omitempty"`
 
+	// DisableNewAllocations specifies whether or not new IP allocations are allowed from this pool.
+	// This is useful when you want to prevent new pods from receiving IP addresses from this pool, without
+	// impacting any existing pods that have already been assigned addresses from this pool.
+	DisableNewAllocations *bool `json:"disableNewAllocations,omitempty"`
+
 	// AllowedUse controls what the IP pool will be used for.  If not specified or empty, defaults to
 	// ["Tunnel", "Workload"] for back-compatibility
 	AllowedUses []IPPoolAllowedUse `json:"allowedUses,omitempty" validate:"omitempty"`
@@ -708,6 +713,10 @@ func (p *IPPool) ToProjectCalicoV1() (*pcv1.IPPool, error) {
 	switch p.NATOutgoing {
 	case NATOutgoingEnabled:
 		pool.Spec.NATOutgoing = true
+	}
+
+	if p.DisableNewAllocations != nil {
+		pool.Spec.Disabled = *p.DisableNewAllocations
 	}
 
 	// Set BlockSize
@@ -754,7 +763,16 @@ func (p *IPPool) FromProjectCalicoV1(crd pcv1.IPPool) {
 	// Set NAT
 	if crd.Spec.NATOutgoing {
 		p.NATOutgoing = NATOutgoingEnabled
+	} else {
+		p.NATOutgoing = NATOutgoingDisabled
 	}
+
+	// Configure DisableNewAllocations
+	disableAlloc := false
+	if crd.Spec.Disabled {
+		disableAlloc = true
+	}
+	p.DisableNewAllocations = &disableAlloc
 
 	// Set BlockSize
 	blockSize := int32(crd.Spec.BlockSize)
@@ -764,13 +782,11 @@ func (p *IPPool) FromProjectCalicoV1(crd pcv1.IPPool) {
 	p.NodeSelector = crd.Spec.NodeSelector
 
 	// Set BGP export.
+	disableExport := false
 	if crd.Spec.DisableBGPExport {
-		t := true
-		p.DisableBGPExport = &t
-	} else {
-		f := false
-		p.DisableBGPExport = &f
+		disableExport = true
 	}
+	p.DisableBGPExport = &disableExport
 
 	for _, use := range crd.Spec.AllowedUses {
 		p.AllowedUses = append(p.AllowedUses, IPPoolAllowedUse(use))

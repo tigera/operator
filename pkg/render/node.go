@@ -444,6 +444,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
 					"networksets",
+					"tiers",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},
@@ -474,6 +475,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"ippools",
 				},
 				Verbs: []string{"create", "update"},
+			},
+			{
+				// Calico creates some tiers on startup.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"tiers",
+				},
+				Verbs: []string{"create"},
 			},
 			{
 				// Calico monitors nodes for some networking configuration.
@@ -520,18 +529,9 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"stagedglobalnetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
-					"tiers",
 					"packetcaptures",
 				},
 				Verbs: []string{"get", "list", "watch"},
-			},
-			{
-				// Tigera Secure creates some tiers on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{
-					"tiers",
-				},
-				Verbs: []string{"create"},
 			},
 			{
 				// Tigera Secure updates status for packet captures.

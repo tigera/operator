@@ -203,6 +203,11 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 			}
 		}
 
+		if pool.DisableNewAllocations == nil {
+			disabled := false
+			pool.DisableNewAllocations = &disabled
+		}
+
 		// Default the name if it's not set.
 		if pool.Name == "" {
 			if name, ok := currentPoolLookup[pool.CIDR]; ok {

@@ -62,6 +62,8 @@ type DPIConfig struct {
 	HasNoDPIResource   bool
 	ClusterDomain      string
 	DPICertSecret      certificatemanagement.KeyPairInterface
+
+	Tenant *operatorv1.Tenant
 }
 
 func DPI(cfg *DPIConfig) render.Component {
@@ -89,6 +91,17 @@ func (d *dpiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var toCreate, toDelete []client.Object
+	if d.cfg.Tenant.MultiTenant() {
+		// We need to create the RBAC needed to allow managed cluster
+		// to push data via Linseed. Since DPI does not get deployed in the
+		// multi-tenant management cluster, Linseed token is created to match
+		// the canonical namespace. The ClusterRoleBinding will use the
+		// canonical service account.
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRole())
+		toCreate = append(toCreate, d.dpiLinseedAccessClusterRoleBinding())
+		return toCreate, toDelete
+	}
+
 	if d.cfg.HasNoLicense {
 		toDelete = append(toDelete, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
 	} else {

@@ -3835,6 +3835,11 @@ func (in *IPPool) DeepCopyInto(out *IPPool) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.DisableNewAllocations != nil {
+		in, out := &in.DisableNewAllocations, &out.DisableNewAllocations
+		*out = new(bool)
+		**out = **in
+	}
 	if in.AllowedUses != nil {
 		in, out := &in.AllowedUses, &out.AllowedUses
 		*out = make([]IPPoolAllowedUse, len(*in))

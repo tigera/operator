@@ -69,12 +69,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = component{
-		Version:  "7.17.21",
+		Version:  "7.17.22",
 		Registry: "",
 	}
 
 	ComponentEckKibana = component{
-		Version:  "7.17.21",
+		Version:  "7.17.22",
 		Registry: "",
 	}
 

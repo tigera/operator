@@ -1,4 +1,4 @@
-// Copyright (c) 2019, 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -966,6 +966,39 @@ var _ = Describe("Installation validation tests", func() {
 			var invalidMinReadySeconds int32 = -1
 			instance.Spec.TyphaDeployment = &operator.TyphaDeployment{
 				Spec: &operator.TyphaDeploymentSpec{
+					MinReadySeconds: &invalidMinReadySeconds,
+				},
+			}
+			err = validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Describe("validate APIServerDeployment", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.APIServerDeployment = &operator.APIServerDeployment{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if it is invalid", func() {
+			instance.Spec.APIServerDeployment = &operator.APIServerDeployment{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+
+			var invalidMinReadySeconds int32 = -1
+			instance.Spec.APIServerDeployment = &operator.APIServerDeployment{
+				Spec: &operator.APIServerDeploymentSpec{
 					MinReadySeconds: &invalidMinReadySeconds,
 				},
 			}

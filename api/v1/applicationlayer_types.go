@@ -24,11 +24,13 @@ import (
 type ApplicationLayerSpec struct {
 	// WebApplicationFirewall controls whether or not ModSecurity enforcement is enabled for the cluster.
 	// When enabled, Services may opt-in to having ingress traffic examed by ModSecurity.
+	// +kubebuilder:validation:Enum=Enabled;Disabled
 	WebApplicationFirewall *WAFStatusType `json:"webApplicationFirewall,omitempty"`
 	// Specification for application layer (L7) log collection.
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
 	// Application Layer Policy controls whether or not ALP enforcement is enabled for the cluster.
 	// When enabled, NetworkPolicies with HTTP Match rules may be defined to opt-in workloads for traffic enforcement on the application layer.
+	// +kubebuilder:validation:Enum=Enabled;Disabled
 	ApplicationLayerPolicy *ApplicationLayerPolicyStatusType `json:"applicationLayerPolicy,omitempty"`
 	// User-configurable settings for the Envoy proxy.
 	EnvoySettings *EnvoySettings `json:"envoy,omitempty"`
@@ -72,6 +74,7 @@ type LogCollectionSpec struct {
 	// This setting enables or disable log collection.
 	// Allowed values are Enabled or Disabled.
 	// +optional
+	// +kubebuilder:validation:Enum=Enabled;Disabled
 	CollectLogs *LogCollectionStatusType `json:"collectLogs,omitempty"`
 
 	// Interval in seconds for sending L7 log information for processing.

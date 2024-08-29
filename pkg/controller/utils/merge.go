@@ -1,4 +1,4 @@
-// Copyright (c) 2020, 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -178,6 +178,13 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.TyphaDeployment = override.TyphaDeployment.DeepCopy()
 	case Different:
 		inst.TyphaDeployment = mergeTyphaDeployment(inst.TyphaDeployment, override.TyphaDeployment)
+	}
+
+	switch compareFields(inst.APIServerDeployment, override.APIServerDeployment) {
+	case BOnlySet:
+		inst.APIServerDeployment = override.APIServerDeployment.DeepCopy()
+	case Different:
+		inst.APIServerDeployment = mergeAPIServerDeployment(inst.APIServerDeployment, override.APIServerDeployment)
 	}
 
 	switch compareFields(inst.CalicoWindowsUpgradeDaemonSet, override.CalicoWindowsUpgradeDaemonSet) {
@@ -767,6 +774,97 @@ func mergeTyphaDeployment(cfg, override *operatorv1.TyphaDeployment) *operatorv1
 		out.Spec = mergeSpec(out.Spec, override.Spec)
 	}
 
+	return out
+}
+
+func mergeAPIServerDeployment(cfg, override *operatorv1.APIServerDeployment) *operatorv1.APIServerDeployment {
+	out := cfg.DeepCopy()
+
+	switch compareFields(out.Metadata, override.Metadata) {
+	case BOnlySet:
+		out.Metadata = override.Metadata.DeepCopy()
+	case Different:
+		out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+	}
+
+	mergePodSpec := func(cfg, override *operatorv1.APIServerDeploymentPodSpec) *operatorv1.APIServerDeploymentPodSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.InitContainers, override.InitContainers) {
+		case BOnlySet, Different:
+			out.InitContainers = make([]operatorv1.APIServerDeploymentInitContainer, len(override.Containers))
+			copy(out.InitContainers, override.InitContainers)
+		}
+
+		switch compareFields(out.Containers, override.Containers) {
+		case BOnlySet, Different:
+			out.Containers = make([]operatorv1.APIServerDeploymentContainer, len(override.Containers))
+			copy(out.Containers, override.Containers)
+		}
+
+		switch compareFields(out.Affinity, override.Affinity) {
+		case BOnlySet, Different:
+			out.Affinity = override.Affinity
+		}
+
+		switch compareFields(out.NodeSelector, override.NodeSelector) {
+		case BOnlySet, Different:
+			out.NodeSelector = override.NodeSelector
+		}
+
+		switch compareFields(out.TopologySpreadConstraints, override.TopologySpreadConstraints) {
+		case BOnlySet, Different:
+			out.TopologySpreadConstraints = override.TopologySpreadConstraints
+		}
+
+		switch compareFields(out.Tolerations, override.Tolerations) {
+		case BOnlySet, Different:
+			out.Tolerations = override.Tolerations
+		}
+		return out
+	}
+	mergeTemplateSpec := func(cfg, override *operatorv1.APIServerDeploymentPodTemplateSpec) *operatorv1.APIServerDeploymentPodTemplateSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.Metadata, override.Metadata) {
+		case BOnlySet:
+			out.Metadata = override.Metadata.DeepCopy()
+		case Different:
+			out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+		}
+
+		switch compareFields(out.Spec, override.Spec) {
+		case BOnlySet:
+			out.Spec = override.Spec.DeepCopy()
+		case Different:
+			out.Spec = mergePodSpec(out.Spec, override.Spec)
+		}
+
+		return out
+	}
+	mergeSpec := func(cfg, override *operatorv1.APIServerDeploymentSpec) *operatorv1.APIServerDeploymentSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.MinReadySeconds, override.MinReadySeconds) {
+		case BOnlySet, Different:
+			out.MinReadySeconds = override.MinReadySeconds
+		}
+
+		switch compareFields(out.Template, override.Template) {
+		case BOnlySet:
+			out.Template = override.Template.DeepCopy()
+		case Different:
+			out.Template = mergeTemplateSpec(out.Template, override.Template)
+		}
+		return out
+	}
+
+	switch compareFields(out.Spec, override.Spec) {
+	case BOnlySet:
+		out.Spec = override.Spec.DeepCopy()
+	case Different:
+		out.Spec = mergeSpec(out.Spec, override.Spec)
+	}
 	return out
 }
 

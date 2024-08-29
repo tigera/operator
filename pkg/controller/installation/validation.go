@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024, 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025, 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/validation"
+	apiserver "github.com/tigera/operator/pkg/common/validation/apiserver"
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
 	csinodedriver "github.com/tigera/operator/pkg/common/validation/csi-node-driver"
 	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
@@ -371,6 +372,14 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		err := validation.ValidateReplicatedPodResourceOverrides(deploy, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
 		if err != nil {
 			return fmt.Errorf("Installation spec.TyphaDeployment is not valid: %w", err)
+		}
+	}
+
+	// Verify the APIServerDeployment overrides, if specified, is valid.
+	if deploy := instance.Spec.APIServerDeployment; deploy != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(deploy, apiserver.ValidateAPIServerDeploymentContainer, apiserver.ValidateAPIServerDeploymentInitContainer)
+		if err != nil {
+			return fmt.Errorf("Installation spec.APIServerDeployment is not valid: %w", err)
 		}
 	}
 

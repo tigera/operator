@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -172,6 +172,9 @@ type InstallationSpec struct {
 	// TyphaDeployment configures the typha Deployment. If used in conjunction with the deprecated
 	// ComponentResources or TyphaAffinity, then these overrides take precedence.
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
+
+	// CalicoApiserverDeployment configures the apiserver Deployment.
+	APIServerDeployment *APIServerDeployment `json:"apiserverDeployment,omitempty"`
 
 	// Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.
 	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.

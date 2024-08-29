@@ -20,85 +20,85 @@ package components
 import "github.com/tigera/operator/version"
 
 var (
-	CalicoRelease string = "v3.26.4"
+	CalicoRelease string = "v3.26.5"
 
 	ComponentCalicoCNI = component{
-		Version: "v3.26.4",
+		Version: "v3.26.5",
 		Image:   "calico/cni",
 	}
 
 	ComponentCalicoCNIFIPS = component{
-		Version: "v3.26.4-fips",
+		Version: "v3.26.5-fips",
 		Image:   "calico/cni",
 	}
 
 	ComponentCalicoKubeControllers = component{
-		Version: "v3.26.4",
+		Version: "v3.26.5",
 		Image:   "calico/kube-controllers",
 	}
 
 	ComponentCalicoKubeControllersFIPS = component{
-		Version: "v3.26.4-fips",
+		Version: "v3.26.5-fips",
 		Image:   "calico/kube-controllers",
 	}
 
 	ComponentCalicoNode = component{
-		Version: "v3.26.4",
+		Version: "v3.26.5",
 		Image:   "calico/node",
 	}
 
 	ComponentCalicoNodeFIPS = component{
-		Version: "v3.26.4-fips",
+		Version: "v3.26.5-fips",
 		Image:   "calico/node",
 	}
 
 	ComponentCalicoTypha = component{
-		Version: "v3.26.4",
+		Version: "v3.26.5",
 		Image:   "calico/typha",
 	}
 
 	ComponentCalicoTyphaFIPS = component{
-		Version: "v3.26.4-fips",
+		Version: "v3.26.5-fips",
 		Image:   "calico/typha",
 	}
 
 	ComponentFlexVolume = component{
-		Version: "v3.26.4",
+		Version: "v3.26.5",
 		Image:   "calico/pod2daemon-flexvol",
 	}
 
 	ComponentCalicoAPIServer = component{
-		Version: "v3.26.4",
+		Version: "v3.26.5",
 		Image:   "calico/apiserver",
 	}
 
 	ComponentCalicoAPIServerFIPS = component{
-		Version: "v3.26.4-fips",
+		Version: "v3.26.5-fips",
 		Image:   "calico/apiserver",
 	}
 
 	ComponentWindowsUpgrade = component{
-		Version: "v3.26.4",
+		Version: "v3.26.5",
 		Image:   "calico/windows-upgrade",
 	}
 
 	ComponentCalicoCSI = component{
-		Version: "v3.26.4",
+		Version: "v3.26.5",
 		Image:   "calico/csi",
 	}
 
 	ComponentCalicoCSIFIPS = component{
-		Version: "v3.26.4-fips",
+		Version: "v3.26.5-fips",
 		Image:   "calico/csi",
 	}
 
 	ComponentCalicoCSIRegistrar = component{
-		Version: "v3.26.4",
+		Version: "v3.26.5",
 		Image:   "calico/node-driver-registrar",
 	}
 
 	ComponentCalicoCSIRegistrarFIPS = component{
-		Version: "v3.26.4-fips",
+		Version: "v3.26.5-fips",
 		Image:   "calico/node-driver-registrar",
 	}
 	ComponentOperatorInit = component{

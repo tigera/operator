@@ -915,9 +915,11 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	name, _ := c.resourceNameBasedOnVariant("tigera-apiserver", "calico-apiserver")
 	hostNetwork := c.hostNetwork()
 	dnsPolicy := corev1.DNSClusterFirst
+	deploymentStrategyType := appsv1.RollingUpdateDeploymentStrategyType
 	if hostNetwork {
 		// Adjust DNS policy so we can access in-cluster services.
 		dnsPolicy = corev1.DNSClusterFirstWithHostNet
+		deploymentStrategyType = appsv1.RecreateDeploymentStrategyType
 	}
 
 	var initContainers []corev1.Container
@@ -944,7 +946,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.cfg.Installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
+				Type: deploymentStrategyType,
 			},
 			Selector: c.deploymentSelector(),
 			Template: corev1.PodTemplateSpec{
@@ -964,11 +966,8 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
-					Containers: []corev1.Container{
-						c.apiServerContainer(),
-					},
-					Volumes:           c.apiServerVolumes(),
-					PriorityClassName: c.priorityClassName(),
+					Containers:         containers,
+					Volumes:            c.apiServerVolumes(),
 				},
 			},
 		},
@@ -1042,16 +1041,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		Args:            c.startUpArgs(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/version",
-					Port:   intstr.FromInt(APIServerPort),
-					Scheme: corev1.URISchemeHTTPS,
-				},
-			},
-			PeriodSeconds: 60,
-		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -1200,14 +1189,6 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 		return rmeta.TolerateAll
 	}
 	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
-}
-
-// priorityClassName create
-func (c *apiServerComponent) priorityClassName() string {
-	if c.cfg.Installation.APIServerDeployment != nil && c.cfg.Installation.APIServerDeployment.GetPriorityClassName() != "" {
-		return c.cfg.Installation.APIServerDeployment.GetPriorityClassName()
-	}
-	return ClusterPriorityClassName
 }
 
 // networkPolicy returns a NP to allow traffic to the API server. This prevents it from

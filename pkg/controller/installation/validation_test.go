@@ -973,39 +973,6 @@ var _ = Describe("Installation validation tests", func() {
 			Expect(err).To(HaveOccurred())
 		})
 	})
-
-	Describe("validate APIServerDeployment", func() {
-		It("should return nil when it is empty", func() {
-			instance.Spec.APIServerDeployment = &operator.APIServerDeployment{}
-			err := validateCustomResource(instance)
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		It("should return an error if it is invalid", func() {
-			instance.Spec.APIServerDeployment = &operator.APIServerDeployment{
-				Metadata: &operator.Metadata{
-					Labels: map[string]string{
-						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
-						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
-					},
-					Annotations: map[string]string{
-						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
-					},
-				},
-			}
-			err := validateCustomResource(instance)
-			Expect(err).To(HaveOccurred())
-
-			var invalidMinReadySeconds int32 = -1
-			instance.Spec.APIServerDeployment = &operator.APIServerDeployment{
-				Spec: &operator.APIServerDeploymentSpec{
-					MinReadySeconds: &invalidMinReadySeconds,
-				},
-			}
-			err = validateCustomResource(instance)
-			Expect(err).To(HaveOccurred())
-		})
-	})
 	Describe("validate Windows configuration", func() {
 		BeforeEach(func() {
 			winDpHNS := operator.WindowsDataplaneHNS

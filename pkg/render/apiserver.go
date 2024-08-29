@@ -969,8 +969,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Containers: []corev1.Container{
 						c.apiServerContainer(),
 					},
-					Volumes:           c.apiServerVolumes(),
-					PriorityClassName: c.priorityClassName(),
+					Volumes: c.apiServerVolumes(),
 				},
 			},
 		},
@@ -1202,14 +1201,6 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 		return rmeta.TolerateAll
 	}
 	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
-}
-
-// priorityClassName create
-func (c *apiServerComponent) priorityClassName() string {
-	if c.cfg.Installation.APIServerDeployment != nil && c.cfg.Installation.APIServerDeployment.GetPriorityClassName() != "" {
-		return c.cfg.Installation.APIServerDeployment.GetPriorityClassName()
-	}
-	return ClusterPriorityClassName
 }
 
 // networkPolicy returns a NP to allow traffic to the API server. This prevents it from

@@ -173,9 +173,6 @@ type InstallationSpec struct {
 	// ComponentResources or TyphaAffinity, then these overrides take precedence.
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
 
-	// CalicoApiserverDeployment configures the apiserver Deployment.
-	APIServerDeployment *APIServerDeployment `json:"apiserverDeployment,omitempty"`
-
 	// Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.
 	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
 	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`

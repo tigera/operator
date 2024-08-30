@@ -1485,6 +1485,12 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"clusterinformations"},
 			Verbs:     []string{"get", "list"},
 		},
+		// Access to hostendpoints from the UI ServiceGraph.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"hostendpoints"},
+			Verbs:     []string{"get", "list"},
+		},
 		// List and view the threat defense configuration
 		{
 			APIGroups: []string{"projectcalico.org"},
@@ -1662,6 +1668,12 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"clusterinformations"},
+			Verbs:     []string{"get", "list"},
+		},
+		// Access to hostendpoints from the UI ServiceGraph.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"hostendpoints"},
 			Verbs:     []string{"get", "list"},
 		},
 		// Manage the threat defense configuration

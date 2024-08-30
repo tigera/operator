@@ -1308,6 +1308,11 @@ var (
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"hostendpoints"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{
 				"alertexceptions",
 				"globalalerts",
@@ -1443,6 +1448,11 @@ var (
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"clusterinformations"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"hostendpoints"},
 			Verbs:     []string{"get", "list"},
 		},
 		{

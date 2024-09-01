@@ -136,6 +136,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
+	if err = c.WatchObject(&operatorv1.NonClusterHost{}, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
+	}
 	if err = c.WatchObject(&operatorv1.Authentication{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
@@ -640,6 +643,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Check if non-cluster host log ingestion is enabled.
+	nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, logc)
+		return reconcile.Result{}, err
+	}
+
 	managerCfg := &render.ManagerConfiguration{
 		VoltronRouteConfig:      routeConfig,
 		KeyValidatorConfig:      keyValidatorConfig,
@@ -650,6 +660,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		OpenShift:               r.provider.IsOpenShift(),
 		Installation:            installation,
 		ManagementCluster:       managementCluster,
+		NonClusterHost:          nonclusterhost,
 		TunnelServerCert:        tunnelServerCert,
 		InternalTLSKeyPair:      internalTrafficSecret,
 		ClusterDomain:           r.clusterDomain,

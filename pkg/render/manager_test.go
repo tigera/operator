@@ -23,6 +23,15 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -40,14 +49,6 @@ import (
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
@@ -59,9 +60,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	expectedManagerOpenshiftPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/manager_ocp.json")
 
 	It("should render all resources for a default configuration", func() {
+		nonclusterhost := &operatorv1.NonClusterHost{
+			Spec: operatorv1.NonClusterHostSpec{
+				Endpoint: "https://127.0.0.1:9443",
+			},
+		}
 		resources := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
+			nonClusterHost:          nonclusterhost,
 			installation:            installation,
 			compliance:              compliance,
 			complianceFeatureActive: true,
@@ -160,16 +167,19 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// voltron container
 		Expect(voltron.Env).To(ContainElements([]corev1.EnvVar{
 			{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"},
+			{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST_LOG_INGESTION", Value: "true"},
 			{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: "https://tigera-api.tigera-system.svc:8080"},
 			{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy/"},
 			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 		}))
 
-		Expect(voltron.VolumeMounts).To(HaveLen(2))
+		Expect(voltron.VolumeMounts).To(HaveLen(3))
 		Expect(voltron.VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
 		Expect(voltron.VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
-		Expect(voltron.VolumeMounts[1].Name).To(Equal(render.ManagerTLSSecretName))
+		Expect(voltron.VolumeMounts[1].Name).To(Equal("manager-tls"))
 		Expect(voltron.VolumeMounts[1].MountPath).To(Equal("/manager-tls"))
+		Expect(voltron.VolumeMounts[2].Name).To(Equal("internal-manager-tls"))
+		Expect(voltron.VolumeMounts[2].MountPath).To(Equal("/internal-manager-tls"))
 
 		Expect(*voltron.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 		Expect(*voltron.SecurityContext.Privileged).To(BeFalse())
@@ -1286,6 +1296,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 type renderConfig struct {
 	oidc                    bool
 	managementCluster       *operatorv1.ManagementCluster
+	nonClusterHost          *operatorv1.NonClusterHost
 	installation            *operatorv1.InstallationSpec
 	compliance              *operatorv1.Compliance
 	complianceFeatureActive bool
@@ -1345,6 +1356,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		TLSKeyPair:              managerTLS,
 		Installation:            roc.installation,
 		ManagementCluster:       roc.managementCluster,
+		NonClusterHost:          roc.nonClusterHost,
 		TunnelServerCert:        tunnelSecret,
 		VoltronLinseedKeyPair:   voltronLinseedKP,
 		InternalTLSKeyPair:      internalTraffic,

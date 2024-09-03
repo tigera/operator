@@ -28,6 +28,7 @@ import (
 
 	"github.com/openshift/library-go/pkg/crypto"
 
+	calicov3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -38,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -660,6 +662,28 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		deployment := deploymentResource.(*appsv1.Deployment)
 		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
+	})
+
+	It("should add egress policy with Enterprise variant and K8SServiceEndpoint defined", func() {
+		cfg.K8SServiceEndpoint.Host = "k8shost"
+		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.ForceHostNetwork = true
+
+		component := render.APIServerPolicy(cfg)
+		resources, _ := component.Objects()
+		policyName := types.NamespacedName{Name: "allow-tigera.cnx-apiserver-access", Namespace: "tigera-system"}
+		policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+		Expect(policy).ToNot(BeNil())
+		Expect(policy.Spec).ToNot(BeNil())
+		Expect(policy.Spec.Egress).ToNot(BeNil())
+		Expect(policy.Spec.Egress).To(ContainElement(calicov3.Rule{
+			Action:   calicov3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: calicov3.EntityRule{
+				Ports:   networkpolicy.Ports(1234),
+				Domains: []string{"k8shost"},
+			},
+		}))
 	})
 
 	It("should not set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with proxy.local", func() {

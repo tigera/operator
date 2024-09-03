@@ -62,7 +62,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	var clientScheme *runtime.Scheme
 	var dpl *appsv1.Deployment
 	var mockStatus *status.MockStatus
-	var objTrackerWithCalls utils.ObjectTrackerWithCalls
+	var objTrackerWithCalls test.ObjectTrackerWithCalls
 
 	notReady := &utils.ReadyFlag{}
 	ready := &utils.ReadyFlag{}
@@ -76,7 +76,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(clientScheme)).ShouldNot(HaveOccurred())
 		err := operatorv1.SchemeBuilder.AddToScheme(clientScheme)
 		Expect(err).NotTo(HaveOccurred())
-		objTrackerWithCalls = utils.NewObjectTrackerWithCalls(clientScheme)
+		objTrackerWithCalls = test.NewObjectTrackerWithCalls(clientScheme)
 		c = ctrlrfake.DefaultFakeClientBuilder(clientScheme).WithObjectTracker(&objTrackerWithCalls).Build()
 		ctx = context.Background()
 		mockStatus = &status.MockStatus{}
@@ -413,7 +413,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 							Version:  "v1",
 							Resource: "pods",
 						}
-						Expect(objTrackerWithCalls.CallCount(podGVR, utils.ObjectTrackerCallList)).To(BeZero())
+						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(BeZero())
 
 						// Now we set the deployment to be available.
 						gd := appsv1.Deployment{}
@@ -429,7 +429,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 						// Reconcile again. The proxy detection logic should kick in since the guardian deployment is ready.
 						_, err = r.Reconcile(ctx, reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
-						Expect(objTrackerWithCalls.CallCount(podGVR, utils.ObjectTrackerCallList)).To(Equal(1))
+						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(Equal(1))
 
 						// Resolve the rendered rule that governs egress from guardian to voltron.
 						policies := v3.NetworkPolicyList{}
@@ -454,7 +454,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 						// Reconcile again. Verify that we do not cause any additional query for pods now that we have resolved the proxy.
 						_, err = r.Reconcile(ctx, reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
-						Expect(objTrackerWithCalls.CallCount(podGVR, utils.ObjectTrackerCallList)).To(Equal(1))
+						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(Equal(1))
 					})
 				})
 			}

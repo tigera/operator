@@ -19,6 +19,12 @@ import (
 	"fmt"
 	"net"
 
+	"golang.org/x/net/http/httpproxy"
+	v1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/labels"
+
+	"github.com/tigera/operator/pkg/url"
+
 	"github.com/go-logr/logr"
 
 	corev1 "k8s.io/api/core/v1"
@@ -166,6 +172,10 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		return fmt.Errorf("%s failed to watch ImageSet: %w", controllerName, err)
 	}
 
+	if err := utils.AddDeploymentWatch(c, render.GuardianDeploymentName, render.GuardianNamespace); err != nil {
+		return fmt.Errorf("%s failed to watch Guardian deployment: %w", controllerName, err)
+	}
+
 	// Watch for changes to TigeraStatus.
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("clusterconnection-controller failed to watch management-cluster-connection Tigerastatus: %w", err)
@@ -185,6 +195,9 @@ type ReconcileConnection struct {
 	status         status.StatusManager
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
+
+	// The fields below are used to track state and decisions surrounding HTTP proxying in the cluster.
+	resolvedProxy *httpproxy.Config
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -345,7 +358,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		// The Tier has been created, which means that this controller's reconciliation should no longer be a dependency
 		// of the License being deployed. If NetworkPolicy requires license features, it should now be safe to validate
 		// License presence and sufficiency.
-		if networkPolicyRequiresEgressAccessControl(managementClusterConnection, log) {
+		if networkPolicyRequiresEgressAccessControl(managementClusterConnection.Spec.ManagementClusterAddr, r.resolvedProxy, log) {
 			license, err := utils.FetchLicenseKey(ctx, r.Client)
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
@@ -363,9 +376,78 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
+	// We need to resolve whether Guardian has been configured for a proxy by a mutating admission webhook.
+	if r.resolvedProxy == nil {
+		// Check if the guardian deployment is available.
+		var guardianDeploymentAvailable bool
+		guardianDeployment := v1.Deployment{}
+		err = r.Client.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, &guardianDeployment)
+
+		// If we error for something other than not found, treat the proxy as unresolved and error.
+		if err != nil && !k8serrors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read the deployment status of Guardian", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
+
+		if err == nil {
+			for _, condition := range guardianDeployment.Status.Conditions {
+				if condition.Type == v1.DeploymentAvailable && condition.Status == corev1.ConditionTrue {
+					guardianDeploymentAvailable = true
+					break
+				}
+			}
+		}
+
+		if guardianDeploymentAvailable {
+			// Query guardian pods.
+			labelSelector := labels.SelectorFromSet(map[string]string{
+				"app.kubernetes.io/name": render.GuardianDeploymentName,
+			})
+			pods := corev1.PodList{}
+			err := r.Client.List(ctx, &pods, &client.ListOptions{
+				LabelSelector: labelSelector,
+				Namespace:     render.GuardianNamespace,
+			})
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to list the pods of the Guardian deployment", err, reqLogger)
+				return reconcile.Result{}, nil
+			}
+
+			// Parse the pod spec to resolve the proxy config.
+			var proxyConfig *httpproxy.Config
+			for _, pod := range pods.Items {
+				for _, container := range pod.Spec.Containers {
+					if container.Name == render.GuardianDeploymentName {
+						proxyConfig = &httpproxy.Config{}
+
+						for _, env := range container.Env {
+							if env.Name == "https_proxy" {
+								proxyConfig.HTTPSProxy = env.Value
+							}
+							if env.Name == "HTTPS_PROXY" {
+								proxyConfig.HTTPSProxy = env.Value
+							}
+							if env.Name == "no_proxy" {
+								proxyConfig.NoProxy = env.Value
+							}
+							if env.Name == "NO_PROXY" {
+								proxyConfig.NoProxy = env.Value
+							}
+						}
+
+						break
+					}
+				}
+			}
+
+			r.resolvedProxy = proxyConfig
+		}
+	}
+
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,
+		HTTPProxyConfig:             r.resolvedProxy,
 		TunnelCAType:                managementClusterConnection.Spec.TLS.CA,
 		PullSecrets:                 pullSecrets,
 		OpenShift:                   r.Provider.IsOpenShift(),
@@ -417,23 +499,43 @@ func fillDefaults(mcc *operatorv1.ManagementClusterConnection) {
 	}
 }
 
-func networkPolicyRequiresEgressAccessControl(connection *operatorv1.ManagementClusterConnection, log logr.Logger) bool {
-	if clusterAddrHasDomain, err := managementClusterAddrHasDomain(connection); err == nil && clusterAddrHasDomain {
-		return true
-	} else {
+func networkPolicyRequiresEgressAccessControl(target string, httpProxyConfig *httpproxy.Config, log logr.Logger) bool {
+	var destinationHostPort string
+	if httpProxyConfig != nil && httpProxyConfig.HTTPSProxy != "" {
+		// HTTPS proxy is specified as a URL.
+		proxyHostPort, err := url.ParseHostPortFromHTTPProxyString(httpProxyConfig.HTTPSProxy)
 		if err != nil {
 			log.Error(err, fmt.Sprintf(
-				"Failed to parse ManagementClusterAddr. Assuming %s does not require license feature %s",
+				"Failed to parse HTTP Proxy URL (%s). Assuming %s does not require license feature %s",
+				httpProxyConfig.HTTPSProxy,
 				render.GuardianPolicyName,
 				common.EgressAccessControlFeature,
 			))
+			return false
 		}
+
+		destinationHostPort = proxyHostPort
+	} else {
+		// Target is already specified as host:port.
+		destinationHostPort = target
+	}
+
+	// Determine if the host in the host:port is a domain name.
+	hostPortHasDomain, err := hostPortUsesDomainName(destinationHostPort)
+	if err != nil {
+		log.Error(err, fmt.Sprintf(
+			"Failed to parse resolved host:port (%s) for remote tunnel endpoint. Assuming %s does not require license feature %s",
+			destinationHostPort,
+			render.GuardianPolicyName,
+			common.EgressAccessControlFeature,
+		))
 		return false
 	}
+	return hostPortHasDomain
 }
 
-func managementClusterAddrHasDomain(connection *operatorv1.ManagementClusterConnection) (bool, error) {
-	host, _, err := net.SplitHostPort(connection.Spec.ManagementClusterAddr)
+func hostPortUsesDomainName(hostPort string) (bool, error) {
+	host, _, err := net.SplitHostPort(hostPort)
 	if err != nil {
 		return false, err
 	}

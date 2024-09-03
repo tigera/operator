@@ -23,6 +23,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/testing"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -249,4 +252,78 @@ func ExpectWaitForWatch(ctx context.Context, r reconcile.Reconciler, mockStatus 
 	_, err := r.Reconcile(ctx, reconcile.Request{})
 	Expect(err).ShouldNot(HaveOccurred())
 	mockStatus.AssertExpectations(GinkgoT())
+}
+
+type ObjectTrackerCall string
+
+const (
+	ObjectTrackerCallGet    ObjectTrackerCall = "get"
+	ObjectTrackerCallCreate ObjectTrackerCall = "create"
+	ObjectTrackerCallUpdate ObjectTrackerCall = "update"
+	ObjectTrackerCallList   ObjectTrackerCall = "list"
+	ObjectTrackerCallDelete ObjectTrackerCall = "delete"
+	ObjectTrackerCallWatch  ObjectTrackerCall = "watch"
+)
+
+func NewObjectTrackerWithCalls(clientScheme testing.ObjectScheme) ObjectTrackerWithCalls {
+	return ObjectTrackerWithCalls{
+		ObjectTracker: testing.NewObjectTracker(clientScheme, scheme.Codecs.UniversalDecoder()),
+		callsByGVR:    make(map[schema.GroupVersionResource]map[ObjectTrackerCall]int),
+	}
+}
+
+// ObjectTrackerWithCalls wraps the default implementation of testing.ObjectTracker to track the calls made.
+type ObjectTrackerWithCalls struct {
+	testing.ObjectTracker
+	callsByGVR map[schema.GroupVersionResource]map[ObjectTrackerCall]int
+}
+
+func (o *ObjectTrackerWithCalls) Add(obj runtime.Object) error {
+	return o.ObjectTracker.Add(obj)
+}
+
+func (o *ObjectTrackerWithCalls) inc(gvr schema.GroupVersionResource, call ObjectTrackerCall) {
+	if o.callsByGVR == nil {
+		o.callsByGVR = make(map[schema.GroupVersionResource]map[ObjectTrackerCall]int)
+	}
+
+	if o.callsByGVR[gvr] == nil {
+		o.callsByGVR[gvr] = make(map[ObjectTrackerCall]int)
+	}
+
+	o.callsByGVR[gvr][call]++
+}
+
+func (o *ObjectTrackerWithCalls) CallCount(gvr schema.GroupVersionResource, call ObjectTrackerCall) int {
+	return o.callsByGVR[gvr][call]
+}
+
+func (o *ObjectTrackerWithCalls) Get(gvr schema.GroupVersionResource, ns, name string) (runtime.Object, error) {
+	o.inc(gvr, ObjectTrackerCallGet)
+	return o.ObjectTracker.Get(gvr, ns, name)
+}
+
+func (o *ObjectTrackerWithCalls) Create(gvr schema.GroupVersionResource, obj runtime.Object, ns string) error {
+	o.inc(gvr, ObjectTrackerCallCreate)
+	return o.ObjectTracker.Create(gvr, obj, ns)
+}
+
+func (o *ObjectTrackerWithCalls) Update(gvr schema.GroupVersionResource, obj runtime.Object, ns string) error {
+	o.inc(gvr, ObjectTrackerCallUpdate)
+	return o.ObjectTracker.Update(gvr, obj, ns)
+}
+
+func (o *ObjectTrackerWithCalls) List(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, ns string) (runtime.Object, error) {
+	o.inc(gvr, ObjectTrackerCallList)
+	return o.ObjectTracker.List(gvr, gvk, ns)
+}
+
+func (o *ObjectTrackerWithCalls) Delete(gvr schema.GroupVersionResource, ns, name string) error {
+	o.inc(gvr, ObjectTrackerCallDelete)
+	return o.ObjectTracker.Delete(gvr, ns, name)
+}
+
+func (o *ObjectTrackerWithCalls) Watch(gvr schema.GroupVersionResource, ns string) (watch.Interface, error) {
+	o.inc(gvr, ObjectTrackerCallWatch)
+	return o.ObjectTracker.Watch(gvr, ns)
 }

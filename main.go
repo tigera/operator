@@ -24,6 +24,8 @@ import (
 	"strings"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/cloudflare/cfssl/log"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -246,17 +248,20 @@ func main() {
 		Port:               9443,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "operator-lock",
-		// We should test this again in the future to see if the problem with LicenseKey updates
-		// being missed is resolved. Prior to controller-runtime 0.7 we observed Test failures
-		// where LicenseKey updates would be missed and the client cache did not have the LicenseKey.
-		// The controller-runtime was updated and we made use of this ClientDisableCacheFor feature
-		// for the LicenseKey. We should test again in the future to see if the cache issue is fixed
-		// and we can remove this. Here is a link to the upstream issue
-		// https://github.com/kubernetes-sigs/controller-runtime/issues/1316
 		Client: client.Options{
 			Cache: &client.CacheOptions{
 				DisableFor: []client.Object{
+					// We should test this again in the future to see if the problem with LicenseKey updates
+					// being missed is resolved. Prior to controller-runtime 0.7 we observed Test failures
+					// where LicenseKey updates would be missed and the client cache did not have the LicenseKey.
+					// The controller-runtime was updated and we made use of this ClientDisableCacheFor feature
+					// for the LicenseKey. We should test again in the future to see if the cache issue is fixed
+					// and we can remove this. Here is a link to the upstream issue
+					// https://github.com/kubernetes-sigs/controller-runtime/issues/1316
 					&v3.LicenseKey{},
+
+					// Avoid caching Pods, as this can cause excessive memory usage in large clusters.
+					&corev1.Pod{},
 				},
 			},
 		},

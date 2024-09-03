@@ -92,6 +92,9 @@ type Config struct {
 	// Optional config for ALP
 	ALPEnabled bool
 
+	// SidecarInjectionEnabled
+	SidecarInjectionEnabled bool
+
 	// Calculated internal fields.
 	proxyImage      string
 	collectorImage  string
@@ -149,10 +152,9 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// If l7spec is provided render the required objects.
 	objs = append(objs, c.serviceAccount())
 
-	c.config.dikastesEnabled = false
-	if c.config.WAFEnabled || c.config.ALPEnabled {
-		c.config.dikastesEnabled = true
-	}
+	c.config.dikastesEnabled = c.config.WAFEnabled ||
+		c.config.ALPEnabled ||
+		c.config.SidecarInjectionEnabled
 
 	// If Web Application Firewall is enabled, we need WAF ruleset ConfigMap present.
 	if c.config.WAFEnabled {

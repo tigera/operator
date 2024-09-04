@@ -92,6 +92,9 @@ type Config struct {
 	// Optional config for ALP
 	ALPEnabled bool
 
+	// SidecarInjectionEnabled
+	SidecarInjectionEnabled bool
+
 	// Calculated internal fields.
 	proxyImage      string
 	collectorImage  string
@@ -149,10 +152,9 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// If l7spec is provided render the required objects.
 	objs = append(objs, c.serviceAccount())
 
-	c.config.dikastesEnabled = false
-	if c.config.WAFEnabled || c.config.ALPEnabled {
-		c.config.dikastesEnabled = true
-	}
+	c.config.dikastesEnabled = c.config.WAFEnabled ||
+		c.config.ALPEnabled ||
+		c.config.SidecarInjectionEnabled
 
 	// If Web Application Firewall is enabled, we need WAF ruleset ConfigMap present.
 	if c.config.WAFEnabled {
@@ -391,20 +393,23 @@ func (c *component) volumes() []corev1.Volume {
 	})
 
 	if c.config.dikastesEnabled {
+		hostPathDirectoryOrCreate := corev1.HostPathDirectoryOrCreate
 		// Web Application Firewall + ApplicationLayer Policy specific volumes.
 
 		// Needed for Dikastes' authz check server.
 		volumes = append(volumes, corev1.Volume{
 			Name: DikastesSyncVolumeName,
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/var/run/dikastes",
+					Type: &hostPathDirectoryOrCreate,
+				},
 			},
 		})
 
 		// Needed for ModSecurity library - contains rule set.
 		if c.config.WAFEnabled { // WAF-only
 			// WAF logs need HostPath volume - logs to be consumed by fluentd.
-			hostPathDirectoryOrCreate := corev1.HostPathDirectoryOrCreate
 			volumes = append(volumes, corev1.Volume{
 				Name: CalicoLogsVolumeName,
 				VolumeSource: corev1.VolumeSource{

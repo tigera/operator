@@ -40,14 +40,17 @@ import (
 )
 
 const (
-	DeepPacketInspectionNamespace       = "tigera-dpi"
-	DeepPacketInspectionName            = "tigera-dpi"
-	DeepPacketInspectionPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
-	DefaultMemoryLimit                  = "1Gi"
-	DefaultMemoryRequest                = "100Mi"
-	DefaultCPULimit                     = "1"
-	DefaultCPURequest                   = "100m"
-	DeepPacketInspectionLinseedRBACName = "tigera-dpi-linseed-permissions"
+	DeepPacketInspectionNamespace            = "tigera-dpi"
+	DeepPacketInspectionName                 = "tigera-dpi"
+	DeepPacketInspectionPolicyName           = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
+	DefaultMemoryLimit                       = "1Gi"
+	DefaultMemoryRequest                     = "100Mi"
+	DefaultCPULimit                          = "1"
+	DefaultCPURequest                        = "100m"
+	DeepPacketInspectionLinseedRBACName      = "tigera-dpi-linseed-permissions"
+	DeepPacketInspectionInitContainerName    = "tigera-dpi-init"
+	DeepPacketInspectionSnortRulesVolumeName = "snort-cache"
+	DeepPacketInspectionSnortRulesVolumePath = "/usr/etc/snort/rules"
 )
 
 type DPIConfig struct {
@@ -180,6 +183,25 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	if d.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
 		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace))
 	}
+	if d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers != nil {
+		for iter, snortInitContainer := range d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers {
+			container := corev1.Container{
+				Name:            fmt.Sprintf("%s-%d", DeepPacketInspectionInitContainerName, iter),
+				Image:           snortInitContainer.Image,
+				ImagePullPolicy: corev1.PullAlways,
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      DeepPacketInspectionSnortRulesVolumeName,
+						MountPath: DeepPacketInspectionSnortRulesVolumePath,
+					},
+				},
+			}
+			if snortInitContainer.Resources != nil {
+				container.Resources = *snortInitContainer.Resources
+			}
+			initContainers = append(initContainers, container)
+		}
+	}
 
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -262,6 +284,17 @@ func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 			})
 	}
 
+	if len(d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers) > 0 {
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: DeepPacketInspectionSnortRulesVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		)
+	}
+
 	return volumes
 }
 
@@ -308,6 +341,15 @@ func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 				Name:      render.LinseedTokenVolumeName,
 				MountPath: render.LinseedVolumeMountPath,
 			})
+	}
+	if len(d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers) > 0 {
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      DeepPacketInspectionSnortRulesVolumeName,
+				MountPath: DeepPacketInspectionSnortRulesVolumePath,
+				ReadOnly:  true,
+			},
+		)
 	}
 	return volumeMounts
 }

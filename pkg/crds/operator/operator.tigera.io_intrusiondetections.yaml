@@ -119,6 +119,78 @@ spec:
                   - resourceRequirements
                   type: object
                 type: array
+              deepPacketInspectionDaemonset:
+                description: DeepPacketInspectionDaemonset configures the DPI Daemonset
+                properties:
+                  snortInitContainers:
+                    description: SnortInitContainers specifies the init containers
+                      for the DPI Daemonset
+                    items:
+                      properties:
+                        image:
+                          description: Image name for the Snort Init container
+                          type: string
+                        resources:
+                          description: |-
+                            Resources allows customization of limits and requests for compute resources such as cpu and memory.
+                            If specified, this overrides the named SnortInitContainer Daemonset init container's resources.
+                            If omitted, the SnortInitContainer Deployment will use its default value for this init container's resources.
+                          properties:
+                            claims:
+                              description: |-
+                                Claims lists the names of resources, defined in spec.resourceClaims,
+                                that are used by this container.
+                                This is an alpha field and requires enabling the
+                                DynamicResourceAllocation feature gate.
+                                This field is immutable. It can only be set for containers.
+                              items:
+                                description: ResourceClaim references one entry in
+                                  PodSpec.ResourceClaims.
+                                properties:
+                                  name:
+                                    description: |-
+                                      Name must match the name of one entry in pod.spec.resourceClaims of
+                                      the Pod where this field is used. It makes that resource available
+                                      inside a container.
+                                    type: string
+                                required:
+                                - name
+                                type: object
+                              type: array
+                              x-kubernetes-list-map-keys:
+                              - name
+                              x-kubernetes-list-type: map
+                            limits:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: |-
+                                Limits describes the maximum amount of compute resources allowed.
+                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                              type: object
+                            requests:
+                              additionalProperties:
+                                anyOf:
+                                - type: integer
+                                - type: string
+                                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                x-kubernetes-int-or-string: true
+                              description: |-
+                                Requests describes the minimum amount of compute resources required.
+                                If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                              type: object
+                          type: object
+                      required:
+                      - image
+                      type: object
+                    maxItems: 1
+                    type: array
+                type: object
               intrusionDetectionControllerDeployment:
                 description: IntrusionDetectionControllerDeployment configures the
                   IntrusionDetection Controller Deployment.
@@ -145,9 +217,9 @@ spec:
                                     is a IntrusionDetectionController Deployment container.
                                   properties:
                                     name:
-                                      description: |-
-                                        Name is an enum which identifies the IntrusionDetectionController Deployment container by name.
-                                        Supported values are: controller, webhooks-processor
+                                      description: Name is an enum which identifies
+                                        the IntrusionDetectionController Deployment
+                                        container by name.
                                       enum:
                                       - controller
                                       - webhooks-processor

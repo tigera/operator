@@ -36,6 +36,27 @@ type IntrusionDetectionSpec struct {
 	// IntrusionDetectionControllerDeployment configures the IntrusionDetection Controller Deployment.
 	// +optional
 	IntrusionDetectionControllerDeployment *IntrusionDetectionControllerDeployment `json:"intrusionDetectionControllerDeployment,omitempty"`
+
+	// DeepPacketInspectionDaemonset configures the DPI Daemonset
+	// +optional
+	DeepPacketInspectionDaemonset *DeepPacketInspectionDaemonset `json:"deepPacketInspectionDaemonset,omitempty"`
+}
+
+type DeepPacketInspectionDaemonset struct {
+	// SnortInitContainers specifies the init containers for the DPI Daemonset
+	// +kubebuilder:validation:MaxItems=1
+	SnortInitContainers []*SnortInitContainer `json:"snortInitContainers,omitempty"`
+}
+
+type SnortInitContainer struct {
+	// Name of the Snort Init container
+	Name string `json:"name"`
+
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named SnortInitContainer Daemonset init container's resources.
+	// If omitted, the SnortInitContainer Deployment will use its default value for this init container's resources.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type AnomalyDetectionSpec struct {
@@ -138,7 +159,6 @@ type IntrusionDetectionControllerDeploymentPodSpec struct {
 // IntrusionDetectionControllerDeploymentContainer is a IntrusionDetectionController Deployment container.
 type IntrusionDetectionControllerDeploymentContainer struct {
 	// Name is an enum which identifies the IntrusionDetectionController Deployment container by name.
-	// Supported values are: controller, webhooks-processor
 	// +kubebuilder:validation:Enum=controller;webhooks-processor
 	Name string `json:"name"`
 

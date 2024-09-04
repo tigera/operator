@@ -184,19 +184,21 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace))
 	}
 	for iter, snortInitContainer := range d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers {
-		initContainers = append(initContainers, corev1.Container{
+		container := corev1.Container{
 			Name:            fmt.Sprintf("%s-%d", DeepPacketInspectionInitContainerName, iter),
 			Image:           snortInitContainer.Image,
 			ImagePullPolicy: corev1.PullAlways,
-			Resources:       *snortInitContainer.Resources,
 			VolumeMounts: []corev1.VolumeMount{
 				{
 					Name:      DeepPacketInspectionSnortRulesVolumeName,
 					MountPath: DeepPacketInspectionSnortRulesVolumePath,
-					ReadOnly:  true,
 				},
 			},
-		})
+		}
+		if snortInitContainer.Resources != nil {
+			container.Resources = *snortInitContainer.Resources
+		}
+		initContainers = append(initContainers, container)
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{

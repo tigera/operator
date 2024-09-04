@@ -127,8 +127,8 @@ spec:
                       for the DPI Daemonset
                     items:
                       properties:
-                        name:
-                          description: Name of the Snort Init container
+                        image:
+                          description: Image name for the Snort Init container
                           type: string
                         resources:
                           description: |-
@@ -186,7 +186,7 @@ spec:
                               type: object
                           type: object
                       required:
-                      - name
+                      - image
                       type: object
                     maxItems: 1
                     type: array

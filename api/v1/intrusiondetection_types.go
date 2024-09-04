@@ -49,8 +49,8 @@ type DeepPacketInspectionDaemonset struct {
 }
 
 type SnortInitContainer struct {
-	// Name of the Snort Init container
-	Name string `json:"name"`
+	// Image name for the Snort Init container
+	Image string `json:"image"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
 	// If specified, this overrides the named SnortInitContainer Daemonset init container's resources.

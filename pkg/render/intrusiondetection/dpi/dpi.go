@@ -183,22 +183,24 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	if d.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
 		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace))
 	}
-	for iter, snortInitContainer := range d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers {
-		container := corev1.Container{
-			Name:            fmt.Sprintf("%s-%d", DeepPacketInspectionInitContainerName, iter),
-			Image:           snortInitContainer.Image,
-			ImagePullPolicy: corev1.PullAlways,
-			VolumeMounts: []corev1.VolumeMount{
-				{
-					Name:      DeepPacketInspectionSnortRulesVolumeName,
-					MountPath: DeepPacketInspectionSnortRulesVolumePath,
+	if d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers != nil {
+		for iter, snortInitContainer := range d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers {
+			container := corev1.Container{
+				Name:            fmt.Sprintf("%s-%d", DeepPacketInspectionInitContainerName, iter),
+				Image:           snortInitContainer.Image,
+				ImagePullPolicy: corev1.PullAlways,
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      DeepPacketInspectionSnortRulesVolumeName,
+						MountPath: DeepPacketInspectionSnortRulesVolumePath,
+					},
 				},
-			},
+			}
+			if snortInitContainer.Resources != nil {
+				container.Resources = *snortInitContainer.Resources
+			}
+			initContainers = append(initContainers, container)
 		}
-		if snortInitContainer.Resources != nil {
-			container.Resources = *snortInitContainer.Resources
-		}
-		initContainers = append(initContainers, container)
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{

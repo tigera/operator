@@ -159,6 +159,7 @@ type IntrusionDetectionControllerDeploymentPodSpec struct {
 // IntrusionDetectionControllerDeploymentContainer is a IntrusionDetectionController Deployment container.
 type IntrusionDetectionControllerDeploymentContainer struct {
 	// Name is an enum which identifies the IntrusionDetectionController Deployment container by name.
+	// Supported values are: controller, webhooks-processor
 	// +kubebuilder:validation:Enum=controller;webhooks-processor
 	Name string `json:"name"`
 

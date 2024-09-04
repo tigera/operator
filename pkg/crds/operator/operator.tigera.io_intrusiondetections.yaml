@@ -217,9 +217,9 @@ spec:
                                     is a IntrusionDetectionController Deployment container.
                                   properties:
                                     name:
-                                      description: Name is an enum which identifies
-                                        the IntrusionDetectionController Deployment
-                                        container by name.
+                                      description: |-
+                                        Name is an enum which identifies the IntrusionDetectionController Deployment container by name.
+                                        Supported values are: controller, webhooks-processor
                                       enum:
                                       - controller
                                       - webhooks-processor

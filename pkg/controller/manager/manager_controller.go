@@ -644,10 +644,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Check if non-cluster host log ingestion is enabled.
-	nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, logc)
-		return reconcile.Result{}, err
+	// non-cluster hosts will only forward logs to a standalone or a managed cluster.
+	var nonclusterhost *operatorv1.NonClusterHost
+	if managementCluster == nil {
+		nonclusterhost, err = utils.GetNonClusterHost(ctx, r.client)
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, logc)
+			return reconcile.Result{}, err
+		}
 	}
 
 	managerCfg := &render.ManagerConfiguration{

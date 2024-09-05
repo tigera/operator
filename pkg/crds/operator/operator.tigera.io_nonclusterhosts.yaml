@@ -44,6 +44,7 @@ spec:
               endpoint:
                 description: 'Location of the log ingestion point for non-cluster
                   hosts. example: https://1.2.3.4:443'
+                pattern: ^https://.+$
                 type: string
             required:
             - endpoint

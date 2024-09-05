@@ -22,6 +22,7 @@ import (
 // NonClusterHostSpec enables non-cluster hosts to connect to a cluster.
 type NonClusterHostSpec struct {
 	// Location of the log ingestion point for non-cluster hosts. example: https://1.2.3.4:443
+	// +kubebuilder:validation:Pattern=`^https://.+$`
 	Endpoint string `json:"endpoint"`
 }
 

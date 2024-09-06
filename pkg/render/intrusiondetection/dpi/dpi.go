@@ -183,12 +183,12 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	if d.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
 		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace))
 	}
-	if d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers != nil {
-		for iter, snortInitContainer := range d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers {
+	if d.dpiInitContainers() {
+		for _, initContainer := range d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.Spec.Template.Spec.InitContainers {
 			container := corev1.Container{
-				Name:            fmt.Sprintf("%s-%d", DeepPacketInspectionInitContainerName, iter),
-				Image:           snortInitContainer.Image,
-				ImagePullPolicy: corev1.PullAlways,
+				Name:            initContainer.Name,
+				Image:           initContainer.Image,
+				ImagePullPolicy: render.ImagePullPolicy(),
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      DeepPacketInspectionSnortRulesVolumeName,
@@ -196,8 +196,8 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 					},
 				},
 			}
-			if snortInitContainer.Resources != nil {
-				container.Resources = *snortInitContainer.Resources
+			if initContainer.Resources != nil {
+				container.Resources = *initContainer.Resources
 			}
 			initContainers = append(initContainers, container)
 		}
@@ -284,7 +284,9 @@ func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 			})
 	}
 
-	if len(d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers) > 0 {
+	if d.dpiInitContainers() {
+		// if DPI init container is present we must include the empty dir volume
+		// the volume is used to store customer's Snort rule files.
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: DeepPacketInspectionSnortRulesVolumeName,
@@ -342,7 +344,10 @@ func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 				MountPath: render.LinseedVolumeMountPath,
 			})
 	}
-	if len(d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.SnortInitContainers) > 0 {
+	if d.dpiInitContainers() {
+		// if DPI init container is present we must include the empty dir volume
+		// the volume is used to store customer's Snort rule files.
+		// the contents of the volume is controlled by the DPI init container.
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{
 				Name:      DeepPacketInspectionSnortRulesVolumeName,
@@ -557,4 +562,18 @@ func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 			Egress:   egressRules,
 		},
 	}
+}
+
+func (d *dpiComponent) dpiInitContainers() bool {
+	switch {
+	case d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset == nil:
+		return false
+	case d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.Spec == nil:
+		return false
+	case d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.Spec.Template == nil:
+		return false
+	case d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.Spec.Template.Spec.InitContainers == nil:
+		return false
+	}
+	return len(d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.Spec.Template.Spec.InitContainers) > 0
 }

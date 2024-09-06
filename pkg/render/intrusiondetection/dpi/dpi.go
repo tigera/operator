@@ -48,7 +48,6 @@ const (
 	DefaultCPULimit                          = "1"
 	DefaultCPURequest                        = "100m"
 	DeepPacketInspectionLinseedRBACName      = "tigera-dpi-linseed-permissions"
-	DeepPacketInspectionInitContainerName    = "tigera-dpi-init"
 	DeepPacketInspectionSnortRulesVolumeName = "snort-cache"
 	DeepPacketInspectionSnortRulesVolumePath = "/usr/etc/snort/rules"
 )

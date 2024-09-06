@@ -377,15 +377,22 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 						// Set the env vars.
 						httpsProxyVarName := "HTTPS_PROXY"
+						httpProxyVarName := "HTTP_PROXY"
 						noProxyVarName := "NO_PROXY"
 						if testCase.lowercase {
 							httpsProxyVarName = strings.ToLower(httpsProxyVarName)
+							httpProxyVarName = strings.ToLower(httpProxyVarName)
 							noProxyVarName = strings.ToLower(noProxyVarName)
 						}
 						if testCase.httpsProxy != nil {
 							pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, v1.EnvVar{
 								Name:  httpsProxyVarName,
 								Value: *testCase.httpsProxy,
+							})
+							// Add a static HTTP_PROXY variable to catch any scenarios where the controller picks the wrong env var (Guardian uses HTTPS).
+							pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, v1.EnvVar{
+								Name:  httpProxyVarName,
+								Value: "http://wrong-proxy-url.com/",
 							})
 						}
 						if testCase.noProxy != nil {

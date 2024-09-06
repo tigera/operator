@@ -40,14 +40,17 @@ import (
 )
 
 const (
-	DeepPacketInspectionNamespace       = "tigera-dpi"
-	DeepPacketInspectionName            = "tigera-dpi"
-	DeepPacketInspectionPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
-	DefaultMemoryLimit                  = "1Gi"
-	DefaultMemoryRequest                = "100Mi"
-	DefaultCPULimit                     = "1"
-	DefaultCPURequest                   = "100m"
-	DeepPacketInspectionLinseedRBACName = "tigera-dpi-linseed-permissions"
+	DeepPacketInspectionNamespace            = "tigera-dpi"
+	DeepPacketInspectionName                 = "tigera-dpi"
+	DeepPacketInspectionPolicyName           = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
+	DefaultMemoryLimit                       = "1Gi"
+	DefaultMemoryRequest                     = "100Mi"
+	DefaultCPULimit                          = "1"
+	DefaultCPURequest                        = "100m"
+	DeepPacketInspectionLinseedRBACName      = "tigera-dpi-linseed-permissions"
+	DeepPacketInspectionInitContainerName    = "tigera-dpi-init"
+	DeepPacketInspectionSnortRulesVolumeName = "snort-cache"
+	DeepPacketInspectionSnortRulesVolumePath = "/usr/etc/snort/rules"
 )
 
 type DPIConfig struct {
@@ -180,6 +183,25 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	if d.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
 		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace))
 	}
+	if d.dpiInitContainers() {
+		for _, initContainer := range d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.Spec.Template.Spec.InitContainers {
+			container := corev1.Container{
+				Name:            initContainer.Name,
+				Image:           initContainer.Image,
+				ImagePullPolicy: render.ImagePullPolicy(),
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      DeepPacketInspectionSnortRulesVolumeName,
+						MountPath: DeepPacketInspectionSnortRulesVolumePath,
+					},
+				},
+			}
+			if initContainer.Resources != nil {
+				container.Resources = *initContainer.Resources
+			}
+			initContainers = append(initContainers, container)
+		}
+	}
 
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -262,6 +284,19 @@ func (d *dpiComponent) dpiVolumes() []corev1.Volume {
 			})
 	}
 
+	if d.dpiInitContainers() {
+		// if DPI init container is present we must include the empty dir volume
+		// the volume is used to store customer's Snort rule files.
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: DeepPacketInspectionSnortRulesVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+			},
+		)
+	}
+
 	return volumes
 }
 
@@ -308,6 +343,18 @@ func (d *dpiComponent) dpiVolumeMounts() []corev1.VolumeMount {
 				Name:      render.LinseedTokenVolumeName,
 				MountPath: render.LinseedVolumeMountPath,
 			})
+	}
+	if d.dpiInitContainers() {
+		// if DPI init container is present we must include the empty dir volume
+		// the volume is used to store customer's Snort rule files.
+		// the contents of the volume is controlled by the DPI init container.
+		volumeMounts = append(volumeMounts,
+			corev1.VolumeMount{
+				Name:      DeepPacketInspectionSnortRulesVolumeName,
+				MountPath: DeepPacketInspectionSnortRulesVolumePath,
+				ReadOnly:  true,
+			},
+		)
 	}
 	return volumeMounts
 }
@@ -515,4 +562,18 @@ func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
 			Egress:   egressRules,
 		},
 	}
+}
+
+func (d *dpiComponent) dpiInitContainers() bool {
+	switch {
+	case d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset == nil:
+		return false
+	case d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.Spec == nil:
+		return false
+	case d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.Spec.Template == nil:
+		return false
+	case d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.Spec.Template.Spec.InitContainers == nil:
+		return false
+	}
+	return len(d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.Spec.Template.Spec.InitContainers) > 0
 }

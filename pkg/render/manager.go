@@ -546,15 +546,14 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	// Determine the volume mounts to use. This varies based on the type of cluster.
 	mounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
 	mounts = append(mounts, corev1.VolumeMount{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true})
-	if c.cfg.ManagementCluster != nil {
-		mounts = append(mounts, c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()))
-		mounts = append(mounts, c.cfg.TunnelServerCert.VolumeMount(c.SupportedOSType()))
-		mounts = append(mounts, c.cfg.VoltronLinseedKeyPair.VolumeMount(c.SupportedOSType()))
-	}
-	if c.cfg.NonClusterHost != nil {
+	if c.cfg.ManagementCluster != nil || c.cfg.NonClusterHost != nil {
 		// We need the internal tls key pair for voltron and linseed mtls connection
-		// when non-cluster host log ingestion is enabled.
+		// when in a management cluster or non-cluster host log ingestion is enabled.
 		mounts = append(mounts, c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()))
+		if c.cfg.ManagementCluster != nil {
+			mounts = append(mounts, c.cfg.TunnelServerCert.VolumeMount(c.SupportedOSType()))
+			mounts = append(mounts, c.cfg.VoltronLinseedKeyPair.VolumeMount(c.SupportedOSType()))
+		}
 	}
 
 	linseedEndpointEnv := corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc.%s", ElasticsearchNamespace, c.cfg.ClusterDomain)}

@@ -36,6 +36,46 @@ type IntrusionDetectionSpec struct {
 	// IntrusionDetectionControllerDeployment configures the IntrusionDetection Controller Deployment.
 	// +optional
 	IntrusionDetectionControllerDeployment *IntrusionDetectionControllerDeployment `json:"intrusionDetectionControllerDeployment,omitempty"`
+
+	// DeepPacketInspectionDaemonset configures the DPI Daemonset
+	// +optional
+	DeepPacketInspectionDaemonset *DeepPacketInspectionDaemonset `json:"deepPacketInspectionDaemonset,omitempty"`
+}
+
+type DeepPacketInspectionDaemonset struct {
+	// DPIDaemonsetSpec configures the DPI Daemonset
+	// +optional
+	Spec *DPIDaemonsetSpec `json:"spec,omitempty"`
+}
+
+type DPIDaemonsetSpec struct {
+	// Template specifies DPI Daemonset Template
+	// +optional
+	Template *DPIDaemonsetTemplate `json:"template,omitempty"`
+}
+
+type DPIDaemonsetTemplate struct {
+	// Spec specifies DPI Daemonset Template Spec
+	// +optional
+	Spec *DPIDaemonsetTemplateSpec `json:"spec,omitempty"`
+}
+
+type DPIDaemonsetTemplateSpec struct {
+	// List of DPI Daemonset Init containers definitions
+	// +kubebuilder:validation:MaxItems=1
+	InitContainers []DPIDaemonsetInitContainer `json:"initContainers,omitempty"`
+}
+
+type DPIDaemonsetInitContainer struct {
+	// Container name
+	Name string `json:"name"`
+	// Image name for the init container
+	Image string `json:"image"`
+	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
+	// If specified, this overrides the named SnortInitContainer Daemonset init container's resources.
+	// If omitted, the SnortInitContainer Deployment will use its default value for this init container's resources.
+	// +optional
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 type AnomalyDetectionSpec struct {

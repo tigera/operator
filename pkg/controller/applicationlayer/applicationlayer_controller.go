@@ -252,7 +252,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	var passthroughModSecurityRuleSet bool
 	var modSecurityRuleSet *corev1.ConfigMap
-	if r.isWAFEnabled(&instance.Spec) {
+	if r.isWAFEnabled(&instance.Spec) || r.isSidecarInjectionEnabled(&instance.Spec) {
 		if modSecurityRuleSet, passthroughModSecurityRuleSet, err = r.getModSecurityRuleSet(ctx); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall ModSecurity rule set", err, reqLogger)
 			return reconcile.Result{}, err
@@ -498,7 +498,8 @@ func (r *ReconcileApplicationLayer) getPolicySyncPathPrefix(fcSpec *crdv1.FelixC
 
 	// No existing value. However, at least one of the applicationLayer features are enabled
 	spec := &al.Spec
-	if r.isALPEnabled(spec) || r.isWAFEnabled(spec) || r.isLogsCollectionEnabled(spec) {
+	if r.isALPEnabled(spec) || r.isWAFEnabled(spec) || r.isLogsCollectionEnabled(spec) ||
+		r.isSidecarInjectionEnabled(spec) {
 		return DefaultPolicySyncPrefix
 	}
 	return ""

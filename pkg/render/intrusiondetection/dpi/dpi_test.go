@@ -746,6 +746,8 @@ func validateDPIComponents(resources []client.Object, openshift bool) {
 		},
 	))
 	Expect(len(dpiDaemonSet.Spec.Template.Spec.InitContainers)).To(Equal(1))
+	Expect(dpiDaemonSet.Spec.Template.Spec.InitContainers[0].Name).Should(Equal("snort-rules-init-container"))
+	Expect(dpiDaemonSet.Spec.Template.Spec.InitContainers[0].Image).Should(Equal("gcr.io/blah/snort-rules:rev01"))
 	Expect(dpiDaemonSet.Spec.Template.Spec.InitContainers[0].VolumeMounts).Should(Equal(
 		[]corev1.VolumeMount{
 			{MountPath: "/usr/etc/snort/rules", Name: "snort-cache", ReadOnly: false},

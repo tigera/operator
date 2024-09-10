@@ -71,7 +71,6 @@ const (
 	L7AdmssCtrlEnvoyImage                           = "envoyproxy/envoy:v1.31-latest"
 	L7AdmssCtrlPort                                 = 6443
 
-	// Sidecar
 	SidecarMutatingWebhookConfigName = "tigera-sidecar-webhook-configuration"
 )
 

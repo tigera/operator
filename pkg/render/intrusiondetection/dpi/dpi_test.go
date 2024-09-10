@@ -620,6 +620,126 @@ var _ = Describe("DPI rendering tests", func() {
 		)
 	})
 
+	Context("with DPI init container", func() {
+		BeforeEach(func() {
+			ids.Spec.DeepPacketInspectionDaemonset = &operatorv1.DeepPacketInspectionDaemonset{
+				Spec: &operatorv1.DPIDaemonsetSpec{
+					Template: &operatorv1.DPIDaemonsetTemplate{
+						Spec: &operatorv1.DPIDaemonsetTemplateSpec{
+							InitContainers: []operatorv1.DPIDaemonsetInitContainer{
+								{
+									Name:  "snort-rules",
+									Image: "gcr.io/blah/snort-rules:rev01",
+								},
+							},
+						},
+					},
+				},
+			}
+		})
+
+		AfterEach(func() {
+			ids.Spec.DeepPacketInspectionDaemonset = nil
+		})
+
+		It("should render all other DPI resources unchanged when the DPI init container is configured", func() {
+			component := dpi.DPI(cfg)
+
+			resources, _ := component.Objects()
+
+			expectedResources := []resourceTestObj{
+				{name: dpi.DeepPacketInspectionNamespace, ns: "", group: "", version: "v1", kind: "Namespace"},
+				{name: dpi.DeepPacketInspectionPolicyName, ns: dpi.DeepPacketInspectionNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+				{name: "pull-secret", ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "Secret"},
+				{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "", version: "v1", kind: "ServiceAccount"},
+				{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: dpi.DeepPacketInspectionName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+				{name: dpi.DeepPacketInspectionName, ns: dpi.DeepPacketInspectionNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+				{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+				{name: dpi.DeepPacketInspectionLinseedRBACName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			}
+
+			Expect(len(resources)).To(Equal(len(expectedResources)))
+
+			for i, expectedRes := range expectedResources {
+				rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
+			}
+
+			ds := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Containers[0].Env).Should(ContainElements(
+				corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/deep-packet-inspection-tls/tls.crt"},
+				corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/deep-packet-inspection-tls/tls.key"},
+				corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "false"},
+				corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
+			))
+			Expect(len(ds.Spec.Template.Spec.Containers)).Should(Equal(1))
+			Expect(*ds.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPURequest)))
+			Expect(*ds.Spec.Template.Spec.Containers[0].Resources.Limits.Cpu()).Should(Equal(resource.MustParse(dpi.DefaultCPULimit)))
+			Expect(*ds.Spec.Template.Spec.Containers[0].Resources.Requests.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryRequest)))
+			Expect(*ds.Spec.Template.Spec.Containers[0].Resources.Limits.Memory()).Should(Equal(resource.MustParse(dpi.DefaultMemoryLimit)))
+
+			validateDPIComponents(resources, false)
+		})
+
+		It("should render the DPI Daemonset and the init container for the DPI Daemonset with correct volumes and respective mounts", func() {
+			resources, _ := dpi.DPI(cfg).Objects()
+			dpiDaemonset := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+
+			Expect(dpiDaemonset.Spec.Template.Spec.Volumes).To(ContainElement(
+				corev1.Volume{
+					Name: "snort-cache",
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+				},
+			))
+
+			Expect(dpiDaemonset.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(
+				corev1.VolumeMount{
+					MountPath: "/usr/etc/snort/rules",
+					Name:      "snort-cache",
+					ReadOnly:  true,
+				},
+			))
+
+			Expect(len(dpiDaemonset.Spec.Template.Spec.InitContainers)).To(Equal(1))
+			Expect(dpiDaemonset.Spec.Template.Spec.InitContainers[0].Name).Should(Equal("snort-rules"))
+			Expect(dpiDaemonset.Spec.Template.Spec.InitContainers[0].Image).Should(Equal("gcr.io/blah/snort-rules:rev01"))
+			Expect(dpiDaemonset.Spec.Template.Spec.InitContainers[0].VolumeMounts).Should(Equal(
+				[]corev1.VolumeMount{
+					{
+						MountPath: "/usr/etc/snort/rules",
+						Name:      "snort-cache",
+						ReadOnly:  false,
+					},
+				},
+			))
+
+			validateDPIComponents(resources, false)
+		})
+
+		It("should respect custom resource requirements for the DPI init container", func() {
+			memoryLimit := resource.MustParse("5Gi")
+			cpuLimit := resource.MustParse("5")
+			ids.Spec.DeepPacketInspectionDaemonset.Spec.Template.Spec.InitContainers[0].Resources = &corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceMemory: memoryLimit,
+					corev1.ResourceCPU:    cpuLimit,
+				},
+			}
+
+			resources, _ := dpi.DPI(cfg).Objects()
+			dpiDaemonset := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			Expect(len(dpiDaemonset.Spec.Template.Spec.InitContainers)).Should(Equal(1))
+			Expect(*dpiDaemonset.Spec.Template.Spec.InitContainers[0].Resources.Limits.Cpu()).Should(Equal(cpuLimit))
+			Expect(*dpiDaemonset.Spec.Template.Spec.InitContainers[0].Resources.Limits.Memory()).Should(Equal(memoryLimit))
+			Expect(dpiDaemonset.Spec.Template.Spec.InitContainers[0].Resources.Requests.Cpu().IsZero()).Should(BeTrue())
+			Expect(dpiDaemonset.Spec.Template.Spec.InitContainers[0].Resources.Requests.Memory().IsZero()).Should(BeTrue())
+
+			validateDPIComponents(resources, false)
+		})
+	})
+
 	Context("multi-tenant", func() {
 		It("should render RBAC to allow Linseed access", func() {
 			cfg.Tenant = &operatorv1.Tenant{

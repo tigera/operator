@@ -26,7 +26,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -352,66 +351,27 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Context("Proxy detection", func() {
 			// Generate test cases based on the combinations of proxy address forms and proxy settings.
 			// Here we specify the base targets along with the base proxy IP, domain, and port that will be used for generation.
-			testCases := generateCases("voltron.io:9000", "192.168.1.2:9000", "proxy.io", "10.1.2.3", "8080")
+			coreCases := generateCoreProxyTestCases("voltron.io:9000", "192.168.1.2:9000", "proxy.io", "10.1.2.3", "8080")
 
+			// In case we support multiple guardian replicas in the future, we test specific multi-pod scenarios.
+			multiPodCases := multiplePodCases()
+
+			testCases := append(coreCases, multiPodCases...)
 			for _, testCase := range testCases {
-				Describe(fmt.Sprintf("Proxy detection when %+v", testCase), func() {
+				Describe(fmt.Sprintf("Proxy detection when %+v", prettyFormatTestCase(testCase)), func() {
 					// Set up the test based on the test case.
 					BeforeEach(func() {
-						pod := v1.Pod{
-							ObjectMeta: metav1.ObjectMeta{
-								Name:      "tigera-guardian",
-								Namespace: "tigera-guardian",
-								Labels: map[string]string{
-									"k8s-app":                "tigera-guardian",
-									"app.kubernetes.io/name": "tigera-guardian",
-								},
-							},
-							Spec: v1.PodSpec{
-								Containers: []v1.Container{{
-									Name: "tigera-guardian",
-									Env:  []v1.EnvVar{},
-								}},
-							},
+						for i, proxy := range testCase.podProxies {
+							createPodWithProxy(ctx, c, proxy, testCase.lowercase, i)
 						}
-
-						// Set the env vars.
-						httpsProxyVarName := "HTTPS_PROXY"
-						httpProxyVarName := "HTTP_PROXY"
-						noProxyVarName := "NO_PROXY"
-						if testCase.lowercase {
-							httpsProxyVarName = strings.ToLower(httpsProxyVarName)
-							httpProxyVarName = strings.ToLower(httpProxyVarName)
-							noProxyVarName = strings.ToLower(noProxyVarName)
-						}
-						if testCase.httpsProxy != nil {
-							pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, v1.EnvVar{
-								Name:  httpsProxyVarName,
-								Value: *testCase.httpsProxy,
-							})
-							// Add a static HTTP_PROXY variable to catch any scenarios where the controller picks the wrong env var (Guardian uses HTTPS).
-							pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, v1.EnvVar{
-								Name:  httpProxyVarName,
-								Value: "http://wrong-proxy-url.com/",
-							})
-						}
-						if testCase.noProxy != nil {
-							pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, v1.EnvVar{
-								Name:  noProxyVarName,
-								Value: *testCase.noProxy,
-							})
-						}
-
-						err := c.Create(ctx, &pod)
-						Expect(err).NotTo(HaveOccurred())
 
 						// Set the target
 						cfg.Spec.ManagementClusterAddr = testCase.target
-						err = c.Update(ctx, cfg)
+						err := c.Update(ctx, cfg)
 						Expect(err).NotTo(HaveOccurred())
 					})
 
-					It(fmt.Sprintf("detects proxy correctly when %+v", testCase), func() {
+					It(fmt.Sprintf("detects proxy correctly when %+v", prettyFormatTestCase(testCase)), func() {
 						// First reconcile creates the guardian deployment without any availability condition.
 						_, err := r.Reconcile(ctx, reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
@@ -466,18 +426,20 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 						Expect(policies.Items).To(HaveLen(2))
 						Expect(policies.Items[1].Name).To(Equal("allow-tigera.guardian-access"))
 						policy := policies.Items[1]
-						Expect(policy.Spec.Egress).To(HaveLen(7))
-						managementClusterEgressRule := policy.Spec.Egress[5]
 
 						// Generate the expectation based on the test case, and compare the rendered rule to our expectation.
-						expected := getExpectedProxyPolicyFromCase(testCase)
-						if expected.hostIsIP {
-							Expect(managementClusterEgressRule.Destination.Nets).To(HaveLen(1))
-							Expect(managementClusterEgressRule.Destination.Nets[0]).To(Equal(fmt.Sprintf("%s/32", expected.host)))
-							Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(expected.port)))
-						} else {
-							Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{expected.host}))
-							Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(expected.port)))
+						expectedEgressRules := getExpectedEgressRulesFromCase(testCase)
+						Expect(policy.Spec.Egress).To(HaveLen(6 + len(expectedEgressRules)))
+						for i, egressRule := range expectedEgressRules {
+							managementClusterEgressRule := policy.Spec.Egress[5+i]
+							if egressRule.hostIsIP {
+								Expect(managementClusterEgressRule.Destination.Nets).To(HaveLen(1))
+								Expect(managementClusterEgressRule.Destination.Nets[0]).To(Equal(fmt.Sprintf("%s/32", egressRule.host)))
+								Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(egressRule.port)))
+							} else {
+								Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{egressRule.host}))
+								Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(egressRule.port)))
+							}
 						}
 
 						// Reconcile again. Verify that we do not cause any additional query for pods now that we have resolved the proxy.
@@ -544,7 +506,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
 			Expect(c.Delete(ctx, ts)).NotTo(HaveOccurred())
 		})
-		It("should reconcile with creating new status condition  with multiple conditions as true", func() {
+		It("should reconcile with creating new status condition with multiple conditions as true", func() {
 			ts := &operatorv1.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "management-cluster-connection"},
 				Spec:       operatorv1.TigeraStatusSpec{},
@@ -665,27 +627,84 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	})
 })
 
+func createPodWithProxy(ctx context.Context, c client.Client, config *proxyConfig, lowercase bool, replicaNum int) {
+	pod := v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-guardian" + strconv.Itoa(replicaNum),
+			Namespace: "tigera-guardian",
+			Labels: map[string]string{
+				"k8s-app":                "tigera-guardian",
+				"app.kubernetes.io/name": "tigera-guardian",
+			},
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{{
+				Name: "tigera-guardian",
+				Env:  []v1.EnvVar{},
+			}},
+		},
+	}
+
+	if config != nil {
+		// Set the env vars.
+		httpsProxyVarName := "HTTPS_PROXY"
+		httpProxyVarName := "HTTP_PROXY"
+		noProxyVarName := "NO_PROXY"
+		if lowercase {
+			httpsProxyVarName = strings.ToLower(httpsProxyVarName)
+			httpProxyVarName = strings.ToLower(httpProxyVarName)
+			noProxyVarName = strings.ToLower(noProxyVarName)
+		}
+		// Environment variables that are empty can be represented as an unset variable or a set variable with an empty string.
+		// For our tests, we'll represent them as an unset variable.
+		if config.httpsProxy != "" {
+			pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, v1.EnvVar{
+				Name:  httpsProxyVarName,
+				Value: config.httpsProxy,
+			})
+			// Add a static HTTP_PROXY variable to catch any scenarios where the controller picks the wrong env var (Guardian uses HTTPS).
+			pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, v1.EnvVar{
+				Name:  httpProxyVarName,
+				Value: "http://wrong-proxy-url.com/",
+			})
+		}
+		if config.noProxy != "" {
+			pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, v1.EnvVar{
+				Name:  noProxyVarName,
+				Value: config.noProxy,
+			})
+		}
+	}
+
+	err := c.Create(ctx, &pod)
+	Expect(err).NotTo(HaveOccurred())
+}
+
 type proxyTestCase struct {
 	lowercase  bool
 	target     string
-	httpsProxy *string
-	noProxy    *string
+	podProxies []*proxyConfig
 }
 
-type expectedProxyPolicy struct {
+type proxyConfig struct {
+	httpsProxy string
+	noProxy    string
+}
+
+type expectedEgressRule struct {
 	host      string
 	port      uint16
 	hostIsIP  bool
 	isProxied bool
 }
 
-func generateCases(targetDomain, targetIP, proxyDomain, proxyIP, proxyPort string) []proxyTestCase {
+func generateCoreProxyTestCases(targetDomain, targetIP, proxyDomain, proxyIP, proxyPort string) []proxyTestCase {
 	var cases []proxyTestCase
 	// We will collect the cases by target type. Targets are in the form of ip:port or domain:port.
 	for _, target := range []string{targetDomain, targetIP} {
 		var casesByTargetType []proxyTestCase
 		// Generate the proxy strings. They can be http or https, use a domain or IP host, and can optionally specify a port.
-		var proxyStrings []*string
+		var proxyStrings []string
 		for _, scheme := range []string{"http", "https"} {
 			for _, host := range []string{proxyDomain, proxyIP} {
 				for _, port := range []string{"", proxyPort} {
@@ -693,16 +712,16 @@ func generateCases(targetDomain, targetIP, proxyDomain, proxyIP, proxyPort strin
 					if port != "" {
 						proxyString = fmt.Sprintf("%s:%s", proxyString, port)
 					}
-					proxyStrings = append(proxyStrings, ptr.ToPtr[string](proxyString))
+					proxyStrings = append(proxyStrings, proxyString)
 				}
 			}
 		}
-		// Add base cases: proxy is unset, or an empty proxy is set.
-		proxyStrings = append(proxyStrings, nil, ptr.ToPtr[string](""))
+		// Add base case: proxy is empty (empty and unset env vars are handled the same).
+		proxyStrings = append(proxyStrings, "")
 
 		// Generate the "no proxy" strings. They can either match or not match the target, can list one or many exemptions,
 		// and can optionally specify a port.
-		var noProxyStrings []*string
+		var noProxyStrings []string
 		for _, matchesTarget := range []bool{true, false} {
 			noProxyContainsPort := []bool{false}
 			if matchesTarget {
@@ -728,24 +747,31 @@ func generateCases(targetDomain, targetIP, proxyDomain, proxyIP, proxyPort strin
 						noProxyString = fmt.Sprintf("1.1.1.1,%s,nobueno.com", noProxyString)
 					}
 
-					noProxyStrings = append(noProxyStrings, ptr.ToPtr[string](noProxyString))
+					noProxyStrings = append(noProxyStrings, noProxyString)
 				}
 			}
 		}
-		// Add base cases: no-proxy is unset, or an empty no-proxy is set.
-		noProxyStrings = append(noProxyStrings, nil, ptr.ToPtr[string](""))
+		// Add base case: no-proxy is empty (empty and unset env vars are handled the same).
+		noProxyStrings = append(noProxyStrings, "")
 
 		// Create the cases based on the generated combinations of proxy strings.
 		// The env vars can be set as either lowercase or uppercase on the container, we express that possibility here.
 		for _, lowercase := range []bool{true, false} {
 			for _, proxyString := range proxyStrings {
 				for _, noProxyString := range noProxyStrings {
-					casesByTargetType = append(casesByTargetType, proxyTestCase{
-						lowercase:  lowercase,
-						target:     target,
-						httpsProxy: proxyString,
-						noProxy:    noProxyString,
-					})
+					testCase := proxyTestCase{
+						lowercase: lowercase,
+						target:    target,
+					}
+					var podProxyConfig *proxyConfig
+					if proxyString != "" || noProxyString != "" {
+						podProxyConfig = &proxyConfig{
+							httpsProxy: proxyString,
+							noProxy:    noProxyString,
+						}
+					}
+					testCase.podProxies = []*proxyConfig{podProxyConfig}
+					casesByTargetType = append(casesByTargetType, testCase)
 				}
 			}
 		}
@@ -754,62 +780,158 @@ func generateCases(targetDomain, targetIP, proxyDomain, proxyIP, proxyPort strin
 	return cases
 }
 
-func getExpectedProxyPolicyFromCase(c proxyTestCase) expectedProxyPolicy {
-	var isProxied bool
-	if c.httpsProxy != nil && *c.httpsProxy != "" {
-		if c.noProxy == nil || *c.noProxy == "" {
-			isProxied = true
-		} else {
-			var proxyIsExempt bool
-			for _, noProxySubstring := range strings.Split(*c.noProxy, ",") {
-				if strings.Contains(c.target, noProxySubstring) {
-					proxyIsExempt = true
-					break
+func getExpectedEgressRulesFromCase(c proxyTestCase) []expectedEgressRule {
+	var expectedEgressRules []expectedEgressRule
+	expectedEgressRulesAdded := map[expectedEgressRule]bool{}
+
+	for _, proxy := range c.podProxies {
+		var isProxied bool
+		if proxy != nil && proxy.httpsProxy != "" {
+			if proxy.noProxy == "" {
+				isProxied = true
+			} else {
+				var proxyIsExempt bool
+				for _, noProxySubstring := range strings.Split(proxy.noProxy, ",") {
+					if strings.Contains(c.target, noProxySubstring) {
+						proxyIsExempt = true
+						break
+					}
+				}
+				if !proxyIsExempt {
+					isProxied = true
 				}
 			}
-			if !proxyIsExempt {
-				isProxied = true
-			}
 		}
-	}
 
-	var host string
-	var port uint16
-	if isProxied {
-		proxyURL, err := url.ParseRequestURI(*c.httpsProxy)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Resolve port
-		hostSplit := strings.Split(proxyURL.Host, ":")
-		switch {
-		case len(hostSplit) == 2:
-			port64, err := strconv.ParseUint(hostSplit[1], 10, 16)
+		var host string
+		var port uint16
+		if isProxied {
+			proxyURL, err := url.ParseRequestURI(proxy.httpsProxy)
 			Expect(err).NotTo(HaveOccurred())
-			host = hostSplit[0]
+
+			// Resolve port
+			hostSplit := strings.Split(proxyURL.Host, ":")
+			switch {
+			case len(hostSplit) == 2:
+				port64, err := strconv.ParseUint(hostSplit[1], 10, 16)
+				Expect(err).NotTo(HaveOccurred())
+				host = hostSplit[0]
+				port = uint16(port64)
+			case proxyURL.Scheme == "https":
+				host = proxyURL.Host
+				port = 443
+			default:
+				host = proxyURL.Host
+				port = 80
+			}
+
+			Expect(err).NotTo(HaveOccurred())
+		} else {
+			var portString string
+			var err error
+			host, portString, err = net.SplitHostPort(c.target)
+			Expect(err).NotTo(HaveOccurred())
+			port64, err := strconv.ParseUint(portString, 10, 16)
+			Expect(err).NotTo(HaveOccurred())
 			port = uint16(port64)
-		case proxyURL.Scheme == "https":
-			host = proxyURL.Host
-			port = 443
-		default:
-			host = proxyURL.Host
-			port = 80
 		}
 
-		Expect(err).NotTo(HaveOccurred())
-	} else {
-		var portString string
-		var err error
-		host, portString, err = net.SplitHostPort(c.target)
-		Expect(err).NotTo(HaveOccurred())
-		port64, err := strconv.ParseUint(portString, 10, 16)
-		Expect(err).NotTo(HaveOccurred())
-		port = uint16(port64)
+		proxyPolicy := expectedEgressRule{
+			host:      host,
+			port:      port,
+			isProxied: isProxied,
+			hostIsIP:  net.ParseIP(host) != nil,
+		}
+
+		if !expectedEgressRulesAdded[proxyPolicy] {
+			expectedEgressRules = append(expectedEgressRules, proxyPolicy)
+			expectedEgressRulesAdded[proxyPolicy] = true
+		}
 	}
 
-	return expectedProxyPolicy{
-		host:      host,
-		port:      port,
-		isProxied: isProxied,
-		hostIsIP:  net.ParseIP(host) != nil,
+	return expectedEgressRules
+}
+
+func multiplePodCases() []proxyTestCase {
+	return []proxyTestCase{
+		// Mainline case with multiple pods: both have the same proxy.
+		{
+			target: "voltron:9000",
+			podProxies: []*proxyConfig{
+				{
+					httpsProxy: "http://proxy.io/",
+					noProxy:    "nomatch",
+				},
+				{
+					httpsProxy: "http://proxy.io/",
+					noProxy:    "nomatch",
+				},
+			},
+		},
+		// Mainline case with multiple pods: neither have a proxy.
+		{
+			target:     "voltron:9000",
+			podProxies: []*proxyConfig{nil, nil},
+		},
+		// One pod has a proxy, one pod does not.
+		{
+			target:     "voltron:9000",
+			podProxies: []*proxyConfig{{httpsProxy: "http://proxy.io/", noProxy: "nomatch"}, nil},
+		},
+		// Pods have different proxies.
+		{
+			target: "voltron:9000",
+			podProxies: []*proxyConfig{
+				{
+					httpsProxy: "http://proxy.io/",
+					noProxy:    "nomatch",
+				},
+				{
+					httpsProxy: "http://proxy-number-two.io/",
+					noProxy:    "nomatch",
+				},
+			},
+		},
+		// Pods have different proxies, but one of them is exempt from the proxy.
+		{
+			target: "voltron:9000",
+			podProxies: []*proxyConfig{
+				{
+					httpsProxy: "http://proxy.io/",
+					noProxy:    "nomatch",
+				},
+				{
+					httpsProxy: "http://proxy-number-two.io/",
+					noProxy:    "voltron",
+				},
+			},
+		},
+		// Pods have different proxies, but both of them are exempt from the proxy.
+		{
+			target: "voltron:9000",
+			podProxies: []*proxyConfig{
+				{
+					httpsProxy: "http://proxy.io/",
+					noProxy:    "voltron",
+				},
+				{
+					httpsProxy: "http://proxy-number-two.io/",
+					noProxy:    "voltron",
+				},
+			},
+		},
 	}
+}
+
+func prettyFormatTestCase(testCase proxyTestCase) string {
+	var containerProxies []string
+	for _, containerProxy := range testCase.podProxies {
+		if containerProxy == nil {
+			containerProxies = append(containerProxies, "nil")
+		} else {
+			containerProxies = append(containerProxies, fmt.Sprintf("{httpsProxy: %s, noProxy: %s}", containerProxy.httpsProxy, containerProxy.noProxy))
+		}
+	}
+
+	return fmt.Sprintf("lowercase: %v, target: %s, containerProxies: [%s]", testCase.lowercase, testCase.target, strings.Join(containerProxies, ","))
 }

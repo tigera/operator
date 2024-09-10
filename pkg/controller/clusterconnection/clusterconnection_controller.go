@@ -195,7 +195,7 @@ type ReconcileConnection struct {
 	status                     status.StatusManager
 	clusterDomain              string
 	tierWatchReady             *utils.ReadyFlag
-	resolvedProxy              *httpproxy.Config
+	resolvedPodProxies         []*httpproxy.Config
 	lastAvailabilityTransition metav1.Time
 }
 
@@ -355,9 +355,9 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
-	// If the deployment availability has changed and is currently available, we update the resolved proxy configuration.
-	// We only update the resolved proxy configuration in this scenario (rather than every reconcile) to limit the number
-	// of pod queries we make.
+	// Resolve the proxies used by each Guardian pod. We only update the resolved proxies if the availability of the
+	// Guardian deployment has changed since our last reconcile and the deployment is currently available. We restrict
+	// the resolution of pod proxies in this way to limit the number of pod queries we make.
 	if !currentAvailabilityTransition.Equal(&r.lastAvailabilityTransition) && currentlyAvailable {
 		// Query guardian pods.
 		labelSelector := labels.SelectorFromSet(map[string]string{
@@ -373,26 +373,34 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, nil
 		}
 
-		// Parse the pod spec to resolve the proxy config.
-		var proxyConfig *httpproxy.Config
+		// Resolve the proxy config for each pod. Pods without a proxy will have a nil proxy config value.
+		var podProxies []*httpproxy.Config
 		for _, pod := range pods.Items {
 			for _, container := range pod.Spec.Containers {
 				if container.Name == render.GuardianDeploymentName {
-					proxyConfig = &httpproxy.Config{}
+					var podProxyConfig *httpproxy.Config
+					var httpsProxy, noProxy string
 					for _, env := range container.Env {
 						switch env.Name {
 						case "https_proxy", "HTTPS_PROXY":
-							proxyConfig.HTTPSProxy = env.Value
+							httpsProxy = env.Value
 						case "no_proxy", "NO_PROXY":
-							proxyConfig.NoProxy = env.Value
+							noProxy = env.Value
 						}
 					}
-					break
+					if httpsProxy != "" || noProxy != "" {
+						podProxyConfig = &httpproxy.Config{
+							HTTPSProxy: httpsProxy,
+							NoProxy:    noProxy,
+						}
+					}
+
+					podProxies = append(podProxies, podProxyConfig)
 				}
 			}
 		}
 
-		r.resolvedProxy = proxyConfig
+		r.resolvedPodProxies = podProxies
 	}
 	r.lastAvailabilityTransition = currentAvailabilityTransition
 
@@ -418,7 +426,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		// The Tier has been created, which means that this controller's reconciliation should no longer be a dependency
 		// of the License being deployed. If NetworkPolicy requires license features, it should now be safe to validate
 		// License presence and sufficiency.
-		if networkPolicyRequiresEgressAccessControl(managementClusterConnection.Spec.ManagementClusterAddr, r.resolvedProxy, log) {
+		if egressAccessControlRequired(managementClusterConnection.Spec.ManagementClusterAddr, r.resolvedPodProxies, log) {
 			license, err := utils.FetchLicenseKey(ctx, r.Client)
 			if err != nil {
 				if k8serrors.IsNotFound(err) {
@@ -439,7 +447,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,
-		HTTPProxyConfig:             r.resolvedProxy,
+		PodProxies:                  r.resolvedPodProxies,
 		TunnelCAType:                managementClusterConnection.Spec.TLS.CA,
 		PullSecrets:                 pullSecrets,
 		OpenShift:                   r.Provider.IsOpenShift(),
@@ -491,7 +499,17 @@ func fillDefaults(mcc *operatorv1.ManagementClusterConnection) {
 	}
 }
 
-func networkPolicyRequiresEgressAccessControl(target string, httpProxyConfig *httpproxy.Config, log logr.Logger) bool {
+func egressAccessControlRequired(target string, podProxies []*httpproxy.Config, log logr.Logger) bool {
+	processedPodProxies := render.ProcessPodProxies(podProxies)
+	for _, httpProxyConfig := range processedPodProxies {
+		if egressAccessControlRequiredByProxy(target, httpProxyConfig, log) {
+			return true
+		}
+	}
+	return false
+}
+
+func egressAccessControlRequiredByProxy(target string, httpProxyConfig *httpproxy.Config, log logr.Logger) bool {
 	var destinationHostPort string
 	if httpProxyConfig != nil && httpProxyConfig.HTTPSProxy != "" {
 		// HTTPS proxy is specified as a URL.

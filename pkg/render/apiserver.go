@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -29,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -65,6 +67,11 @@ const (
 	tigeraAPIServerTLSSecretName                    = "tigera-apiserver-certs"
 	APIServerSecretsRBACName                        = "tigera-extension-apiserver-secrets-access"
 	MultiTenantManagedClustersAccessClusterRoleName = "tigera-managed-cluster-access"
+	L7AdmissionControllerContainerName              = "calico-l7admssctrl"
+	L7AdmissionControllerEnvoyImage                 = "envoyproxy/envoy:v1.31-latest"
+	L7AdmissionControllerPort                       = 6443
+
+	SidecarMutatingWebhookConfigName = "tigera-sidecar-webhook-configuration"
 )
 
 var TigeraAPIServerEntityRule = v3.EntityRule{
@@ -113,6 +120,7 @@ type APIServerConfiguration struct {
 	Installation                *operatorv1.InstallationSpec
 	APIServer                   *operatorv1.APIServerSpec
 	ForceHostNetwork            bool
+	ApplicationLayer            *operatorv1.ApplicationLayer
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	TLSKeyPair                  certificatemanagement.KeyPairInterface
@@ -123,9 +131,11 @@ type APIServerConfiguration struct {
 }
 
 type apiServerComponent struct {
-	cfg              *APIServerConfiguration
-	apiServerImage   string
-	queryServerImage string
+	cfg                        *APIServerConfiguration
+	apiServerImage             string
+	queryServerImage           string
+	l7AdmissionControllerImage string
+	dikastesImage              string
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -143,6 +153,16 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
+		}
+		if c.cfg.IsSidecarInjectionEnabled() {
+			c.l7AdmissionControllerImage, err = components.GetReference(components.ComponentL7AdmissionController, reg, path, prefix, is)
+			if err != nil {
+				errMsgs = append(errMsgs, err.Error())
+			}
+			c.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
+			if err != nil {
+				errMsgs = append(errMsgs, err.Error())
+			}
 		}
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
@@ -265,6 +285,11 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	if c.cfg.TrustedBundle != nil {
 		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.cfg.TrustedBundle.ConfigMap(QueryserverNamespace))
+	}
+	if c.cfg.IsSidecarInjectionEnabled() {
+		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.sidecarMutatingWebhookConfig())
+	} else {
+		objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: SidecarMutatingWebhookConfigName}})
 	}
 
 	// Global OSS-only objects.
@@ -472,6 +497,9 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 
 	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
 	ingressPorts := networkpolicy.Ports(443, APIServerPort, QueryServerPort, 10443)
+	if cfg.IsSidecarInjectionEnabled() {
+		ingressPorts = append(ingressPorts, numorstring.Port{MinPort: L7AdmissionControllerPort, MaxPort: L7AdmissionControllerPort})
+	}
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
@@ -909,6 +937,18 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 			},
 		)
 	}
+
+	if c.cfg.IsSidecarInjectionEnabled() {
+		s.Spec.Ports = append(s.Spec.Ports,
+			corev1.ServicePort{
+				Name:       "l7admctrl",
+				Port:       L7AdmissionControllerPort,
+				Protocol:   corev1.ProtocolTCP,
+				TargetPort: intstr.FromInt(L7AdmissionControllerPort),
+			},
+		)
+	}
+
 	return s
 }
 
@@ -932,6 +972,14 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 	annotations := map[string]string{
 		c.cfg.TLSKeyPair.HashAnnotationKey(): c.cfg.TLSKeyPair.HashAnnotationValue(),
+	}
+
+	containers := []corev1.Container{
+		c.apiServerContainer(),
+	}
+
+	if c.cfg.IsSidecarInjectionEnabled() {
+		containers = append(containers, c.l7AdmissionControllerContainer())
 	}
 
 	d := &appsv1.Deployment{
@@ -966,10 +1014,8 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
-					Containers: []corev1.Container{
-						c.apiServerContainer(),
-					},
-					Volumes: c.apiServerVolumes(),
+					Containers:         containers,
+					Volumes:            c.apiServerVolumes(),
 				},
 			},
 		},
@@ -995,6 +1041,65 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	return d
+}
+
+// apiServer creates a MutatingWebhookConfiguration for sidecars.
+func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConfiguration {
+	var cacert []byte
+	var svcPort int32 = L7AdmissionControllerPort
+
+	svcpath := "/sidecar-webhook"
+	svcref := admregv1.ServiceReference{
+		Name:      QueryserverServiceName,
+		Namespace: QueryserverNamespace,
+		Path:      &svcpath,
+		Port:      &svcPort,
+	}
+	failpol := admregv1.Fail
+	labelsel := metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"applicationlayer.projectcalico.org/sidecar": "true",
+		},
+	}
+	rules := []admregv1.RuleWithOperations{
+		admregv1.RuleWithOperations{
+			Rule: admregv1.Rule{
+				APIGroups:   []string{""},
+				APIVersions: []string{"v1"},
+				Resources:   []string{"pods"},
+			},
+			Operations: []admregv1.OperationType{admregv1.Create},
+		},
+	}
+	sidefx := admregv1.SideEffectClassNone
+	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
+		cacert = c.cfg.TLSKeyPair.GetIssuer().GetCertificatePEM()
+	} else {
+		cacert = c.cfg.Installation.CertificateManagement.CACert
+	}
+	mwc := admregv1.MutatingWebhookConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "MutatingWebhookConfiguration",
+			APIVersion: "admissionregistration.k8s.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{Name: SidecarMutatingWebhookConfigName},
+		Webhooks: []admregv1.MutatingWebhook{
+			admregv1.MutatingWebhook{
+				AdmissionReviewVersions: []string{"v1"},
+				ClientConfig: admregv1.WebhookClientConfig{
+					Service:  &svcref,
+					CABundle: cacert,
+				},
+				Name:           "sidecar.projectcalico.org",
+				FailurePolicy:  &failpol,
+				ObjectSelector: &labelsel,
+				Rules:          rules,
+				SideEffects:    &sidefx,
+			},
+		},
+	}
+
+	return &mwc
 }
 
 func (c *apiServerComponent) hostNetwork() bool {
@@ -2022,4 +2127,52 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 	}
 
 	return renamedRscList
+}
+
+func (cfg *APIServerConfiguration) IsSidecarInjectionEnabled() bool {
+	return cfg.ApplicationLayer != nil &&
+		cfg.ApplicationLayer.Spec.SidecarInjection != nil &&
+		*cfg.ApplicationLayer.Spec.SidecarInjection == operatorv1.SidecarEnabled
+}
+
+func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+	}
+
+	l7AdmssCtrl := corev1.Container{
+		Name:            L7AdmissionControllerContainerName,
+		Image:           c.l7AdmissionControllerImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Env: []corev1.EnvVar{
+			corev1.EnvVar{
+				Name:  "L7ADMCTRL_TLSCERTPATH",
+				Value: c.cfg.TLSKeyPair.VolumeMountCertificateFilePath(),
+			},
+			corev1.EnvVar{
+				Name:  "L7ADMCTRL_TLSKEYPATH",
+				Value: c.cfg.TLSKeyPair.VolumeMountKeyFilePath(),
+			},
+			corev1.EnvVar{
+				Name:  "L7ADMCTRL_ENVOYIMAGE",
+				Value: L7AdmissionControllerEnvoyImage,
+			},
+			corev1.EnvVar{
+				Name:  "L7ADMCTRL_DIKASTESIMAGE",
+				Value: c.dikastesImage,
+			},
+		},
+		VolumeMounts: volumeMounts,
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   "/live",
+					Port:   intstr.FromInt(L7AdmissionControllerPort),
+					Scheme: corev1.URISchemeHTTPS,
+				},
+			},
+		},
+	}
+
+	return l7AdmssCtrl
 }

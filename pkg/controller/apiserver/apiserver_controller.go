@@ -123,6 +123,12 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	}
 
 	if r.enterpriseCRDsExist {
+		// Watch for changes to ApplicationLayer
+		err = c.WatchObject(&operatorv1.ApplicationLayer{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name}}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch ApplicationLayer resource: %v", err)
+		}
+
 		// Watch for changes to primary resource ManagementCluster
 		err = c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -283,10 +289,17 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// Query enterprise-only data.
 	var tunnelCAKeyPair certificatemanagement.KeyPairInterface
 	var trustedBundle certificatemanagement.TrustedBundle
+	var applicationLayer *operatorv1.ApplicationLayer
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	includeV3NetworkPolicy := false
 	if installationSpec.Variant == operatorv1.TigeraSecureEnterprise {
+		applicationLayer, err = utils.GetApplicationLayer(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ApplicationLayer", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
@@ -374,6 +387,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		Installation:                installationSpec,
 		APIServer:                   &instance.Spec,
 		ForceHostNetwork:            false,
+		ApplicationLayer:            applicationLayer,
 		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,
 		TLSKeyPair:                  tlsSecret,

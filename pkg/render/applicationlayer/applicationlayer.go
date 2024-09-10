@@ -93,7 +93,7 @@ type Config struct {
 	// Optional config for ALP
 	ALPEnabled bool
 
-	// SidecarInjectionEnabled
+	// Optional config for SidecarInjection
 	SidecarInjectionEnabled bool
 
 	// Calculated internal fields.

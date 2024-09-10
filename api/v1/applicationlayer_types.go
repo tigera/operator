@@ -36,11 +36,20 @@ type ApplicationLayerSpec struct {
 	// L7LogCollectorDaemonSet configures the L7LogCollector DaemonSet.
 	// +optional
 	L7LogCollectorDaemonSet *L7LogCollectorDaemonSet `json:"l7LogCollectorDaemonSet,omitempty"`
+
+	// SidecarInjection controls whether or not sidecar injection is enabled for the cluster.
+	// When enabled, containers that has the label
+	// "applicationlayer.projectcalico.io/sidecar"="true" will have injected
+	// sidecar, that will replace system firewall rules for L7
+	// functionality, like WAF and ALP.
+	// +optional
+	SidecarInjection *SidecarStatusType `json:"sidecarInjection,omitempty"`
 }
 
 type LogCollectionStatusType string
 type WAFStatusType string
 type ApplicationLayerPolicyStatusType string
+type SidecarStatusType string
 
 const (
 	WAFDisabled                    WAFStatusType                    = "Disabled"
@@ -49,6 +58,8 @@ const (
 	L7LogCollectionEnabled         LogCollectionStatusType          = "Enabled"
 	ApplicationLayerPolicyEnabled  ApplicationLayerPolicyStatusType = "Enabled"
 	ApplicationLayerPolicyDisabled ApplicationLayerPolicyStatusType = "Disabled"
+	SidecarEnabled                 SidecarStatusType                = "Enabled"
+	SidecarDisabled                SidecarStatusType                = "Disabled"
 )
 
 type EnvoySettings struct {

@@ -620,7 +620,7 @@ var _ = Describe("DPI rendering tests", func() {
 		)
 	})
 
-	Context("with DPI init container", func() {
+	Context("with DPI init container configured", func() {
 		BeforeEach(func() {
 			ids.Spec.DeepPacketInspectionDaemonset = &operatorv1.DeepPacketInspectionDaemonset{
 				Spec: &operatorv1.DPIDaemonsetSpec{

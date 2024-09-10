@@ -71,6 +71,7 @@ type DPIDaemonsetInitContainer struct {
 	Name string `json:"name"`
 	// Image name for the init container
 	Image string `json:"image"`
+	
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
 	// If specified, this overrides the named SnortInitContainer Daemonset init container's resources.
 	// If omitted, the SnortInitContainer Deployment will use its default value for this init container's resources.

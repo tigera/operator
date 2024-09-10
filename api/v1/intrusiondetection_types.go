@@ -69,6 +69,7 @@ type DPIDaemonsetTemplateSpec struct {
 type DPIDaemonsetInitContainer struct {
 	// Container name
 	Name string `json:"name"`
+	
 	// Image name for the init container
 	Image string `json:"image"`
 	

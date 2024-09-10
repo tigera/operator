@@ -67,7 +67,8 @@ type DPIDaemonsetTemplateSpec struct {
 }
 
 type DPIDaemonsetInitContainer struct {
-	// Container name
+	// Name is an enum that identifies the init container by its name.
+	// +kubebuilder:validation:Enum=snort-rules
 	Name string `json:"name"`
 
 	// Image name for the init container

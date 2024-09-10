@@ -140,7 +140,10 @@ spec:
                                       description: Image name for the init container
                                       type: string
                                     name:
-                                      description: Container name
+                                      description: Name is an enum that identifies
+                                        the init container by its name.
+                                      enum:
+                                      - snort-rules
                                       type: string
                                     resources:
                                       description: |-

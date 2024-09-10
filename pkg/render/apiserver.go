@@ -288,7 +288,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.cfg.TrustedBundle.ConfigMap(QueryserverNamespace))
 	}
 	if c.cfg.IsSidecarInjectionEnabled() {
-		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.sidecarMutatingWbhConfig())
+		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.sidecarMutatingWebhookConfig())
 	} else {
 		objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: SidecarMutatingWebhookConfigName}})
 	}
@@ -1045,7 +1045,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 }
 
 // apiServer creates a MutatingWebhookConfiguration for sidecars.
-func (c *apiServerComponent) sidecarMutatingWbhConfig() *admregv1.MutatingWebhookConfiguration {
+func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConfiguration {
 	var cacert []byte
 	var svcPort int32 = L7AdmssCtrlPort
 

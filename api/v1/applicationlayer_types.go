@@ -38,7 +38,10 @@ type ApplicationLayerSpec struct {
 	L7LogCollectorDaemonSet *L7LogCollectorDaemonSet `json:"l7LogCollectorDaemonSet,omitempty"`
 
 	// SidecarInjection controls whether or not sidecar injection is enabled for the cluster.
-	// When enabled, sidecar containers can be injected into pods to provide additional L7 functionality.
+	// When enabled, containers that has the label
+	// "applicationlayer.projectcalico.io/sidecar"="true" will have injected
+	// sidecar, that will replace system firewall rules for L7
+	// functionality, like WAF and ALP.
 	// +optional
 	SidecarInjection *SidecarStatusType `json:"sidecarInjection,omitempty"`
 }

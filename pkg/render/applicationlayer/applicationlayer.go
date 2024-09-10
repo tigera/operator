@@ -166,7 +166,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		c.config.ALPEnabled ||
 		c.config.LogsEnabled
 
-	// If Web Application Firewall is enabled, we need WAF ruleset ConfigMap present.
+	// If Web Application Firewall or Sidecar Injection is enabled, we need WAF ruleset ConfigMap present.
 	if c.config.WAFEnabled || c.config.SidecarInjectionEnabled {
 		// this ConfigMap is a copy of the provided configuration from the operator namespace into the calico-system namespace
 		objs = append(objs, c.modSecurityConfigMap())
@@ -311,10 +311,7 @@ func (c *component) containers() []corev1.Container {
 				"--waf-ruleset-file", filepath.Join(ModSecurityRulesetVolumePath, "tigera.conf"),
 			)
 			if c.config.WAFEnabled {
-				commandArgs = append(
-					commandArgs,
-					"--waf-enabled",
-				)
+				commandArgs = append(commandArgs, "--waf-enabled")
 			}
 			volMounts = append(
 				volMounts,
@@ -333,10 +330,7 @@ func (c *component) containers() []corev1.Container {
 		}
 
 		if c.config.ALPEnabled {
-			commandArgs = append(
-				commandArgs,
-				"--alp-enabled",
-			)
+			commandArgs = append(commandArgs, "--alp-enabled")
 		}
 
 		dikastes := corev1.Container{
@@ -447,7 +441,7 @@ func (c *component) volumes() []corev1.Volume {
 		})
 
 		// Needed for ModSecurity library - contains rule set.
-		if c.config.WAFEnabled || c.config.SidecarInjectionEnabled { // WAF-only
+		if c.config.WAFEnabled || c.config.SidecarInjectionEnabled {
 			// WAF logs need HostPath volume - logs to be consumed by fluentd.
 			volumes = append(volumes, corev1.Volume{
 				Name: CalicoLogsVolumeName,

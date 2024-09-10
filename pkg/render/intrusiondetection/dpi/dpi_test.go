@@ -52,6 +52,20 @@ var (
 		TypeMeta:   metav1.TypeMeta{Kind: "IntrusionDetection", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		Spec: operatorv1.IntrusionDetectionSpec{
+			DeepPacketInspectionDaemonset: &operatorv1.DeepPacketInspectionDaemonset{
+				Spec: &operatorv1.DPIDaemonsetSpec{
+					Template: &operatorv1.DPIDaemonsetTemplate{
+						Spec: &operatorv1.DPIDaemonsetTemplateSpec{
+							InitContainers: []operatorv1.DPIDaemonsetInitContainer{
+								{
+									Name:  "snort-rules-init-container",
+									Image: "gcr.io/blah/snort-rules:rev01",
+								},
+							},
+						},
+					},
+				},
+			},
 			ComponentResources: []operatorv1.IntrusionDetectionComponentResource{
 				{
 					ComponentName: operatorv1.ComponentNameDeepPacketInspection,
@@ -155,14 +169,19 @@ var (
 				},
 			},
 		},
+		{
+			Name: "snort-cache",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
+			},
+		},
 	}
 
 	expectedVolumeMounts = []corev1.VolumeMount{
 		{MountPath: "/etc/pki/tls/certs", Name: "tigera-ca-bundle", ReadOnly: true},
 		{MountPath: "/node-certs", Name: "node-certs", ReadOnly: true},
-		{
-			MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters",
-		},
+		{MountPath: "/var/log/calico/snort-alerts", Name: "log-snort-alters"},
+		{MountPath: "/usr/etc/snort/rules", Name: "snort-cache", ReadOnly: true},
 	}
 
 	pullSecrets = []*corev1.Secret{{
@@ -399,14 +418,36 @@ var _ = Describe("DPI rendering tests", func() {
 		ids2 := &operatorv1.IntrusionDetection{
 			TypeMeta:   metav1.TypeMeta{Kind: "IntrusionDetection", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-			Spec: operatorv1.IntrusionDetectionSpec{ComponentResources: []operatorv1.IntrusionDetectionComponentResource{
-				{
-					ComponentName: "DeepPacketInspection",
-					ResourceRequirements: &corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{"memory": memoryLimit, "cpu": cpuLimit},
+			Spec: operatorv1.IntrusionDetectionSpec{
+				ComponentResources: []operatorv1.IntrusionDetectionComponentResource{
+					{
+						ComponentName: "DeepPacketInspection",
+						ResourceRequirements: &corev1.ResourceRequirements{
+							Limits: corev1.ResourceList{"memory": memoryLimit, "cpu": cpuLimit},
+						},
 					},
 				},
-			}},
+				DeepPacketInspectionDaemonset: &operatorv1.DeepPacketInspectionDaemonset{
+					Spec: &operatorv1.DPIDaemonsetSpec{
+						Template: &operatorv1.DPIDaemonsetTemplate{
+							Spec: &operatorv1.DPIDaemonsetTemplateSpec{
+								InitContainers: []operatorv1.DPIDaemonsetInitContainer{
+									{
+										Name:  "snort-rules-init-container",
+										Image: "gcr.io/blah/snort-rules:rev01",
+										Resources: &corev1.ResourceRequirements{
+											Limits: corev1.ResourceList{
+												corev1.ResourceMemory: memoryLimit,
+												corev1.ResourceCPU:    cpuLimit,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		}
 
 		cfg.IntrusionDetection = ids2
@@ -439,6 +480,11 @@ var _ = Describe("DPI rendering tests", func() {
 		Expect(*ds.Spec.Template.Spec.Containers[0].Resources.Limits.Memory()).Should(Equal(memoryLimit))
 		Expect(ds.Spec.Template.Spec.Containers[0].Resources.Requests.Cpu().IsZero()).Should(BeTrue())
 		Expect(ds.Spec.Template.Spec.Containers[0].Resources.Requests.Memory().IsZero()).Should(BeTrue())
+		Expect(len(ds.Spec.Template.Spec.InitContainers)).Should(Equal(1))
+		Expect(*ds.Spec.Template.Spec.InitContainers[0].Resources.Limits.Cpu()).Should(Equal(cpuLimit))
+		Expect(*ds.Spec.Template.Spec.InitContainers[0].Resources.Limits.Memory()).Should(Equal(memoryLimit))
+		Expect(ds.Spec.Template.Spec.InitContainers[0].Resources.Requests.Cpu().IsZero()).Should(BeTrue())
+		Expect(ds.Spec.Template.Spec.InitContainers[0].Resources.Requests.Memory().IsZero()).Should(BeTrue())
 
 		validateDPIComponents(resources, true)
 	})
@@ -697,5 +743,14 @@ func validateDPIComponents(resources []client.Object, openshift bool) {
 	Expect(dpiDaemonSet.Spec.Template.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
 		&corev1.SeccompProfile{
 			Type: corev1.SeccompProfileTypeRuntimeDefault,
-		}))
+		},
+	))
+	Expect(len(dpiDaemonSet.Spec.Template.Spec.InitContainers)).To(Equal(1))
+	Expect(dpiDaemonSet.Spec.Template.Spec.InitContainers[0].Name).Should(Equal("snort-rules-init-container"))
+	Expect(dpiDaemonSet.Spec.Template.Spec.InitContainers[0].Image).Should(Equal("gcr.io/blah/snort-rules:rev01"))
+	Expect(dpiDaemonSet.Spec.Template.Spec.InitContainers[0].VolumeMounts).Should(Equal(
+		[]corev1.VolumeMount{
+			{MountPath: "/usr/etc/snort/rules", Name: "snort-cache", ReadOnly: false},
+		},
+	))
 }

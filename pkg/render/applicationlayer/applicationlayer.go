@@ -46,6 +46,7 @@ const (
 	RoleName                         = "application-layer"
 	ApplicationLayerDaemonsetName    = "l7-log-collector"
 	L7CollectorContainerName         = "l7-collector"
+	L7CollectorSocksVolumeName       = "l7-collector-socks"
 	ProxyContainerName               = "envoy-proxy"
 	EnvoyLogsVolumeName              = "envoy-logs"
 	EnvoyConfigMapName               = "envoy-config"
@@ -81,23 +82,28 @@ type Config struct {
 	OsType       rmeta.OSType
 
 	// Optional config for WAF.
-	WAFEnabled           bool
+	PerHostWAFEnabled    bool
 	ModSecurityConfigMap *corev1.ConfigMap
 
 	// Optional config for L7 logs.
-	LogsEnabled            bool
+	PerHostLogsEnabled     bool
 	LogRequestsPerInterval *int64
 	LogIntervalSeconds     *int64
 
 	// Optional config for ALP
-	ALPEnabled bool
+	PerHostALPEnabled bool
+
+	// Optional config for SidecarInjection
+	SidecarInjectionEnabled bool
 
 	// Calculated internal fields.
-	proxyImage      string
-	collectorImage  string
-	dikastesImage   string
-	dikastesEnabled bool
-	envoyConfigMap  *corev1.ConfigMap
+	proxyImage            string
+	collectorImage        string
+	dikastesImage         string
+	dikastesEnabled       bool
+	perHostEnvoyEnabled   bool
+	l7logcollectorEnabled bool
+	envoyConfigMap        *corev1.ConfigMap
 
 	// envoy user-configurable overrides
 	UseRemoteAddressXFF bool
@@ -149,22 +155,35 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// If l7spec is provided render the required objects.
 	objs = append(objs, c.serviceAccount())
 
-	c.config.dikastesEnabled = false
-	if c.config.WAFEnabled || c.config.ALPEnabled {
-		c.config.dikastesEnabled = true
-	}
+	c.config.dikastesEnabled = c.config.PerHostWAFEnabled ||
+		c.config.PerHostALPEnabled ||
+		c.config.SidecarInjectionEnabled
 
-	// If Web Application Firewall is enabled, we need WAF ruleset ConfigMap present.
-	if c.config.WAFEnabled {
+	c.config.l7logcollectorEnabled = c.config.PerHostLogsEnabled ||
+		c.config.SidecarInjectionEnabled
+
+	c.config.perHostEnvoyEnabled = c.config.PerHostWAFEnabled ||
+		c.config.PerHostALPEnabled ||
+		c.config.PerHostLogsEnabled
+
+	// If Web Application Firewall or Sidecar Injection is enabled, we need WAF ruleset ConfigMap present.
+	if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
 		// this ConfigMap is a copy of the provided configuration from the operator namespace into the calico-system namespace
 		objs = append(objs, c.modSecurityConfigMap())
 	}
 
 	// Envoy configuration
-	c.config.envoyConfigMap = c.envoyL7ConfigMap()
-	objs = append(objs, c.config.envoyConfigMap)
+	if c.config.perHostEnvoyEnabled {
+		c.config.envoyConfigMap = c.envoyL7ConfigMap()
+		objs = append(objs, c.config.envoyConfigMap)
+	}
 
-	// Envoy & Dikastes Daemonset
+	// Envoy, Dikastes & L7 log collector Daemonset
+	// It always installed, even with sidecars enabled, the sidecars contain
+	// only envoy proxy inside them, and if only sidcar is enabled the
+	// daemonset will contain only Dikastes and L7 log collector to be
+	// prepared to do some action depending on the envoy inside application
+	// pod configuration.
 	objs = append(objs, c.daemonset())
 
 	if c.config.Installation.KubernetesProvider.IsDockerEE() {
@@ -241,26 +260,28 @@ func (c *component) containers() []corev1.Container {
 	var containers []corev1.Container
 
 	// Daemonset needs root and NET_ADMIN, NET_RAW permission to be able to use netfilter tproxy option.
-	sc := securitycontext.NewRootContext(false)
-	sc.Capabilities.Add = []corev1.Capability{
-		"NET_ADMIN",
-		"NET_RAW",
-	}
-	proxy := corev1.Container{
-		Name:            ProxyContainerName,
-		Image:           c.config.proxyImage,
-		ImagePullPolicy: render.ImagePullPolicy(),
-		Command: []string{
-			"envoy", "-c", "/etc/envoy/envoy-config.yaml",
-		},
-		SecurityContext: sc,
-		Env:             c.proxyEnv(),
-		VolumeMounts:    c.proxyVolMounts(),
+	if c.config.perHostEnvoyEnabled {
+		sc := securitycontext.NewRootContext(false)
+		sc.Capabilities.Add = []corev1.Capability{
+			"NET_ADMIN",
+			"NET_RAW",
+		}
+		proxy := corev1.Container{
+			Name:            ProxyContainerName,
+			Image:           c.config.proxyImage,
+			ImagePullPolicy: render.ImagePullPolicy(),
+			Command: []string{
+				"envoy", "-c", "/etc/envoy/envoy-config.yaml",
+			},
+			SecurityContext: sc,
+			Env:             c.proxyEnv(),
+			VolumeMounts:    c.proxyVolMounts(),
+		}
+
+		containers = append(containers, proxy)
 	}
 
-	containers = append(containers, proxy)
-
-	if c.config.LogsEnabled {
+	if c.config.l7logcollectorEnabled {
 		// Log collection specific container
 		collector := corev1.Container{
 			Name:            L7CollectorContainerName,
@@ -288,13 +309,15 @@ func (c *component) containers() []corev1.Container {
 			{Name: DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
 		}
 
-		if c.config.WAFEnabled {
+		if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
 			commandArgs = append(
 				commandArgs,
-				"--waf-enabled",
 				"--waf-log-file", filepath.Join(CalicologsVolumePath, "waf", "waf.log"),
 				"--waf-ruleset-file", filepath.Join(ModSecurityRulesetVolumePath, "tigera.conf"),
 			)
+			if c.config.PerHostWAFEnabled {
+				commandArgs = append(commandArgs, "--waf-enabled")
+			}
 			volMounts = append(
 				volMounts,
 				[]corev1.VolumeMount{
@@ -309,6 +332,10 @@ func (c *component) containers() []corev1.Container {
 					},
 				}...,
 			)
+		}
+
+		if c.config.PerHostALPEnabled {
+			commandArgs = append(commandArgs, "--alp-enabled")
 		}
 
 		dikastes := corev1.Container{
@@ -362,33 +389,47 @@ func (c *component) collectorEnv() []corev1.EnvVar {
 }
 
 func (c *component) volumes() []corev1.Volume {
-	var volumes []corev1.Volume
-
-	// This empty directory volume will be mounted at /tmp/ which will contain the access logs file generated by envoy.
-	volumes = append(volumes, corev1.Volume{
-		Name: EnvoyLogsVolumeName,
-		VolumeSource: corev1.VolumeSource{
-			EmptyDir: &corev1.EmptyDirVolumeSource{},
-		},
-	})
-
-	volumes = append(volumes, corev1.Volume{
-		Name: EnvoyConfigMapName,
-		VolumeSource: corev1.VolumeSource{
-			ConfigMap: &corev1.ConfigMapVolumeSource{
-				LocalObjectReference: corev1.LocalObjectReference{Name: EnvoyConfigMapName},
+	hostPathDirectoryOrCreate := corev1.HostPathDirectoryOrCreate
+	volumes := []corev1.Volume{
+		{
+			Name: FelixSync,
+			VolumeSource: corev1.VolumeSource{
+				CSI: &corev1.CSIVolumeSource{
+					Driver: "csi.tigera.io",
+				},
 			},
 		},
-	})
-
-	volumes = append(volumes, corev1.Volume{
-		Name: FelixSync,
-		VolumeSource: corev1.VolumeSource{
-			CSI: &corev1.CSIVolumeSource{
-				Driver: "csi.tigera.io",
+		// This empty directory volume will be mounted at /tmp/ which will contain the access logs file generated by envoy.
+		{
+			Name: EnvoyLogsVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
-	})
+	}
+
+	if c.config.perHostEnvoyEnabled {
+		volumes = append(volumes, corev1.Volume{
+			Name: EnvoyConfigMapName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: EnvoyConfigMapName},
+				},
+			},
+		})
+	}
+
+	if c.config.l7logcollectorEnabled {
+		volumes = append(volumes, corev1.Volume{
+			Name: L7CollectorSocksVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/var/run/l7-collector",
+					Type: &hostPathDirectoryOrCreate,
+				},
+			},
+		})
+	}
 
 	if c.config.dikastesEnabled {
 		// Web Application Firewall + ApplicationLayer Policy specific volumes.
@@ -397,14 +438,16 @@ func (c *component) volumes() []corev1.Volume {
 		volumes = append(volumes, corev1.Volume{
 			Name: DikastesSyncVolumeName,
 			VolumeSource: corev1.VolumeSource{
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/var/run/dikastes",
+					Type: &hostPathDirectoryOrCreate,
+				},
 			},
 		})
 
 		// Needed for ModSecurity library - contains rule set.
-		if c.config.WAFEnabled { // WAF-only
+		if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
 			// WAF logs need HostPath volume - logs to be consumed by fluentd.
-			hostPathDirectoryOrCreate := corev1.HostPathDirectoryOrCreate
 			volumes = append(volumes, corev1.Volume{
 				Name: CalicoLogsVolumeName,
 				VolumeSource: corev1.VolumeSource{
@@ -454,6 +497,7 @@ func (c *component) collectorVolMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{
 		{Name: EnvoyLogsVolumeName, MountPath: "/tmp/"},
 		{Name: FelixSync, MountPath: "/var/run/felix"},
+		{Name: L7CollectorSocksVolumeName, MountPath: "/var/run/l7-collector"},
 	}
 }
 

@@ -409,6 +409,22 @@ func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) (
 	return secrets, nil
 }
 
+// Return the AplicationLayer CR if present. No error is returned if it was not
+// found.
+func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.ApplicationLayer, error) {
+	applicationLayer := &operatorv1.ApplicationLayer{}
+
+	err := c.Get(ctx, DefaultTSEEInstanceKey, applicationLayer)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return applicationLayer, nil
+}
+
 // Return the ManagementCluster CR if present. No error is returned if it was not found.
 func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.ManagementCluster, error) {
 	managementCluster := &operatorv1.ManagementCluster{}

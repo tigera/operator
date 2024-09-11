@@ -82,16 +82,16 @@ type Config struct {
 	OsType       rmeta.OSType
 
 	// Optional config for WAF.
-	WAFEnabled           bool
+	PerHostWAFEnabled    bool
 	ModSecurityConfigMap *corev1.ConfigMap
 
 	// Optional config for L7 logs.
-	LogsEnabled            bool
+	PerHostLogsEnabled     bool
 	LogRequestsPerInterval *int64
 	LogIntervalSeconds     *int64
 
 	// Optional config for ALP
-	ALPEnabled bool
+	PerHostALPEnabled bool
 
 	// Optional config for SidecarInjection
 	SidecarInjectionEnabled bool
@@ -101,7 +101,7 @@ type Config struct {
 	collectorImage        string
 	dikastesImage         string
 	dikastesEnabled       bool
-	envoyEnabled          bool
+	perHostEnvoyEnabled   bool
 	l7logcollectorEnabled bool
 	envoyConfigMap        *corev1.ConfigMap
 
@@ -155,30 +155,35 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// If l7spec is provided render the required objects.
 	objs = append(objs, c.serviceAccount())
 
-	c.config.dikastesEnabled = c.config.WAFEnabled ||
-		c.config.ALPEnabled ||
+	c.config.dikastesEnabled = c.config.PerHostWAFEnabled ||
+		c.config.PerHostALPEnabled ||
 		c.config.SidecarInjectionEnabled
 
-	c.config.l7logcollectorEnabled = c.config.LogsEnabled ||
+	c.config.l7logcollectorEnabled = c.config.PerHostLogsEnabled ||
 		c.config.SidecarInjectionEnabled
 
-	c.config.envoyEnabled = c.config.WAFEnabled ||
-		c.config.ALPEnabled ||
-		c.config.LogsEnabled
+	c.config.perHostEnvoyEnabled = c.config.PerHostWAFEnabled ||
+		c.config.PerHostALPEnabled ||
+		c.config.PerHostLogsEnabled
 
 	// If Web Application Firewall or Sidecar Injection is enabled, we need WAF ruleset ConfigMap present.
-	if c.config.WAFEnabled || c.config.SidecarInjectionEnabled {
+	if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
 		// this ConfigMap is a copy of the provided configuration from the operator namespace into the calico-system namespace
 		objs = append(objs, c.modSecurityConfigMap())
 	}
 
 	// Envoy configuration
-	if c.config.envoyEnabled {
+	if c.config.perHostEnvoyEnabled {
 		c.config.envoyConfigMap = c.envoyL7ConfigMap()
 		objs = append(objs, c.config.envoyConfigMap)
 	}
 
-	// Envoy & Dikastes Daemonset
+	// Envoy, Dikastes & L7 log collector Daemonset
+	// It always installed, even with sidecars enabled, the sidecars contain
+	// only envoy proxy inside them, and if only sidcar is enabled the
+	// daemonset will contain only Dikastes and L7 log collector to be
+	// prepared to do some action depending on the envoy inside application
+	// pod configuration.
 	objs = append(objs, c.daemonset())
 
 	if c.config.Installation.KubernetesProvider.IsDockerEE() {
@@ -255,7 +260,7 @@ func (c *component) containers() []corev1.Container {
 	var containers []corev1.Container
 
 	// Daemonset needs root and NET_ADMIN, NET_RAW permission to be able to use netfilter tproxy option.
-	if c.config.envoyEnabled {
+	if c.config.perHostEnvoyEnabled {
 		sc := securitycontext.NewRootContext(false)
 		sc.Capabilities.Add = []corev1.Capability{
 			"NET_ADMIN",
@@ -304,13 +309,13 @@ func (c *component) containers() []corev1.Container {
 			{Name: DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
 		}
 
-		if c.config.WAFEnabled || c.config.SidecarInjectionEnabled {
+		if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
 			commandArgs = append(
 				commandArgs,
 				"--waf-log-file", filepath.Join(CalicologsVolumePath, "waf", "waf.log"),
 				"--waf-ruleset-file", filepath.Join(ModSecurityRulesetVolumePath, "tigera.conf"),
 			)
-			if c.config.WAFEnabled {
+			if c.config.PerHostWAFEnabled {
 				commandArgs = append(commandArgs, "--waf-enabled")
 			}
 			volMounts = append(
@@ -329,7 +334,7 @@ func (c *component) containers() []corev1.Container {
 			)
 		}
 
-		if c.config.ALPEnabled {
+		if c.config.PerHostALPEnabled {
 			commandArgs = append(commandArgs, "--alp-enabled")
 		}
 
@@ -403,7 +408,7 @@ func (c *component) volumes() []corev1.Volume {
 		},
 	}
 
-	if c.config.envoyEnabled {
+	if c.config.perHostEnvoyEnabled {
 		volumes = append(volumes, corev1.Volume{
 			Name: EnvoyConfigMapName,
 			VolumeSource: corev1.VolumeSource{
@@ -441,7 +446,7 @@ func (c *component) volumes() []corev1.Volume {
 		})
 
 		// Needed for ModSecurity library - contains rule set.
-		if c.config.WAFEnabled || c.config.SidecarInjectionEnabled {
+		if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
 			// WAF logs need HostPath volume - logs to be consumed by fluentd.
 			volumes = append(volumes, corev1.Volume{
 				Name: CalicoLogsVolumeName,

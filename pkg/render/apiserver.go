@@ -68,7 +68,6 @@ const (
 	APIServerSecretsRBACName                        = "tigera-extension-apiserver-secrets-access"
 	MultiTenantManagedClustersAccessClusterRoleName = "tigera-managed-cluster-access"
 	L7AdmissionControllerContainerName              = "calico-l7admssctrl"
-	L7AdmissionControllerEnvoyImage                 = "envoyproxy/envoy:v1.31-latest"
 	L7AdmissionControllerPort                       = 6443
 
 	SidecarMutatingWebhookConfigName = "tigera-sidecar-webhook-configuration"
@@ -131,11 +130,12 @@ type APIServerConfiguration struct {
 }
 
 type apiServerComponent struct {
-	cfg                        *APIServerConfiguration
-	apiServerImage             string
-	queryServerImage           string
-	l7AdmissionControllerImage string
-	dikastesImage              string
+	cfg                             *APIServerConfiguration
+	apiServerImage                  string
+	queryServerImage                string
+	l7AdmissionControllerImage      string
+	l7AdmissionControllerEnvoyImage string
+	dikastesImage                   string
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -156,6 +156,10 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		}
 		if c.cfg.IsSidecarInjectionEnabled() {
 			c.l7AdmissionControllerImage, err = components.GetReference(components.ComponentL7AdmissionController, reg, path, prefix, is)
+			if err != nil {
+				errMsgs = append(errMsgs, err.Error())
+			}
+			c.l7AdmissionControllerEnvoyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, is)
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
 			}
@@ -2155,7 +2159,7 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 			},
 			corev1.EnvVar{
 				Name:  "L7ADMCTRL_ENVOYIMAGE",
-				Value: L7AdmissionControllerEnvoyImage,
+				Value: c.l7AdmissionControllerEnvoyImage,
 			},
 			corev1.EnvVar{
 				Name:  "L7ADMCTRL_DIKASTESIMAGE",

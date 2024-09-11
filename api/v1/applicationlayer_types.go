@@ -38,17 +38,24 @@ type ApplicationLayerSpec struct {
 	L7LogCollectorDaemonSet *L7LogCollectorDaemonSet `json:"l7LogCollectorDaemonSet,omitempty"`
 
 	// SidecarInjection controls whether or not sidecar injection is enabled for the cluster.
-	// When enabled, containers that has the label
-	// "applicationlayer.projectcalico.io/sidecar"="true" will have injected
-	// sidecar, that will replace system firewall rules for L7
-	// functionality, like WAF and ALP.
+	// When enabled, pods with the label
+	// "applicationlayer.projectcalico.org/sidecar"="true" will have their L7 functionality
+	// such as WAF and ALP implemented using an injected sidecar instead of a per-host proxy.
+	// The per-host proxy will continue to be used for pods without this label.
 	// +optional
 	SidecarInjection *SidecarStatusType `json:"sidecarInjection,omitempty"`
 }
 
+// +kubebuilder:validation:Enum=Enabled;Disabled
 type LogCollectionStatusType string
+
+// +kubebuilder:validation:Enum=Enabled;Disabled
 type WAFStatusType string
+
+// +kubebuilder:validation:Enum=Enabled;Disabled
 type ApplicationLayerPolicyStatusType string
+
+// +kubebuilder:validation:Enum=Enabled;Disabled
 type SidecarStatusType string
 
 const (

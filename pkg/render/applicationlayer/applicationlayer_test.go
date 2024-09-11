@@ -48,10 +48,10 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 
 		cfg = &applicationlayer.Config{
-			PullSecrets:  nil,
-			Installation: installation,
-			OsType:       rmeta.OSTypeLinux,
-			LogsEnabled:  true,
+			PullSecrets:        nil,
+			Installation:       installation,
+			OsType:             rmeta.OSTypeLinux,
+			PerHostLogsEnabled: true,
 		}
 	})
 
@@ -263,7 +263,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			},
 		}
 
-		cfg.WAFEnabled = true
+		cfg.PerHostWAFEnabled = true
 		cfg.ModSecurityConfigMap = cm
 
 		component := applicationlayer.ApplicationLayer(cfg)
@@ -311,7 +311,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			PullSecrets:            nil,
 			Installation:           installation,
 			OsType:                 rmeta.OSTypeLinux,
-			LogsEnabled:            true,
+			PerHostLogsEnabled:     true,
 			LogIntervalSeconds:     ptr.Int64ToPtr(5),
 			LogRequestsPerInterval: ptr.Int64ToPtr(-1),
 		})
@@ -342,7 +342,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			PullSecrets:            nil,
 			Installation:           installation,
 			OsType:                 rmeta.OSTypeLinux,
-			LogsEnabled:            true,
+			PerHostLogsEnabled:     true,
 			LogIntervalSeconds:     ptr.Int64ToPtr(5),
 			LogRequestsPerInterval: ptr.Int64ToPtr(-1),
 			UseRemoteAddressXFF:    true,
@@ -383,10 +383,10 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 		// Should render the correct resources.
 		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
-			PullSecrets:  nil,
-			Installation: installation,
-			OsType:       rmeta.OSTypeLinux,
-			ALPEnabled:   true,
+			PullSecrets:       nil,
+			Installation:      installation,
+			OsType:            rmeta.OSTypeLinux,
+			PerHostALPEnabled: true,
 		})
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -528,7 +528,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			PullSecrets:          nil,
 			Installation:         installation,
 			OsType:               rmeta.OSTypeLinux,
-			WAFEnabled:           true,
+			PerHostWAFEnabled:    true,
 			ModSecurityConfigMap: cm,
 		})
 		resources, _ := component.Objects()

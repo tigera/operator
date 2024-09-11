@@ -142,8 +142,14 @@ components:
   envoy:
     image: tigera/envoy
     version: master
+  envoyproxy-envoy:
+    image: envoyproxy/envoy
+    version: v1.31.0
   dikastes:
     image: tigera/dikastes
+    version: master
+  l7-admission-controller:
+    image: tigera/l7-admission-controller
     version: master
   egress-gateway:
     image: tigera/egress-gateway

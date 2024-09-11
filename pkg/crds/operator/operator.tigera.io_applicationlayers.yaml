@@ -255,6 +255,14 @@ spec:
                     format: int64
                     type: integer
                 type: object
+              sidecarInjection:
+                description: |-
+                  SidecarInjection controls whether or not sidecar injection is enabled for the cluster.
+                  When enabled, containers that has the label
+                  "applicationlayer.projectcalico.io/sidecar"="true" will have injected
+                  sidecar, that will replace system firewall rules for L7
+                  functionality, like WAF and ALP.
+                type: string
               webApplicationFirewall:
                 description: |-
                   WebApplicationFirewall controls whether or not ModSecurity enforcement is enabled for the cluster.

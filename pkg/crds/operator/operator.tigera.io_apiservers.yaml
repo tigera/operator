@@ -919,6 +919,7 @@ spec:
                                       enum:
                                       - calico-apiserver
                                       - tigera-queryserver
+                                      - calico-l7admssctrl
                                       type: string
                                     resources:
                                       description: |-

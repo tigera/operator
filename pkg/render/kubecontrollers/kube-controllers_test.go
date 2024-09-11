@@ -249,7 +249,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
-			Name: "ENABLED_CONTROLLERS", Value: "node,service,federatedservices,usage,loadbalancer",
+			Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
 		}))
 
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
@@ -390,7 +390,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name:  "ENABLED_CONTROLLERS",
-			Value: "node,service,federatedservices,usage,loadbalancer",
+			Value: "node,loadbalancer,service,federatedservices,usage",
 		}))
 
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))

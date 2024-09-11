@@ -74,7 +74,7 @@ static_resources:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
                 stat_prefix: ingress_tls
                 cluster: original_dst_cluster
-                {{if .LogsEnabled}}{{template "access_log" "tls"}}{{end}}
+                {{if .PerHostLogsEnabled}}{{template "access_log" "tls"}}{{end}}
         - filter_chain_match:
             application_protocols:
               - http/1.0
@@ -85,7 +85,7 @@ static_resources:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: ingress_http
                 {{template "XFF" .}}
-                {{if .LogsEnabled}}{{template "access_log" "%PROTOCOL%"}}{{end}}
+                {{if .PerHostLogsEnabled}}{{template "access_log" "%PROTOCOL%"}}{{end}}
                 route_config:
                   name: local_service
                   virtual_hosts:
@@ -98,7 +98,7 @@ static_resources:
                           route:
                             cluster: original_dst_cluster
                 http_filters:
-                  {{if or .ALPEnabled .WAFEnabled}}{{template "DIKASTES"}}{{end}}
+                  {{if or .PerHostALPEnabled .PerHostWAFEnabled}}{{template "DIKASTES"}}{{end}}
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
@@ -112,7 +112,7 @@ static_resources:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                 stat_prefix: ingress_http
                 {{template "XFF" .}}
-                {{if .LogsEnabled}}{{template "access_log" "%PROTOCOL%"}}{{end}}
+                {{if .PerHostLogsEnabled}}{{template "access_log" "%PROTOCOL%"}}{{end}}
                 route_config:
                   name: local_service
                   virtual_hosts:
@@ -125,7 +125,7 @@ static_resources:
                           route:
                             cluster: original_dst_cluster_h2c
                 http_filters:
-                  {{if or .ALPEnabled .WAFEnabled}}{{template "DIKASTES"}}{{end}}
+                  {{if or .PerHostALPEnabled .PerHostWAFEnabled}}{{template "DIKASTES"}}{{end}}
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
@@ -137,7 +137,7 @@ static_resources:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.tcp_proxy.v3.TcpProxy
                 stat_prefix: ingress_tcp
                 cluster: original_dst_cluster
-                {{if .LogsEnabled}}{{template "access_log" "tcp"}}{{end}}
+                {{if .PerHostLogsEnabled}}{{template "access_log" "tcp"}}{{end}}
     - name: nodeports
       transparent: true
       address:

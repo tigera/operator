@@ -51,6 +51,7 @@ import (
 	rmanager "github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/url"
 )
 
 const ResourceName = "manager"
@@ -644,12 +645,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Check if non-cluster host log ingestion is enabled.
-	// non-cluster hosts will only forward logs to a standalone or a managed cluster.
-	var nonclusterhost *operatorv1.NonClusterHost
-	if managementCluster == nil {
-		nonclusterhost, err = utils.GetNonClusterHost(ctx, r.client)
-		if err != nil && !errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, logc)
+	nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, logc)
+		return reconcile.Result{}, err
+	}
+	if nonclusterhost != nil {
+		if _, _, _, err := url.ParseEndpoint(nonclusterhost.Spec.Endpoint); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read parse endpoint from NonClusterHost resource", err, logc)
 			return reconcile.Result{}, err
 		}
 	}

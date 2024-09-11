@@ -442,8 +442,12 @@ func GetManagementClusterConnection(ctx context.Context, c client.Client) (*oper
 // GetNonClusterHost finds the NonClusterHost CR in your cluster.
 func GetNonClusterHost(ctx context.Context, cli client.Client) (*operatorv1.NonClusterHost, error) {
 	nonclusterhost := &operatorv1.NonClusterHost{}
+
 	err := cli.Get(ctx, DefaultTSEEInstanceKey, nonclusterhost)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 

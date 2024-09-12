@@ -1031,6 +1031,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 									Name:      "tigera-queryserver",
 									Resources: &rr2,
 								},
+								{
+									Name:      "calico-l7-admission-controller",
+									Resources: &rr2,
+								},
 							},
 							InitContainers: []operatorv1.APIServerDeploymentInitContainer{
 								{

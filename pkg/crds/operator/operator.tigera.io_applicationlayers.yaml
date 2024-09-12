@@ -42,6 +42,9 @@ spec:
                 description: |-
                   Application Layer Policy controls whether or not ALP enforcement is enabled for the cluster.
                   When enabled, NetworkPolicies with HTTP Match rules may be defined to opt-in workloads for traffic enforcement on the application layer.
+                enum:
+                - Enabled
+                - Disabled
                 type: string
               envoy:
                 description: User-configurable settings for the Envoy proxy.
@@ -239,6 +242,9 @@ spec:
                     description: |-
                       This setting enables or disable log collection.
                       Allowed values are Enabled or Disabled.
+                    enum:
+                    - Enabled
+                    - Disabled
                     type: string
                   logIntervalSeconds:
                     description: |-
@@ -255,10 +261,24 @@ spec:
                     format: int64
                     type: integer
                 type: object
+              sidecarInjection:
+                description: |-
+                  SidecarInjection controls whether or not sidecar injection is enabled for the cluster.
+                  When enabled, pods with the label
+                  "applicationlayer.projectcalico.org/sidecar"="true" will have their L7 functionality
+                  such as WAF and ALP implemented using an injected sidecar instead of a per-host proxy.
+                  The per-host proxy will continue to be used for pods without this label.
+                enum:
+                - Enabled
+                - Disabled
+                type: string
               webApplicationFirewall:
                 description: |-
                   WebApplicationFirewall controls whether or not ModSecurity enforcement is enabled for the cluster.
                   When enabled, Services may opt-in to having ingress traffic examed by ModSecurity.
+                enum:
+                - Enabled
+                - Disabled
                 type: string
             type: object
           status:

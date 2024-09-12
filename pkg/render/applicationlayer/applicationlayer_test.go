@@ -48,10 +48,10 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 
 		cfg = &applicationlayer.Config{
-			PullSecrets:  nil,
-			Installation: installation,
-			OsType:       rmeta.OSTypeLinux,
-			LogsEnabled:  true,
+			PullSecrets:        nil,
+			Installation:       installation,
+			OsType:             rmeta.OSTypeLinux,
+			PerHostLogsEnabled: true,
 		}
 	})
 
@@ -121,7 +121,16 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		// Ensure each volume rendered correctly.
 		dsVols := ds.Spec.Template.Spec.Volumes
+		hp := corev1.HostPathDirectoryOrCreate
 		expectedVolumes := []corev1.Volume{
+			{
+				Name: applicationlayer.FelixSync,
+				VolumeSource: corev1.VolumeSource{
+					CSI: &corev1.CSIVolumeSource{
+						Driver: "csi.tigera.io",
+					},
+				},
+			},
 			{
 				Name: applicationlayer.EnvoyLogsVolumeName,
 				VolumeSource: corev1.VolumeSource{
@@ -137,10 +146,11 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 				},
 			},
 			{
-				Name: applicationlayer.FelixSync,
+				Name: applicationlayer.L7CollectorSocksVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					CSI: &corev1.CSIVolumeSource{
-						Driver: "csi.tigera.io",
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/var/run/l7-collector",
+						Type: &hp,
 					},
 				},
 			},
@@ -200,6 +210,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		expectedCollectorVolMounts := []corev1.VolumeMount{
 			{Name: applicationlayer.EnvoyLogsVolumeName, MountPath: "/tmp/"},
 			{Name: applicationlayer.FelixSync, MountPath: "/var/run/felix"},
+			{Name: applicationlayer.L7CollectorSocksVolumeName, MountPath: "/var/run/l7-collector"},
 		}
 		Expect(len(collectorVolMounts)).To(Equal(len(expectedCollectorVolMounts)))
 		for _, expected := range expectedCollectorVolMounts {
@@ -252,7 +263,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			},
 		}
 
-		cfg.WAFEnabled = true
+		cfg.PerHostWAFEnabled = true
 		cfg.ModSecurityConfigMap = cm
 
 		component := applicationlayer.ApplicationLayer(cfg)
@@ -300,7 +311,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			PullSecrets:            nil,
 			Installation:           installation,
 			OsType:                 rmeta.OSTypeLinux,
-			LogsEnabled:            true,
+			PerHostLogsEnabled:     true,
 			LogIntervalSeconds:     ptr.Int64ToPtr(5),
 			LogRequestsPerInterval: ptr.Int64ToPtr(-1),
 		})
@@ -331,7 +342,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			PullSecrets:            nil,
 			Installation:           installation,
 			OsType:                 rmeta.OSTypeLinux,
-			LogsEnabled:            true,
+			PerHostLogsEnabled:     true,
 			LogIntervalSeconds:     ptr.Int64ToPtr(5),
 			LogRequestsPerInterval: ptr.Int64ToPtr(-1),
 			UseRemoteAddressXFF:    true,
@@ -372,10 +383,10 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 		// Should render the correct resources.
 		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
-			PullSecrets:  nil,
-			Installation: installation,
-			OsType:       rmeta.OSTypeLinux,
-			ALPEnabled:   true,
+			PullSecrets:       nil,
+			Installation:      installation,
+			OsType:            rmeta.OSTypeLinux,
+			PerHostALPEnabled: true,
 		})
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -397,7 +408,16 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		// Ensure each volume rendered correctly.
 		dsVols := ds.Spec.Template.Spec.Volumes
+		hp := corev1.HostPathDirectoryOrCreate
 		expectedVolumes := []corev1.Volume{
+			{
+				Name: applicationlayer.FelixSync,
+				VolumeSource: corev1.VolumeSource{
+					CSI: &corev1.CSIVolumeSource{
+						Driver: "csi.tigera.io",
+					},
+				},
+			},
 			{
 				Name: applicationlayer.EnvoyLogsVolumeName,
 				VolumeSource: corev1.VolumeSource{
@@ -413,17 +433,12 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 				},
 			},
 			{
-				Name: applicationlayer.FelixSync,
-				VolumeSource: corev1.VolumeSource{
-					CSI: &corev1.CSIVolumeSource{
-						Driver: "csi.tigera.io",
-					},
-				},
-			},
-			{
 				Name: applicationlayer.DikastesSyncVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/var/run/dikastes",
+						Type: &hp,
+					},
 				},
 			},
 		}
@@ -513,7 +528,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			PullSecrets:          nil,
 			Installation:         installation,
 			OsType:               rmeta.OSTypeLinux,
-			WAFEnabled:           true,
+			PerHostWAFEnabled:    true,
 			ModSecurityConfigMap: cm,
 		})
 		resources, _ := component.Objects()
@@ -537,6 +552,14 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		hp := corev1.HostPathDirectoryOrCreate
 		expectedVolumes := []corev1.Volume{
 			{
+				Name: applicationlayer.FelixSync,
+				VolumeSource: corev1.VolumeSource{
+					CSI: &corev1.CSIVolumeSource{
+						Driver: "csi.tigera.io",
+					},
+				},
+			},
+			{
 				Name: applicationlayer.EnvoyLogsVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
@@ -551,17 +574,12 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 				},
 			},
 			{
-				Name: applicationlayer.FelixSync,
-				VolumeSource: corev1.VolumeSource{
-					CSI: &corev1.CSIVolumeSource{
-						Driver: "csi.tigera.io",
-					},
-				},
-			},
-			{
 				Name: applicationlayer.DikastesSyncVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/var/run/dikastes",
+						Type: &hp,
+					},
 				},
 			},
 			{
@@ -635,7 +653,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		dikastesArgs := dikastesContainer.Command
 		expectedDikastesArgs := []string{
-			"--waf-enabled",
+			"--per-host-waf-enabled",
 			"--waf-log-file", filepath.Join(applicationlayer.CalicologsVolumePath, "waf", "waf.log"),
 			"--waf-ruleset-file", filepath.Join(applicationlayer.ModSecurityRulesetVolumePath, "tigera.conf"),
 		}

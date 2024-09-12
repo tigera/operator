@@ -215,6 +215,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentL7AdmissionController = Component{
+		Version:  "master",
+		Image:    "tigera/l7-admission-controller",
+		Registry: "",
+	}
+
 	ComponentCoreOSPrometheus = Component{
 		Version:  "v2.48.1",
 		Registry: "",
@@ -314,6 +320,12 @@ var (
 		Image:    "tigera/node-driver-registrar",
 		Registry: "",
 	}
+
+	ComponentEnvoyProxyEnvoy = Component{
+		Version:  "v1.31.0",
+		Image:    "envoyproxy/envoy",
+		Registry: "",
+	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
@@ -359,6 +371,7 @@ var (
 		ComponentESGateway,
 		ComponentLinseed,
 		ComponentDikastes,
+		ComponentL7AdmissionController,
 		ComponentTigeraFlexVolume,
 		ComponentTigeraCSI,
 		ComponentTigeraCSINodeDriverRegistrar,

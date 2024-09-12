@@ -51,6 +51,7 @@ import (
 	rmanager "github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/url"
 )
 
 const ResourceName = "manager"
@@ -135,6 +136,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	if err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
+	}
+	if err = c.WatchObject(&operatorv1.NonClusterHost{}, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
 	if err = c.WatchObject(&operatorv1.Authentication{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
@@ -640,6 +644,19 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Check if non-cluster host log ingestion is enabled.
+	nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, logc)
+		return reconcile.Result{}, err
+	}
+	if nonclusterhost != nil {
+		if _, _, _, err := url.ParseEndpoint(nonclusterhost.Spec.Endpoint); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read parse endpoint from NonClusterHost resource", err, logc)
+			return reconcile.Result{}, err
+		}
+	}
+
 	managerCfg := &render.ManagerConfiguration{
 		VoltronRouteConfig:      routeConfig,
 		KeyValidatorConfig:      keyValidatorConfig,
@@ -650,6 +667,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		OpenShift:               r.provider.IsOpenShift(),
 		Installation:            installation,
 		ManagementCluster:       managementCluster,
+		NonClusterHost:          nonclusterhost,
 		TunnelServerCert:        tunnelServerCert,
 		InternalTLSKeyPair:      internalTrafficSecret,
 		ClusterDomain:           r.clusterDomain,

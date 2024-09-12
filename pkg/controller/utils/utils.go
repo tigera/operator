@@ -455,6 +455,21 @@ func GetManagementClusterConnection(ctx context.Context, c client.Client) (*oper
 	return managementClusterConnection, nil
 }
 
+// GetNonClusterHost finds the NonClusterHost CR in your cluster.
+func GetNonClusterHost(ctx context.Context, cli client.Client) (*operatorv1.NonClusterHost, error) {
+	nonclusterhost := &operatorv1.NonClusterHost{}
+
+	err := cli.Get(ctx, DefaultTSEEInstanceKey, nonclusterhost)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return nonclusterhost, nil
+}
+
 // GetAuthentication finds the authentication CR in your cluster.
 func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Authentication, error) {
 	authentication := &operatorv1.Authentication{}

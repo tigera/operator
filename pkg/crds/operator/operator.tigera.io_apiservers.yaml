@@ -919,7 +919,7 @@ spec:
                                       enum:
                                       - calico-apiserver
                                       - tigera-queryserver
-                                      - calico-l7admssctrl
+                                      - calico-l7-admission-controller
                                       type: string
                                     resources:
                                       description: |-

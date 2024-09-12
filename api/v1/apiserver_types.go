@@ -78,7 +78,7 @@ func init() {
 type APIServerDeploymentContainer struct {
 	// Name is an enum which identifies the API server Deployment container by name.
 	// Supported values are: calico-apiserver, tigera-queryserver
-	// +kubebuilder:validation:Enum=calico-apiserver;tigera-queryserver;calico-l7admssctrl
+	// +kubebuilder:validation:Enum=calico-apiserver;tigera-queryserver;calico-l7-admission-controller
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

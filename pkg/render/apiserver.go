@@ -67,7 +67,7 @@ const (
 	tigeraAPIServerTLSSecretName                    = "tigera-apiserver-certs"
 	APIServerSecretsRBACName                        = "tigera-extension-apiserver-secrets-access"
 	MultiTenantManagedClustersAccessClusterRoleName = "tigera-managed-cluster-access"
-	L7AdmissionControllerContainerName              = "calico-l7admssctrl"
+	L7AdmissionControllerContainerName              = "calico-l7-admission-controller"
 	L7AdmissionControllerPort                       = 6443
 
 	SidecarMutatingWebhookConfigName = "tigera-sidecar-webhook-configuration"

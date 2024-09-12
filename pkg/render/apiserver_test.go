@@ -1032,7 +1032,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 									Resources: &rr2,
 								},
 								{
-									Name:      "calico-l7admssctrl",
+									Name:      "calico-l7-admission-controller",
 									Resources: &rr2,
 								},
 							},

@@ -653,7 +653,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		dikastesArgs := dikastesContainer.Command
 		expectedDikastesArgs := []string{
-			"--waf-enabled",
+			"--per-host-waf-enabled",
 			"--waf-log-file", filepath.Join(applicationlayer.CalicologsVolumePath, "waf", "waf.log"),
 			"--waf-ruleset-file", filepath.Join(applicationlayer.ModSecurityRulesetVolumePath, "tigera.conf"),
 		}

@@ -316,7 +316,7 @@ func (c *component) containers() []corev1.Container {
 				"--waf-ruleset-file", filepath.Join(ModSecurityRulesetVolumePath, "tigera.conf"),
 			)
 			if c.config.PerHostWAFEnabled {
-				commandArgs = append(commandArgs, "--waf-enabled")
+				commandArgs = append(commandArgs, "--per-host-waf-enabled")
 			}
 			volMounts = append(
 				volMounts,
@@ -335,7 +335,7 @@ func (c *component) containers() []corev1.Container {
 		}
 
 		if c.config.PerHostALPEnabled {
-			commandArgs = append(commandArgs, "--alp-enabled")
+			commandArgs = append(commandArgs, "--per-host-alp-enabled")
 		}
 
 		dikastes := corev1.Container{

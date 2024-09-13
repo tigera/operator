@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
@@ -282,7 +283,6 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
 		{Name: "PACKETCAPTURE_API_HTTPS_KEY", Value: pc.cfg.ServerCertSecret.VolumeMountKeyFilePath()},
 		{Name: "PACKETCAPTURE_API_HTTPS_CERT", Value: pc.cfg.ServerCertSecret.VolumeMountCertificateFilePath()},
-		{Name: "PACKETCAPTURE_API_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(pc.cfg.Installation.FIPSMode)},
 	}
 
 	if pc.cfg.KeyValidatorConfig != nil {

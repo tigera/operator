@@ -1160,4 +1160,23 @@ var _ = Describe("Installation validation tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
+	Describe("validate FIPSMode combined with Variant", func() {
+		DescribeTable("test that FIPSMode is not allowed in combination with Enterprise",
+			func(variant operator.ProductVariant, fipsMode operator.FIPSMode, expectErr bool) {
+				instance.Spec.Variant = variant
+				instance.Spec.FIPSMode = &fipsMode
+				err := validateCustomResource(instance)
+				if expectErr {
+					Expect(err).To(HaveOccurred())
+				} else {
+					Expect(err).NotTo(HaveOccurred())
+				}
+			},
+
+			Entry("Product: Calico FipsMode: Disabled", operator.Calico, operator.FIPSModeDisabled, false),
+			Entry("Product: Calico FipsMode: Enabled", operator.Calico, operator.FIPSModeEnabled, false),
+			Entry("Product: TigeraSecureEnterprise FipsMode: Disabled", operator.TigeraSecureEnterprise, operator.FIPSModeDisabled, false),
+			Entry("Product: TigeraSecureEnterprise FipsMode: Enabled", operator.TigeraSecureEnterprise, operator.FIPSModeEnabled, true),
+		)
+	})
 })

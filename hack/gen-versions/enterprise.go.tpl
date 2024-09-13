@@ -101,13 +101,6 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with .Components.elasticsearch }}
-	ComponentElasticsearchFIPS = Component{
-		Version:  "{{ .Version }}-fips",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
 {{ with index .Components "eck-elasticsearch-operator" }}
 	ComponentECKElasticsearchOperator = Component{
 		Version:  "{{ .Version }}",
@@ -329,13 +322,6 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "tigera-cni" }}
-	ComponentTigeraCNIFIPS = Component{
-		Version:  "{{ .Version }}-fips",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
 {{ with index .Components "tigera-cni-windows" }}
 	ComponentTigeraCNIWindows = Component{
 		Version:  "{{ .Version }}",
@@ -391,7 +377,6 @@ var (
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
-		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
 		ComponentEsProxy,
 		ComponentFluentd,
@@ -417,7 +402,6 @@ var (
 		ComponentTigeraNodeWindows,
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
-		ComponentTigeraCNIFIPS,
 		ComponentTigeraCNIWindows,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,

@@ -181,6 +181,7 @@ type InstallationSpec struct {
 	CalicoNodeWindowsDaemonSet *CalicoNodeWindowsDaemonSet `json:"calicoNodeWindowsDaemonSet,omitempty"`
 
 	// FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
+	// Only supported for Variant=Calico.
 	// Default: Disabled
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	// +optional

@@ -60,7 +60,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Recon
 	r := &ReconcileNonClusterHost{
 		client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
-		status: status.New(mgr.GetClient(), "nonclusterhost", opts.KubernetesVersion),
+		status: status.New(mgr.GetClient(), "non-cluster-hosts", opts.KubernetesVersion),
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r

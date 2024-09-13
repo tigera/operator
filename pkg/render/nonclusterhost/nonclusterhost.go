@@ -55,10 +55,10 @@ func (c *nonClusterHostComponent) SupportedOSType() rmeta.OSType {
 
 func (c *nonClusterHostComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate := []client.Object{
-		ServiceAccount(),
-		TokenSecret(),
-		ClusterRole(),
-		ClusterRoleBinding(),
+		c.serviceAccount(),
+		c.tokenSecret(),
+		c.clusterRole(),
+		c.clusterRoleBinding(),
 	}
 	return toCreate, nil
 }
@@ -67,7 +67,7 @@ func (c *nonClusterHostComponent) Ready() bool {
 	return true
 }
 
-func ServiceAccount() *corev1.ServiceAccount {
+func (c *nonClusterHostComponent) serviceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "ServiceAccount",
@@ -80,7 +80,7 @@ func ServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func TokenSecret() *corev1.Secret {
+func (c *nonClusterHostComponent) tokenSecret() *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Secret",
@@ -98,7 +98,7 @@ func TokenSecret() *corev1.Secret {
 	}
 }
 
-func ClusterRole() *rbacv1.ClusterRole {
+func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 	// calico node rules
 	rules := []rbacv1.PolicyRule{
 		{
@@ -190,7 +190,7 @@ func ClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-func ClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *nonClusterHostComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

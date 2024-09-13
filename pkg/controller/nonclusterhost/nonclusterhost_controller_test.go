@@ -99,42 +99,5 @@ var _ = Describe("NonClusterHost controller tests", func() {
 			err = cli.Get(ctx, client.ObjectKey{Name: "tigera-noncluster-host"}, crb)
 			Expect(err).NotTo(HaveOccurred())
 		})
-
-		It("should delete existing resources if NonClusterHost doesn't exist", func() {
-			// create relevant resources first
-			err := cli.Create(ctx, &corev1.ServiceAccount{
-				TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-noncluster-host"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			err = cli.Create(ctx, &corev1.Secret{
-				TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-noncluster-host"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			err = cli.Create(ctx, &rbacv1.ClusterRole{
-				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-noncluster-host"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			err = cli.Create(ctx, &rbacv1.ClusterRoleBinding{
-				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-noncluster-host"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).NotTo(HaveOccurred())
-
-			// resources should be deleted after reconciliation
-			err = cli.Get(ctx, client.ObjectKey{Name: "tigera-noncluster-host", Namespace: "calico-system"}, sa)
-			Expect(err).To(HaveOccurred())
-			err = cli.Get(ctx, client.ObjectKey{Name: "tigera-noncluster-host", Namespace: "calico-system"}, secret)
-			Expect(err).To(HaveOccurred())
-			err = cli.Get(ctx, client.ObjectKey{Name: "tigera-noncluster-host"}, cr)
-			Expect(err).To(HaveOccurred())
-			err = cli.Get(ctx, client.ObjectKey{Name: "tigera-noncluster-host"}, crb)
-			Expect(err).To(HaveOccurred())
-		})
 	})
 })

@@ -31,7 +31,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
-	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/nonclusterhost"
 )
 
@@ -90,25 +89,11 @@ func (r *ReconcileNonClusterHost) Reconcile(ctx context.Context, request reconci
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, logc)
 		return reconcile.Result{}, err
-	}
-
-	ch := utils.NewComponentHandler(logc, r.client, r.scheme, instance)
-
-	if instance == nil {
-		objects := []client.Object{
-			nonclusterhost.ClusterRoleBinding(),
-			nonclusterhost.ClusterRole(),
-			nonclusterhost.TokenSecret(),
-			nonclusterhost.ServiceAccount(),
-		}
-		err := ch.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(objects...), r.status)
-		if err != nil {
-			logc.Error(err, "error deleting nonclusterhost resources")
-			return reconcile.Result{}, nil
-		}
+	} else if instance == nil {
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	}
+
 	logc.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()
 
@@ -119,6 +104,7 @@ func (r *ReconcileNonClusterHost) Reconcile(ctx context.Context, request reconci
 	}
 	component := nonclusterhost.NonClusterHost(config)
 
+	ch := utils.NewComponentHandler(logc, r.client, r.scheme, instance)
 	if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
 		return reconcile.Result{}, err

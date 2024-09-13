@@ -50,7 +50,7 @@ func (c *nonClusterHostComponent) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (c *nonClusterHostComponent) SupportedOSType() rmeta.OSType {
-	return rmeta.OSTypeLinux
+	return rmeta.OSTypeAny
 }
 
 func (c *nonClusterHostComponent) Objects() ([]client.Object, []client.Object) {

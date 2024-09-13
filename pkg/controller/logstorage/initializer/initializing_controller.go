@@ -245,8 +245,9 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	// Multitenant clusters do not get kibana, so namespace creation can be skipped.
 	if !r.multiTenant {
-		// Create the Namespace.
 		kbNamespace := render.CreateNamespace(kibana.Namespace, install.KubernetesProvider, render.PSSBaseline)
 		if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(kbNamespace), r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

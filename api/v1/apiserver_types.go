@@ -87,6 +87,9 @@ type APIServerDeploymentContainer struct {
 	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +optional
+	Lifecycle *v1.Lifecycle `json:"lifecycle,omitempty" protobuf:"bytes,12,opt,name=lifecycle"`
 }
 
 // APIServerDeploymentInitContainer is an API server Deployment init container.
@@ -146,6 +149,10 @@ type APIServerDeploymentPodSpec struct {
 	// WARNING: Please note that this field will override the default API server Deployment tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+
+	// PriorityClassName allows to specify a PriorityClass resource to be used.
+	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
 }
 
 // APIServerDeploymentPodTemplateSpec is the API server Deployment's PodTemplateSpec
@@ -173,6 +180,12 @@ type APIServerDeployment struct {
 
 // APIServerDeploymentSpec defines configuration for the API server Deployment.
 type APIServerDeploymentSpec struct {
+	// Replicas defines how many instances of the API server pod will run.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=2147483647
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// MinReadySeconds is the minimum number of seconds for which a newly created Deployment pod should
 	// be ready without any of its container crashing, for it to be considered available.
 	// If specified, this overrides any minReadySeconds value that may be set on the API server Deployment.
@@ -185,6 +198,24 @@ type APIServerDeploymentSpec struct {
 	// Template describes the API server Deployment pod that will be created.
 	// +optional
 	Template *APIServerDeploymentPodTemplateSpec `json:"template,omitempty"`
+
+	// The deployment strategy to use to replace existing pods with new ones.
+	// +optional
+	// +patchStrategy=retainKeys
+	Strategy *APIServerDeploymentStrategy `json:"strategy,omitempty" patchStrategy:"retainKeys" protobuf:"bytes,4,opt,name=strategy"`
+}
+
+// APIServerDeploymentStrategy describes how to replace existing pods with new ones.
+type APIServerDeploymentStrategy struct {
+	// Rolling update config params. Present only if DeploymentStrategyType =
+	// RollingUpdate.
+	// to be.
+	// +optional
+	RollingUpdate *appsv1.RollingUpdateDeployment `json:"rollingUpdate,omitempty" protobuf:"bytes,2,opt,name=rollingUpdate"`
+
+	// Type of deployment. Can be "Recreate" or "RollingUpdate". Default is RollingUpdate.
+	// +optional
+	Type *appsv1.DeploymentStrategyType `json:"type,omitempty" protobuf:"bytes,1,opt,name=type,casttype=DeploymentStrategyType"`
 }
 
 func (c *APIServerDeployment) GetMetadata() *Metadata {

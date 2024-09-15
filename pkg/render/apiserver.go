@@ -1152,6 +1152,16 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		Args:            c.startUpArgs(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   "/version",
+					Port:   intstr.FromInt(APIServerPort),
+					Scheme: corev1.URISchemeHTTPS,
+				},
+			},
+			PeriodSeconds: 60,
+		},
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{

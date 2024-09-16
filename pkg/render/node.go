@@ -519,7 +519,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
-				// Tigera Secure needs to be able to read licenses, tiers, and config.
+				// Calico Enterprise needs to be able to read additional resources.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"egressgatewaypolicies",
@@ -530,6 +530,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"stagedglobalnetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
+					"bfdconfigurations",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},

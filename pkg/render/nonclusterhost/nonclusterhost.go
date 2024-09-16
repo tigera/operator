@@ -154,6 +154,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 				"stagedkubernetesnetworkpolicies",
 				"stagednetworkpolicies",
 				"tiers",
+				"bfdconfigurations",
 			},
 			Verbs: []string{"get", "list", "watch"},
 		},

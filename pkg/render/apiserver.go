@@ -1066,7 +1066,7 @@ func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWe
 		},
 	}
 	rules := []admregv1.RuleWithOperations{
-		admregv1.RuleWithOperations{
+		{
 			Rule: admregv1.Rule{
 				APIGroups:   []string{""},
 				APIVersions: []string{"v1"},
@@ -1088,7 +1088,7 @@ func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWe
 		},
 		ObjectMeta: metav1.ObjectMeta{Name: SidecarMutatingWebhookConfigName},
 		Webhooks: []admregv1.MutatingWebhook{
-			admregv1.MutatingWebhook{
+			{
 				AdmissionReviewVersions: []string{"v1"},
 				ClientConfig: admregv1.WebhookClientConfig{
 					Service:  &svcref,
@@ -1361,6 +1361,7 @@ func (c *apiServerComponent) tigeraApiServerClusterRole() *rbacv1.ClusterRole {
 				"externalnetworks",
 				"egressgatewaypolicies",
 				"securityeventwebhooks",
+				"bfdconfigurations",
 			},
 			Verbs: []string{
 				"get",
@@ -2149,19 +2150,19 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 		Image:           c.l7AdmissionControllerImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Env: []corev1.EnvVar{
-			corev1.EnvVar{
+			{
 				Name:  "L7ADMCTRL_TLSCERTPATH",
 				Value: c.cfg.TLSKeyPair.VolumeMountCertificateFilePath(),
 			},
-			corev1.EnvVar{
+			{
 				Name:  "L7ADMCTRL_TLSKEYPATH",
 				Value: c.cfg.TLSKeyPair.VolumeMountKeyFilePath(),
 			},
-			corev1.EnvVar{
+			{
 				Name:  "L7ADMCTRL_ENVOYIMAGE",
 				Value: c.l7AdmissionControllerEnvoyImage,
 			},
-			corev1.EnvVar{
+			{
 				Name:  "L7ADMCTRL_DIKASTESIMAGE",
 				Value: c.dikastesImage,
 			},

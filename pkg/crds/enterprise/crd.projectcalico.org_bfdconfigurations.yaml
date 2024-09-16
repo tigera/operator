@@ -4,7 +4,7 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: (devel)
   creationTimestamp: null
-  name: :Qbfdconfigurations.crd.projectcalico.org
+  name: bfdconfigurations.crd.projectcalico.org
 spec:
   group: crd.projectcalico.org
   names:

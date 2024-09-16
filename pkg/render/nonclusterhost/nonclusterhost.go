@@ -135,6 +135,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 			// For monitoring Calico-specific configuration.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{
+				"bfdconfigurations",
 				"bgpconfigurations",
 				"clusterinformations",
 				"egressgatewaypolicies",
@@ -154,7 +155,6 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 				"stagedkubernetesnetworkpolicies",
 				"stagednetworkpolicies",
 				"tiers",
-				"bfdconfigurations",
 			},
 			Verbs: []string{"get", "list", "watch"},
 		},

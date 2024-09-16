@@ -522,6 +522,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				// Calico Enterprise needs to be able to read additional resources.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
+					"bfdconfigurations",
 					"egressgatewaypolicies",
 					"externalnetworks",
 					"licensekeys",
@@ -530,7 +531,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"stagedglobalnetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
-					"bfdconfigurations",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},

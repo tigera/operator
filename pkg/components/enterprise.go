@@ -222,7 +222,7 @@ var (
 	}
 
 	ComponentCoreOSPrometheus = Component{
-		Version:  "v2.48.1",
+		Version:  "v2.54.1",
 		Registry: "",
 	}
 
@@ -239,7 +239,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = Component{
-		Version:  "v0.25.0",
+		Version:  "v0.27.0",
 		Registry: "",
 	}
 

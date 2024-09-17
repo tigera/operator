@@ -102,6 +102,17 @@ spec:
                   This will be deprecated. Use BPFConnectTimeLoadBalancing [Default:
                   true]'
                 type: boolean
+              bpfDNSPolicyMode:
+                description: 'BPFDNSPolicyMode specifies how DNS policy programming
+                  will be handled. Inline - BPF parses DNS response inline with DNS
+                  response packet processing. This guarantees the DNS rules reflect
+                  any change immediately. NoDelay - Felix does not introduce any delay
+                  to the packets. DNS rules may not have been programmed by the time
+                  the first packet traverses the policy rules. Client applications
+                  need to handle reconnection attempts if initial connection attempts
+                  fail. This may be problematic for some applications or for very
+                  low DNS TTLs. [Default: Inline]'
+                type: string
               bpfDSROptoutCIDRs:
                 description: BPFDSROptoutCIDRs is a list of CIDRs which are excluded
                   from DSR. That is, clients in those CIDRs will accesses nodeports
@@ -485,9 +496,9 @@ spec:
                   programmed by the time the first packet traverses the policy rules.
                   Client applications need to handle reconnection attempts if initial
                   connection attempts fail. This may be problematic for some applications
-                  or for very low DNS TTLs. \n On Windows, or when using the eBPF
-                  dataplane, this setting is ignored and \"NoDelay\" is always used.
-                  \n [Default: DelayDeniedPacket]"
+                  or for very low DNS TTLs. \n This setting is ignored on Windows
+                  and \"NoDelay\" is always used. \n This setting is ignored by eBPF
+                  and BPFDNSPolicyMode is used instead. \n [Default: DelayDeniedPacket]"
                 enum:
                 - NoDelay
                 - DelayDeniedPacket

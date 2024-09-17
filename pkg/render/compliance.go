@@ -972,6 +972,11 @@ func (c *complianceComponent) complianceSnapshotterClusterRole() *rbacv1.Cluster
 				Verbs: []string{"get", "list"},
 			},
 			{
+				APIGroups: []string{"policy.networking.k8s.io"},
+				Resources: []string{"adminnetworkpolicies"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"globalnetworkpolicies", "tier.globalnetworkpolicies",

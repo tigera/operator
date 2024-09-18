@@ -227,9 +227,8 @@ func (r *TenantController) upstreamCertificates(cm certificatemanager.Certificat
 	}
 
 	if r.elasticExternal {
-		// If configured to use external Elasticsearch, get the Elasticsearch and Kibana public certs.
+		// If configured to use external Elasticsearch, get the Elasticsearch public certs.
 		toQuery[logstorage.ExternalESPublicCertName] = common.OperatorNamespace()
-		toQuery[logstorage.ExternalKBPublicCertName] = common.OperatorNamespace()
 	}
 
 	// Query each certificate.

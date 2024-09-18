@@ -283,6 +283,20 @@ func CreateCertSecret(name, namespace string, dnsNames ...string) *corev1.Secret
 	}
 }
 
+func CreateCertSecretWithContent(name, namespace string, keyContent []byte, crtContent []byte) *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: map[string][]byte{
+			corev1.TLSPrivateKeyKey: keyContent,
+			corev1.TLSCertKey:       crtContent,
+		},
+	}
+}
+
 func ExpectBundleContents(bundle *corev1.ConfigMap, secrets ...types.NamespacedName) {
 	ExpectWithOffset(1, bundle.Data).To(HaveKey("tigera-ca-bundle.crt"), fmt.Sprintf("Bundle: %+v", bundle))
 

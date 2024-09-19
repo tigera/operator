@@ -15,6 +15,7 @@
 package secrets
 
 import (
+	"bytes"
 	"context"
 
 	. "github.com/onsi/ginkgo"
@@ -31,6 +32,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -41,8 +43,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/logstorage"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -112,9 +116,16 @@ var _ = Describe("Tenant controller", func() {
 		Expect(cli.Create(ctx, cm.KeyPair().Secret(common.OperatorNamespace()))).ShouldNot(HaveOccurred())
 
 		// Create the external ES and Kibana public certificates, used for external ES.
-		externalESSecret := rtest.CreateCertSecret(logstorage.ExternalESPublicCertName, common.OperatorNamespace(), "external.es.com")
+
+		cryptoCA, _ := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix + "@some-hash")
+		dnsNames := []string{"external.ingress.elastic"}
+		cfg, _ := cryptoCA.MakeServerCertForDuration(sets.NewString(dnsNames...), tls.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
+		keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
+		_ = cfg.WriteCertConfig(crtContent, keyContent)
+
+		externalESSecret := rtest.CreateCertSecretWithContent(logstorage.ExternalESPublicCertName, common.OperatorNamespace(), keyContent.Bytes(), crtContent.Bytes())
 		Expect(cli.Create(ctx, externalESSecret)).ShouldNot(HaveOccurred())
-		externalKibanaSecret := rtest.CreateCertSecret(logstorage.ExternalKBPublicCertName, common.OperatorNamespace(), "external.kb.com")
+		externalKibanaSecret := rtest.CreateCertSecretWithContent(logstorage.ExternalKBPublicCertName, common.OperatorNamespace(), keyContent.Bytes(), crtContent.Bytes())
 		Expect(cli.Create(ctx, externalKibanaSecret)).ShouldNot(HaveOccurred())
 
 		// Create the tenant Namespace.
@@ -174,9 +185,8 @@ var _ = Describe("Tenant controller", func() {
 			types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: common.OperatorNamespace()},
 			types.NamespacedName{Name: certificatemanagement.TenantCASecretName, Namespace: tenantNS},
 
-			// Should include public certs for external ES and Kibana.
+			// Should include public certs for external ES.
 			types.NamespacedName{Name: logstorage.ExternalESPublicCertName, Namespace: common.OperatorNamespace()},
-			types.NamespacedName{Name: logstorage.ExternalKBPublicCertName, Namespace: common.OperatorNamespace()},
 		)
 
 		// A trusted bundle ConfigMap with system roots should also have been created.

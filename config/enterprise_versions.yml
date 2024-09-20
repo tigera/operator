@@ -145,6 +145,7 @@ components:
   envoyproxy-envoy:
     image: envoyproxy/envoy
     version: v1.31.0
+    registry: docker.io/
   dikastes:
     image: tigera/dikastes
     version: master

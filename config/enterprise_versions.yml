@@ -142,9 +142,6 @@ components:
   envoy:
     image: tigera/envoy
     version: master
-  envoyproxy-envoy:
-    image: envoyproxy/envoy
-    version: v1.31.0
   dikastes:
     image: tigera/dikastes
     version: master

@@ -159,7 +159,7 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
 			}
-			c.l7AdmissionControllerEnvoyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, is)
+			c.l7AdmissionControllerEnvoyImage, err = components.GetReference(components.ComponentEnvoyProxyEnvoy, reg, path, prefix, is)
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
 			}

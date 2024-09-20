@@ -240,6 +240,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "envoyproxy-envoy" }}
+	ComponentEnvoyProxyEnvoy = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "dikastes" }}
 	ComponentDikastes = Component{
 		Version:  "{{ .Version }}",

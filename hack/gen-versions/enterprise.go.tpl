@@ -415,6 +415,7 @@ var (
 		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentEnvoyProxy,
+                ComponentEnvoyProxyEnvoy,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,

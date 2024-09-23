@@ -169,6 +169,17 @@ var _ = Describe("Kibana rendering tests", func() {
 			Expect(x["publicBaseUrl"]).To(Equal("https://test.domain.com/tigera-kibana"))
 		})
 
+		It("should configure X-Frame-Options as DENY in customResponseHeaders", func() {
+			component := kibana.Kibana(cfg)
+
+			createResources, _ := component.Objects()
+			kb := rtest.GetResource(createResources, kibana.CRName, kibana.Namespace, "kibana.k8s.elastic.co", "v1", "Kibana")
+			kibana := kb.(*kbv1.Kibana)
+			server := kibana.Spec.Config.Data["server"].(map[string]interface{})
+			customResponseHeaders := server["customResponseHeaders"].(map[string]interface{})
+			Expect(customResponseHeaders["X-Frame-Options"]).To(Equal("DENY"))
+		})
+
 		It("should delete Kibana ExternalService", func() {
 			cfg.KbService = &corev1.Service{
 				ObjectMeta: metav1.ObjectMeta{Name: kibana.ServiceName, Namespace: kibana.Namespace},

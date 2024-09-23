@@ -224,7 +224,7 @@ func fillDefaults(instance *operatorv1.LogCollector) []string {
 			// Special case: For users that have a Syslog config and are upgrading from an older release
 			//  where logTypes field did not exist, we will auto-populate default values for
 			// them. This should only happen on upgrade, since logTypes is a required field.
-			if syslog.LogTypes == nil || len(syslog.LogTypes) == 0 {
+			if len(syslog.LogTypes) == 0 {
 				// Set default log types to everything except for v1.SyslogLogIDSEvents (since this
 				// option was not available prior to the logTypes field being introduced). This ensures
 				// existing users continue to get the same expected behavior for Syslog forwarding.

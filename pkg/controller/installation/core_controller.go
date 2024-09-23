@@ -1635,7 +1635,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		}
 	}
 	if len(errMsgs) != 0 {
-		return nil, fmt.Errorf(strings.Join(errMsgs, ";"))
+		return nil, fmt.Errorf("%s", strings.Join(errMsgs, ";"))
 	}
 	return &render.TyphaNodeTLS{
 		TrustedBundle:   trustedBundle,

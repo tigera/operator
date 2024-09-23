@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.9 AS ubi
+FROM registry.access.redhat.com/ubi8/ubi-minimal:8.10 AS ubi
 
 FROM scratch AS source
 
@@ -41,7 +41,4 @@ COPY --from=source / /
 
 USER 10001:10001
 
-# The exec form of ENTRYPOINT does not invoke a command shell.
-# This means that normal shell processing does not happen, so will not
-# do variable substitution. Using this form instead of passing $OPERATOR.
 ENTRYPOINT ["/usr/bin/operator"]

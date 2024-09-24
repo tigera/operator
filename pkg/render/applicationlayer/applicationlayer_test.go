@@ -175,6 +175,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		expectedProxyEnvs := []corev1.EnvVar{
 			{Name: "ENVOY_UID", Value: "0"},
 			{Name: "ENVOY_GID", Value: "0"},
+			{Name: "TIGERA_TPROXY_ENABLED", Value: ""},
 		}
 		Expect(len(proxyEnvs)).To(Equal(len(expectedProxyEnvs)))
 
@@ -462,6 +463,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		expectedProxyEnvs := []corev1.EnvVar{
 			{Name: "ENVOY_UID", Value: "0"},
 			{Name: "ENVOY_GID", Value: "0"},
+			{Name: "TIGERA_TPROXY_ENABLED", Value: ""},
 		}
 		Expect(len(proxyEnvs)).To(Equal(len(expectedProxyEnvs)))
 
@@ -620,6 +622,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		expectedProxyEnvs := []corev1.EnvVar{
 			{Name: "ENVOY_UID", Value: "0"},
 			{Name: "ENVOY_GID", Value: "0"},
+			{Name: "TIGERA_TPROXY_ENABLED", Value: ""},
 		}
 		Expect(len(proxyEnvs)).To(Equal(len(expectedProxyEnvs)))
 

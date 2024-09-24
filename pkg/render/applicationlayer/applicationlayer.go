@@ -361,6 +361,7 @@ func (c *component) proxyEnv() []corev1.EnvVar {
 		// envoy needs to run as root to be able to use transparent flag (for tproxy)
 		{Name: "ENVOY_UID", Value: "0"},
 		{Name: "ENVOY_GID", Value: "0"},
+		{Name: "TIGERA_TPROXY_ENABLED", Value: ""},
 	}
 }
 

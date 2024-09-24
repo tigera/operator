@@ -825,6 +825,17 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			Expect(x["publicBaseUrl"]).To(Equal("https://test.domain.com/tigera-kibana"))
 		})
 
+		It("should configure X-Frame-Options as DENY in customResponseHeaders", func() {
+			component := render.LogStorage(cfg)
+
+			createResources, _ := component.Objects()
+			kb := rtest.GetResource(createResources, render.KibanaName, render.KibanaNamespace, "kibana.k8s.elastic.co", "v1", "Kibana")
+			kibana := kb.(*kbv1.Kibana)
+			server := kibana.Spec.Config.Data["server"].(map[string]interface{})
+			customResponseHeaders := server["customResponseHeaders"].(map[string]interface{})
+			Expect(customResponseHeaders["X-Frame-Options"]).To(Equal("DENY"))
+		})
+
 		Context("ECKOperator memory requests/limits", func() {
 			When("LogStorage Spec contains an entry for ECKOperator in ComponentResources", func() {
 				It("should set matching memory requests/limits in the elastic-operator StatefulSet.Spec manager container", func() {

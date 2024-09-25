@@ -215,6 +215,9 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		"basePath":        fmt.Sprintf("/%s", BasePath),
 		"rewriteBasePath": true,
 		"defaultRoute":    fmt.Sprintf(DefaultRoute, TimeFilter, url.PathEscape(FlowsDashboardName)),
+		"customResponseHeaders": map[string]interface{}{
+			"X-Frame-Options": "DENY",
+		},
 	}
 
 	if k.cfg.BaseURL != "" {

@@ -94,6 +94,11 @@ spec:
                   If not specified, then this is defaulted to "Never" (i.e. VXLAN
                   tunneling is disabled).
                 type: string
+              assignmentMode:
+                description: AssignmentMode determines if IP addresses
+                  from this pool should be  assigned automatically or
+                  on request only
+                type: string
             required:
             - cidr
             type: object

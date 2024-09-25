@@ -673,13 +673,17 @@ type IPPool struct {
 	// AllowedUse controls what the IP pool will be used for.  If not specified or empty, defaults to
 	// ["Tunnel", "Workload"] for back-compatibility
 	AllowedUses []IPPoolAllowedUse `json:"allowedUses,omitempty" validate:"omitempty"`
+
+	// AssignmentMode determines if IP addresses from this pool should be  assigned automatically or on request only
+	AssignmentMode pcv1.AssignmentMode `json:"assignmentMode,omitempty" validate:"omitempty,assignmentMode"`
 }
 
 type IPPoolAllowedUse string
 
 const (
-	IPPoolAllowedUseWorkload IPPoolAllowedUse = "Workload"
-	IPPoolAllowedUseTunnel   IPPoolAllowedUse = "Tunnel"
+	IPPoolAllowedUseWorkload     IPPoolAllowedUse = "Workload"
+	IPPoolAllowedUseTunnel       IPPoolAllowedUse = "Tunnel"
+	IPPoolAllowedUseLoadBalancer IPPoolAllowedUse = "LoadBalancer"
 )
 
 // ToProjectCalicoV1 converts an IPPool to a crd.projectcalico.org/v1 IPPool resource.
@@ -736,6 +740,8 @@ func (p *IPPool) ToProjectCalicoV1() (*pcv1.IPPool, error) {
 		pool.Spec.AllowedUses = append(pool.Spec.AllowedUses, pcv1.IPPoolAllowedUse(use))
 	}
 
+	pool.Spec.AssignmentMode = p.AssignmentMode
+
 	return &pool, nil
 }
 
@@ -791,6 +797,8 @@ func (p *IPPool) FromProjectCalicoV1(crd pcv1.IPPool) {
 	for _, use := range crd.Spec.AllowedUses {
 		p.AllowedUses = append(p.AllowedUses, IPPoolAllowedUse(use))
 	}
+
+	p.AssignmentMode = crd.Spec.AssignmentMode
 }
 
 // CNIPluginType describes the type of CNI plugin used.

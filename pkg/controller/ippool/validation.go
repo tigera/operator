@@ -42,9 +42,30 @@ func ValidatePools(instance *operator.Installation) error {
 		}
 		names[pool.Name] = true
 
+		// Check if pool is for LoadBalancer
+		isLoadBalancer := false
+		for _, u := range pool.AllowedUses {
+			if u == operator.IPPoolAllowedUseLoadBalancer {
+				isLoadBalancer = true
+			}
+		}
+
+		// Check if pool is set as LoadBalancer no other allowed use is specified
+		if isLoadBalancer {
+			for _, u := range pool.AllowedUses {
+				if u != operator.IPPoolAllowedUseLoadBalancer {
+					return fmt.Errorf("IP pool %s AllowedUse LoadBalancer cannot be used with Workload/Tunnel", pool.Name)
+				}
+			}
+		}
+
 		// Verify NAT outgoing values.
 		switch pool.NATOutgoing {
-		case operator.NATOutgoingEnabled, operator.NATOutgoingDisabled:
+		case operator.NATOutgoingEnabled:
+		case operator.NATOutgoingDisabled:
+			if isLoadBalancer {
+				return fmt.Errorf("IP pool %s NATOutgoing cannot be disabled with allowedUse LoadBalancer", pool.Name)
+			}
 		default:
 			return fmt.Errorf("%s is invalid for natOutgoing, should be one of %s",
 				pool.NATOutgoing, strings.Join(operator.NATOutgoingTypesString, ","))
@@ -54,6 +75,11 @@ func ValidatePools(instance *operator.Installation) error {
 		if pool.NodeSelector == "" {
 			return fmt.Errorf("IP pool nodeSelector should not be empty")
 		}
+
+		if isLoadBalancer && pool.NodeSelector != "all()" {
+			return fmt.Errorf("IP pool nodeSelector should be set to all() if allowedUse is LoadBalancer")
+		}
+
 		if instance.Spec.CNI == nil {
 			// We expect this to be defaulted by the core Installation controller prior to the IP pool controller
 			// being invoked, but check just in case.
@@ -67,8 +93,10 @@ func ValidatePools(instance *operator.Installation) error {
 
 		// Verify the Encapsulation mode is valid.
 		switch pool.Encapsulation {
-		case operator.EncapsulationIPIP, operator.EncapsulationIPIPCrossSubnet:
-		case operator.EncapsulationVXLAN, operator.EncapsulationVXLANCrossSubnet:
+		case operator.EncapsulationIPIP, operator.EncapsulationIPIPCrossSubnet, operator.EncapsulationVXLAN, operator.EncapsulationVXLANCrossSubnet:
+			if isLoadBalancer {
+				return fmt.Errorf("IP pool encapsulation must be none if allowedUse is LoadBalancer")
+			}
 		case operator.EncapsulationNone:
 		default:
 			return fmt.Errorf("%s is invalid for ipPool.encapsulation, should be one of %s",
@@ -103,6 +131,10 @@ func ValidatePools(instance *operator.Installation) error {
 					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
 				}
 			}
+		}
+
+		if isLoadBalancer && *pool.DisableBGPExport {
+			return fmt.Errorf("IP pool disable bgp export must be false when AllowedUse is LoadBalancer")
 		}
 	}
 	return nil

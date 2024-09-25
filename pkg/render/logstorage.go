@@ -208,7 +208,7 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -315,7 +315,7 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources: corev1.ResourceRequirements{
+			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					"storage": resource.MustParse(fmt.Sprintf("%dGi", DefaultElasticStorageGi)),
 				},
@@ -1118,7 +1118,7 @@ func overrideResourceRequirements(defaultReq corev1.ResourceRequirements, userOv
 // - If user provided both Limits and Requests, use them
 // - If user has provided just Limits, and Limits is <= default Requests, set Requests value as user's Limits value.
 // We don not set default Limits for storage, so don't have to handle case where user has set only Requests.
-func overridePvcRequirements(defaultReq corev1.ResourceRequirements, userOverrides corev1.ResourceRequirements) corev1.ResourceRequirements {
+func overridePvcRequirements(defaultReq corev1.VolumeResourceRequirements, userOverrides corev1.ResourceRequirements) corev1.VolumeResourceRequirements {
 	updatedReq := defaultReq
 	if _, ok := userOverrides.Limits["storage"]; ok {
 		updatedReq.Limits = corev1.ResourceList{

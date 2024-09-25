@@ -8,12 +8,12 @@ require (
 	github.com/containernetworking/cni v1.0.1
 	github.com/elastic/cloud-on-k8s/v2 v2.9.0
 	github.com/go-ldap/ldap v3.0.3+incompatible
-	github.com/go-logr/logr v1.2.4
+	github.com/go-logr/logr v1.3.0
 	github.com/google/go-cmp v0.6.0
 	github.com/hashicorp/go-version v1.2.1
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.27.7
+	github.com/onsi/gomega v1.29.0
 	github.com/openshift/api v0.0.0-20210623185703-9958693a7597
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/pkg/errors v0.9.1
@@ -24,15 +24,15 @@ require (
 	github.com/tigera/api v0.0.0-20230406222214-ca74195900cb
 	go.uber.org/zap v1.24.0
 	golang.org/x/crypto v0.22.0
+	golang.org/x/net v0.24.0
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
-	k8s.io/api v0.28.9
-	k8s.io/apiextensions-apiserver v0.28.9
-	k8s.io/apimachinery v0.28.9
-	k8s.io/apiserver v0.28.9
-	k8s.io/client-go v0.28.9
-	k8s.io/kube-aggregator v0.28.9
-	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2 // indirect
+	k8s.io/api v0.29.9
+	k8s.io/apiextensions-apiserver v0.29.9
+	k8s.io/apimachinery v0.29.9
+	k8s.io/apiserver v0.29.9
+	k8s.io/client-go v0.29.9
+	k8s.io/kube-aggregator v0.29.9
 	sigs.k8s.io/controller-runtime v0.15.3
 	sigs.k8s.io/kind v0.17.0 // Do not remove, not used by code but used by build
 	sigs.k8s.io/yaml v1.3.0
@@ -49,10 +49,10 @@ require (
 	github.com/elastic/go-sysinfo v1.7.1 // indirect
 	github.com/elastic/go-ucfg v0.8.6 // indirect
 	github.com/elastic/go-windows v1.0.1 // indirect
-	github.com/emicklei/go-restful/v3 v3.9.0 // indirect
+	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
 	github.com/evanphx/json-patch v4.12.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
-	github.com/fsnotify/fsnotify v1.6.0 // indirect
+	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-logr/zapr v1.2.4 // indirect
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
@@ -94,7 +94,6 @@ require (
 	go.elastic.co/fastjson v1.1.0 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.24.0 // indirect
 	golang.org/x/oauth2 v0.19.0 // indirect
 	golang.org/x/sys v0.19.0 // indirect
 	golang.org/x/term v0.19.0 // indirect
@@ -107,12 +106,13 @@ require (
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	howett.net/plist v1.0.1 // indirect
-	k8s.io/component-base v0.28.9 // indirect
+	k8s.io/component-base v0.29.9 // indirect
 	k8s.io/klog v1.0.0 // indirect
-	k8s.io/klog/v2 v2.100.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20230717233707-2695361300d9 // indirect
+	k8s.io/klog/v2 v2.110.1 // indirect
+	k8s.io/kube-openapi v0.0.0-20231010175941-2dd684a91f00 // indirect
+	k8s.io/utils v0.0.0-20230726121419-3b25d923346b // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
-	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
+	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 )
 
 replace (

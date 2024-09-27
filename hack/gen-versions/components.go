@@ -17,37 +17,33 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"text/template"
 
 	"gopkg.in/yaml.v2"
 )
 
 var defaultImages = map[string]string{
-	"calico/cni":                 "calico/cni",
-	"calico/cni-windows":         "calico/cni-windows",
-	"calico/dikastes":            "calico/dikastes",
-	"calico/kube-controllers":    "calico/kube-controllers",
-	"calico/node":                "calico/node",
-	"calico/node-windows":        "calico/node-windows",
-	"calicoctl":                  "calico/ctl",
-	"flannel":                    "coreos/flannel",
-	"flexvol":                    "calico/pod2daemon-flexvol",
-	"calico/csi":                 "calico/csi",
-	"csi-node-driver-registrar":  "calico/node-driver-registrar",
-	"typha":                      "calico/typha",
-	"key-cert-provisioner":       "calico/key-cert-provisioner",
-	"eck-elasticsearch":          "unused/image",
-	"eck-elasticsearch-operator": "unused/image",
-	"eck-kibana":                 "unused/image",
-	"coreos-prometheus":          "unused/image",
-	"coreos-alertmanager":        "unused/image",
-	"guardian":                   "tigera/guardian",
-	"cnx-node":                   "tigera/cnx-node",
-	"cnx-node-windows":           "tigera/cnx-node-windows",
-	"tigera-cni":                 "tigera/cni",
-	"tigera-cni-windows":         "tigera/cni-windows",
-	"calico/apiserver":           "calico/apiserver",
-	"tigera/linseed":             "tigera/linseed",
+	"calico/cni":                "calico/cni",
+	"calico/cni-windows":        "calico/cni-windows",
+	"calico/dikastes":           "calico/dikastes",
+	"calico/kube-controllers":   "calico/kube-controllers",
+	"calico/node":               "calico/node",
+	"calico/node-windows":       "calico/node-windows",
+	"calicoctl":                 "calico/ctl",
+	"flannel":                   "coreos/flannel",
+	"flexvol":                   "calico/pod2daemon-flexvol",
+	"calico/csi":                "calico/csi",
+	"csi-node-driver-registrar": "calico/node-driver-registrar",
+	"typha":                     "calico/typha",
+	"key-cert-provisioner":      "calico/key-cert-provisioner",
+	"guardian":                  "tigera/guardian",
+	"cnx-node":                  "tigera/cnx-node",
+	"cnx-node-windows":          "tigera/cnx-node-windows",
+	"tigera-cni":                "tigera/cni",
+	"tigera-cni-windows":        "tigera/cni-windows",
+	"calico/apiserver":          "calico/apiserver",
+	"tigera/linseed":            "tigera/linseed",
 }
 
 var ignoredImages = map[string]struct{}{
@@ -93,7 +89,7 @@ func GetComponents(versionsPath string) (Release, error) {
 			continue
 		}
 
-		if component.Image == "" {
+		if component.Image == "" && !(strings.HasPrefix(key, "coreos-") || strings.HasPrefix(key, "eck-")) {
 			image := defaultImages[key]
 			if image == "" {
 				return cv, fmt.Errorf("no image nor default image available for component '%s'. "+

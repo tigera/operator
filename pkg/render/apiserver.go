@@ -499,6 +499,14 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 		},
 	}...)
 
+	if r, err := cfg.K8SServiceEndpoint.DestinationEntityRule(); r != nil && err == nil {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: *r,
+		})
+	}
+
 	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
 	ingressPorts := networkpolicy.Ports(443, APIServerPort, QueryServerPort, 10443)
 	if cfg.IsSidecarInjectionEnabled() {

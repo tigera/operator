@@ -40,6 +40,8 @@ var defaultImages = map[string]string{
 	"eck-elasticsearch-operator": "unused/image",
 	"eck-kibana":                 "unused/image",
 	"coreos-prometheus":          "unused/image",
+	"coreos-prometheus-operator": "unused/image",
+	"coreos-config-reloader":     "unused/image",
 	"coreos-alertmanager":        "unused/image",
 	"guardian":                   "tigera/guardian",
 	"cnx-node":                   "tigera/cnx-node",

@@ -109,7 +109,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		manager := deployment.Spec.Template.Spec.Containers[2]
 
 		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
-		Expect(esProxy.Image).Should(Equal(components.TigeraRegistry + "tigera/es-proxy:" + components.ComponentEsProxy.Version))
+		Expect(esProxy.Image).Should(Equal(components.TigeraRegistry + "tigera/ui-apis:" + components.ComponentEsProxy.Version))
 		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
 
 		// manager container
@@ -131,7 +131,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			corev1.EnvVar{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		))
 
-		// es-proxy container
+		// ui-apis container
 		esProxyExpectedEnvVars := []corev1.EnvVar{
 			{Name: "ELASTIC_LICENSE_TYPE", Value: "enterprise_trial"},
 			{Name: "ELASTIC_KIBANA_ENDPOINT", Value: "https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc:5601"},
@@ -814,7 +814,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		})
 		deployment, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
-		Expect(deployment.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-es-proxy"))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-ui-apis"))
 		Expect(deployment.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-voltron"))
 		Expect(deployment.Spec.Template.Spec.Containers[2].Name).To(Equal("tigera-manager"))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))

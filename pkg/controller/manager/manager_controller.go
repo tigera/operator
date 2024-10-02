@@ -162,7 +162,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	for _, namespace := range namespacesToWatch {
 		for _, secretName := range []string{
-			// We need to watch for es-gateway certificate because es-proxy still creates a
+			// We need to watch for es-gateway certificate because ui-apis still creates a
 			// client to talk to elastic via es-gateway
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
@@ -366,7 +366,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// Get or create a certificate for clients of the manager pod es-proxy container.
+	// Get or create a certificate for clients of the manager pod ui-apis container.
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.ManagerTLSSecretName,

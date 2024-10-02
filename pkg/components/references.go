@@ -85,12 +85,12 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 	}
 
 	for _, img := range is.Spec.Images {
-		if img.Image == c.Image {
+		if img.Image == image {
 			return fmt.Sprintf("%s%s@%s", registry, image, img.Digest), nil
 		}
 	}
 
-	return "", fmt.Errorf("ImageSet did not contain image %s", c.Image)
+	return "", fmt.Errorf("ImageSet did not contain image %s", image)
 }
 
 func ReplaceImagePath(image, imagePath string) string {

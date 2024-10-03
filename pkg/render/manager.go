@@ -143,7 +143,7 @@ type ManagerConfiguration struct {
 	// KeyPair used by Voltron as the server certificate when establishing an mTLS tunnel with Guardian.
 	TunnelServerCert certificatemanagement.KeyPairInterface
 
-	// TLS KeyPair used by both Voltron and es-proxy, presented by each as part of the mTLS handshake with
+	// TLS KeyPair used by both Voltron and ui-apis, presented by each as part of the mTLS handshake with
 	// other services within the cluster. This is used in both management and standalone clusters.
 	InternalTLSKeyPair certificatemanagement.KeyPairInterface
 
@@ -639,7 +639,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "tigera-es-proxy",
+		Name:            "tigera-ui-apis",
 		Image:           c.esProxyImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		LivenessProbe:   c.managerEsProxyProbe(),
@@ -982,7 +982,7 @@ func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
 
 	// In a single tenant setup we want to create a role that binds using service account
 	// tigera-manager from tigera-manager namespace. In a multi-tenant setup
-	// ESProxy from the tenant's namespace impersonates service tigera-manager
+	// ui-apis from the tenant's namespace impersonates service tigera-manager
 	// from tigera-manager namespace
 	objects = append(objects, &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -993,7 +993,7 @@ func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
 			Name:     MultiTenantManagedClustersAccessClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
-			// requests for ESProxy to managed clusters are done using service account tigera-manager
+			// requests from ui-apis to managed clusters are done using service account tigera-manager
 			// from tigera-manager namespace regardless of tenancy mode (single tenant or multi-tenant)
 			{
 				Kind:      "ServiceAccount",

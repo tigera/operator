@@ -579,7 +579,7 @@ var _ = Describe("Manager controller tests", func() {
 						fmt.Sprintf("some.registry.org/%s:%s",
 							components.ComponentManager.Image,
 							components.ComponentManager.Version)))
-					esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
+					esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
 					Expect(esproxy).ToNot(BeNil())
 					Expect(esproxy.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
@@ -599,7 +599,7 @@ var _ = Describe("Manager controller tests", func() {
 						Spec: operatorv1.ImageSetSpec{
 							Images: []operatorv1.Image{
 								{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
-								{Image: "tigera/es-proxy", Digest: "sha256:esproxyhash"},
+								{Image: "tigera/ui-apis", Digest: "sha256:esproxyhash"},
 								{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
 								{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 							},
@@ -623,7 +623,7 @@ var _ = Describe("Manager controller tests", func() {
 						fmt.Sprintf("some.registry.org/%s@%s",
 							components.ComponentManager.Image,
 							"sha256:cnxmanagerhash")))
-					esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
+					esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
 					Expect(esproxy).ToNot(BeNil())
 					Expect(esproxy.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",

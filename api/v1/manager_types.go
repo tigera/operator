@@ -68,8 +68,8 @@ type ManagerDeploymentPodSpec struct {
 // ManagerDeploymentContainer is a Manager Deployment container.
 type ManagerDeploymentContainer struct {
 	// Name is an enum which identifies the Manager Deployment container by name.
-	// Supported values are: tigera-voltron, tigera-manager, ui-apis, and tigera-es-proxy (deprecated).
-	// +kubebuilder:validation:Enum=tigera-voltron;tigera-manager;tigera-es-proxy;ui-apis
+	// Supported values are: tigera-voltron, tigera-manager, tigera-ui-apis, and tigera-es-proxy (deprecated).
+	// +kubebuilder:validation:Enum=tigera-voltron;tigera-manager;tigera-es-proxy;tigera-ui-apis
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

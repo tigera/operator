@@ -121,7 +121,7 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "es-proxy" }}
+{{ with index .Components "ui-apis" }}
 	ComponentEsProxy = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",

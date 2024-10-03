@@ -24,7 +24,6 @@ import (
 
 // ManagerSpec defines configuration for the Calico Enterprise manager GUI.
 type ManagerSpec struct {
-
 	// ManagerDeployment configures the Manager Deployment.
 	// +optional
 	ManagerDeployment *ManagerDeployment `json:"managerDeployment,omitempty"`
@@ -32,7 +31,6 @@ type ManagerSpec struct {
 
 // ManagerDeployment is the configuration for the Manager Deployment.
 type ManagerDeployment struct {
-
 	// Spec is the specification of the Manager Deployment.
 	// +optional
 	Spec *ManagerDeploymentSpec `json:"spec,omitempty"`
@@ -40,7 +38,6 @@ type ManagerDeployment struct {
 
 // ManagerDeploymentSpec defines configuration for the Manager Deployment.
 type ManagerDeploymentSpec struct {
-
 	// Template describes the Manager Deployment pod that will be created.
 	// +optional
 	Template *ManagerDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -48,7 +45,6 @@ type ManagerDeploymentSpec struct {
 
 // ManagerDeploymentPodTemplateSpec is the Manager Deployment's PodTemplateSpec
 type ManagerDeploymentPodTemplateSpec struct {
-
 	// Spec is the Manager Deployment's PodSpec.
 	// +optional
 	Spec *ManagerDeploymentPodSpec `json:"spec,omitempty"`
@@ -72,8 +68,8 @@ type ManagerDeploymentPodSpec struct {
 // ManagerDeploymentContainer is a Manager Deployment container.
 type ManagerDeploymentContainer struct {
 	// Name is an enum which identifies the Manager Deployment container by name.
-	// Supported values are: tigera-voltron, tigera-manager, tigera-es-proxy
-	// +kubebuilder:validation:Enum=tigera-voltron;tigera-manager;tigera-es-proxy
+	// Supported values are: tigera-voltron, tigera-manager, tigera-ui-apis, and tigera-es-proxy (deprecated).
+	// +kubebuilder:validation:Enum=tigera-voltron;tigera-manager;tigera-es-proxy;tigera-ui-apis
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
@@ -100,7 +96,6 @@ type ManagerDeploymentInitContainer struct {
 
 // ManagerStatus defines the observed state of the Calico Enterprise manager GUI.
 type ManagerStatus struct {
-
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`
 

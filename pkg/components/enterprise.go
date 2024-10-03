@@ -109,7 +109,7 @@ var (
 
 	ComponentEsProxy = Component{
 		Version:  "master",
-		Image:    "tigera/es-proxy",
+		Image:    "tigera/ui-apis",
 		Registry: "",
 	}
 

@@ -414,14 +414,6 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 	}
 }
 
-func KibanaEnabled(tenant *operatorv1.Tenant, installation *operatorv1.InstallationSpec) bool {
-	enableKibana := !operatorv1.IsFIPSModeEnabled(installation.FIPSMode)
-	if tenant.MultiTenant() {
-		enableKibana = false
-	}
-	return enableKibana
-}
-
 // managerEnvVars returns the envvars for the manager container.
 func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
@@ -436,7 +428,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
-		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(KibanaEnabled(c.cfg.Tenant, c.cfg.Installation))},
+		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(!c.cfg.Tenant.MultiTenant())},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -526,7 +518,6 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: defaultForwardServer},
 		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.ComplianceLicenseActive)},
-		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 
 	if c.cfg.VoltronRouteConfig != nil {
@@ -603,10 +594,9 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
-		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
-		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(!KibanaEnabled(c.cfg.Tenant, c.cfg.Installation))},
+		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant())},
 		{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", c.cfg.Namespace)},
 	}
 

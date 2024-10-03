@@ -670,10 +670,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			Value: c.cfg.TrustedCertBundle.MountPath(),
 		},
 		{
-			Name:  "FIPS_MODE_ENABLED",
-			Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
-		},
-		{
 			Name:  "LINSEED_URL",
 			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant)),
 		},

@@ -579,12 +579,12 @@ var _ = Describe("Manager controller tests", func() {
 						fmt.Sprintf("some.registry.org/%s:%s",
 							components.ComponentManager.Image,
 							components.ComponentManager.Version)))
-					esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
-					Expect(esproxy).ToNot(BeNil())
-					Expect(esproxy.Image).To(Equal(
+					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
+					Expect(uiAPIContainer).ToNot(BeNil())
+					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
-							components.ComponentEsProxy.Image,
-							components.ComponentEsProxy.Version)))
+							components.ComponentUIAPIs.Image,
+							components.ComponentUIAPIs.Version)))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
@@ -599,7 +599,7 @@ var _ = Describe("Manager controller tests", func() {
 						Spec: operatorv1.ImageSetSpec{
 							Images: []operatorv1.Image{
 								{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
-								{Image: "tigera/es-proxy", Digest: "sha256:esproxyhash"},
+								{Image: "tigera/ui-apis", Digest: "sha256:uiapihash"},
 								{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
 								{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 							},
@@ -623,12 +623,12 @@ var _ = Describe("Manager controller tests", func() {
 						fmt.Sprintf("some.registry.org/%s@%s",
 							components.ComponentManager.Image,
 							"sha256:cnxmanagerhash")))
-					esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
-					Expect(esproxy).ToNot(BeNil())
-					Expect(esproxy.Image).To(Equal(
+					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
+					Expect(uiAPIContainer).ToNot(BeNil())
+					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
-							components.ComponentEsProxy.Image,
-							"sha256:esproxyhash")))
+							components.ComponentUIAPIs.Image,
+							"sha256:uiapihash")))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
@@ -1123,7 +1123,6 @@ var _ = Describe("Manager controller tests", func() {
 			tenantANamespace := "tenant-a"
 			tenantBNamespace := "tenant-b"
 			BeforeEach(func() {
-
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
@@ -1196,11 +1195,9 @@ var _ = Describe("Manager controller tests", func() {
 					},
 				})
 				Expect(err).NotTo(HaveOccurred())
-
 			})
 
 			It("should reconcile only if a namespace is provided", func() {
-
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -1289,7 +1286,6 @@ var _ = Describe("Manager controller tests", func() {
 			})
 
 			It("should apply TLSRoutes in from the manager namespace", func() {
-
 				Expect(c.Create(ctx, &operatorv1.TLSTerminatedRoute{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: tenantANamespace,

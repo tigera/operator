@@ -175,7 +175,7 @@ type managerComponent struct {
 	tlsAnnotations map[string]string
 	managerImage   string
 	proxyImage     string
-	esProxyImage   string
+	uiAPIsImage    string
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -194,7 +194,7 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
+	c.uiAPIsImage, err = components.GetReference(components.ComponentUIAPIs, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -285,7 +285,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		initContainers = append(initContainers, c.cfg.VoltronLinseedKeyPair.InitContainer(ManagerNamespace))
 	}
 
-	managerPodContainers := []corev1.Container{c.managerEsProxyContainer(), c.voltronContainer()}
+	managerPodContainers := []corev1.Container{c.managerUIAPIsContainer(), c.voltronContainer()}
 	if c.cfg.Tenant == nil {
 		managerPodContainers = append(managerPodContainers, c.managerContainer())
 	}
@@ -386,8 +386,8 @@ func (c *managerComponent) managerProbe() *corev1.Probe {
 	}
 }
 
-// managerEsProxyProbe returns the probe for the ES proxy container.
-func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
+// managerUIAPIsProbe returns the probe for the ES proxy container.
+func (c *managerComponent) managerUIAPIsProbe() *corev1.Probe {
 	return &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -592,8 +592,8 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	}
 }
 
-// managerEsProxyContainer returns the ES proxy container
-func (c *managerComponent) managerEsProxyContainer() corev1.Container {
+// managerUIAPIsContainer returns the ES proxy container
+func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 	var keyPath, certPath string
 	if c.cfg.InternalTLSKeyPair != nil {
 		// This should never be nil, but we check it anyway just to be safe.
@@ -640,9 +640,9 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            "tigera-ui-apis",
-		Image:           c.esProxyImage,
+		Image:           c.uiAPIsImage,
 		ImagePullPolicy: ImagePullPolicy(),
-		LivenessProbe:   c.managerEsProxyProbe(),
+		LivenessProbe:   c.managerUIAPIsProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,

@@ -122,7 +122,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "ui-apis" }}
-	ComponentEsProxy = Component{
+	ComponentUIAPIs = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -386,7 +386,7 @@ var (
 		ComponentElasticsearch,
 		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
-		ComponentEsProxy,
+		ComponentUIAPIs,
 		ComponentFluentd,
 		ComponentFluentdWindows,
 		ComponentGuardian,

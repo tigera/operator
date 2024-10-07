@@ -19,12 +19,13 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"slices"
 	"sort"
-
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"strings"
 
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -93,6 +94,10 @@ func createTrustedBundle(includeSystemBundle bool, name string, certificates ...
 
 // AddCertificates Adds the certificates to the bundle.
 func (t *trustedBundle) AddCertificates(certificates ...CertificateInterface) {
+	slices.SortFunc(certificates, func(i, j CertificateInterface) int {
+		return strings.Compare(rmeta.AnnotationHash(i.GetCertificatePEM()), rmeta.AnnotationHash(j.GetCertificatePEM()))
+	})
+
 	for _, cert := range certificates {
 		// Check if we already trust an issuer of this cert. In practice, this will be 0 or 1 iteration,
 		// because the issuer is only set when the tigera-ca-private is the issuer.

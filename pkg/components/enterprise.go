@@ -107,9 +107,9 @@ var (
 		Registry: "",
 	}
 
-	ComponentEsProxy = Component{
+	ComponentUIAPIs = Component{
 		Version:  "master",
-		Image:    "tigera/es-proxy",
+		Image:    "tigera/ui-apis",
 		Registry: "",
 	}
 
@@ -335,7 +335,7 @@ var (
 		ComponentElasticsearch,
 		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
-		ComponentEsProxy,
+		ComponentUIAPIs,
 		ComponentFluentd,
 		ComponentFluentdWindows,
 		ComponentGuardian,

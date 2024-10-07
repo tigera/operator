@@ -143,7 +143,7 @@ type ManagerConfiguration struct {
 	// KeyPair used by Voltron as the server certificate when establishing an mTLS tunnel with Guardian.
 	TunnelServerCert certificatemanagement.KeyPairInterface
 
-	// TLS KeyPair used by both Voltron and es-proxy, presented by each as part of the mTLS handshake with
+	// TLS KeyPair used by both Voltron and ui-apis, presented by each as part of the mTLS handshake with
 	// other services within the cluster. This is used in both management and standalone clusters.
 	InternalTLSKeyPair certificatemanagement.KeyPairInterface
 
@@ -175,7 +175,7 @@ type managerComponent struct {
 	tlsAnnotations map[string]string
 	managerImage   string
 	proxyImage     string
-	esProxyImage   string
+	uiAPIsImage    string
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -194,7 +194,7 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
+	c.uiAPIsImage, err = components.GetReference(components.ComponentUIAPIs, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -285,7 +285,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		initContainers = append(initContainers, c.cfg.VoltronLinseedKeyPair.InitContainer(ManagerNamespace))
 	}
 
-	managerPodContainers := []corev1.Container{c.managerEsProxyContainer(), c.voltronContainer()}
+	managerPodContainers := []corev1.Container{c.managerUIAPIsContainer(), c.voltronContainer()}
 	if c.cfg.Tenant == nil {
 		managerPodContainers = append(managerPodContainers, c.managerContainer())
 	}
@@ -386,8 +386,8 @@ func (c *managerComponent) managerProbe() *corev1.Probe {
 	}
 }
 
-// managerEsProxyProbe returns the probe for the ES proxy container.
-func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
+// managerUIAPIsProbe returns the probe for the ES proxy container.
+func (c *managerComponent) managerUIAPIsProbe() *corev1.Probe {
 	return &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -592,8 +592,8 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	}
 }
 
-// managerEsProxyContainer returns the ES proxy container
-func (c *managerComponent) managerEsProxyContainer() corev1.Container {
+// managerUIAPIsContainer returns the ES proxy container
+func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 	var keyPath, certPath string
 	if c.cfg.InternalTLSKeyPair != nil {
 		// This should never be nil, but we check it anyway just to be safe.
@@ -639,10 +639,10 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "tigera-es-proxy",
-		Image:           c.esProxyImage,
+		Name:            "tigera-ui-apis",
+		Image:           c.uiAPIsImage,
 		ImagePullPolicy: ImagePullPolicy(),
-		LivenessProbe:   c.managerEsProxyProbe(),
+		LivenessProbe:   c.managerUIAPIsProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
@@ -982,7 +982,7 @@ func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
 
 	// In a single tenant setup we want to create a role that binds using service account
 	// tigera-manager from tigera-manager namespace. In a multi-tenant setup
-	// ESProxy from the tenant's namespace impersonates service tigera-manager
+	// ui-apis from the tenant's namespace impersonates service tigera-manager
 	// from tigera-manager namespace
 	objects = append(objects, &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -993,7 +993,7 @@ func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
 			Name:     MultiTenantManagedClustersAccessClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
-			// requests for ESProxy to managed clusters are done using service account tigera-manager
+			// requests from ui-apis to managed clusters are done using service account tigera-manager
 			// from tigera-manager namespace regardless of tenancy mode (single tenant or multi-tenant)
 			{
 				Kind:      "ServiceAccount",

@@ -20,6 +20,7 @@ package certificatemanager_test
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"runtime"
 	"strings"
 	"time"
@@ -598,6 +599,10 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			By("counting the number of pem blocks in the configmap")
 			bundle := configMap.Data[certificatemanagement.TrustedCertConfigMapKeyName]
 			numBlocks := strings.Count(bundle, "certificate name:")
+
+			for key, hash := range trustedBundle.HashAnnotations() {
+				fmt.Println(fmt.Sprintf("%s:%s", key, hash))
+			}
 
 			// While we have the ca + 4 certs, we expect 3 cert blocks (+ 2):
 			// - the certificateManager: this covers for all certs signed by the tigera root ca

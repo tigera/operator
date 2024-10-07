@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/tls"
@@ -176,7 +177,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt",
 								},
 								Env: []corev1.EnvVar{
-									{Name: "FIPS_MODE_ENABLED", Value: "false"},
 									{
 										Name: "ELASTIC_USERNAME",
 										ValueFrom: &corev1.EnvVarSource{

@@ -254,11 +254,7 @@ func (c *dexComponent) deployment() client.Object {
 							Name:            DexObjectName,
 							Image:           c.image,
 							ImagePullPolicy: ImagePullPolicy(),
-							Env: append(
-								[]corev1.EnvVar{
-									{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
-								},
-								c.cfg.DexConfig.RequiredEnv("")...),
+							Env:             c.cfg.DexConfig.RequiredEnv(""),
 							LivenessProbe:   c.probe(),
 							SecurityContext: securitycontext.NewNonRootContext(),
 

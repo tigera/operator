@@ -327,7 +327,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
@@ -570,7 +569,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
@@ -823,7 +821,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 					{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 					{Name: "MULTI_INTERFACE_MODE", Value: operatorv1.MultiInterfaceModeNone.Value()},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
@@ -1109,7 +1106,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
@@ -1275,7 +1271,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
 					{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"},
 					{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 
@@ -1522,7 +1517,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
@@ -1685,7 +1679,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
 					{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"},
 					{Name: "FELIX_WIREGUARDHOSTENCRYPTIONENABLED", Value: "true"},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 
@@ -1856,7 +1849,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
@@ -1960,7 +1952,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
 					{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 					{Name: "MULTI_INTERFACE_MODE", Value: operatorv1.MultiInterfaceModeNone.Value()},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
@@ -2055,7 +2046,6 @@ var _ = Describe("Node rendering tests", func() {
 
 					// The RKE2 envvar overrides.
 					{Name: "MULTI_INTERFACE_MODE", Value: operatorv1.MultiInterfaceModeNone.Value()},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
@@ -3071,7 +3061,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 					{Name: "FELIX_HEALTHENABLED", Value: "true"},
 					{Name: "FELIX_HEALTHPORT", Value: "9099"},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 					{
 						Name: "NODENAME",
 						ValueFrom: &corev1.EnvVarSource{
@@ -3286,33 +3275,6 @@ var _ = Describe("Node rendering tests", func() {
 				rtest.ExpectEnv(deploy.Spec.Template.Spec.Containers[0].Env, "CALICO_EARLY_NETWORKING", render.BGPLayoutPath)
 			})
 
-			It("should render the correct env and/or images when FIPS mode is enabled (EE)", func() {
-				fipsEnabled := operatorv1.FIPSModeEnabled
-				cfg.Installation.FIPSMode = &fipsEnabled
-				cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
-				cfg.Installation.NodeMetricsPort = ptr.Int32ToPtr(123)
-
-				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
-				Expect(err).NotTo(HaveOccurred())
-
-				cfg.PrometheusServerTLS = certificateManager.KeyPair()
-				component := render.Node(&cfg)
-				Expect(component.ResolveImages(nil)).To(BeNil())
-
-				resources, _ := component.Objects()
-				nodeDSObj := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
-				Expect(nodeDSObj).ToNot(BeNil())
-
-				nodeDS, ok := nodeDSObj.(*appsv1.DaemonSet)
-				Expect(ok).To(BeTrue())
-
-				Expect(nodeDS.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-node"))
-				Expect(nodeDS.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
-
-				Expect(nodeDS.Spec.Template.Spec.InitContainers[1].Name).To(Equal("install-cni"))
-				Expect(nodeDS.Spec.Template.Spec.InitContainers[1].Image).To(ContainSubstring("-fips"))
-			})
-
 			It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
 				fipsEnabled := operatorv1.FIPSModeEnabled
 				cfg.Installation.FIPSMode = &fipsEnabled
@@ -3334,7 +3296,6 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ok).To(BeTrue())
 
 				Expect(nodeDS.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-node"))
-				Expect(nodeDS.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
 				Expect(nodeDS.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
 
 				Expect(nodeDS.Spec.Template.Spec.InitContainers[1].Name).To(Equal("install-cni"))

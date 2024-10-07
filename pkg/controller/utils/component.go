@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
+	"strings"
 	"sync"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -99,6 +101,9 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 
 	// Make sure any objects with images also have an image pull policy.
 	modifyPodSpec(obj, setImagePullPolicy)
+	// Order volumes and volume mounts
+	modifyPodSpec(obj, orderVolumes)
+	modifyPodSpec(obj, orderVolumeMounts)
 
 	// Modify Liveness and Readiness probe default values if they are not set for this object.
 	setProbeTimeouts(obj)
@@ -586,6 +591,20 @@ func setImagePullPolicy(podSpec *v1.PodSpec) {
 		if len(podSpec.Containers[i].ImagePullPolicy) == 0 {
 			podSpec.Containers[i].ImagePullPolicy = v1.PullIfNotPresent
 		}
+	}
+}
+
+func orderVolumes(podSpec *v1.PodSpec) {
+	slices.SortFunc(podSpec.Volumes, func(a, b v1.Volume) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+}
+
+func orderVolumeMounts(podSpec *v1.PodSpec) {
+	for _, container := range podSpec.Containers {
+		slices.SortFunc(container.VolumeMounts, func(a, b v1.VolumeMount) int {
+			return strings.Compare(a.Name, b.Name)
+		})
 	}
 }
 

@@ -19,12 +19,12 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"sort"
-
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"slices"
+	"strings"
 
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -41,8 +41,10 @@ type trustedBundle struct {
 	name string
 	// systemCertificates is a bundle of certificates loaded from the host systems root location.
 	systemCertificates []byte
-	// certificates is a map of key: hash, value: certificate.
-	certificates map[string]CertificateInterface
+	// certificates store the actual certificates in the budle
+	certificates []CertificateInterface
+	// issuers is a map of key: hash, value: issue of the certificate.
+	issuers map[string]CertificateInterface
 }
 
 // CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
@@ -84,7 +86,7 @@ func createTrustedBundle(includeSystemBundle bool, name string, certificates ...
 	bundle := &trustedBundle{
 		name:               name,
 		systemCertificates: systemCertificates,
-		certificates:       make(map[string]CertificateInterface),
+		issuers:            make(map[string]CertificateInterface),
 	}
 	bundle.AddCertificates(certificates...)
 
@@ -93,24 +95,44 @@ func createTrustedBundle(includeSystemBundle bool, name string, certificates ...
 
 // AddCertificates Adds the certificates to the bundle.
 func (t *trustedBundle) AddCertificates(certificates ...CertificateInterface) {
+	// Sort the certificates so that we get a consistent ordering.
+	// when processing certificates
+	slices.SortFunc(certificates, func(a, b CertificateInterface) int {
+		return strings.Compare(a.GetNamespace()+a.GetName(), b.GetNamespace()+b.GetName())
+	})
+
 	for _, cert := range certificates {
 		// Check if we already trust an issuer of this cert. In practice, this will be 0 or 1 iteration,
 		// because the issuer is only set when the tigera-ca-private is the issuer.
 		cur := cert
-		var skip bool
-		for cur != nil && !skip {
-			hash := rmeta.AnnotationHash(cur.GetCertificatePEM())
-			cur = cur.GetIssuer()
-			if _, found := t.certificates[hash]; found {
-				skip = true
+		var issuer CertificateInterface
+		for cur != nil {
+			if cur.GetIssuer() == nil {
+				issuer = cur
+				break
 			}
+			cur = cur.GetIssuer()
 		}
-		if cert != nil && !skip {
-			// Add the leaf certificate
-			hash := rmeta.AnnotationHash(cert.GetCertificatePEM())
-			t.certificates[hash] = cert
+
+		if issuer == nil {
+			continue
+		}
+
+		hash := rmeta.AnnotationHash(issuer.GetCertificatePEM())
+		if _, found := t.issuers[hash]; found {
+			continue
+		} else {
+			t.issuers[hash] = issuer
+			t.certificates = append(t.certificates, cert)
 		}
 	}
+
+	// Sort the certificates so that we get a consistent ordering.
+	// This reduces the number of changes we see in the configmap.
+	slices.SortFunc(t.certificates, func(a, b CertificateInterface) int {
+		return strings.Compare(a.GetNamespace()+a.GetName(), b.GetNamespace()+b.GetName())
+	})
+
 }
 
 func (t *trustedBundle) MountPath() string {
@@ -119,8 +141,8 @@ func (t *trustedBundle) MountPath() string {
 
 func (t *trustedBundle) HashAnnotations() map[string]string {
 	annotations := make(map[string]string)
-	for hash, cert := range t.certificates {
-		annotations[fmt.Sprintf("%s.hash.operator.tigera.io/%s", cert.GetNamespace(), cert.GetName())] = hash
+	for _, cert := range t.certificates {
+		annotations[fmt.Sprintf("%s.hash.operator.tigera.io/%s", cert.GetNamespace(), cert.GetName())] = rmeta.AnnotationHash(cert.GetCertificatePEM())
 	}
 	if len(t.systemCertificates) > 0 {
 		annotations["hash.operator.tigera.io/system"] = rmeta.AnnotationHash(t.systemCertificates)
@@ -172,16 +194,7 @@ func (t *trustedBundle) Volume() corev1.Volume {
 func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 	pemBuf := bytes.Buffer{}
 
-	// Sort the certificates so that we get a consistent ordering.
-	// This reduces the number of changes we see in the configmap.
-	certs := []CertificateInterface{}
 	for _, cert := range t.certificates {
-		certs = append(certs, cert)
-	}
-	sort.Slice(certs, func(i, j int) bool {
-		return certs[i].GetName() < certs[j].GetName()
-	})
-	for _, cert := range certs {
 		pemBuf.WriteString(fmt.Sprintf("# certificate name: %s/%s\n%s\n\n", cert.GetNamespace(), cert.GetName(), string(cert.GetCertificatePEM())))
 	}
 

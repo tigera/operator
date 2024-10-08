@@ -1669,6 +1669,103 @@ var _ = Describe("Component handler tests", func() {
 			Expect(sa.ImagePullSecrets).To(HaveLen(1))
 		})
 	})
+	Context("volumes and volume mounts", func() {
+		It("orders by name alphabetically", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-deployment",
+							Namespace: "test-namespace",
+						},
+						Spec: apps.DeploymentSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name: "test-deployment-container",
+											VolumeMounts: []corev1.VolumeMount{
+												{Name: "z"},
+												{Name: "y"},
+												{Name: "x"},
+											},
+										},
+									},
+									Volumes: []corev1.Volume{
+										{Name: "c"},
+										{Name: "b"},
+										{Name: "a"},
+									},
+								},
+							},
+						},
+					},
+					&apps.DaemonSet{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "test-daemonset",
+							Namespace: "test-namespace",
+						},
+						Spec: apps.DaemonSetSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Name: "test-daemonset-container",
+											VolumeMounts: []corev1.VolumeMount{
+												{Name: "z"},
+												{Name: "y"},
+												{Name: "x"},
+											},
+										},
+									},
+									Volumes: []corev1.Volume{
+										{Name: "c"},
+										{Name: "b"},
+										{Name: "a"},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).NotTo(HaveOccurred())
+
+			var deploy apps.Deployment
+			err = c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, &deploy)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deploy.Spec.Template.Spec.Volumes).To(ConsistOf(
+				corev1.Volume{Name: "a"},
+				corev1.Volume{Name: "b"},
+				corev1.Volume{Name: "c"},
+			))
+			Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(deploy.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(
+				corev1.VolumeMount{Name: "x"},
+				corev1.VolumeMount{Name: "y"},
+				corev1.VolumeMount{Name: "z"},
+			))
+
+			var ds apps.DaemonSet
+			err = c.Get(ctx, client.ObjectKey{Name: "test-daemonset", Namespace: "test-namespace"}, &ds)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(ds.Spec.Template.Spec.Volumes).To(ConsistOf(
+				corev1.Volume{Name: "a"},
+				corev1.Volume{Name: "b"},
+				corev1.Volume{Name: "c"},
+			))
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(
+				corev1.VolumeMount{Name: "x"},
+				corev1.VolumeMount{Name: "y"},
+				corev1.VolumeMount{Name: "z"},
+			))
+
+		})
+	})
 })
 
 var _ = Describe("Mocked client Component handler tests", func() {

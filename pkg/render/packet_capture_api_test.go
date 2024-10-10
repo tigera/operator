@@ -129,11 +129,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				Name:  "PACKETCAPTURE_API_HTTPS_CERT",
 				Value: "/tigera-packetcapture-server-tls/tls.crt",
 			},
-			{
-				Name:      "PACKETCAPTURE_API_FIPS_MODE_ENABLED",
-				Value:     "false",
-				ValueFrom: nil,
-			},
 		}
 
 		if enableOIDC {

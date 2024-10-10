@@ -315,7 +315,6 @@ func (d *dpiComponent) dpiEnvVars() []corev1.EnvVar {
 		{Name: "LINSEED_CLIENT_CERT", Value: d.cfg.DPICertSecret.VolumeMountCertificateFilePath()},
 		{Name: "LINSEED_CLIENT_KEY", Value: d.cfg.DPICertSecret.VolumeMountKeyFilePath()},
 		{Name: "LINSEED_TOKEN", Value: render.GetLinseedTokenPath(d.cfg.ManagedCluster)},
-		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(d.cfg.Installation.FIPSMode)},
 	}
 
 	// We need at least the CN or URISAN set, we depend on the validation

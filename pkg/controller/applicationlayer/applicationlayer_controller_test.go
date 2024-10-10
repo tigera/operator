@@ -22,17 +22,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/render/applicationlayer"
-	"github.com/tigera/operator/test"
-
-	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -41,6 +30,17 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/render/applicationlayer"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Application layer controller tests", func() {
@@ -528,26 +528,6 @@ var _ = Describe("Application layer controller tests", func() {
 				Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 				Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 			})
-		})
-		It("should not work in combination with FIPS", func() {
-			fipsEnabled := operatorv1.FIPSModeEnabled
-			installation.Spec.FIPSMode = &fipsEnabled
-			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "ApplicationLayer features cannot be used in combination with FIPSMode=Enabled", mock.Anything, mock.Anything).Return()
-			mockStatus.On("SetMetaData", mock.Anything).Return()
-			By("applying the ApplicationLayer CR to the fake cluster")
-			enabled := operatorv1.L7LogCollectionEnabled
-			Expect(c.Create(ctx, &operatorv1.ApplicationLayer{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.ApplicationLayerSpec{
-					LogCollection: &operatorv1.LogCollectionSpec{
-						CollectLogs: &enabled,
-					},
-				},
-			})).NotTo(HaveOccurred())
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			mockStatus.AssertExpectations(GinkgoT())
 		})
 	})
 })

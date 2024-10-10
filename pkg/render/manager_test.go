@@ -135,7 +135,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		uiAPIsExpectedEnvVars := []corev1.EnvVar{
 			{Name: "ELASTIC_LICENSE_TYPE", Value: "enterprise_trial"},
 			{Name: "ELASTIC_KIBANA_ENDPOINT", Value: "https://tigera-secure-es-gateway-http.tigera-elasticsearch.svc:5601"},
-			{Name: "FIPS_MODE_ENABLED", Value: "false"},
 			{Name: "LINSEED_CLIENT_CERT", Value: "/internal-manager-tls/tls.crt"},
 			{Name: "LINSEED_CLIENT_KEY", Value: "/internal-manager-tls/tls.key"},
 			{Name: "ELASTIC_KIBANA_DISABLED", Value: "false"},
@@ -799,27 +798,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-manager", render.ManagerNamespace)))
-	})
-
-	It("should set the right env when FIPS is enabled", func() {
-		fipsEnabled := operatorv1.FIPSModeEnabled
-		installation.FIPSMode = &fipsEnabled
-		resources := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       nil,
-			installation:            installation,
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
-		})
-		deployment, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(ok).To(BeTrue())
-		Expect(deployment.Spec.Template.Spec.Containers[0].Name).To(Equal("tigera-ui-apis"))
-		Expect(deployment.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-voltron"))
-		Expect(deployment.Spec.Template.Spec.Containers[2].Name).To(Equal("tigera-manager"))
-		Expect(deployment.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
-		Expect(deployment.Spec.Template.Spec.Containers[1].Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: "true"}))
-		Expect(deployment.Spec.Template.Spec.Containers[2].Env).To(ContainElement(corev1.EnvVar{Name: "ENABLE_KIBANA", Value: "false"}))
 	})
 
 	It("should override container's resource request with the value from Manager CR", func() {

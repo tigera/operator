@@ -149,9 +149,9 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
+		cfg.Installation.Variant = operatorv1.Calico
 		fipsEnabled := operatorv1.FIPSModeEnabled
 		cfg.Installation.FIPSMode = &fipsEnabled
-		cfg.Installation.Variant = operatorv1.Calico
 		component := render.Typha(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()

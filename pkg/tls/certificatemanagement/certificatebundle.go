@@ -94,19 +94,9 @@ func createTrustedBundle(includeSystemBundle bool, name string, certificates ...
 // AddCertificates Adds the certificates to the bundle.
 func (t *trustedBundle) AddCertificates(certificates ...CertificateInterface) {
 	for _, cert := range certificates {
-		// Check if we already trust an issuer of this cert. In practice, this will be 0 or 1 iteration,
-		// because the issuer is only set when the tigera-ca-private is the issuer.
-		cur := cert
-		var skip bool
-		for cur != nil && !skip {
-			hash := rmeta.AnnotationHash(cur.GetCertificatePEM())
-			cur = cur.GetIssuer()
-			if _, found := t.certificates[hash]; found {
-				skip = true
-			}
-		}
-		if cert != nil && !skip {
-			// Add the leaf certificate
+		// cert.GetIssuer() is set only for certificates that are signed by our operator CA.
+		// If a certificate was not signed by our operator, we should add it to the bundle.
+		if cert != nil && cert.GetIssuer() == nil {
 			hash := rmeta.AnnotationHash(cert.GetCertificatePEM())
 			t.certificates[hash] = cert
 		}

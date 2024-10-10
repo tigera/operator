@@ -48,8 +48,8 @@ type trustedBundle struct {
 // CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
 // It will include:
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
-func CreateTrustedBundle(certificates ...CertificateInterface) TrustedBundle {
-	bundle, err := createTrustedBundle(false, TrustedCertConfigMapName, certificates...)
+func CreateTrustedBundle(rootCA CertificateInterface, certificates ...CertificateInterface) TrustedBundle {
+	bundle, err := createTrustedBundle(false, TrustedCertConfigMapName, rootCA, certificates...)
 	if err != nil {
 		panic(err) // This should never happen.
 	}
@@ -60,18 +60,18 @@ func CreateTrustedBundle(certificates ...CertificateInterface) TrustedBundle {
 // It will include:
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 // - A system root certificate bundle in /etc/pki/tls/certs/ca-bundle.crt.
-func CreateTrustedBundleWithSystemRootCertificates(certificates ...CertificateInterface) (TrustedBundle, error) {
-	return createTrustedBundle(true, TrustedCertConfigMapName, certificates...)
+func CreateTrustedBundleWithSystemRootCertificates(rootCA CertificateInterface, certificates ...CertificateInterface) (TrustedBundle, error) {
+	return createTrustedBundle(true, TrustedCertConfigMapName, rootCA, certificates...)
 }
 
 // CreateMultiTenantTrustedBundleWithSystemRootCertificates creates a TrustedBundle with system root certificates that is
 // appropraite for a multi-tenant cluster, in which each tenant needs multiple trusted bundles.
-func CreateMultiTenantTrustedBundleWithSystemRootCertificates(certificates ...CertificateInterface) (TrustedBundle, error) {
-	return createTrustedBundle(true, TrustedCertConfigMapNamePublic, certificates...)
+func CreateMultiTenantTrustedBundleWithSystemRootCertificates(rootCA CertificateInterface, certificates ...CertificateInterface) (TrustedBundle, error) {
+	return createTrustedBundle(true, TrustedCertConfigMapNamePublic, rootCA, certificates...)
 }
 
 // createTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
-func createTrustedBundle(includeSystemBundle bool, name string, certificates ...CertificateInterface) (TrustedBundle, error) {
+func createTrustedBundle(includeSystemBundle bool, name string, rootCA CertificateInterface, certificates ...CertificateInterface) (TrustedBundle, error) {
 	var systemCertificates []byte
 	var err error
 	if includeSystemBundle {
@@ -81,10 +81,14 @@ func createTrustedBundle(includeSystemBundle bool, name string, certificates ...
 		}
 	}
 
+	certMap := make(map[string]CertificateInterface)
+	if rootCA != nil {
+		certMap[rmeta.AnnotationHash(rootCA.GetCertificatePEM())] = rootCA
+	}
 	bundle := &trustedBundle{
 		name:               name,
 		systemCertificates: systemCertificates,
-		certificates:       make(map[string]CertificateInterface),
+		certificates:       certMap,
 	}
 	bundle.AddCertificates(certificates...)
 
@@ -94,19 +98,9 @@ func createTrustedBundle(includeSystemBundle bool, name string, certificates ...
 // AddCertificates Adds the certificates to the bundle.
 func (t *trustedBundle) AddCertificates(certificates ...CertificateInterface) {
 	for _, cert := range certificates {
-		// Check if we already trust an issuer of this cert. In practice, this will be 0 or 1 iteration,
-		// because the issuer is only set when the tigera-ca-private is the issuer.
-		cur := cert
-		var skip bool
-		for cur != nil && !skip {
-			hash := rmeta.AnnotationHash(cur.GetCertificatePEM())
-			cur = cur.GetIssuer()
-			if _, found := t.certificates[hash]; found {
-				skip = true
-			}
-		}
-		if cert != nil && !skip {
-			// Add the leaf certificate
+		// cert.GetIssuer() is set only for certificates that are signed by our operator CA.
+		// If a certificate was not signed by our operator, we should add it to the bundle.
+		if cert != nil && cert.GetIssuer() == nil {
 			hash := rmeta.AnnotationHash(cert.GetCertificatePEM())
 			t.certificates[hash] = cert
 		}
@@ -252,7 +246,7 @@ func getSystemCertificates() ([]byte, error) {
 		if err == nil {
 			return data, nil
 		}
-		if err != nil && !os.IsNotExist(err) {
+		if !os.IsNotExist(err) {
 			return nil, fmt.Errorf(fmt.Sprintf("error occurred when loading system root certificate with name %s", filename), err)
 		}
 	}

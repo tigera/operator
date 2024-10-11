@@ -760,8 +760,12 @@ func setStandardSelectorAndLabels(obj client.Object) {
 	if podTemplate.ObjectMeta.Labels == nil {
 		podTemplate.ObjectMeta.Labels = make(map[string]string)
 	}
-	podTemplate.ObjectMeta.Labels["k8s-app"] = name
-	podTemplate.ObjectMeta.Labels["app.kubernetes.io/name"] = name
+	if podTemplate.ObjectMeta.Labels["k8s-app"] == "" {
+		podTemplate.ObjectMeta.Labels["k8s-app"] = name
+	}
+	if podTemplate.ObjectMeta.Labels["app.kubernetes.io/name"] == "" {
+		podTemplate.ObjectMeta.Labels["app.kubernetes.io/name"] = name
+	}
 }
 
 // ReadyFlag is used to synchronize access to a boolean flag

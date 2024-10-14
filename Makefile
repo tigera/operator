@@ -220,8 +220,21 @@ else
   GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)
 endif
 
+ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
+ENVOY_GATEWAY_VERSION ?= v1.1.2
+ENVOY_GATEWAY_PREFIX ?= calico-gateway
+ENVOY_GATEWAY_NAMESPACE ?= calico-gateway-system
+
+pkg/envoygateway/resources.yaml:
+	helm template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
+		--version $(ENVOY_GATEWAY_VERSION) \
+		-n $(ENVOY_GATEWAY_NAMESPACE) \
+		--create-namespace \
+		--include-crds \
+	> $@
+
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES)
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES) pkg/envoygateway/resources.yaml
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \

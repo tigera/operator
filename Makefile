@@ -220,8 +220,28 @@ else
   GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)
 endif
 
+ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
+ENVOY_GATEWAY_VERSION ?= v1.1.2
+ENVOY_GATEWAY_PREFIX ?= calico-gateway
+ENVOY_GATEWAY_NAMESPACE ?= calico-gateway-system
+
+pkg/envoygateway/resources.yaml: hack/bin/helm
+	hack/bin/helm template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
+		--version $(ENVOY_GATEWAY_VERSION) \
+		-n $(ENVOY_GATEWAY_NAMESPACE) \
+		--create-namespace \
+		--include-crds \
+	> $@
+
+hack/bin/helm:
+	mkdir -p hack/bin
+	curl -sSf -L --retry 5 -o hack/bin/helm3.tar.gz https://get.helm.sh/helm-v3.11.3-linux-$(ARCH).tar.gz
+	tar -zxvf hack/bin/helm3.tar.gz -C hack/bin linux-$(ARCH)/helm
+	mv hack/bin/linux-$(ARCH)/helm hack/bin/helm
+	rmdir hack/bin/linux-$(ARCH)
+
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES)
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES) pkg/envoygateway/resources.yaml
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
@@ -284,14 +304,14 @@ GINKGO_ARGS?= -v -trace -r
 GINKGO_FOCUS?=.*
 
 .PHONY: ut
-ut:
+ut: pkg/envoygateway/resources.yaml
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs:
+run-fvs: pkg/envoygateway/resources.yaml
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'

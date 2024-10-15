@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
+	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -61,6 +62,7 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(admregv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 			// Create a client that will have a crud interface of k8s objects.
 			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 			ctx = context.Background()
@@ -302,6 +304,66 @@ var _ = Describe("Application layer controller tests", func() {
 			}
 			Expect(test.GetResource(c, &fc)).To(BeNil())
 			Expect(*fc.Spec.TPROXYMode).To(Equal(crdv1.TPROXYModeOptionDisabled))
+		})
+
+		It("should render proper SidecarWebhook status", func() {
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("OnCRNotFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("SetMetaData", mock.Anything).Return()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+			By("applying the ApplicationLayer CR to the fake cluster")
+			enabled := operatorv1.L7LogCollectionEnabled
+			Expect(c.Create(ctx, &operatorv1.ApplicationLayer{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ApplicationLayerSpec{
+					LogCollection: &operatorv1.LogCollectionSpec{
+						CollectLogs: &enabled,
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			instance, err := getApplicationLayer(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(*instance.Status.SidecarWebhook).To(Equal(operatorv1.SidecarWebhookStateDisabled))
+
+			By("creating sidecar mutatingwebhookconfiguration")
+			sidecarMutatingWebhook := &admregv1.MutatingWebhookConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: common.SidecarMutatingWebhookConfigName,
+				},
+			}
+			Expect(c.Create(ctx, sidecarMutatingWebhook)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			instance, err = getApplicationLayer(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(*instance.Status.SidecarWebhook).To(Equal(operatorv1.SidecarWebhookStateEnabled))
+
+			By("deleting sidecar mutatingwebhookconfiguration")
+			Expect(c.Delete(ctx, sidecarMutatingWebhook)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			instance, err = getApplicationLayer(ctx, r.client)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(*instance.Status.SidecarWebhook).To(Equal(operatorv1.SidecarWebhookStateDisabled))
 		})
 		Context("Reconcile for Condition status", func() {
 			generation := int64(2)

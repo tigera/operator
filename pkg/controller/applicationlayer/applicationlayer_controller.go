@@ -32,8 +32,10 @@ import (
 	"github.com/tigera/operator/pkg/render/applicationlayer/embed"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
+	admregv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -120,6 +122,13 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 			"applicationlayer-controller failed to watch ConfigMap %s: %v",
 			applicationlayer.ModSecurityRulesetConfigMapName, err,
 		)
+	}
+
+	// Watch mutatingwebhookconfiguration responsible for sidecar injetion
+	err = c.WatchObject(&admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}},
+		&handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("applicationlayer-controller failed to watch sidecar MutatingWebhookConfiguration resource: %w", err)
 	}
 
 	// Watch configmaps created for envoy and dikastes in calico-system namespace:
@@ -305,6 +314,18 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
+	err = r.client.Get(ctx, types.NamespacedName{Name: common.SidecarMutatingWebhookConfigName}, &admregv1.MutatingWebhookConfiguration{})
+	if err != nil {
+		sidecarWebhookDisabled := operatorv1.SidecarWebhookStateDisabled
+		instance.Status.SidecarWebhook = &sidecarWebhookDisabled
+		if !apierrors.IsNotFound(err) {
+			return reconcile.Result{}, err
+		}
+	} else {
+		sidecarWebhookEnabled := operatorv1.SidecarWebhookStateEnabled
+		instance.Status.SidecarWebhook = &sidecarWebhookEnabled
+	}
+
 	// Everything is available - update the CRD status.
 	instance.Status.State = operatorv1.TigeraStatusReady
 	if err = r.client.Status().Update(ctx, instance); err != nil {
@@ -323,6 +344,7 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 		defaultWebApplicationFirewallStatusType operatorv1.WAFStatusType                    = operatorv1.WAFDisabled
 		defaultApplicationLayerPolicyStatusType operatorv1.ApplicationLayerPolicyStatusType = operatorv1.ApplicationLayerPolicyDisabled
 		defaultSidecarStatusType                operatorv1.SidecarStatusType                = operatorv1.SidecarDisabled
+		defaultSidecarWebhookStateType          operatorv1.SidecarWebhookStateType          = operatorv1.SidecarWebhookStateDisabled
 	)
 
 	if al.Spec.LogCollection == nil {
@@ -359,6 +381,10 @@ func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 
 	if al.Spec.SidecarInjection == nil {
 		al.Spec.SidecarInjection = &defaultSidecarStatusType
+	}
+
+	if al.Status.SidecarWebhook == nil {
+		al.Status.SidecarWebhook = &defaultSidecarWebhookStateType
 	}
 }
 

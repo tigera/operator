@@ -305,9 +305,31 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			OpenShift:    true,
 		})
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		Expect(resources).To(HaveLen(len(expectedResources)))
 		for i, expectedRes := range expectedResources {
 			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
 		}
+	})
+
+	It("should render toleration on GKE", func() {
+		installation.KubernetesProvider = operatorv1.ProviderGKE
+
+		component := egressgateway.EgressGateway(&egressgateway.Config{
+			PullSecrets:  nil,
+			Installation: installation,
+			OSType:       rmeta.OSTypeLinux,
+			EgressGW:     egw,
+			VXLANVNI:     4097,
+			VXLANPort:    4790,
+			OpenShift:    true,
+		})
+		resources, _ := component.Objects()
+		deploy := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deploy.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}))
 	})
 })

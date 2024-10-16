@@ -452,6 +452,21 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 	})
 
+	It("should render toleration on GKE", func() {
+		cfg.Installation = &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderGKE,
+		}
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(idc.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}))
+	})
+
 	Context("allow-tigera rendering", func() {
 		policyNames := []types.NamespacedName{
 			{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"},

@@ -228,6 +228,10 @@ func (pc *packetCaptureApiComponent) clusterRoleBinding() *rbacv1.ClusterRoleBin
 }
 
 func (pc *packetCaptureApiComponent) deployment() *appsv1.Deployment {
+	tolerations := append(pc.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
+	if pc.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -248,7 +252,7 @@ func (pc *packetCaptureApiComponent) deployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					NodeSelector:       pc.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: PacketCaptureServiceAccountName,
-					Tolerations:        append(pc.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...),
+					Tolerations:        tolerations,
 					ImagePullSecrets:   secret.GetReferenceList(pc.cfg.PullSecrets),
 					InitContainers:     pc.initContainers(),
 					Containers:         []corev1.Container{pc.container()},

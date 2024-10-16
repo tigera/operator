@@ -2101,6 +2101,22 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
 		})
 
+		It("should render toleration on GKE", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+
+			component, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred(), "Expected APIServer to create successfully %s", err)
+			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElement(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+		})
+
 		It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
 			fipsEnabled := operatorv1.FIPSModeEnabled
 			cfg.Installation.FIPSMode = &fipsEnabled

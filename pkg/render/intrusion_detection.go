@@ -601,6 +601,11 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		containers = append(containers, c.webhooksControllerContainer())
 	}
 
+	tolerations := c.cfg.Installation.ControlPlaneTolerations
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
+
 	return &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        IntrusionDetectionName,
@@ -608,7 +613,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			Annotations: c.intrusionDetectionAnnotations(),
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
+			Tolerations:        tolerations,
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: IntrusionDetectionName,
 			ImagePullSecrets:   ps,

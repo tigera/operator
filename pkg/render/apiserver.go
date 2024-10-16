@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/api/pkg/lib/numorstring"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
@@ -69,8 +70,6 @@ const (
 	MultiTenantManagedClustersAccessClusterRoleName = "tigera-managed-cluster-access"
 	L7AdmissionControllerContainerName              = "calico-l7-admission-controller"
 	L7AdmissionControllerPort                       = 6443
-
-	SidecarMutatingWebhookConfigName = "tigera-sidecar-webhook-configuration"
 )
 
 var TigeraAPIServerEntityRule = v3.EntityRule{
@@ -293,7 +292,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.IsSidecarInjectionEnabled() {
 		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.sidecarMutatingWebhookConfig())
 	} else {
-		objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: SidecarMutatingWebhookConfigName}})
+		objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}})
 	}
 
 	podSecurityNamespaceLabel := PodSecurityStandard(PSSRestricted)
@@ -1104,7 +1103,7 @@ func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWe
 			Kind:       "MutatingWebhookConfiguration",
 			APIVersion: "admissionregistration.k8s.io/v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{Name: SidecarMutatingWebhookConfigName},
+		ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName},
 		Webhooks: []admregv1.MutatingWebhook{
 			{
 				AdmissionReviewVersions: []string{"v1"},

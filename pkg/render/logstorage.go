@@ -279,7 +279,7 @@ func (es *elasticsearchComponent) Ready() bool {
 	return true
 }
 
-func (es elasticsearchComponent) elasticsearchServiceAccount() *corev1.ServiceAccount {
+func (es *elasticsearchComponent) elasticsearchServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchObjectName,
@@ -289,7 +289,7 @@ func (es elasticsearchComponent) elasticsearchServiceAccount() *corev1.ServiceAc
 }
 
 // generate the PVC required for the Elasticsearch nodes
-func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
+func (es *elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 	pvcTemplate := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "elasticsearch-data", // ECK requires this name
@@ -314,7 +314,7 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 	return pvcTemplate
 }
 
-func (es elasticsearchComponent) resourceRequirements() corev1.ResourceRequirements {
+func (es *elasticsearchComponent) resourceRequirements() corev1.ResourceRequirements {
 	resources := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{
 			"cpu":    resource.MustParse("1"),
@@ -332,7 +332,7 @@ func (es elasticsearchComponent) resourceRequirements() corev1.ResourceRequireme
 	return resources
 }
 
-func (es elasticsearchComponent) javaOpts() string {
+func (es *elasticsearchComponent) javaOpts() string {
 	var javaOpts string
 	resources := es.resourceRequirements()
 	if es.cfg.LogStorage.Spec.Nodes != nil && es.cfg.LogStorage.Spec.Nodes.ResourceRequirements != nil {
@@ -346,7 +346,7 @@ func (es elasticsearchComponent) javaOpts() string {
 }
 
 // Generate the pod template required for the ElasticSearch nodes (controls the ElasticSearch container)
-func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
+func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// Setup default configuration for ES container. For more information on managing resources, see:
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html and
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
@@ -503,6 +503,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		nodeSels = es.cfg.LogStorage.Spec.DataNodeSelector
 	}
 
+	tolerations := es.cfg.Installation.ControlPlaneTolerations
+	if es.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
+
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: annotations,
@@ -512,7 +517,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Containers:                   []corev1.Container{esContainer},
 			ImagePullSecrets:             secret.GetReferenceList(es.cfg.PullSecrets),
 			NodeSelector:                 nodeSels,
-			Tolerations:                  es.cfg.Installation.ControlPlaneTolerations,
+			Tolerations:                  tolerations,
 			ServiceAccountName:           ElasticsearchObjectName,
 			Volumes:                      volumes,
 			AutomountServiceAccountToken: &autoMountToken,
@@ -523,7 +528,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
-func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
+func (es *elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 	elasticsearch := &esv1.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -616,7 +621,7 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 // nodeSets calculates the number of NodeSets needed for the Elasticsearch cluster. Multiple NodeSets are returned only
 // if the "nodeSets" field has been set in the LogStorage CR. The number of Nodes for the cluster will be distributed as
 // evenly as possible between the NodeSets.
-func (es elasticsearchComponent) nodeSets() []esv1.NodeSet {
+func (es *elasticsearchComponent) nodeSets() []esv1.NodeSet {
 	nodeConfig := es.cfg.LogStorage.Spec.Nodes
 	pvcTemplate := es.pvcTemplate()
 
@@ -710,7 +715,7 @@ func (es elasticsearchComponent) nodeSets() []esv1.NodeSet {
 //
 // Note that this does not return a complete NodeSet, fields like Name and Count will at least need to be set on the returned
 // NodeSet
-func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVolumeClaim) esv1.NodeSet {
+func (es *elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVolumeClaim) esv1.NodeSet {
 	config := map[string]interface{}{
 		"node.master":                 "true",
 		"node.data":                   "true",
@@ -755,7 +760,7 @@ func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim) string {
 
 // This is a list of components that belong to Curator which has been decommissioned since it is no longer supported
 // in Elasticsearch beyond version 8. We want to be able to clean up these resources if they exist in the cluster on upgrade.
-func (es elasticsearchComponent) curatorDecommissionedResources() []client.Object {
+func (es *elasticsearchComponent) curatorDecommissionedResources() []client.Object {
 	resources := []client.Object{
 		&batchv1.CronJob{
 			ObjectMeta: metav1.ObjectMeta{
@@ -796,7 +801,7 @@ func (es elasticsearchComponent) curatorDecommissionedResources() []client.Objec
 	return resources
 }
 
-func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {
+func (es *elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -813,7 +818,7 @@ func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole 
 	}
 }
 
-func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (es *elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ElasticsearchObjectName,
@@ -833,7 +838,7 @@ func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.Clust
 	}
 }
 
-func (es elasticsearchComponent) oidcUserRole() client.Object {
+func (es *elasticsearchComponent) oidcUserRole() client.Object {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -857,7 +862,7 @@ func (es elasticsearchComponent) oidcUserRole() client.Object {
 	}
 }
 
-func (es elasticsearchComponent) oidcUserRoleBinding() client.Object {
+func (es *elasticsearchComponent) oidcUserRoleBinding() client.Object {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

@@ -1015,6 +1015,11 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 
 	var eksLogForwarderReplicas int32 = 1
 
+	tolerations := c.cfg.Installation.ControlPlaneTolerations
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1044,7 +1049,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					Annotations: annots,
 				},
 				Spec: corev1.PodSpec{
-					Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
+					Tolerations:        tolerations,
 					ServiceAccountName: EKSLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers: []corev1.Container{{

@@ -402,13 +402,17 @@ func (mc *monitorComponent) prometheusOperatorClusterRoleBinding() *rbacv1.Clust
 }
 
 func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
-
 	resources := corev1.ResourceRequirements{}
 
 	if mc.cfg.Monitor.AlertManager != nil {
 		if mc.cfg.Monitor.AlertManager.AlertManagerSpec != nil {
 			resources = mc.cfg.Monitor.AlertManager.AlertManagerSpec.Resources
 		}
+	}
+
+	tolerations := mc.cfg.Installation.ControlPlaneTolerations
+	if mc.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
 	}
 
 	am := &monitoringv1.Alertmanager{
@@ -425,7 +429,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			Replicas:           mc.cfg.Installation.ControlPlaneReplicas,
 			SecurityContext:    securitycontext.NewNonRootPodContext(),
 			ServiceAccountName: PrometheusServiceAccountName,
-			Tolerations:        mc.cfg.Installation.ControlPlaneTolerations,
+			Tolerations:        tolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
 			Resources:          resources,
 		},
@@ -513,6 +517,11 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		env = append(env, mc.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
+	tolerations := mc.cfg.Installation.ControlPlaneTolerations
+	if mc.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
+
 	prometheus := &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -572,7 +581,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				SecurityContext:        securitycontext.NewNonRootPodContext(),
 				ServiceAccountName:     PrometheusServiceAccountName,
 				ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
-				Tolerations:            mc.cfg.Installation.ControlPlaneTolerations,
+				Tolerations:            tolerations,
 				Version:                components.ComponentCoreOSPrometheus.Version,
 				VolumeMounts:           volumeMounts,
 				Volumes:                volumes,

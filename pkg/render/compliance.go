@@ -451,6 +451,12 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 	if c.cfg.ControllerKeyPair != nil && c.cfg.ControllerKeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.ControllerKeyPair.InitContainer(c.cfg.Namespace))
 	}
+
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
+
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceControllerName,
@@ -458,7 +464,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		},
 		Spec: corev1.PodSpec{
 			ServiceAccountName: ComplianceControllerServiceAccount,
-			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
+			Tolerations:        tolerations,
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,
@@ -629,6 +635,11 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		initContainers = append(initContainers, c.cfg.ReporterKeyPair.InitContainer(c.cfg.Namespace))
 	}
 
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
+
 	podtemplate := &corev1.PodTemplate{
 		TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -648,7 +659,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			},
 			Spec: corev1.PodSpec{
 				ServiceAccountName: ComplianceReporterServiceAccount,
-				Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
+				Tolerations:        tolerations,
 				NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 				ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 				InitContainers:     initContainers,
@@ -862,6 +873,11 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		initContainers = append(initContainers, c.cfg.ServerKeyPair.InitContainer(c.cfg.Namespace))
 	}
 
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
+
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ComplianceServerName,
@@ -870,7 +886,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 		},
 		Spec: corev1.PodSpec{
 			ServiceAccountName: ComplianceServerServiceAccount,
-			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
+			Tolerations:        tolerations,
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,
@@ -1066,6 +1082,11 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		initContainers = append(initContainers, c.cfg.SnapshotterKeyPair.InitContainer(c.cfg.Namespace))
 	}
 
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
+
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ComplianceSnapshotterName,
@@ -1073,7 +1094,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		},
 		Spec: corev1.PodSpec{
 			ServiceAccountName: ComplianceSnapshotterServiceAccount,
-			Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
+			Tolerations:        tolerations,
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 			InitContainers:     initContainers,

@@ -184,6 +184,22 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			}))
 	})
 
+	It("should render toleration on GKE", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+		component := render.PolicyRecommendation(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		deploy := rtest.GetResource(resources, render.PolicyRecommendationName, render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deploy).NotTo(BeNil())
+		Expect(deploy.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}))
+	})
+
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 		cfg.OpenShift = true

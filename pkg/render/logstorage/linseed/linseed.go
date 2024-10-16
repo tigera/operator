@@ -419,6 +419,10 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		}
 		annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
 	}
+	tolerations := l.cfg.Installation.ControlPlaneTolerations
+	if l.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        DeploymentName,
@@ -426,7 +430,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:        l.cfg.Installation.ControlPlaneTolerations,
+			Tolerations:        tolerations,
 			NodeSelector:       l.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ServiceAccountName,
 			ImagePullSecrets:   secret.GetReferenceList(l.cfg.PullSecrets),

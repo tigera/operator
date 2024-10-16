@@ -282,6 +282,11 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		count = *k.cfg.Installation.ControlPlaneReplicas
 	}
 
+	tolerations := k.cfg.Installation.ControlPlaneTolerations
+	if k.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
+
 	kibana := &kbv1.Kibana{
 		TypeMeta: metav1.TypeMeta{Kind: "Kibana", APIVersion: "kibana.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -324,7 +329,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 					ImagePullSecrets:             secret.GetReferenceList(k.cfg.PullSecrets),
 					ServiceAccountName:           ObjectName,
 					NodeSelector:                 k.cfg.Installation.ControlPlaneNodeSelector,
-					Tolerations:                  k.cfg.Installation.ControlPlaneTolerations,
+					Tolerations:                  tolerations,
 					InitContainers:               initContainers,
 					AutomountServiceAccountToken: &automountToken,
 					Containers: []corev1.Container{{

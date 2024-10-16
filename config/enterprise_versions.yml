@@ -16,7 +16,7 @@ components:
     image: tigera/cnx-queryserver
     version: v3.19.2
   cnx-kube-controllers:
-    image: tigera/kube-controllers
+    image: tigera/kube-controllers`
     version: v3.19.2
   typha:
     image: tigera/typha
@@ -46,12 +46,12 @@ components:
     image: tigera/dex
     version: v3.19.2
   eck-kibana:
-    version: 7.17.22
+    version: 7.17.24
   kibana:
     image: tigera/kibana
     version: v3.19.2
   eck-elasticsearch:
-    version: 7.17.22
+    version: 7.17.24
   elasticsearch:
     image: tigera/elasticsearch
     version: v3.19.2

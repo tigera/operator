@@ -356,6 +356,13 @@ spec:
                   - type
                   type: object
                 type: array
+              sidecarWebhook:
+                description: SidecarWebhook provides the state of sidecar injection
+                  mutatinwebhookconfiguration
+                enum:
+                - Enabled
+                - Disabled
+                type: string
               state:
                 description: State provides user-readable status.
                 type: string

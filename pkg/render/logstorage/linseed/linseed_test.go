@@ -193,6 +193,22 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(s.Data).To(Equal(cfg.ElasticClientSecret.Data))
 		})
 
+		It("should render toleration on GKE", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+			component := Linseed(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			deploy, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue(), "Deployment not found")
+			Expect(deploy.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+		})
+
 		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 			cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 			component := Linseed(cfg)

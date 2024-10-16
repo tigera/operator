@@ -1349,21 +1349,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
-		K8sServiceEp:            k8sapi.Endpoint,
-		Installation:            &instance.Spec,
-		IPPools:                 crdPoolsToOperator(currentPools.Items),
-		LogCollector:            logCollector,
-		BirdTemplates:           birdTemplates,
-		TLS:                     typhaNodeTLS,
-		ClusterDomain:           r.clusterDomain,
-		NodeReporterMetricsPort: nodeReporterMetricsPort,
-		BGPLayouts:              bgpLayout,
-		NodeAppArmorProfile:     nodeAppArmorProfile,
-		MigrateNamespaces:       needNsMigration,
-		CanRemoveCNIFinalizer:   canRemoveCNI,
-		PrometheusServerTLS:     nodePrometheusTLS,
-		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
-		BindMode:                bgpConfiguration.Spec.BindMode,
+		K8sServiceEp:                  k8sapi.Endpoint,
+		Installation:                  &instance.Spec,
+		IPPools:                       crdPoolsToOperator(currentPools.Items),
+		LogCollector:                  logCollector,
+		BirdTemplates:                 birdTemplates,
+		TLS:                           typhaNodeTLS,
+		ClusterDomain:                 r.clusterDomain,
+		NodeReporterMetricsPort:       nodeReporterMetricsPort,
+		BGPLayouts:                    bgpLayout,
+		NodeAppArmorProfile:           nodeAppArmorProfile,
+		MigrateNamespaces:             needNsMigration,
+		CanRemoveCNIFinalizer:         canRemoveCNI,
+		PrometheusServerTLS:           nodePrometheusTLS,
+		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
+		BindMode:                      bgpConfiguration.Spec.BindMode,
+		FelixPrometheusMetricsEnabled: isFelixPrometheusMetricsEnabled(felixConfiguration),
 	}
 	components = append(components, render.Node(&nodeCfg))
 
@@ -1550,6 +1551,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	reqLogger.V(1).Info("Finished reconciling Installation")
 	return reconcile.Result{}, nil
+}
+
+func isFelixPrometheusMetricsEnabled(felixConfiguration *crdv1.FelixConfiguration) bool {
+	if felixConfiguration.Spec.PrometheusMetricsEnabled != nil {
+		return *felixConfiguration.Spec.PrometheusMetricsEnabled
+	}
+	return false
 }
 
 func readMTUFile() (int, error) {

@@ -626,9 +626,13 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace))
 	}
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+	}
 	podSpec := corev1.PodSpec{
 		NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
-		Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...),
+		Tolerations:        tolerations,
 		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
 		ServiceAccountName: c.kubeControllerServiceAccountName,
 		InitContainers:     initContainers,

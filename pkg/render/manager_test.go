@@ -201,8 +201,33 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 	})
 
+	It("should render toleration on GKE", func() {
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            installation,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
+		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deployment).NotTo(BeNil())
+		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}))
+	})
+
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
-		resources := renderObjects(renderConfig{oidc: false, managementCluster: nil, installation: &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, KubernetesProvider: operatorv1.ProviderOpenShift}, compliance: compliance, complianceFeatureActive: true})
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, KubernetesProvider: operatorv1.ProviderOpenShift},
+			compliance:              compliance,
+			complianceFeatureActive: true,
+		})
 
 		// tigera-manager-role clusterRole should have openshift securitycontextconstraints PolicyRule
 		managerRole := rtest.GetResource(resources, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)

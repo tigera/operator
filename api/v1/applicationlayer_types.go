@@ -58,6 +58,9 @@ type ApplicationLayerPolicyStatusType string
 // +kubebuilder:validation:Enum=Enabled;Disabled
 type SidecarStatusType string
 
+// +kubebuilder:validation:Enum=Enabled;Disabled
+type SidecarWebhookStateType string
+
 const (
 	WAFDisabled                    WAFStatusType                    = "Disabled"
 	WAFEnabled                     WAFStatusType                    = "Enabled"
@@ -67,6 +70,8 @@ const (
 	ApplicationLayerPolicyDisabled ApplicationLayerPolicyStatusType = "Disabled"
 	SidecarEnabled                 SidecarStatusType                = "Enabled"
 	SidecarDisabled                SidecarStatusType                = "Disabled"
+	SidecarWebhookStateEnabled     SidecarWebhookStateType          = "Enabled"
+	SidecarWebhookStateDisabled    SidecarWebhookStateType          = "Disabled"
 )
 
 type EnvoySettings struct {
@@ -109,6 +114,9 @@ type LogCollectionSpec struct {
 type ApplicationLayerStatus struct {
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`
+
+	// SidecarWebhook provides the state of sidecar injection mutatinwebhookconfiguration
+	SidecarWebhook *SidecarWebhookStateType `json:"sidecarWebhook,omitempty"`
 
 	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
 	// Ready, Progressing, Degraded or other customer types.

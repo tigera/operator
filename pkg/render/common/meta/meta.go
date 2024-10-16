@@ -60,6 +60,15 @@ var (
 
 	TolerateCriticalAddonsAndControlPlane = append(TolerateControlPlane, TolerateCriticalAddonsOnly)
 
+	// TolerateGKEArm64NoSchedule allows pods to be scheduled on GKE Arm64 nodes.
+	// See https://cloud.google.com/kubernetes-engine/docs/how-to/prepare-arm-workloads-for-deployment#multi-arch-schedule-any-arch
+	TolerateGKEArm64NoSchedule = corev1.Toleration{
+		Key:      "kubernetes.io/arch",
+		Operator: corev1.TolerationOpEqual,
+		Value:    "arm64",
+		Effect:   corev1.TaintEffectNoSchedule,
+	}
+
 	// TolerateAll returns tolerations to tolerate all taints. When used, it is not necessary
 	// to include the user's custom tolerations because we already tolerate everything.
 	TolerateAll = []corev1.Toleration{

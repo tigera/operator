@@ -854,6 +854,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
 		Expect(toDelete).To(HaveLen(3))
 	})
+
 	It("Should render external prometheus resources with service monitor and custom token", func() {
 		cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
 			ServiceMonitor: &operatorv1.ServiceMonitor{
@@ -883,6 +884,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
 		Expect(toDelete).To(HaveLen(3))
 	})
+
 	It("Should render external prometheus resources without service monitor", func() {
 		cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
 			Namespace: "external-prometheus",
@@ -902,6 +904,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
 		Expect(toDelete).To(HaveLen(3))
 	})
+
 	It("Should render typha service monitor if typha metrics are enabled", func() {
 		cfg.Installation.TyphaMetricsPort = ptr.Int32ToPtr(9093)
 		component := monitor.Monitor(cfg)

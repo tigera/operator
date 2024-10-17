@@ -697,6 +697,38 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(complianceBenchmarker.Spec.Template.Spec.Tolerations).To(ContainElements(rmeta.TolerateAll))
 		})
 
+		It("should render toleration on GKE", func() {
+			installation := &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+			}
+			dpComplianceServer, dpComplianceController, complianceSnapshotter, complianceReporter, complianceBenchmarker := renderCompliance(installation)
+			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+			Expect(complianceBenchmarker.Spec.Template.Spec.Tolerations).To(ContainElements(rmeta.TolerateAll))
+		})
+
 		It("should apply controlPlaneNodeSelectors", func() {
 			dpComplianceServer, dpComplianceController, complianceSnapshotter, _, _ := renderCompliance(&operatorv1.InstallationSpec{
 				ControlPlaneNodeSelector: map[string]string{"foo": "bar"},

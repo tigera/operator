@@ -18,19 +18,20 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/testutils"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("ECK rendering tests", func() {
@@ -237,6 +238,21 @@ var _ = Describe("ECK rendering tests", func() {
 			component := eck.ECK(cfg)
 			createResources, _ := component.Objects()
 			rtest.ExpectResources(createResources, expectedResources)
+		})
+
+		It("should render toleration on GKE", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+			component := eck.ECK(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+			statefulSet := rtest.GetResource(resources, eck.OperatorName, eck.OperatorNamespace, "apps", "v1", "StatefulSet").(*appsv1.StatefulSet)
+			Expect(statefulSet).NotTo(BeNil())
+			Expect(statefulSet.Spec.Template.Spec.Tolerations).To(ContainElement(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
 		})
 
 		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {

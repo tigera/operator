@@ -258,13 +258,18 @@ func (d *dashboards) Job() *batchv1.Job {
 		envVars = append(envVars, corev1.EnvVar{Name: "KIBANA_CLIENT_CERT", Value: "/certs/kibana/mtls/client.crt"})
 	}
 
+	tolerations := d.cfg.Installation.ControlPlaneTolerations
+	if d.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      map[string]string{"job-name": Name, "k8s-app": Name},
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:  d.cfg.Installation.ControlPlaneTolerations,
+			Tolerations:  tolerations,
 			NodeSelector: d.cfg.Installation.ControlPlaneNodeSelector,
 			// This value needs to be set to never. The PodFailurePolicy will still ensure that this job will run until completion.
 			RestartPolicy:    corev1.RestartPolicyNever,

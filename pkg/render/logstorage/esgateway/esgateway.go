@@ -225,6 +225,12 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 
 	annotations := e.cfg.TrustedBundle.HashAnnotations()
 	annotations[e.cfg.ESGatewayKeyPair.HashAnnotationKey()] = e.cfg.ESGatewayKeyPair.HashAnnotationValue()
+
+	tolerations := e.cfg.Installation.ControlPlaneTolerations
+	if e.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        DeploymentName,
@@ -232,7 +238,7 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:        e.cfg.Installation.ControlPlaneTolerations,
+			Tolerations:        tolerations,
 			NodeSelector:       e.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ServiceAccountName,
 			ImagePullSecrets:   secret.GetReferenceList(e.cfg.PullSecrets),

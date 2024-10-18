@@ -129,6 +129,22 @@ var _ = Describe("Dashboards rendering tests", func() {
 			Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 		})
 
+		It("should render toleration on GKE", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+
+			component := Dashboards(cfg)
+
+			resources, _ := component.Objects()
+			job, ok := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
+			Expect(ok).To(BeTrue(), "Job not found")
+			Expect(job.Spec.Template.Spec.Tolerations).To(ContainElement(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+		})
+
 		It("should apply controlPlaneTolerations correctly", func() {
 			t := corev1.Toleration{
 				Key:      "foo",

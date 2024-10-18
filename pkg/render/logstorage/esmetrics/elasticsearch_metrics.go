@@ -205,7 +205,7 @@ func (e *elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 
 	tolerations := e.cfg.Installation.ControlPlaneTolerations
 	if e.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	d := &appsv1.Deployment{

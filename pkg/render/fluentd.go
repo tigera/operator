@@ -1007,7 +1007,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 
 	tolerations := c.cfg.Installation.ControlPlaneTolerations
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	d := &appsv1.Deployment{

@@ -589,7 +589,7 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	tolerations := es.cfg.Installation.ControlPlaneTolerations
 	if es.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	podTemplate := corev1.PodTemplateSpec{

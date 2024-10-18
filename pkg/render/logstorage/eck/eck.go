@@ -299,7 +299,7 @@ func (e *eck) operatorStatefulSet() *appsv1.StatefulSet {
 	}
 	tolerations := e.cfg.Installation.ControlPlaneTolerations
 	if e.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 	s := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},

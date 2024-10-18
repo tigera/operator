@@ -653,7 +653,7 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 func (c *managerComponent) managerTolerations() []corev1.Toleration {
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 	return tolerations
 }

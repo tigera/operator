@@ -284,7 +284,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 
 	tolerations := k.cfg.Installation.ControlPlaneTolerations
 	if k.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	kibana := &kbv1.Kibana{

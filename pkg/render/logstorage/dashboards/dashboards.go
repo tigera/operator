@@ -260,7 +260,7 @@ func (d *dashboards) Job() *batchv1.Job {
 
 	tolerations := d.cfg.Installation.ControlPlaneTolerations
 	if d.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{

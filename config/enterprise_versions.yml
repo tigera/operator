@@ -46,12 +46,12 @@ components:
     image: tigera/dex
     version: release-calient-v3.20
   eck-kibana:
-    version: 7.17.22
+    version: 7.17.24
   kibana:
     image: tigera/kibana
     version: release-calient-v3.20
   eck-elasticsearch:
-    version: 7.17.22
+    version: 7.17.24
   elasticsearch:
     image: tigera/elasticsearch
     version: release-calient-v3.20

@@ -495,7 +495,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 		},
 		Spec: corev1.PodSpec{
 			NodeSelector:                  map[string]string{},
-			Tolerations:                   c.tolerations(),
+			Tolerations:                   rmeta.TolerateAll,
 			ImagePullSecrets:              secret.GetReferenceList(c.cfg.PullSecrets),
 			TerminationGracePeriodSeconds: &terminationGracePeriod,
 			InitContainers:                initContainers,
@@ -527,16 +527,6 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	}
 	setNodeCriticalPod(&(ds.Spec.Template))
 	return ds
-}
-
-// logCollectorTolerations creates the node's tolerations.
-func (c *fluentdComponent) tolerations() []corev1.Toleration {
-	tolerations := []corev1.Toleration{
-		{Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoSchedule},
-		{Operator: corev1.TolerationOpExists, Effect: corev1.TaintEffectNoExecute},
-	}
-
-	return tolerations
 }
 
 // container creates the fluentd container.
@@ -1015,6 +1005,11 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 
 	var eksLogForwarderReplicas int32 = 1
 
+	tolerations := c.cfg.Installation.ControlPlaneTolerations
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1044,7 +1039,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 					Annotations: annots,
 				},
 				Spec: corev1.PodSpec{
-					Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
+					Tolerations:        tolerations,
 					ServiceAccountName: EKSLogForwarderName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers: []corev1.Container{{

@@ -15,6 +15,8 @@
 package render
 
 import (
+	"reflect"
+
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -59,7 +61,7 @@ func (p *passthroughComponent) Objects() (objsToCreate []client.Object, objsToDe
 		if o == nil {
 			continue
 		}
-		p.log.V(1).Info("PassThrough processing object", "obj", o)
+		p.log.V(1).Info("PassThrough processing object", "type", reflect.TypeOf(o), "name", o.GetName(), "namespace", o.GetNamespace())
 		objs = append(objs, o)
 	}
 	if p.isDelete {

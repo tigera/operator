@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
+	"github.com/tigera/operator/pkg/envoygateway"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	"github.com/go-logr/logr"
@@ -1400,6 +1401,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		)
 	}
 
+	installEnvoyGateway := (instance.Spec.Variant == v1.TigeraSecureEnterprise)
+	if installEnvoyGateway {
+		if err = r.installEnvoyGateway(ctx, reqLogger); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceReadError, "Error getting ImageSet", err, reqLogger)
@@ -1885,6 +1893,18 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if err := handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil); err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating CRD resource", err, log)
+		return err
+	}
+	return nil
+}
+
+func (r *ReconcileInstallation) installEnvoyGateway(ctx context.Context, log logr.Logger) error {
+	egComponent := render.NewPassthrough(envoygateway.GetResources(log)...)
+	// Specify nil for the CR so no ownership is put on the gateway resources.  We do this so
+	// removing the Installation CR will not remove them.
+	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
+	if err := handler.CreateOrUpdateOrDelete(ctx, egComponent, nil); err != nil {
+		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating gateway resource", err, log)
 		return err
 	}
 	return nil

@@ -256,6 +256,11 @@ func (c *GuardianComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 func (c *GuardianComponent) deployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -276,7 +281,7 @@ func (c *GuardianComponent) deployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: GuardianServiceAccountName,
-					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...),
+					Tolerations:        tolerations,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers:         c.container(),
 					Volumes:            c.volumes(),

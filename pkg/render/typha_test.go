@@ -77,6 +77,22 @@ var _ = Describe("Typha rendering tests", func() {
 		}
 	})
 
+	It("should render toleration on GKE", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+		component := render.Typha(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		deploy := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deploy).ToNot(BeNil())
+		Expect(deploy.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}))
+	})
+
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 		component := render.Typha(&cfg)

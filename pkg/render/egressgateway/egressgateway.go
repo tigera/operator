@@ -153,6 +153,10 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 	for _, x := range c.config.PullSecrets {
 		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
 	}
+	var tolerations []corev1.Toleration
+	if c.config.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
 	return &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: c.egwBuildAnnotations(),
@@ -162,6 +166,7 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 			InitContainers:     []corev1.Container{*c.egwInitContainer()},
 			Containers:         []corev1.Container{*c.egwContainer()},
 			ServiceAccountName: c.config.EgressGW.Name,
+			Tolerations:        tolerations,
 			Volumes:            []corev1.Volume{*c.egwVolume()},
 		},
 	}

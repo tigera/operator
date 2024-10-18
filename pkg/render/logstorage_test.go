@@ -359,6 +359,23 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{Name: "elastic-internal-transport-certificates", MountPath: certificatemanagement.CSRCMountPath},
 				}, false)
 			})
+
+			It("should render toleration on GKE", func() {
+				cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+
+				component := render.LogStorage(cfg)
+				createResources, _ := component.Objects()
+
+				resultES := rtest.GetResource(createResources, render.ElasticsearchName, render.ElasticsearchNamespace,
+					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
+				Expect(resultES).NotTo(BeNil())
+				Expect(resultES.Spec.NodeSets[0].PodTemplate.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+					Key:      "kubernetes.io/arch",
+					Operator: corev1.TolerationOpEqual,
+					Value:    "arm64",
+					Effect:   corev1.TaintEffectNoSchedule,
+				}))
+			})
 		})
 
 		Context("Elasticsearch with a default cluster domain", func() {

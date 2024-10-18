@@ -420,7 +420,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	}
 	tolerations := l.cfg.Installation.ControlPlaneTolerations
 	if l.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{

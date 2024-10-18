@@ -333,7 +333,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 
 	tolerations := pr.cfg.Installation.ControlPlaneTolerations
 	if pr.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	podTemplateSpec := &corev1.PodTemplateSpec{

@@ -412,7 +412,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 
 	tolerations := mc.cfg.Installation.ControlPlaneTolerations
 	if mc.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	am := &monitoringv1.Alertmanager{
@@ -519,7 +519,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 
 	tolerations := mc.cfg.Installation.ControlPlaneTolerations
 	if mc.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	prometheus := &monitoringv1.Prometheus{

@@ -454,7 +454,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{
@@ -637,7 +637,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	podtemplate := &corev1.PodTemplate{
@@ -874,7 +874,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{
@@ -1083,7 +1083,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{

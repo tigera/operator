@@ -227,7 +227,7 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 
 	tolerations := e.cfg.Installation.ControlPlaneTolerations
 	if e.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{

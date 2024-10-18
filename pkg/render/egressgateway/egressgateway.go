@@ -153,9 +153,9 @@ func (c *component) deploymentPodTemplate() *corev1.PodTemplateSpec {
 	for _, x := range c.config.PullSecrets {
 		ps = append(ps, corev1.LocalObjectReference{Name: x.Name})
 	}
-	tolerations := []corev1.Toleration{}
+	var tolerations []corev1.Toleration
 	if c.config.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEArm64NoSchedule)
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 	return &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{

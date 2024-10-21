@@ -360,7 +360,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		} else if prometheusCertificate != nil {
-			trustedBundle = certificatemanagement.CreateTrustedBundle(prometheusCertificate)
+			trustedBundle = certificateManager.CreateTrustedBundle(prometheusCertificate)
 		}
 	}
 

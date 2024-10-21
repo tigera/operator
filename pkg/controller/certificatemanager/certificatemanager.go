@@ -329,7 +329,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 			cm.log.V(3).Info("secret %s has invalid DNS names, the expected names are: %v", secretName, dnsNames)
 			return keyPair, nil
 		}
-	} else if keyPair == nil {
+	} else {
 		cm.log.V(1).Info("Keypair wasn't found, create a new one", "namespace", secretNamespace, "name", secretName)
 	}
 
@@ -561,7 +561,7 @@ func HasExpectedDNSNames(secretName, secretNamespace string, cert *x509.Certific
 // It will include:
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 func (cm *certificateManager) CreateTrustedBundle(certificates ...certificatemanagement.CertificateInterface) certificatemanagement.TrustedBundle {
-	return certificatemanagement.CreateTrustedBundle(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
+	return certificatemanagement.CreateTrustedBundle(cm.keyPair, certificates...)
 }
 
 // CreateTrustedBundleWithSystemRootCertificates creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
@@ -569,11 +569,11 @@ func (cm *certificateManager) CreateTrustedBundle(certificates ...certificateman
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 // - A system root certificate bundle in /etc/pki/tls/certs/ca-bundle.crt.
 func (cm *certificateManager) CreateTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error) {
-	return certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
+	return certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(cm.keyPair, certificates...)
 }
 
 func (cm *certificateManager) CreateMultiTenantTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error) {
-	return certificatemanagement.CreateMultiTenantTrustedBundleWithSystemRootCertificates(append([]certificatemanagement.CertificateInterface{cm.keyPair}, certificates...)...)
+	return certificatemanagement.CreateMultiTenantTrustedBundleWithSystemRootCertificates(cm.keyPair, certificates...)
 }
 
 func (cm *certificateManager) LoadTrustedBundle(ctx context.Context, client client.Client, ns string) (certificatemanagement.TrustedBundleRO, error) {

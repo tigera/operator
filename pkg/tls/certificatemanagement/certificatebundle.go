@@ -41,15 +41,19 @@ type trustedBundle struct {
 	name string
 	// systemCertificates is a bundle of certificates loaded from the host systems root location.
 	systemCertificates []byte
+
+	// This is the CA that signs new certificates that are being created.
+	ca CertificateInterface
+
 	// certificates is a map of key: hash, value: certificate.
-	certificates map[string]CertificateInterface
+	certificates []CertificateInterface
 }
 
 // CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
 // It will include:
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
-func CreateTrustedBundle(rootCA CertificateInterface, certificates ...CertificateInterface) TrustedBundle {
-	bundle, err := createTrustedBundle(false, TrustedCertConfigMapName, rootCA, certificates...)
+func CreateTrustedBundle(ca CertificateInterface, certificates ...CertificateInterface) TrustedBundle {
+	bundle, err := createTrustedBundle(false, TrustedCertConfigMapName, ca, certificates...)
 	if err != nil {
 		panic(err) // This should never happen.
 	}
@@ -60,18 +64,18 @@ func CreateTrustedBundle(rootCA CertificateInterface, certificates ...Certificat
 // It will include:
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 // - A system root certificate bundle in /etc/pki/tls/certs/ca-bundle.crt.
-func CreateTrustedBundleWithSystemRootCertificates(rootCA CertificateInterface, certificates ...CertificateInterface) (TrustedBundle, error) {
-	return createTrustedBundle(true, TrustedCertConfigMapName, rootCA, certificates...)
+func CreateTrustedBundleWithSystemRootCertificates(ca CertificateInterface, certificates ...CertificateInterface) (TrustedBundle, error) {
+	return createTrustedBundle(true, TrustedCertConfigMapName, ca, certificates...)
 }
 
 // CreateMultiTenantTrustedBundleWithSystemRootCertificates creates a TrustedBundle with system root certificates that is
 // appropraite for a multi-tenant cluster, in which each tenant needs multiple trusted bundles.
-func CreateMultiTenantTrustedBundleWithSystemRootCertificates(rootCA CertificateInterface, certificates ...CertificateInterface) (TrustedBundle, error) {
-	return createTrustedBundle(true, TrustedCertConfigMapNamePublic, rootCA, certificates...)
+func CreateMultiTenantTrustedBundleWithSystemRootCertificates(ca CertificateInterface, certificates ...CertificateInterface) (TrustedBundle, error) {
+	return createTrustedBundle(true, TrustedCertConfigMapNamePublic, ca, certificates...)
 }
 
 // createTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
-func createTrustedBundle(includeSystemBundle bool, name string, rootCA CertificateInterface, certificates ...CertificateInterface) (TrustedBundle, error) {
+func createTrustedBundle(includeSystemBundle bool, name string, ca CertificateInterface, certificates ...CertificateInterface) (TrustedBundle, error) {
 	var systemCertificates []byte
 	var err error
 	if includeSystemBundle {
@@ -81,14 +85,14 @@ func createTrustedBundle(includeSystemBundle bool, name string, rootCA Certifica
 		}
 	}
 
-	certMap := make(map[string]CertificateInterface)
-	if rootCA != nil {
-		certMap[rmeta.AnnotationHash(rootCA.GetCertificatePEM())] = rootCA
-	}
 	bundle := &trustedBundle{
 		name:               name,
+		ca:                 ca,
 		systemCertificates: systemCertificates,
-		certificates:       certMap,
+		certificates:       []CertificateInterface{},
+	}
+	if ca != nil {
+		bundle.certificates = append(bundle.certificates, ca)
 	}
 	bundle.AddCertificates(certificates...)
 
@@ -98,11 +102,13 @@ func createTrustedBundle(includeSystemBundle bool, name string, rootCA Certifica
 // AddCertificates Adds the certificates to the bundle.
 func (t *trustedBundle) AddCertificates(certificates ...CertificateInterface) {
 	for _, cert := range certificates {
-		// cert.GetIssuer() is set only for certificates that are signed by our operator CA.
-		// If a certificate was not signed by our operator, we should add it to the bundle.
-		if cert != nil && cert.GetIssuer() == nil {
-			hash := rmeta.AnnotationHash(cert.GetCertificatePEM())
-			t.certificates[hash] = cert
+		if cert != nil {
+			// Only if a certificate was not signed by our operator, we should add it to the bundle.
+			if cert.GetIssuer() != nil && t.ca != nil &&
+				string(cert.GetIssuer().GetCertificatePEM()) == string(t.ca.GetCertificatePEM()) {
+				continue
+			}
+			t.certificates = append(t.certificates, cert)
 		}
 	}
 }
@@ -113,8 +119,8 @@ func (t *trustedBundle) MountPath() string {
 
 func (t *trustedBundle) HashAnnotations() map[string]string {
 	annotations := make(map[string]string)
-	for hash, cert := range t.certificates {
-		annotations[fmt.Sprintf("%s.hash.operator.tigera.io/%s", cert.GetNamespace(), cert.GetName())] = hash
+	for _, cert := range t.certificates {
+		annotations[fmt.Sprintf("%s.hash.operator.tigera.io/%s", cert.GetNamespace(), cert.GetName())] = rmeta.AnnotationHash(cert.GetCertificatePEM())
 	}
 	if len(t.systemCertificates) > 0 {
 		annotations["hash.operator.tigera.io/system"] = rmeta.AnnotationHash(t.systemCertificates)
@@ -168,10 +174,9 @@ func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 
 	// Sort the certificates so that we get a consistent ordering.
 	// This reduces the number of changes we see in the configmap.
-	certs := []CertificateInterface{}
-	for _, cert := range t.certificates {
-		certs = append(certs, cert)
-	}
+	var certs []CertificateInterface
+	certs = append(certs, t.certificates...)
+
 	sort.Slice(certs, func(i, j int) bool {
 		return certs[i].GetName() < certs[j].GetName()
 	})

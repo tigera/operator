@@ -246,6 +246,9 @@ var _ = Describe("Windows rendering tests", func() {
 				// The DaemonSet should have the correct configuration.
 				ds := dsResource.(*appsv1.DaemonSet)
 
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				// The calico-node-windows daemonset has 3 containers (felix, node and confd).
 				// confd is only instantiated if using BGP.
 				numContainers := 3
@@ -709,6 +712,9 @@ var _ = Describe("Windows rendering tests", func() {
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				// The calico-node-windows daemonset has 3 containers (felix, node and confd).
 				// confd is only instantiated if using BGP.
 				numContainers := 3
@@ -1140,6 +1146,9 @@ var _ = Describe("Windows rendering tests", func() {
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*appsv1.DaemonSet)
 
+		// The pod template should have node critical priority
+		Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 		// The calico-node-windows daemonset has 2 containers (felix, node) when using VXLAN
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(2))
 
@@ -1347,6 +1356,9 @@ var _ = Describe("Windows rendering tests", func() {
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*appsv1.DaemonSet)
 
+		// The pod template should have node critical priority
+		Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 		// CNI install container should not be present.
 		cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 		Expect(cniContainer).To(BeNil())
@@ -1487,6 +1499,9 @@ var _ = Describe("Windows rendering tests", func() {
 			// The DaemonSet should have the correct configuration.
 			ds := dsResource.(*appsv1.DaemonSet)
 
+			// The pod template should have node critical priority
+			Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 			// CNI install container should not be present.
 			cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 			Expect(cniContainer).To(BeNil())
@@ -1538,6 +1553,10 @@ var _ = Describe("Windows rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+
+		// The pod template should have node critical priority
+		Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 		felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
 		Expect(felixContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
@@ -1675,6 +1694,10 @@ var _ = Describe("Windows rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+
+		// The pod template should have node critical priority
+		Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 		felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
 		Expect(felixContainer.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraNodeWindows.Image, components.ComponentTigeraNodeWindows.Version)))
 		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
@@ -1827,6 +1850,10 @@ var _ = Describe("Windows rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+
+		// The pod template should have node critical priority
+		Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 		felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
 		Expect(felixContainer.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraNodeWindows.Image, components.ComponentTigeraNodeWindows.Version)))
 		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
@@ -1962,6 +1989,10 @@ var _ = Describe("Windows rendering tests", func() {
 
 			// The DaemonSet should have the correct configuration.
 			ds := dsResource.(*appsv1.DaemonSet)
+
+			// The pod template should have node critical priority
+			Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 			Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
 				corev1.NodeSelectorTerm{
 					MatchExpressions: []corev1.NodeSelectorRequirement{{
@@ -1985,6 +2016,10 @@ var _ = Describe("Windows rendering tests", func() {
 
 			// The DaemonSet should have the correct configuration.
 			ds := dsResource.(*appsv1.DaemonSet)
+
+			// The pod template should have node critical priority
+			Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 			Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
 				corev1.NodeSelectorTerm{
 					MatchExpressions: []corev1.NodeSelectorRequirement{{
@@ -2011,6 +2046,10 @@ var _ = Describe("Windows rendering tests", func() {
 
 			// The DaemonSet should have the correct configuration.
 			ds := dsResource.(*appsv1.DaemonSet)
+
+			// The pod template should have node critical priority
+			Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 			felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
 			rtest.ExpectEnv(felixContainer.Env, "IP_AUTODETECTION_METHOD", "can-reach=1.1.1.1")
 		})
@@ -2028,6 +2067,10 @@ var _ = Describe("Windows rendering tests", func() {
 
 			// The DaemonSet should have the correct configuration.
 			ds := dsResource.(*appsv1.DaemonSet)
+
+			// The pod template should have node critical priority
+			Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 			felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
 			rtest.ExpectEnv(felixContainer.Env, "IP_AUTODETECTION_METHOD", "interface=eth*")
 		})
@@ -2045,6 +2088,10 @@ var _ = Describe("Windows rendering tests", func() {
 
 			// The DaemonSet should have the correct configuration.
 			ds := dsResource.(*appsv1.DaemonSet)
+
+			// The pod template should have node critical priority
+			Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 			felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
 			rtest.ExpectEnv(felixContainer.Env, "IP_AUTODETECTION_METHOD", "skip-interface=eth*")
 		})
@@ -2062,6 +2109,10 @@ var _ = Describe("Windows rendering tests", func() {
 
 			// The DaemonSet should have the correct configuration.
 			ds := dsResource.(*appsv1.DaemonSet)
+
+			// The pod template should have node critical priority
+			Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 			felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
 			rtest.ExpectEnv(felixContainer.Env, "IP_AUTODETECTION_METHOD", "cidr=10.0.1.0/24,10.0.2.0/24")
 		})
@@ -2363,6 +2414,10 @@ var _ = Describe("Windows rendering tests", func() {
 
 		// The DaemonSet should have the correct configuration.
 		ds := dsResource.(*appsv1.DaemonSet)
+
+		// The pod template should have node critical priority
+		Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
 		felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
 

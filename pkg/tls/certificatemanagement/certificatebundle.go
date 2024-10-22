@@ -238,11 +238,12 @@ var certFiles = []string{
 func getSystemCertificates() ([]byte, error) {
 	for _, filename := range certFiles {
 		data, err := os.ReadFile(filename)
-		if err == nil {
+		if err != nil {
+			if !os.IsNotExist(err) {
+				return nil, fmt.Errorf(fmt.Sprintf("error occurred when loading system root certificate with name %s", filename), err)
+			}
+		} else {
 			return data, nil
-		}
-		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf(fmt.Sprintf("error occurred when loading system root certificate with name %s", filename), err)
 		}
 	}
 	return nil, nil

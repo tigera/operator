@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"sort"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -171,16 +170,7 @@ func (t *trustedBundle) Volume() corev1.Volume {
 
 func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 	pemBuf := bytes.Buffer{}
-
-	// Sort the certificates so that we get a consistent ordering.
-	// This reduces the number of changes we see in the configmap.
-	var certs []CertificateInterface
-	certs = append(certs, t.certificates...)
-
-	sort.Slice(certs, func(i, j int) bool {
-		return certs[i].GetName() < certs[j].GetName()
-	})
-	for _, cert := range certs {
+	for _, cert := range t.certificates {
 		pemBuf.WriteString(fmt.Sprintf("# certificate name: %s/%s\n%s\n\n", cert.GetNamespace(), cert.GetName(), string(cert.GetCertificatePEM())))
 	}
 

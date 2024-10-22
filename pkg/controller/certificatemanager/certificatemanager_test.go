@@ -698,10 +698,6 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			By("verifying the hash annotations and pem blocks of the bundle", func() {
 				bundle := trustedBundle.ConfigMap("").Data[certificatemanagement.TrustedCertConfigMapKeyName]
 				numBlocks := strings.Count(bundle, "certificate name:")
-				// While we have the ca + 4 certs, we expect 3 cert blocks (+ 2):
-				// - the certificateManager: this covers for all certs signed by the tigera root ca
-				// - the byo block (+ its ca block)
-				// - the legacy cert that already has ExtKeyUsageClient configured.
 				Expect(numBlocks).To(Equal(3))
 				Expect(trustedBundle.HashAnnotations()).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
 				Expect(trustedBundle.HashAnnotations()).To(HaveKey("tigera-operator.hash.operator.tigera.io/byo-secret-copy"))

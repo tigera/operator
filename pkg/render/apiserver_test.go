@@ -28,6 +28,7 @@ import (
 
 	"github.com/openshift/library-go/pkg/crypto"
 
+	calicov3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -38,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -258,7 +260,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
 
-		Expect(d.Spec.Template.Spec.Containers[1].Env).To(HaveLen(7))
+		Expect(d.Spec.Template.Spec.Containers[1].Env).To(HaveLen(6))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Name).To(Equal("LOGLEVEL"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Value).To(Equal("info"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].ValueFrom).To(BeNil())
@@ -274,10 +276,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Name).To(Equal("TLS_KEY"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Value).To(Equal("/tigera-apiserver-certs/tls.key"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[4].ValueFrom).To(BeNil())
-		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Name).To(Equal("FIPS_MODE_ENABLED"))
-		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Value).To(Equal("false"))
-		Expect(d.Spec.Template.Spec.Containers[1].Env[6].Name).To(Equal("TRUSTED_BUNDLE_PATH"))
-		Expect(d.Spec.Template.Spec.Containers[1].Env[6].Value).To(Equal("/etc/pki/tls/certs/tigera-ca-bundle.crt"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Name).To(Equal("TRUSTED_BUNDLE_PATH"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Value).To(Equal("/etc/pki/tls/certs/tigera-ca-bundle.crt"))
 
 		// Expect the SECURITY_GROUP env variables to not be set
 		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
@@ -363,17 +363,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Verbs:         []string{"use"},
 			ResourceNames: []string{"privileged"},
 		}))
-	})
-
-	It("should render the env variable for queryserver when FIPS is enabled", func() {
-		fipsEnabled := operatorv1.FIPSModeEnabled
-		cfg.Installation.FIPSMode = &fipsEnabled
-		component, err := render.APIServer(cfg)
-		Expect(err).NotTo(HaveOccurred())
-		resources, _ := component.Objects()
-		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
-		Expect(d.Spec.Template.Spec.Containers[1].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
 	})
 
 	It("should render an API server with custom configuration", func() {
@@ -660,6 +649,50 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		deployment := deploymentResource.(*appsv1.Deployment)
 		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
+	})
+
+	It("should add egress policy with Enterprise variant and K8SServiceEndpoint defined", func() {
+		cfg.K8SServiceEndpoint.Host = "k8shost"
+		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.ForceHostNetwork = true
+
+		component := render.APIServerPolicy(cfg)
+		resources, _ := component.Objects()
+		policyName := types.NamespacedName{Name: "allow-tigera.cnx-apiserver-access", Namespace: "tigera-system"}
+		policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+		Expect(policy).ToNot(BeNil())
+		Expect(policy.Spec).ToNot(BeNil())
+		Expect(policy.Spec.Egress).ToNot(BeNil())
+		Expect(policy.Spec.Egress).To(ContainElement(calicov3.Rule{
+			Action:   calicov3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: calicov3.EntityRule{
+				Ports:   networkpolicy.Ports(1234),
+				Domains: []string{"k8shost"},
+			},
+		}))
+	})
+
+	It("should add egress policy with Enterprise variant and K8SServiceEndpoint as IP defined", func() {
+		cfg.K8SServiceEndpoint.Host = "169.169.169.169"
+		cfg.K8SServiceEndpoint.Port = "4321"
+		cfg.ForceHostNetwork = false
+
+		component := render.APIServerPolicy(cfg)
+		resources, _ := component.Objects()
+		policyName := types.NamespacedName{Name: "allow-tigera.cnx-apiserver-access", Namespace: "tigera-system"}
+		policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+		Expect(policy).ToNot(BeNil())
+		Expect(policy.Spec).ToNot(BeNil())
+		Expect(policy.Spec.Egress).ToNot(BeNil())
+		Expect(policy.Spec.Egress).To(ContainElement(calicov3.Rule{
+			Action:   calicov3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: calicov3.EntityRule{
+				Ports: networkpolicy.Ports(4321),
+				Nets:  []string{"169.169.169.169/32"},
+			},
+		}))
 	})
 
 	It("should not set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with proxy.local", func() {
@@ -1031,6 +1064,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 									Name:      "tigera-queryserver",
 									Resources: &rr2,
 								},
+								{
+									Name:      "calico-l7-admission-controller",
+									Resources: &rr2,
+								},
 							},
 							InitContainers: []operatorv1.APIServerDeploymentInitContainer{
 								{
@@ -1308,6 +1345,11 @@ var (
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"hostendpoints"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{
 				"alertexceptions",
 				"globalalerts",
@@ -1443,6 +1485,11 @@ var (
 		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"clusterinformations"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"hostendpoints"},
 			Verbs:     []string{"get", "list"},
 		},
 		{
@@ -2052,6 +2099,23 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
+		})
+
+		It("should render toleration on GKE", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+
+			component, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred(), "Expected APIServer to create successfully %s", err)
+			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d).NotTo(BeNil())
+			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElement(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
 		})
 
 		It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {

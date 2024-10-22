@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
@@ -227,6 +228,10 @@ func (pc *packetCaptureApiComponent) clusterRoleBinding() *rbacv1.ClusterRoleBin
 }
 
 func (pc *packetCaptureApiComponent) deployment() *appsv1.Deployment {
+	tolerations := append(pc.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
+	if pc.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -247,7 +252,7 @@ func (pc *packetCaptureApiComponent) deployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					NodeSelector:       pc.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: PacketCaptureServiceAccountName,
-					Tolerations:        append(pc.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...),
+					Tolerations:        tolerations,
 					ImagePullSecrets:   secret.GetReferenceList(pc.cfg.PullSecrets),
 					InitContainers:     pc.initContainers(),
 					Containers:         []corev1.Container{pc.container()},
@@ -282,7 +287,6 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 		{Name: "PACKETCAPTURE_API_LOG_LEVEL", Value: "Info"},
 		{Name: "PACKETCAPTURE_API_HTTPS_KEY", Value: pc.cfg.ServerCertSecret.VolumeMountKeyFilePath()},
 		{Name: "PACKETCAPTURE_API_HTTPS_CERT", Value: pc.cfg.ServerCertSecret.VolumeMountCertificateFilePath()},
-		{Name: "PACKETCAPTURE_API_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(pc.cfg.Installation.FIPSMode)},
 	}
 
 	if pc.cfg.KeyValidatorConfig != nil {

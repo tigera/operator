@@ -36,11 +36,30 @@ type ApplicationLayerSpec struct {
 	// L7LogCollectorDaemonSet configures the L7LogCollector DaemonSet.
 	// +optional
 	L7LogCollectorDaemonSet *L7LogCollectorDaemonSet `json:"l7LogCollectorDaemonSet,omitempty"`
+
+	// SidecarInjection controls whether or not sidecar injection is enabled for the cluster.
+	// When enabled, pods with the label
+	// "applicationlayer.projectcalico.org/sidecar"="true" will have their L7 functionality
+	// such as WAF and ALP implemented using an injected sidecar instead of a per-host proxy.
+	// The per-host proxy will continue to be used for pods without this label.
+	// +optional
+	SidecarInjection *SidecarStatusType `json:"sidecarInjection,omitempty"`
 }
 
+// +kubebuilder:validation:Enum=Enabled;Disabled
 type LogCollectionStatusType string
+
+// +kubebuilder:validation:Enum=Enabled;Disabled
 type WAFStatusType string
+
+// +kubebuilder:validation:Enum=Enabled;Disabled
 type ApplicationLayerPolicyStatusType string
+
+// +kubebuilder:validation:Enum=Enabled;Disabled
+type SidecarStatusType string
+
+// +kubebuilder:validation:Enum=Enabled;Disabled
+type SidecarWebhookStateType string
 
 const (
 	WAFDisabled                    WAFStatusType                    = "Disabled"
@@ -49,6 +68,10 @@ const (
 	L7LogCollectionEnabled         LogCollectionStatusType          = "Enabled"
 	ApplicationLayerPolicyEnabled  ApplicationLayerPolicyStatusType = "Enabled"
 	ApplicationLayerPolicyDisabled ApplicationLayerPolicyStatusType = "Disabled"
+	SidecarEnabled                 SidecarStatusType                = "Enabled"
+	SidecarDisabled                SidecarStatusType                = "Disabled"
+	SidecarWebhookStateEnabled     SidecarWebhookStateType          = "Enabled"
+	SidecarWebhookStateDisabled    SidecarWebhookStateType          = "Disabled"
 )
 
 type EnvoySettings struct {
@@ -91,6 +114,9 @@ type LogCollectionSpec struct {
 type ApplicationLayerStatus struct {
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`
+
+	// SidecarWebhook provides the state of sidecar injection mutatinwebhookconfiguration
+	SidecarWebhook *SidecarWebhookStateType `json:"sidecarWebhook,omitempty"`
 
 	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
 	// Ready, Progressing, Degraded or other customer types.

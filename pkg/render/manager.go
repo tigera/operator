@@ -130,6 +130,7 @@ type ManagerConfiguration struct {
 	OpenShift          bool
 	Installation       *operatorv1.InstallationSpec
 	ManagementCluster  *operatorv1.ManagementCluster
+	NonClusterHost     *operatorv1.NonClusterHost
 
 	// If provided, the KeyPair to used for external connections terminated by Voltron,
 	// and connections from the manager pod to Linseed.
@@ -142,7 +143,7 @@ type ManagerConfiguration struct {
 	// KeyPair used by Voltron as the server certificate when establishing an mTLS tunnel with Guardian.
 	TunnelServerCert certificatemanagement.KeyPairInterface
 
-	// TLS KeyPair used by both Voltron and es-proxy, presented by each as part of the mTLS handshake with
+	// TLS KeyPair used by both Voltron and ui-apis, presented by each as part of the mTLS handshake with
 	// other services within the cluster. This is used in both management and standalone clusters.
 	InternalTLSKeyPair certificatemanagement.KeyPairInterface
 
@@ -174,7 +175,7 @@ type managerComponent struct {
 	tlsAnnotations map[string]string
 	managerImage   string
 	proxyImage     string
-	esProxyImage   string
+	uiAPIsImage    string
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -193,13 +194,13 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
+	c.uiAPIsImage, err = components.GetReference(components.ComponentUIAPIs, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -284,7 +285,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		initContainers = append(initContainers, c.cfg.VoltronLinseedKeyPair.InitContainer(ManagerNamespace))
 	}
 
-	managerPodContainers := []corev1.Container{c.managerEsProxyContainer(), c.voltronContainer()}
+	managerPodContainers := []corev1.Container{c.managerUIAPIsContainer(), c.voltronContainer()}
 	if c.cfg.Tenant == nil {
 		managerPodContainers = append(managerPodContainers, c.managerContainer())
 	}
@@ -385,8 +386,8 @@ func (c *managerComponent) managerProbe() *corev1.Probe {
 	}
 }
 
-// managerEsProxyProbe returns the probe for the ES proxy container.
-func (c *managerComponent) managerEsProxyProbe() *corev1.Probe {
+// managerUIAPIsProbe returns the probe for the ES proxy container.
+func (c *managerComponent) managerUIAPIsProbe() *corev1.Probe {
 	return &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
@@ -413,14 +414,6 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 	}
 }
 
-func KibanaEnabled(tenant *operatorv1.Tenant, installation *operatorv1.InstallationSpec) bool {
-	enableKibana := !operatorv1.IsFIPSModeEnabled(installation.FIPSMode)
-	if tenant.MultiTenant() {
-		enableKibana = false
-	}
-	return enableKibana
-}
-
 // managerEnvVars returns the envvars for the manager container.
 func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
@@ -435,7 +428,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
-		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(KibanaEnabled(c.cfg.Tenant, c.cfg.Installation))},
+		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(!c.cfg.Tenant.MultiTenant())},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -521,10 +514,10 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_INTERNAL_HTTPS_KEY", Value: intKeyPath},
 		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: intCertPath},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
+		{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST_LOG_INGESTION", Value: strconv.FormatBool(c.cfg.NonClusterHost != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: defaultForwardServer},
 		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.ComplianceLicenseActive)},
-		{Name: "VOLTRON_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 	}
 
 	if c.cfg.VoltronRouteConfig != nil {
@@ -544,10 +537,14 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	// Determine the volume mounts to use. This varies based on the type of cluster.
 	mounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
 	mounts = append(mounts, corev1.VolumeMount{Name: ManagerTLSSecretName, MountPath: "/manager-tls", ReadOnly: true})
-	if c.cfg.ManagementCluster != nil {
+	if c.cfg.ManagementCluster != nil || c.cfg.NonClusterHost != nil {
+		// We need the internal tls key pair for voltron and linseed mtls connection
+		// when in a management cluster or non-cluster host log ingestion is enabled.
 		mounts = append(mounts, c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()))
-		mounts = append(mounts, c.cfg.TunnelServerCert.VolumeMount(c.SupportedOSType()))
-		mounts = append(mounts, c.cfg.VoltronLinseedKeyPair.VolumeMount(c.SupportedOSType()))
+		if c.cfg.ManagementCluster != nil {
+			mounts = append(mounts, c.cfg.TunnelServerCert.VolumeMount(c.SupportedOSType()))
+			mounts = append(mounts, c.cfg.VoltronLinseedKeyPair.VolumeMount(c.SupportedOSType()))
+		}
 	}
 
 	linseedEndpointEnv := corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc.%s", ElasticsearchNamespace, c.cfg.ClusterDomain)}
@@ -586,8 +583,8 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	}
 }
 
-// managerEsProxyContainer returns the ES proxy container
-func (c *managerComponent) managerEsProxyContainer() corev1.Container {
+// managerUIAPIsContainer returns the ES proxy container
+func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 	var keyPath, certPath string
 	if c.cfg.InternalTLSKeyPair != nil {
 		// This should never be nil, but we check it anyway just to be safe.
@@ -597,10 +594,9 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "ELASTIC_LICENSE_TYPE", Value: string(c.cfg.ESLicenseType)},
 		{Name: "ELASTIC_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
-		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
-		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(!KibanaEnabled(c.cfg.Tenant, c.cfg.Installation))},
+		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant())},
 		{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", c.cfg.Namespace)},
 	}
 
@@ -633,10 +629,10 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "tigera-es-proxy",
-		Image:           c.esProxyImage,
+		Name:            "tigera-ui-apis",
+		Image:           c.uiAPIsImage,
 		ImagePullPolicy: ImagePullPolicy(),
-		LivenessProbe:   c.managerEsProxyProbe(),
+		LivenessProbe:   c.managerUIAPIsProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
@@ -645,7 +641,11 @@ func (c *managerComponent) managerEsProxyContainer() corev1.Container {
 
 // managerTolerations returns the tolerations for the Tigera Secure manager deployment pods.
 func (c *managerComponent) managerTolerations() []corev1.Toleration {
-	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+	return tolerations
 }
 
 // managerService returns the service exposing the Tigera Secure web app.
@@ -976,7 +976,7 @@ func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
 
 	// In a single tenant setup we want to create a role that binds using service account
 	// tigera-manager from tigera-manager namespace. In a multi-tenant setup
-	// ESProxy from the tenant's namespace impersonates service tigera-manager
+	// ui-apis from the tenant's namespace impersonates service tigera-manager
 	// from tigera-manager namespace
 	objects = append(objects, &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -987,7 +987,7 @@ func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
 			Name:     MultiTenantManagedClustersAccessClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
-			// requests for ESProxy to managed clusters are done using service account tigera-manager
+			// requests from ui-apis to managed clusters are done using service account tigera-manager
 			// from tigera-manager namespace regardless of tenancy mode (single tenant or multi-tenant)
 			{
 				Kind:      "ServiceAccount",

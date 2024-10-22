@@ -148,7 +148,7 @@ func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
 		}
 	}
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -287,7 +287,6 @@ func (l *linseed) multiTenantManagedClustersAccess() []client.Object {
 func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	envVars := []corev1.EnvVar{
 		{Name: "LINSEED_LOG_LEVEL", Value: "INFO"},
-		{Name: "LINSEED_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(l.cfg.Installation.FIPSMode)},
 
 		// Configure Linseed server certificate.
 		{Name: "LINSEED_HTTPS_CERT", Value: l.cfg.KeyPair.VolumeMountCertificateFilePath()},
@@ -419,6 +418,10 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		}
 		annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
 	}
+	tolerations := l.cfg.Installation.ControlPlaneTolerations
+	if l.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        DeploymentName,
@@ -426,7 +429,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:        l.cfg.Installation.ControlPlaneTolerations,
+			Tolerations:        tolerations,
 			NodeSelector:       l.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: ServiceAccountName,
 			ImagePullSecrets:   secret.GetReferenceList(l.cfg.PullSecrets),

@@ -330,7 +330,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		}
 	}
 	if len(errMsgs) != 0 {
-		return reconcile.Result{}, fmt.Errorf(strings.Join(errMsgs, ";"))
+		return reconcile.Result{}, fmt.Errorf("%s", strings.Join(errMsgs, ";"))
 	}
 
 	if unreadyEGW != nil {

@@ -411,7 +411,6 @@ var _ = Describe("Windows rendering tests", func() {
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 
 					{Name: "VXLAN_VNI", Value: "4096"},
 					{Name: "VXLAN_ADAPTER", Value: ""},
@@ -874,7 +873,6 @@ var _ = Describe("Windows rendering tests", func() {
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-					{Name: "FIPS_MODE_ENABLED", Value: "false"},
 
 					{Name: "VXLAN_VNI", Value: "4096"},
 					{Name: "VXLAN_ADAPTER", Value: ""},
@@ -1197,7 +1195,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-			{Name: "FIPS_MODE_ENABLED", Value: "false"},
 
 			{Name: "VXLAN_VNI", Value: "4096"},
 			{Name: "VXLAN_ADAPTER", Value: ""},
@@ -1395,7 +1392,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
 			{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"},
-			{Name: "FIPS_MODE_ENABLED", Value: "false"},
 
 			{Name: "VXLAN_VNI", Value: "4096"},
 			{Name: "VXLAN_ADAPTER", Value: ""},
@@ -1632,8 +1628,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
-			{Name: "FIPS_MODE_ENABLED", Value: "false"},
-
 			// Calico Windows specific envvars
 			{Name: "VXLAN_VNI", Value: "4096"},
 			{Name: "VXLAN_ADAPTER", Value: ""},
@@ -1770,8 +1764,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-
-			{Name: "FIPS_MODE_ENABLED", Value: "false"},
 
 			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"},
 
@@ -1922,8 +1914,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
-
-			{Name: "FIPS_MODE_ENABLED", Value: "false"},
 
 			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:kube-system/rke2-coredns-rke2-coredns"},
 
@@ -2398,7 +2388,6 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "USE_POD_CIDR", Value: "true"},
 			{Name: "FELIX_DEFAULTENDPOINTTOHOSTACTION", Value: "ACCEPT"},
 			{Name: "FELIX_HEALTHENABLED", Value: "true"},
-			{Name: "FIPS_MODE_ENABLED", Value: "false"},
 			{
 				Name: "NODENAME",
 				ValueFrom: &corev1.EnvVarSource{

@@ -110,13 +110,7 @@ const (
 )
 
 const (
-	// ElasticsearchKeystoreSecret Currently only used when FIPS mode is enabled, we need to initialize the keystore with a password.
-	ElasticsearchKeystoreSecret         = "tigera-secure-elasticsearch-keystore"
-	ElasticsearchKeystoreEnvName        = "KEYSTORE_PASSWORD"
-	ElasticsearchKeystoreHashAnnotation = "hash.operator.tigera.io/keystore-password"
-
-	keystoreInitContainerName = "elastic-internal-init-keystore"
-	csrRootCAConfigMapName    = "elasticsearch-config"
+	csrRootCAConfigMapName = "elasticsearch-config"
 )
 
 // Certificate management constants.
@@ -175,8 +169,6 @@ type ElasticsearchConfiguration struct {
 	ElasticLicenseType      ElasticsearchLicenseType
 	TrustedBundle           certificatemanagement.TrustedBundleRO
 	UnusedTLSSecret         *corev1.Secret
-	ApplyTrial              bool
-	KeyStoreSecret          *corev1.Secret
 }
 
 type elasticsearchComponent struct {
@@ -189,12 +181,10 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := es.cfg.Installation.Registry
 	path := es.cfg.Installation.ImagePath
 	prefix := es.cfg.Installation.ImagePrefix
+
 	var err error
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		es.esImage, err = components.GetReference(components.ComponentElasticsearchFIPS, reg, path, prefix, is)
-	} else {
-		es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
-	}
+	es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
+
 	errMsgs := make([]string, 0)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
@@ -208,7 +198,7 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -256,15 +246,6 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.elasticsearchClusterRole(), es.elasticsearchClusterRoleBinding())
 	}
 
-	if es.cfg.KeyStoreSecret != nil {
-		if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-			es.cfg.KeyStoreSecret.Data["ES_JAVA_OPTS"] = []byte(es.javaOpts())
-		}
-
-		toCreate = append(toCreate, es.cfg.KeyStoreSecret)
-		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.KeyStoreSecret)...)...)
-	}
-
 	// Curator is no longer supported in ElasticSearch beyond version 8 so remove its resources here unconditionally so
 	// that on upgrade we clean up after ourselves. Eventually we can remove this cleanup code as well.
 	toDelete = append(toDelete, es.curatorDecommissionedResources()...)
@@ -298,7 +279,7 @@ func (es *elasticsearchComponent) Ready() bool {
 	return true
 }
 
-func (es elasticsearchComponent) elasticsearchServiceAccount() *corev1.ServiceAccount {
+func (es *elasticsearchComponent) elasticsearchServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchObjectName,
@@ -308,14 +289,14 @@ func (es elasticsearchComponent) elasticsearchServiceAccount() *corev1.ServiceAc
 }
 
 // generate the PVC required for the Elasticsearch nodes
-func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
+func (es *elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 	pvcTemplate := corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "elasticsearch-data", // ECK requires this name
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources: corev1.ResourceRequirements{
+			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					"storage": resource.MustParse(fmt.Sprintf("%dGi", DefaultElasticStorageGi)),
 				},
@@ -333,7 +314,7 @@ func (es elasticsearchComponent) pvcTemplate() corev1.PersistentVolumeClaim {
 	return pvcTemplate
 }
 
-func (es elasticsearchComponent) resourceRequirements() corev1.ResourceRequirements {
+func (es *elasticsearchComponent) resourceRequirements() corev1.ResourceRequirements {
 	resources := corev1.ResourceRequirements{
 		Limits: corev1.ResourceList{
 			"cpu":    resource.MustParse("1"),
@@ -351,7 +332,7 @@ func (es elasticsearchComponent) resourceRequirements() corev1.ResourceRequireme
 	return resources
 }
 
-func (es elasticsearchComponent) javaOpts() string {
+func (es *elasticsearchComponent) javaOpts() string {
 	var javaOpts string
 	resources := es.resourceRequirements()
 	if es.cfg.LogStorage.Spec.Nodes != nil && es.cfg.LogStorage.Spec.Nodes.ResourceRequirements != nil {
@@ -361,50 +342,20 @@ func (es elasticsearchComponent) javaOpts() string {
 	} else {
 		javaOpts = "-Xms2G -Xmx2G"
 	}
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		javaOpts = fmt.Sprintf("%s --module-path /usr/share/bc-fips/ "+
-			"-Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks "+
-			"-Djavax.net.ssl.trustStoreType=BCFKS "+
-			"-Djavax.net.ssl.trustStorePassword=%s "+
-			"-Dorg.bouncycastle.fips.approved_only=true", javaOpts, es.cfg.KeyStoreSecret.Data[ElasticsearchKeystoreEnvName])
-	}
 	return javaOpts
 }
 
 // Generate the pod template required for the ElasticSearch nodes (controls the ElasticSearch container)
-func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
+func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	// Setup default configuration for ES container. For more information on managing resources, see:
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-managing-compute-resources.html and
 	// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-jvm-heap-size.html#k8s-jvm-heap-size
 
-	var env []corev1.EnvVar
-
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		// We mount it from a secret, as it contains sensitive information.
-		env = append(env,
-			corev1.EnvVar{
-				Name: ElasticsearchKeystoreEnvName,
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
-						Key:                  ElasticsearchKeystoreEnvName,
-					},
-				},
-			},
-			corev1.EnvVar{
-				Name: "ES_JAVA_OPTS",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
-						Key:                  "ES_JAVA_OPTS",
-					},
-				},
-			})
-	} else {
-		env = append(env, corev1.EnvVar{
+	env := []corev1.EnvVar{
+		{
 			Name:  "ES_JAVA_OPTS",
 			Value: es.javaOpts(),
-		})
+		},
 	}
 
 	sc := securitycontext.NewRootContext(false)
@@ -455,41 +406,6 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	annotations := es.cfg.TrustedBundle.HashAnnotations()
 	annotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret)
 	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
-
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		sc := securitycontext.NewRootContext(false)
-		// keystore init container converts jdk jks to bcfks and chown the new file to
-		// elasticsearch user and group for the main container to consume.
-		sc.Capabilities.Add = []corev1.Capability{"CHOWN"}
-
-		initKeystore := corev1.Container{
-			Name:            keystoreInitContainerName,
-			Image:           es.esImage,
-			ImagePullPolicy: ImagePullPolicy(),
-			Env: []corev1.EnvVar{
-				{
-					Name: ElasticsearchKeystoreEnvName,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
-							Key:                  ElasticsearchKeystoreEnvName,
-						},
-					},
-				},
-				{
-					Name:  "ES_JAVA_OPTS",
-					Value: "--module-path /usr/share/bc-fips/",
-				},
-			},
-			// This is a script made by Tigera in our docker image to initialize the JVM keystore and the ES keystore
-			// using the password from env var KEYSTORE_PASSWORD.
-			Command:         []string{"/bin/sh"},
-			Args:            []string{"-c", "/usr/bin/initialize_keystore.sh"},
-			SecurityContext: sc,
-		}
-		initContainers = append(initContainers, initKeystore)
-		annotations[ElasticsearchKeystoreHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.KeyStoreSecret)
-	}
 
 	var volumes []corev1.Volume
 
@@ -587,6 +503,11 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		nodeSels = es.cfg.LogStorage.Spec.DataNodeSelector
 	}
 
+	tolerations := es.cfg.Installation.ControlPlaneTolerations
+	if es.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: annotations,
@@ -596,7 +517,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			Containers:                   []corev1.Container{esContainer},
 			ImagePullSecrets:             secret.GetReferenceList(es.cfg.PullSecrets),
 			NodeSelector:                 nodeSels,
-			Tolerations:                  es.cfg.Installation.ControlPlaneTolerations,
+			Tolerations:                  tolerations,
 			ServiceAccountName:           ElasticsearchObjectName,
 			Volumes:                      volumes,
 			AutomountServiceAccountToken: &autoMountToken,
@@ -607,7 +528,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
-func (es elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
+func (es *elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 	elasticsearch := &esv1.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -700,7 +621,7 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 // nodeSets calculates the number of NodeSets needed for the Elasticsearch cluster. Multiple NodeSets are returned only
 // if the "nodeSets" field has been set in the LogStorage CR. The number of Nodes for the cluster will be distributed as
 // evenly as possible between the NodeSets.
-func (es elasticsearchComponent) nodeSets() []esv1.NodeSet {
+func (es *elasticsearchComponent) nodeSets() []esv1.NodeSet {
 	nodeConfig := es.cfg.LogStorage.Spec.Nodes
 	pvcTemplate := es.pvcTemplate()
 
@@ -794,7 +715,7 @@ func (es elasticsearchComponent) nodeSets() []esv1.NodeSet {
 //
 // Note that this does not return a complete NodeSet, fields like Name and Count will at least need to be set on the returned
 // NodeSet
-func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVolumeClaim) esv1.NodeSet {
+func (es *elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVolumeClaim) esv1.NodeSet {
 	config := map[string]interface{}{
 		"node.master":                 "true",
 		"node.data":                   "true",
@@ -806,10 +727,6 @@ func (es elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVo
 
 	if es.cfg.Installation.CertificateManagement != nil {
 		config["xpack.security.http.ssl.certificate_authorities"] = []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"}
-	}
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		config["xpack.security.fips_mode.enabled"] = "true"
-		config["xpack.security.authc.password_hashing.algorithm"] = "pbkdf2_stretch"
 	}
 
 	return esv1.NodeSet{
@@ -843,7 +760,7 @@ func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim) string {
 
 // This is a list of components that belong to Curator which has been decommissioned since it is no longer supported
 // in Elasticsearch beyond version 8. We want to be able to clean up these resources if they exist in the cluster on upgrade.
-func (es elasticsearchComponent) curatorDecommissionedResources() []client.Object {
+func (es *elasticsearchComponent) curatorDecommissionedResources() []client.Object {
 	resources := []client.Object{
 		&batchv1.CronJob{
 			ObjectMeta: metav1.ObjectMeta{
@@ -884,7 +801,7 @@ func (es elasticsearchComponent) curatorDecommissionedResources() []client.Objec
 	return resources
 }
 
-func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {
+func (es *elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -901,7 +818,7 @@ func (es elasticsearchComponent) elasticsearchClusterRole() *rbacv1.ClusterRole 
 	}
 }
 
-func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (es *elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: ElasticsearchObjectName,
@@ -921,7 +838,7 @@ func (es elasticsearchComponent) elasticsearchClusterRoleBinding() *rbacv1.Clust
 	}
 }
 
-func (es elasticsearchComponent) oidcUserRole() client.Object {
+func (es *elasticsearchComponent) oidcUserRole() client.Object {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -945,7 +862,7 @@ func (es elasticsearchComponent) oidcUserRole() client.Object {
 	}
 }
 
-func (es elasticsearchComponent) oidcUserRoleBinding() client.Object {
+func (es *elasticsearchComponent) oidcUserRoleBinding() client.Object {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1118,7 +1035,7 @@ func overrideResourceRequirements(defaultReq corev1.ResourceRequirements, userOv
 // - If user provided both Limits and Requests, use them
 // - If user has provided just Limits, and Limits is <= default Requests, set Requests value as user's Limits value.
 // We don not set default Limits for storage, so don't have to handle case where user has set only Requests.
-func overridePvcRequirements(defaultReq corev1.ResourceRequirements, userOverrides corev1.ResourceRequirements) corev1.ResourceRequirements {
+func overridePvcRequirements(defaultReq corev1.VolumeResourceRequirements, userOverrides corev1.ResourceRequirements) corev1.VolumeResourceRequirements {
 	updatedReq := defaultReq
 	if _, ok := userOverrides.Limits["storage"]; ok {
 		updatedReq.Limits = corev1.ResourceList{

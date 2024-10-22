@@ -21,8 +21,6 @@ import (
 	"encoding/pem"
 	"fmt"
 
-	kerror "k8s.io/apimachinery/pkg/api/errors"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -32,6 +30,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -580,12 +579,12 @@ var _ = Describe("Manager controller tests", func() {
 						fmt.Sprintf("some.registry.org/%s:%s",
 							components.ComponentManager.Image,
 							components.ComponentManager.Version)))
-					esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
-					Expect(esproxy).ToNot(BeNil())
-					Expect(esproxy.Image).To(Equal(
+					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
+					Expect(uiAPIContainer).ToNot(BeNil())
+					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
-							components.ComponentEsProxy.Image,
-							components.ComponentEsProxy.Version)))
+							components.ComponentUIAPIs.Image,
+							components.ComponentUIAPIs.Version)))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
@@ -600,7 +599,7 @@ var _ = Describe("Manager controller tests", func() {
 						Spec: operatorv1.ImageSetSpec{
 							Images: []operatorv1.Image{
 								{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
-								{Image: "tigera/es-proxy", Digest: "sha256:esproxyhash"},
+								{Image: "tigera/ui-apis", Digest: "sha256:uiapihash"},
 								{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
 								{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 							},
@@ -624,12 +623,12 @@ var _ = Describe("Manager controller tests", func() {
 						fmt.Sprintf("some.registry.org/%s@%s",
 							components.ComponentManager.Image,
 							"sha256:cnxmanagerhash")))
-					esproxy := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-es-proxy")
-					Expect(esproxy).ToNot(BeNil())
-					Expect(esproxy.Image).To(Equal(
+					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
+					Expect(uiAPIContainer).ToNot(BeNil())
+					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
-							components.ComponentEsProxy.Image,
-							"sha256:esproxyhash")))
+							components.ComponentUIAPIs.Image,
+							"sha256:uiapihash")))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
@@ -1057,13 +1056,73 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 				})
 			})
+
+			Context("non-cluster host", func() {
+				It("should read NonClusterHost resource", func() {
+					nonclusterhost := &operatorv1.NonClusterHost{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "tigera-secure",
+						},
+						Spec: operatorv1.NonClusterHostSpec{
+							Endpoint: "https://1.2.3.4:5678",
+						},
+					}
+					Expect(c.Create(ctx, nonclusterhost)).NotTo(HaveOccurred())
+
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).NotTo(HaveOccurred())
+
+					d := appsv1.Deployment{
+						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "tigera-manager",
+							Namespace: render.ManagerNamespace,
+						},
+					}
+					Expect(test.GetResource(c, &d)).To(BeNil())
+					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+					voltron := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-voltron")
+					Expect(voltron).NotTo(BeNil())
+					Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST_LOG_INGESTION", Value: "true"}))
+				})
+
+				It("should return error when endpoint is invalid", func() {
+					mockStatus.On("SetDegraded", operatorv1.ResourceReadError, "Failed to read parse endpoint from NonClusterHost resource", mock.Anything, mock.Anything).Return().Maybe()
+
+					nonclusterhost := &operatorv1.NonClusterHost{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "tigera-secure",
+						},
+						Spec: operatorv1.NonClusterHostSpec{
+							Endpoint: "invalid-endpoint-url",
+						},
+					}
+					Expect(c.Create(ctx, nonclusterhost)).NotTo(HaveOccurred())
+
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).To(HaveOccurred())
+				})
+
+				It("should return error when spec is missing from the NonClusterHost resource", func() {
+					mockStatus.On("SetDegraded", operatorv1.ResourceReadError, "Failed to read parse endpoint from NonClusterHost resource", mock.Anything, mock.Anything).Return().Maybe()
+
+					nonclusterhost := &operatorv1.NonClusterHost{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "tigera-secure",
+						},
+					}
+					Expect(c.Create(ctx, nonclusterhost)).NotTo(HaveOccurred())
+
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).To(HaveOccurred())
+				})
+			})
 		})
 
 		Context("multi-tenant", func() {
 			tenantANamespace := "tenant-a"
 			tenantBNamespace := "tenant-b"
 			BeforeEach(func() {
-
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
@@ -1136,11 +1195,9 @@ var _ = Describe("Manager controller tests", func() {
 					},
 				})
 				Expect(err).NotTo(HaveOccurred())
-
 			})
 
 			It("should reconcile only if a namespace is provided", func() {
-
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -1229,7 +1286,6 @@ var _ = Describe("Manager controller tests", func() {
 			})
 
 			It("should apply TLSRoutes in from the manager namespace", func() {
-
 				Expect(c.Create(ctx, &operatorv1.TLSTerminatedRoute{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: tenantANamespace,

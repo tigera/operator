@@ -18,9 +18,6 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/tls"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -38,13 +35,15 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"github.com/tigera/operator/pkg/render/common/meta"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 )
@@ -176,7 +175,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 									"--ca.crt=/etc/pki/tls/certs/tigera-ca-bundle.crt",
 								},
 								Env: []corev1.EnvVar{
-									{Name: "FIPS_MODE_ENABLED", Value: "false"},
 									{
 										Name: "ELASTIC_USERNAME",
 										ValueFrom: &corev1.EnvVarSource{
@@ -204,8 +202,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 									{Name: "ELASTIC_CA", Value: certificatemanagement.TrustedCertBundleMountPath},
 								},
 								VolumeMounts: append(
-									cfg.TrustedBundle.VolumeMounts(meta.OSTypeLinux),
-									cfg.ServerTLS.VolumeMount(meta.OSTypeLinux),
+									cfg.TrustedBundle.VolumeMounts(rmeta.OSTypeLinux),
+									cfg.ServerTLS.VolumeMount(rmeta.OSTypeLinux),
 								),
 							}},
 							ServiceAccountName: ElasticsearchMetricsName,
@@ -306,6 +304,22 @@ var _ = Describe("Elasticsearch metrics", func() {
 			Expect(initContainer).NotTo(BeNil())
 			Expect(initContainer.Resources).To(Equal(esMetricsResources))
 
+		})
+
+		It("should render toleration on GKE", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+			component := ElasticsearchMetrics(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			d, ok := rtest.GetResource(resources, "tigera-elasticsearch-metrics", render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue())
+			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
 		})
 
 		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {

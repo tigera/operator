@@ -101,13 +101,6 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with .Components.elasticsearch }}
-	ComponentElasticsearchFIPS = Component{
-		Version:  "{{ .Version }}-fips",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
 {{ with index .Components "eck-elasticsearch-operator" }}
 	ComponentECKElasticsearchOperator = Component{
 		Version:  "{{ .Version }}",
@@ -121,8 +114,8 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "es-proxy" }}
-	ComponentEsProxy = Component{
+{{ with index .Components "ui-apis" }}
+	ComponentUIAPIs = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -247,6 +240,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "l7-admission-controller" }}
+	ComponentL7AdmissionController = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = Component{
 		Version:  "{{ .Version }}",
@@ -322,13 +322,6 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "tigera-cni" }}
-	ComponentTigeraCNIFIPS = Component{
-		Version:  "{{ .Version }}-fips",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
 {{ with index .Components "tigera-cni-windows" }}
 	ComponentTigeraCNIWindows = Component{
 		Version:  "{{ .Version }}",
@@ -377,9 +370,8 @@ var (
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
-		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
-		ComponentEsProxy,
+		ComponentUIAPIs,
 		ComponentFluentd,
 		ComponentFluentdWindows,
 		ComponentGuardian,
@@ -403,12 +395,12 @@ var (
 		ComponentTigeraNodeWindows,
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
-		ComponentTigeraCNIFIPS,
 		ComponentTigeraCNIWindows,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentLinseed,
 		ComponentDikastes,
+		ComponentL7AdmissionController,
 		ComponentTigeraFlexVolume,
 		ComponentTigeraCSI,
 		ComponentTigeraCSINodeDriverRegistrar,

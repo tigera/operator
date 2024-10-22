@@ -193,6 +193,22 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(s.Data).To(Equal(cfg.ElasticClientSecret.Data))
 		})
 
+		It("should render toleration on GKE", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+			component := Linseed(cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			deploy, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue(), "Deployment not found")
+			Expect(deploy.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+		})
+
 		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 			cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 			component := Linseed(cfg)
@@ -394,32 +410,6 @@ var _ = Describe("Linseed rendering tests", func() {
 				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
 				Entry("for management/standalone, openshift-dns with dpi", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true, DPIEnabled: true}),
 			)
-		})
-
-		It("should set the right env when FIPS mode is enabled", func() {
-			kp, tokenKP, bundle := getTLS(installation)
-			enabled := operatorv1.FIPSModeEnabled
-			installation.FIPSMode = &enabled
-			component := Linseed(&Config{
-				Installation: installation,
-				PullSecrets: []*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
-				},
-				KeyPair:         kp,
-				TokenKeyPair:    tokenKP,
-				TrustedBundle:   bundle,
-				ClusterDomain:   clusterDomain,
-				ESClusterConfig: esClusterConfig,
-				Namespace:       render.ElasticsearchNamespace,
-				BindNamespaces:  []string{render.ElasticsearchNamespace},
-				ElasticHost:     "tigera-secure-es-http.tigera-elasticsearch.svc",
-				ElasticPort:     "9200",
-			})
-
-			resources, _ := component.Objects()
-			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(ok).To(BeTrue(), "Deployment not found")
-			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_FIPS_MODE_ENABLED", Value: "true"}))
 		})
 	})
 
@@ -1015,10 +1005,6 @@ func expectedContainers() []corev1.Container {
 				{
 					Name:  "LINSEED_LOG_LEVEL",
 					Value: "INFO",
-				},
-				{
-					Name:  "LINSEED_FIPS_MODE_ENABLED",
-					Value: "false",
 				},
 				{
 					Name:  "LINSEED_HTTPS_CERT",

@@ -129,11 +129,6 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				Name:  "PACKETCAPTURE_API_HTTPS_CERT",
 				Value: "/tigera-packetcapture-server-tls/tls.crt",
 			},
-			{
-				Name:      "PACKETCAPTURE_API_FIPS_MODE_ENABLED",
-				Value:     "false",
-				ValueFrom: nil,
-			},
 		}
 
 		if enableOIDC {
@@ -370,6 +365,20 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		deployment := rtest.GetResource(resources, render.PacketCaptureDeploymentName, render.PacketCaptureNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment).NotTo(BeNil())
 		Expect(deployment.Spec.Template.Spec.Tolerations).Should(ContainElements(append(rmeta.TolerateCriticalAddonsAndControlPlane, t)))
+	})
+
+	It("should render toleration on GKE", func() {
+		resources := renderPacketCapture(operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderGKE,
+		}, nil)
+		deployment := rtest.GetResource(resources, render.PacketCaptureDeploymentName, render.PacketCaptureNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deployment).NotTo(BeNil())
+		Expect(deployment.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}))
 	})
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {

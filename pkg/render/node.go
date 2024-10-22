@@ -154,11 +154,7 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIFIPS, reg, path, prefix, is))
-		} else {
-			c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
-		}
+		c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
 		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentTigeraFlexVolume, reg, path, prefix, is))
 	} else {
@@ -173,7 +169,7 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -398,6 +394,12 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list"},
 			},
 			{
+				// For enforcing admin network policies.
+				APIGroups: []string{"policy.networking.k8s.io"},
+				Resources: []string{"adminnetworkpolicies"},
+				Verbs:     []string{"watch", "list"},
+			},
+			{
 				// Metadata from these are used in conjunction with network policy.
 				APIGroups: []string{""},
 				Resources: []string{"pods", "namespaces", "serviceaccounts"},
@@ -426,24 +428,24 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				// For monitoring Calico-specific configuration.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
-					"bgpfilters",
 					"bgpconfigurations",
-					"bgppeers",
 					"bgpfilters",
+					"bgpfilters",
+					"bgppeers",
 					"blockaffinities",
 					"clusterinformations",
 					"felixconfigurations",
 					"globalnetworkpolicies",
-					"stagedglobalnetworkpolicies",
 					"globalnetworksets",
 					"hostendpoints",
 					"ipamblocks",
 					"ippools",
 					"ipreservations",
 					"networkpolicies",
+					"networksets",
+					"stagedglobalnetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
-					"networksets",
 					"tiers",
 				},
 				Verbs: []string{"get", "list", "watch"},
@@ -497,8 +499,8 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{
 					"blockaffinities",
 					"ipamblocks",
-					"ipamhandles",
 					"ipamconfigs",
+					"ipamhandles",
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
 			},
@@ -519,17 +521,18 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		extraRules := []rbacv1.PolicyRule{
 			{
-				// Tigera Secure needs to be able to read licenses, tiers, and config.
+				// Calico Enterprise needs to be able to read additional resources.
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
-					"externalnetworks",
+					"bfdconfigurations",
 					"egressgatewaypolicies",
+					"externalnetworks",
 					"licensekeys",
+					"packetcaptures",
 					"remoteclusterconfigurations",
 					"stagedglobalnetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
 					"stagednetworkpolicies",
-					"packetcaptures",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},
@@ -1435,7 +1438,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_TYPHACAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
 		{Name: "FELIX_TYPHACERTFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "FELIX_TYPHAKEYFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
-		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "NO_DEFAULT_POOLS", Value: "true"},
 	}
 

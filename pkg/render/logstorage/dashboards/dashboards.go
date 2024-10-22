@@ -114,13 +114,13 @@ func (d *dashboards) ResolveImages(is *operatorv1.ImageSet) error {
 		}
 	}
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
 
 func (d *dashboards) Objects() (objsToCreate, objsToDelete []client.Object) {
-	if d.cfg.IsManaged || operatorv1.IsFIPSModeEnabled(d.cfg.Installation.FIPSMode) {
+	if d.cfg.IsManaged {
 		return nil, d.resources()
 	}
 
@@ -221,10 +221,6 @@ func (d *dashboards) Job() *batchv1.Job {
 			Name:  "KB_CA_CERT",
 			Value: d.cfg.TrustedBundle.MountPath(),
 		},
-		{
-			Name:  "FIPS_MODE_ENABLED",
-			Value: operatorv1.IsFIPSModeEnabledString(d.cfg.Installation.FIPSMode),
-		},
 		relasticsearch.ElasticUserEnvVar(ElasticCredentialsSecret),
 		relasticsearch.ElasticPasswordEnvVar(ElasticCredentialsSecret),
 	}
@@ -258,13 +254,18 @@ func (d *dashboards) Job() *batchv1.Job {
 		envVars = append(envVars, corev1.EnvVar{Name: "KIBANA_CLIENT_CERT", Value: "/certs/kibana/mtls/client.crt"})
 	}
 
+	tolerations := d.cfg.Installation.ControlPlaneTolerations
+	if d.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:      map[string]string{"job-name": Name, "k8s-app": Name},
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:  d.cfg.Installation.ControlPlaneTolerations,
+			Tolerations:  tolerations,
 			NodeSelector: d.cfg.Installation.ControlPlaneNodeSelector,
 			// This value needs to be set to never. The PodFailurePolicy will still ensure that this job will run until completion.
 			RestartPolicy:    corev1.RestartPolicyNever,

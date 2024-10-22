@@ -70,11 +70,6 @@ var (
 
 // Kibana renders the components necessary for kibana and elasticsearch
 func Kibana(cfg *Configuration) render.Component {
-	if cfg.Enabled && operatorv1.IsFIPSModeEnabled(cfg.Installation.FIPSMode) {
-		// This branch should only be hit if there is a coding bug in the controller, as Enabled
-		// should already take into account FIPS.
-		panic("BUG: Kibana is not supported in FIPS mode")
-	}
 	return &kibana{
 		cfg: cfg,
 	}
@@ -127,7 +122,7 @@ func (k *kibana) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -215,6 +210,9 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		"basePath":        fmt.Sprintf("/%s", BasePath),
 		"rewriteBasePath": true,
 		"defaultRoute":    fmt.Sprintf(DefaultRoute, TimeFilter, url.PathEscape(FlowsDashboardName)),
+		"customResponseHeaders": map[string]interface{}{
+			"X-Frame-Options": "DENY",
+		},
 	}
 
 	if k.cfg.BaseURL != "" {
@@ -279,6 +277,11 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		count = *k.cfg.Installation.ControlPlaneReplicas
 	}
 
+	tolerations := k.cfg.Installation.ControlPlaneTolerations
+	if k.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
 	kibana := &kbv1.Kibana{
 		TypeMeta: metav1.TypeMeta{Kind: "Kibana", APIVersion: "kibana.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -321,7 +324,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 					ImagePullSecrets:             secret.GetReferenceList(k.cfg.PullSecrets),
 					ServiceAccountName:           ObjectName,
 					NodeSelector:                 k.cfg.Installation.ControlPlaneNodeSelector,
-					Tolerations:                  k.cfg.Installation.ControlPlaneTolerations,
+					Tolerations:                  tolerations,
 					InitContainers:               initContainers,
 					AutomountServiceAccountToken: &automountToken,
 					Containers: []corev1.Container{{

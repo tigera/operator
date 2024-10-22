@@ -33,8 +33,8 @@ components:
   fluentd-windows:
     image: tigera/fluentd-windows
     version: master
-  es-proxy:
-    image: tigera/es-proxy
+  ui-apis:
+    image: tigera/ui-apis
     version: master
   linseed:
     image: tigera/linseed
@@ -46,12 +46,12 @@ components:
     image: tigera/dex
     version: master
   eck-kibana:
-    version: 7.17.22
+    version: 7.17.24
   kibana:
     image: tigera/kibana
     version: master
   eck-elasticsearch:
-    version: 7.17.22
+    version: 7.17.24
   elasticsearch:
     image: tigera/elasticsearch
     version: master
@@ -103,14 +103,14 @@ components:
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
-    version: v2.48.1
+    version: v2.54.1
   prometheus:
     image: tigera/prometheus
     version: master
   # coreos-prometheus holds the version of alertmanager built for tigera/alertmanager,
   # which prometheus operator uses to validate.
   coreos-alertmanager:
-    version: v0.25.0
+    version: v0.27.0
   alertmanager:
     image: tigera/alertmanager
     version: master
@@ -144,6 +144,9 @@ components:
     version: master
   dikastes:
     image: tigera/dikastes
+    version: master
+  l7-admission-controller:
+    image: tigera/l7-admission-controller
     version: master
   egress-gateway:
     image: tigera/egress-gateway

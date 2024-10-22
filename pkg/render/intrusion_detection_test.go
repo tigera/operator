@@ -22,7 +22,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -144,7 +143,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Containers).To(HaveLen(2))
 		idcExpectedEnvVars := []corev1.EnvVar{
 			{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
-			{Name: "FIPS_MODE_ENABLED", Value: "false"},
 			{Name: "LINSEED_URL", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
 			{Name: "LINSEED_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			{Name: "LINSEED_CLIENT_CERT", Value: "/intrusion-detection-tls/tls.crt"},
@@ -454,6 +452,22 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		Expect(idc.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 	})
 
+	It("should render toleration on GKE", func() {
+		cfg.Installation = &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderGKE,
+		}
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(idc).NotTo(BeNil())
+		Expect(idc.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}))
+	})
+
 	Context("allow-tigera rendering", func() {
 		policyNames := []types.NamespacedName{
 			{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"},
@@ -491,112 +505,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
 			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
 		)
-	})
-
-	It("should not render es-job installer when FIPS mode is enabled", func() {
-		fipsEnabled := operatorv1.FIPSModeEnabled
-		testADStorageClassName := "test-storage-class-name"
-		cfg.Installation.FIPSMode = &fipsEnabled
-		cfg.IntrusionDetection = &operatorv1.IntrusionDetection{
-			Spec: operatorv1.IntrusionDetectionSpec{
-				AnomalyDetection: operatorv1.AnomalyDetectionSpec{
-					StorageClassName: testADStorageClassName,
-				},
-			},
-		}
-		component := render.IntrusionDetection(cfg)
-		toCreate, toRemove := component.Objects()
-
-		expected := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
-			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.pod"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkpolicy"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkset"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.serviceaccount"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.cloudapi"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.ssh"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.access"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "network.lateral.originate"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.servfail"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "dns.dos"}},
-		}
-		rtest.ExpectResources(toCreate, expected)
-
-		// Check that GlobalAlertTemplates are populated
-		for i, res := range toCreate {
-			switch res.(type) {
-			case *v3.GlobalAlertTemplate:
-				rtest.ExpectGlobalAlertTemplateToBePopulated(toCreate[i])
-			}
-		}
-
-		expectedDeletes := []client.Object{
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dga"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dga"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-connection-spike"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-connection-spike"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-response-codes"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-response-codes"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-verbs"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.http-verbs"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.port-scan"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.port-scan"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-dns"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-dns"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-flows"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-flows"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.multivariable-flow"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.multivariable-flow"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-l7"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.generic-l7"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dns-latency"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dns-latency"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dns-tunnel"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.dns-tunnel"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.l7-bytes"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.l7-bytes"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.l7-latency"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.l7-latency"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.bytes-in"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.bytes-in"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.bytes-out"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.bytes-out"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.process-bytes"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.process-bytes"}},
-			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.process-restarts"}},
-			&v3.GlobalAlert{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detector.process-restarts"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.anomaly-detection-api", Namespace: "tigera-intrusion-detection"}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detection-api", Namespace: "tigera-intrusion-detection"}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detection-api"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detection-api"}},
-			&corev1.PersistentVolumeClaim{ObjectMeta: metav1.ObjectMeta{Name: "tigera-anomaly-detection", Namespace: "tigera-intrusion-detection"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detection-api", Namespace: "tigera-intrusion-detection"}},
-			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detection-api", Namespace: "tigera-intrusion-detection"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.anomaly-detectors", Namespace: "tigera-intrusion-detection"}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors", Namespace: "tigera-intrusion-detection"}},
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors", Namespace: "tigera-intrusion-detection"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors", Namespace: "tigera-intrusion-detection"}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors", Namespace: "tigera-intrusion-detection"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "anomaly-detectors"}},
-			&corev1.PodTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detectors.training", Namespace: "tigera-intrusion-detection"}},
-			&corev1.PodTemplate{ObjectMeta: metav1.ObjectMeta{Name: "tigera.io.detectors.detection", Namespace: "tigera-intrusion-detection"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-elastic", Namespace: "tigera-intrusion-detection"}},
-			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-es-job-installer", Namespace: "tigera-intrusion-detection"}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-es-job-installer", Namespace: "tigera-intrusion-detection"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-intrusion-detection"}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-psp"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-psp"}},
-		}
-
-		rtest.ExpectResources(toRemove, expectedDeletes)
 	})
 
 	It("should render an init container for pods when certificate management is enabled", func() {

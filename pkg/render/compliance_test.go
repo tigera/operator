@@ -160,17 +160,6 @@ var _ = Describe("compliance rendering tests", func() {
 		}))
 	})
 
-	It("should render the env variable for queryserver when FIPS is enabled", func() {
-		fipsEnabled := operatorv1.FIPSModeEnabled
-		cfg.Installation.FIPSMode = &fipsEnabled
-		component, err := render.Compliance(cfg)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
-		d := rtest.GetResource(resources, "compliance-server", ns, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "FIPS_MODE_ENABLED", Value: "true"}))
-	})
-
 	It("should render resource requests and limits for compliance components", func() {
 		cfg.Compliance = &operatorv1.Compliance{
 			Spec: operatorv1.ComplianceSpec{
@@ -705,6 +694,38 @@ var _ = Describe("compliance rendering tests", func() {
 			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
 			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
 			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
+			Expect(complianceBenchmarker.Spec.Template.Spec.Tolerations).To(ContainElements(rmeta.TolerateAll))
+		})
+
+		It("should render toleration on GKE", func() {
+			installation := &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+			}
+			dpComplianceServer, dpComplianceController, complianceSnapshotter, complianceReporter, complianceBenchmarker := renderCompliance(installation)
+			Expect(dpComplianceServer.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+			Expect(dpComplianceController.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+			Expect(complianceSnapshotter.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+			Expect(complianceReporter.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
 			Expect(complianceBenchmarker.Spec.Template.Spec.Tolerations).To(ContainElements(rmeta.TolerateAll))
 		})
 

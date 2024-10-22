@@ -82,7 +82,7 @@ func (e *eck) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -297,6 +297,10 @@ func (e *eck) operatorStatefulSet() *appsv1.StatefulSet {
 			memoryRequest = c.ResourceRequirements.Requests[corev1.ResourceMemory]
 		}
 	}
+	tolerations := e.cfg.Installation.ControlPlaneTolerations
+	if e.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
 	s := &appsv1.StatefulSet{
 		TypeMeta: metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -333,7 +337,7 @@ func (e *eck) operatorStatefulSet() *appsv1.StatefulSet {
 					ImagePullSecrets:   secret.GetReferenceList(e.cfg.PullSecrets),
 					HostNetwork:        false,
 					NodeSelector:       e.cfg.Installation.ControlPlaneNodeSelector,
-					Tolerations:        e.cfg.Installation.ControlPlaneTolerations,
+					Tolerations:        tolerations,
 					Containers: []corev1.Container{{
 						Image:           e.esOperatorImage,
 						ImagePullPolicy: render.ImagePullPolicy(),

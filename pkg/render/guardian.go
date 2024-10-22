@@ -18,6 +18,10 @@ package render
 
 import (
 	"net"
+	"net/url"
+
+	operatorurl "github.com/tigera/operator/pkg/url"
+	"golang.org/x/net/http/httpproxy"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -29,6 +33,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	"github.com/tigera/api/pkg/lib/numorstring"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -81,15 +86,19 @@ func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 
 // GuardianConfiguration contains all the config information needed to render the component.
 type GuardianConfiguration struct {
-	URL               string
-	PullSecrets       []*corev1.Secret
-	OpenShift         bool
-	Installation      *operatorv1.InstallationSpec
-	TunnelSecret      *corev1.Secret
-	TrustedCertBundle certificatemanagement.TrustedBundle
-	TunnelCAType      operatorv1.CAType
-
+	URL                         string
+	PullSecrets                 []*corev1.Secret
+	OpenShift                   bool
+	Installation                *operatorv1.InstallationSpec
+	TunnelSecret                *corev1.Secret
+	TrustedCertBundle           certificatemanagement.TrustedBundle
+	TunnelCAType                operatorv1.CAType
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
+
+	// PodProxies represents the resolved proxy configuration for each Guardian pod.
+	// If this slice is empty, then resolution has not yet occurred. Pods with no proxy
+	// configured are represented with a nil value.
+	PodProxies []*httpproxy.Config
 }
 
 type GuardianComponent struct {
@@ -247,6 +256,11 @@ func (c *GuardianComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 func (c *GuardianComponent) deployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -267,7 +281,7 @@ func (c *GuardianComponent) deployment() *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: GuardianServiceAccountName,
-					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...),
+					Tolerations:        tolerations,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers:         c.container(),
 					Volumes:            c.volumes(),
@@ -312,7 +326,6 @@ func (c *GuardianComponent) container() []corev1.Container {
 				{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 				{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 				{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-				{Name: "GUARDIAN_FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 			},
 			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{
@@ -378,42 +391,85 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 		},
 	}...)
 
-	// Assumes address has the form "host:port", required by net.Dial for TCP.
-	host, port, err := net.SplitHostPort(cfg.URL)
-	if err != nil {
-		return nil, err
-	}
-	parsedPort, err := numorstring.PortFromString(port)
-	if err != nil {
-		return nil, err
-	}
-	parsedIp := net.ParseIP(host)
-	if parsedIp == nil {
-		// Assume host is a valid hostname.
-		egressRules = append(egressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Domains: []string{host},
-				Ports:   []numorstring.Port{parsedPort},
-			},
-		})
-	} else {
-		var netSuffix string
-		if parsedIp.To4() != nil {
-			netSuffix = "/32"
-		} else {
-			netSuffix = "/128"
+	// The loop below creates an egress rule for each unique destination that the Guardian pods connect to. If there are
+	// multiple guardian pods and their proxy  settings differ, then there are multiple destinations that must have egress allowed.
+	allowedDestinations := map[string]bool{}
+	processedPodProxies := ProcessPodProxies(cfg.PodProxies)
+	for _, podProxyConfig := range processedPodProxies {
+		var proxyURL *url.URL
+		var err error
+		if podProxyConfig != nil && podProxyConfig.HTTPSProxy != "" {
+			targetURL := &url.URL{
+				// The scheme should be HTTPS, as we are establishing an mTLS session with the target.
+				Scheme: "https",
+
+				// We expect `target` to be of the form host:port.
+				Host: cfg.URL,
+			}
+
+			proxyURL, err = podProxyConfig.ProxyFunc()(targetURL)
+			if err != nil {
+				return nil, err
+			}
 		}
 
-		egressRules = append(egressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Nets:  []string{parsedIp.String() + netSuffix},
-				Ports: []numorstring.Port{parsedPort},
-			},
-		})
+		var tunnelDestinationHostPort string
+		if proxyURL != nil {
+			proxyHostPort, err := operatorurl.ParseHostPortFromHTTPProxyURL(proxyURL)
+			if err != nil {
+				return nil, err
+			}
+
+			tunnelDestinationHostPort = proxyHostPort
+		} else {
+			// cfg.URL has host:port form
+			tunnelDestinationHostPort = cfg.URL
+		}
+
+		// Check if we've already created an egress rule for this destination.
+		if allowedDestinations[tunnelDestinationHostPort] {
+			continue
+		}
+
+		host, port, err := net.SplitHostPort(tunnelDestinationHostPort)
+		if err != nil {
+			return nil, err
+		}
+		parsedPort, err := numorstring.PortFromString(port)
+		if err != nil {
+			return nil, err
+		}
+		parsedIp := net.ParseIP(host)
+		if parsedIp == nil {
+			// Assume host is a valid hostname.
+			egressRules = append(egressRules, v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Domains: []string{host},
+					Ports:   []numorstring.Port{parsedPort},
+				},
+			})
+			allowedDestinations[tunnelDestinationHostPort] = true
+
+		} else {
+			var netSuffix string
+			if parsedIp.To4() != nil {
+				netSuffix = "/32"
+			} else {
+				netSuffix = "/128"
+			}
+
+			egressRules = append(egressRules, v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Nets:  []string{parsedIp.String() + netSuffix},
+					Ports: []numorstring.Port{parsedPort},
+				},
+			})
+			allowedDestinations[tunnelDestinationHostPort] = true
+		}
 	}
 
 	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
@@ -487,4 +543,14 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 	}
 
 	return policy, nil
+}
+
+func ProcessPodProxies(podProxies []*httpproxy.Config) []*httpproxy.Config {
+	// If pod proxies are empty, then pod proxy resolution has not yet occurred.
+	// Assume that a single Guardian pod is running without a proxy.
+	if len(podProxies) == 0 {
+		return []*httpproxy.Config{nil}
+	}
+
+	return podProxies
 }

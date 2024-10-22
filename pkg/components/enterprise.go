@@ -69,12 +69,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = Component{
-		Version:  "7.17.22",
+		Version:  "7.17.24",
 		Registry: "",
 	}
 
 	ComponentEckKibana = Component{
-		Version:  "7.17.22",
+		Version:  "7.17.24",
 		Registry: "",
 	}
 
@@ -90,12 +90,6 @@ var (
 		Registry: "",
 	}
 
-	ComponentElasticsearchFIPS = Component{
-		Version:  "master-fips",
-		Image:    "tigera/elasticsearch",
-		Registry: "",
-	}
-
 	ComponentECKElasticsearchOperator = Component{
 		Version:  "2.6.1",
 		Registry: "",
@@ -107,9 +101,9 @@ var (
 		Registry: "",
 	}
 
-	ComponentEsProxy = Component{
+	ComponentUIAPIs = Component{
 		Version:  "master",
-		Image:    "tigera/es-proxy",
+		Image:    "tigera/ui-apis",
 		Registry: "",
 	}
 
@@ -215,8 +209,14 @@ var (
 		Registry: "",
 	}
 
+	ComponentL7AdmissionController = Component{
+		Version:  "master",
+		Image:    "tigera/l7-admission-controller",
+		Registry: "",
+	}
+
 	ComponentCoreOSPrometheus = Component{
-		Version:  "v2.48.1",
+		Version:  "v2.54.1",
 		Registry: "",
 	}
 
@@ -233,7 +233,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = Component{
-		Version:  "v0.25.0",
+		Version:  "v0.27.0",
 		Registry: "",
 	}
 
@@ -275,12 +275,6 @@ var (
 
 	ComponentTigeraCNI = Component{
 		Version:  "master",
-		Image:    "tigera/cni",
-		Registry: "",
-	}
-
-	ComponentTigeraCNIFIPS = Component{
-		Version:  "master-fips",
 		Image:    "tigera/cni",
 		Registry: "",
 	}
@@ -327,9 +321,8 @@ var (
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
-		ComponentElasticsearchFIPS,
 		ComponentElasticsearchOperator,
-		ComponentEsProxy,
+		ComponentUIAPIs,
 		ComponentFluentd,
 		ComponentFluentdWindows,
 		ComponentGuardian,
@@ -353,12 +346,12 @@ var (
 		ComponentTigeraNodeWindows,
 		ComponentTigeraTypha,
 		ComponentTigeraCNI,
-		ComponentTigeraCNIFIPS,
 		ComponentTigeraCNIWindows,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentLinseed,
 		ComponentDikastes,
+		ComponentL7AdmissionController,
 		ComponentTigeraFlexVolume,
 		ComponentTigeraCSI,
 		ComponentTigeraCSINodeDriverRegistrar,

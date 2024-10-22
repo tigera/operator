@@ -102,7 +102,7 @@ func (c *dexComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -226,6 +226,11 @@ func (c *dexComponent) deployment() client.Object {
 	mounts = append(mounts, c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()))
 	mounts = append(mounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -246,7 +251,7 @@ func (c *dexComponent) deployment() client.Object {
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					ServiceAccountName: DexObjectName,
-					Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...),
+					Tolerations:        tolerations,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
 					Containers: []corev1.Container{
@@ -254,11 +259,7 @@ func (c *dexComponent) deployment() client.Object {
 							Name:            DexObjectName,
 							Image:           c.image,
 							ImagePullPolicy: ImagePullPolicy(),
-							Env: append(
-								[]corev1.EnvVar{
-									{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
-								},
-								c.cfg.DexConfig.RequiredEnv("")...),
+							Env:             c.cfg.DexConfig.RequiredEnv(""),
 							LivenessProbe:   c.probe(),
 							SecurityContext: securitycontext.NewNonRootContext(),
 

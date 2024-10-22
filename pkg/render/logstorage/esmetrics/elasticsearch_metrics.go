@@ -192,7 +192,7 @@ func (e *elasticsearchMetrics) metricsService() *corev1.Service {
 	}
 }
 
-func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
+func (e *elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 	var initContainers []corev1.Container
 	annotations := e.cfg.TrustedBundle.HashAnnotations()
 	if e.cfg.ServerTLS.UseCertificateManagement() {
@@ -202,6 +202,11 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 	}
 
 	_, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(e.SupportedOSType(), e.cfg.ClusterDomain, render.ElasticsearchNamespace))
+
+	tolerations := e.cfg.Installation.ControlPlaneTolerations
+	if e.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -216,7 +221,7 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
-					Tolerations:        e.cfg.Installation.ControlPlaneTolerations,
+					Tolerations:        tolerations,
 					NodeSelector:       e.cfg.Installation.ControlPlaneNodeSelector,
 					ImagePullSecrets:   secret.GetReferenceList(e.cfg.PullSecrets),
 					ServiceAccountName: ElasticsearchMetricsName,
@@ -239,7 +244,6 @@ func (e elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 								e.cfg.ServerTLS.VolumeMount(e.SupportedOSType()),
 							),
 							Env: []corev1.EnvVar{
-								{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(e.cfg.Installation.FIPSMode)},
 								relasticsearch.ElasticUsernameEnvVar(ElasticsearchMetricsSecret),
 								relasticsearch.ElasticPasswordEnvVar(ElasticsearchMetricsSecret),
 								relasticsearch.ElasticHostEnvVar(esHost),

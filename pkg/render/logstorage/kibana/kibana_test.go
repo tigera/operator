@@ -17,10 +17,10 @@ package kibana_test
 import (
 	"context"
 
-	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -28,6 +28,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -140,6 +142,21 @@ var _ = Describe("Kibana rendering tests", func() {
 
 		})
 
+		It("should render toleration on GKE", func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+			component := kibana.Kibana(cfg)
+			createResources, _ := component.Objects()
+			kb := rtest.GetResource(createResources, "tigera-secure", "tigera-kibana", "kibana.k8s.elastic.co", "v1", "Kibana")
+			Expect(kb).NotTo(BeNil())
+			kibanaCR := kb.(*kbv1.Kibana)
+			Expect(kibanaCR.Spec.PodTemplate.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+				Key:      "kubernetes.io/arch",
+				Operator: corev1.TolerationOpEqual,
+				Value:    "arm64",
+				Effect:   corev1.TaintEffectNoSchedule,
+			}))
+		})
+
 		It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 			cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 			component := kibana.Kibana(cfg)
@@ -167,6 +184,17 @@ var _ = Describe("Kibana rendering tests", func() {
 			kibana := kb.(*kbv1.Kibana)
 			x := kibana.Spec.Config.Data["server"].(map[string]interface{})
 			Expect(x["publicBaseUrl"]).To(Equal("https://test.domain.com/tigera-kibana"))
+		})
+
+		It("should configure X-Frame-Options as DENY in customResponseHeaders", func() {
+			component := kibana.Kibana(cfg)
+
+			createResources, _ := component.Objects()
+			kb := rtest.GetResource(createResources, kibana.CRName, kibana.Namespace, "kibana.k8s.elastic.co", "v1", "Kibana")
+			kibana := kb.(*kbv1.Kibana)
+			server := kibana.Spec.Config.Data["server"].(map[string]interface{})
+			customResponseHeaders := server["customResponseHeaders"].(map[string]interface{})
+			Expect(customResponseHeaders["X-Frame-Options"]).To(Equal("DENY"))
 		})
 
 		It("should delete Kibana ExternalService", func() {

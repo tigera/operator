@@ -528,7 +528,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: c.kubeControllerConfigName},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
-		{Name: "FIPS_MODE_ENABLED", Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode)},
 		{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant() && c.kubeControllerConfigName == "elasticsearch")},
 	}
 
@@ -632,9 +631,13 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace))
 	}
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
 	podSpec := corev1.PodSpec{
 		NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
-		Tolerations:        append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...),
+		Tolerations:        tolerations,
 		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
 		ServiceAccountName: c.kubeControllerServiceAccountName,
 		InitContainers:     initContainers,

@@ -142,7 +142,7 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 	}
 
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -601,6 +601,11 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		containers = append(containers, c.webhooksControllerContainer())
 	}
 
+	tolerations := c.cfg.Installation.ControlPlaneTolerations
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
 	return &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        IntrusionDetectionName,
@@ -608,7 +613,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 			Annotations: c.intrusionDetectionAnnotations(),
 		},
 		Spec: corev1.PodSpec{
-			Tolerations:        c.cfg.Installation.ControlPlaneTolerations,
+			Tolerations:        tolerations,
 			NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 			ServiceAccountName: IntrusionDetectionName,
 			ImagePullSecrets:   ps,
@@ -668,10 +673,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_CA",
 			Value: c.cfg.TrustedCertBundle.MountPath(),
-		},
-		{
-			Name:  "FIPS_MODE_ENABLED",
-			Value: operatorv1.IsFIPSModeEnabledString(c.cfg.Installation.FIPSMode),
 		},
 		{
 			Name:  "LINSEED_URL",

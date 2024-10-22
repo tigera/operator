@@ -102,6 +102,17 @@ spec:
                   This will be deprecated. Use BPFConnectTimeLoadBalancing [Default:
                   true]'
                 type: boolean
+              bpfDNSPolicyMode:
+                description: 'BPFDNSPolicyMode specifies how DNS policy programming
+                  will be handled. Inline - BPF parses DNS response inline with DNS
+                  response packet processing. This guarantees the DNS rules reflect
+                  any change immediately. NoDelay - Felix does not introduce any delay
+                  to the packets. DNS rules may not have been programmed by the time
+                  the first packet traverses the policy rules. Client applications
+                  need to handle reconnection attempts if initial connection attempts
+                  fail. This may be problematic for some applications or for very
+                  low DNS TTLs. [Default: Inline]'
+                type: string
               bpfDSROptoutCIDRs:
                 description: BPFDSROptoutCIDRs is a list of CIDRs which are excluded
                   from DSR. That is, clients in those CIDRs will accesses nodeports
@@ -288,6 +299,17 @@ spec:
                   information about the BPF policy programs, which can be examined
                   with the calico-bpf command-line tool.
                 type: boolean
+              bpfRedirectToPeer:
+                description: 'BPFRedirectToPeer controls which whether it is allowed
+                  to forward straight to the peer side of the workload devices. It
+                  is allowed for any host L2 devices by default (L2Only), but it breaks
+                  TCP dump on the host side of workload device as it bypasses it on
+                  ingress. Value of Enabled also allows redirection from L3 host devices
+                  like IPIP tunnel or Wireguard directly to the peer side of the workload''s
+                  device. This makes redirection faster, however, it breaks tools
+                  like tcpdump on the peer side. Use Enabled with caution. [Default:
+                  Disabled]'
+                type: string
               captureDir:
                 description: 'CaptureDir controls directory to store file capture.
                   [Default: /var/log/calico/pcap]'
@@ -485,9 +507,9 @@ spec:
                   programmed by the time the first packet traverses the policy rules.
                   Client applications need to handle reconnection attempts if initial
                   connection attempts fail. This may be problematic for some applications
-                  or for very low DNS TTLs. \n On Windows, or when using the eBPF
-                  dataplane, this setting is ignored and \"NoDelay\" is always used.
-                  \n [Default: DelayDeniedPacket]"
+                  or for very low DNS TTLs. \n This setting is ignored on Windows
+                  and \"NoDelay\" is always used. \n This setting is ignored by eBPF
+                  and BPFDNSPolicyMode is used instead. \n [Default: DelayDeniedPacket]"
                 enum:
                 - NoDelay
                 - DelayDeniedPacket
@@ -896,6 +918,15 @@ spec:
                   disabled by setting the interval to 0.
                 pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
+              ipForwarding:
+                description: 'IPForwarding controls whether Felix sets the host sysctls
+                  to enable IP forwarding.  IP forwarding is required when using Calico
+                  for workload networking.  This should only be disabled on hosts
+                  where Calico is used for host protection.  [Default: Enabled]'
+                enum:
+                - Enabled
+                - Disabled
+                type: string
               ipipEnabled:
                 description: 'IPIPEnabled overrides whether Felix should configure
                   an IPIP interface on the host. Optional as Felix determines this
@@ -1180,6 +1211,9 @@ spec:
                 pattern: ^(?i)(Debug|Info|Warning|Error|Fatal)?$
                 type: string
               maxIpsetSize:
+                description: MaxIpsetSize is the maximum number of IP addresses that
+                  can be stored in an IP set. Not applicable if using the nftables
+                  backend.
                 type: integer
               metadataAddr:
                 description: 'MetadataAddr is the IP address or domain name of the
@@ -1220,9 +1254,33 @@ spec:
                 type: string
               nfNetlinkBufSize:
                 type: string
+              nftablesFilterAllowAction:
+                pattern: ^(?i)(Accept|Return)?$
+                type: string
+              nftablesFilterDenyAction:
+                description: FilterDenyAction controls what happens to traffic that
+                  is denied by network policy. By default Calico blocks traffic with
+                  a "drop" action. If you want to use a "reject" action instead you
+                  can configure it here.
+                pattern: ^(?i)(Drop|Reject)?$
+                type: string
+              nftablesMangleAllowAction:
+                pattern: ^(?i)(Accept|Return)?$
+                type: string
+              nftablesMarkMask:
+                description: 'MarkMask is the mask that Felix selects its nftables
+                  Mark bits from. Should be a 32 bit hexadecimal number with at least
+                  8 bits set, none of which clash with any other mark bits in use
+                  on the system. [Default: 0xffff0000]'
+                format: int32
+                type: integer
               nftablesMode:
                 description: 'NFTablesMode configures nftables support in Felix. [Default:
                   Disabled]'
+                type: string
+              nftablesRefreshInterval:
+                description: 'NftablesRefreshInterval controls the interval at which
+                  Felix periodically refreshes the nftables rules. [Default: 90s]'
                 type: string
               openstackRegion:
                 description: 'OpenstackRegion is the name of the region that a particular

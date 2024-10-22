@@ -671,6 +671,39 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				},
 			}))
 		})
+
+		It("should create a hash for both secrets even if the same pem is used twice", func() {
+			By("creating 2 secrets with identical pem in the datastore", func() {
+
+				byoSecretCopy := byoSecret.DeepCopyObject().(*corev1.Secret)
+
+				byoSecret.Name, byoSecret.Namespace = "byo-secret", common.OperatorNamespace()
+				Expect(cli.Create(ctx, byoSecret)).NotTo(HaveOccurred())
+
+				byoSecretCopy.Name, byoSecretCopy.Namespace = "byo-secret-copy", common.OperatorNamespace()
+				Expect(cli.Create(ctx, byoSecretCopy)).NotTo(HaveOccurred())
+			})
+
+			var trustedBundle certificatemanagement.TrustedBundle
+			By("creating the bundle from the certificates", func() {
+				byo, err := certificateManager.GetCertificate(cli, "byo-secret", common.OperatorNamespace())
+				Expect(err).NotTo(HaveOccurred())
+				byoCopy, err := certificateManager.GetCertificate(cli, "byo-secret-copy", common.OperatorNamespace())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(byo.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
+				Expect(byoCopy.GetIssuer()).NotTo(Equal(certificateManager.KeyPair()))
+				trustedBundle = certificateManager.CreateTrustedBundle(byo, byoCopy)
+			})
+
+			By("verifying the hash annotations and pem blocks of the bundle", func() {
+				bundle := trustedBundle.ConfigMap("").Data[certificatemanagement.TrustedCertConfigMapKeyName]
+				numBlocks := strings.Count(bundle, "certificate name:")
+				Expect(numBlocks).To(Equal(3))
+				Expect(trustedBundle.HashAnnotations()).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
+				Expect(trustedBundle.HashAnnotations()).To(HaveKey("tigera-operator.hash.operator.tigera.io/byo-secret-copy"))
+				Expect(trustedBundle.HashAnnotations()).To(HaveKey("tigera-operator.hash.operator.tigera.io/byo-secret"))
+			})
+		})
 	})
 })
 

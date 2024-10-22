@@ -881,9 +881,12 @@ func (c *windowsComponent) windowsDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
+	setNodeCriticalPod(&(ds.Spec.Template))
+
 	if overrides := c.cfg.Installation.CalicoNodeWindowsDaemonSet; overrides != nil {
 		rcomp.ApplyDaemonSetOverrides(&ds, overrides)
 	}
+
 	return &ds
 }
 

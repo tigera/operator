@@ -248,12 +248,19 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := dsResource.(*appsv1.DaemonSet)
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				if enableIPv4 {
 					rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 				}
 				if enableIPv6 {
 					rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV6POOL_CIDR", "2001:db8:1::/122")
 				}
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
 
 				// Node image override results in correct image.
 				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
@@ -518,6 +525,10 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := dsResource.(*appsv1.DaemonSet)
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				if enableIPv4 {
 					rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 				}
@@ -793,6 +804,10 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
 				rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
@@ -886,6 +901,10 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct security context.
 				ds := dsResource.(*appsv1.DaemonSet)
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
 				Expect(nodeContainer).ToNot(BeNil())
 				Expect(nodeContainer.SecurityContext).ToNot(BeNil())
@@ -1077,12 +1096,9 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := dsResource.(*appsv1.DaemonSet)
-				if enableIPv4 {
-					rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
-				}
-				if enableIPv6 {
-					rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV6POOL_CIDR", "2001:db8:1::/122")
-				}
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
 
 				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
@@ -1245,6 +1261,9 @@ var _ = Describe("Node rendering tests", func() {
 				// The DaemonSet should have the correct configuration.
 				ds := dsResource.(*appsv1.DaemonSet)
 
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				// CNI install container should not be present.
 				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				Expect(cniContainer).To(BeNil())
@@ -1378,6 +1397,9 @@ var _ = Describe("Node rendering tests", func() {
 					// The DaemonSet should have the correct configuration.
 					ds := dsResource.(*appsv1.DaemonSet)
 
+					// The pod template should have node critical priority
+					Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 					// CNI install container should not be present.
 					cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 					Expect(cniContainer).To(BeNil())
@@ -1491,6 +1513,10 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := dsResource.(*appsv1.DaemonSet)
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				if enableIPv4 {
 					rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 				}
@@ -1656,6 +1682,9 @@ var _ = Describe("Node rendering tests", func() {
 				// The DaemonSet should have the correct configuration.
 				ds := dsResource.(*appsv1.DaemonSet)
 
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				// CNI install container should not be present.
 				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				Expect(cniContainer).To(BeNil())
@@ -1809,6 +1838,9 @@ var _ = Describe("Node rendering tests", func() {
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/var/run/multus/cni/net.d")
 
 				// Verify volumes. In particular, we want to make sure the flexvol-driver-host volume uses the right
@@ -1934,6 +1966,9 @@ var _ = Describe("Node rendering tests", func() {
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
 
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/var/run/multus/cni/net.d")
 
 				// Verify the Flex volume container image.
@@ -2028,6 +2063,9 @@ var _ = Describe("Node rendering tests", func() {
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node:" + components.ComponentTigeraNode.Version))
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
 
 				rtest.ExpectEnv(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
@@ -2124,6 +2162,10 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				volumes := ds.Spec.Template.Spec.Volumes
 				// Expect(ds.Spec.Template.Spec.Volumes).To(Equal())
 				Expect(volumes).To(ContainElement(
@@ -2158,6 +2200,10 @@ var _ = Describe("Node rendering tests", func() {
 
 					// The DaemonSet should have the correct configuration.
 					ds := dsResource.(*appsv1.DaemonSet)
+
+					// The pod template should have node critical priority
+					Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 					Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
 						corev1.NodeSelectorTerm{
 							MatchExpressions: []corev1.NodeSelectorRequirement{{
@@ -2180,6 +2226,10 @@ var _ = Describe("Node rendering tests", func() {
 
 					// The DaemonSet should have the correct configuration.
 					ds := dsResource.(*appsv1.DaemonSet)
+
+					// The pod template should have node critical priority
+					Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 					Expect(ds.Spec.Template.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms).To(ContainElement(
 						corev1.NodeSelectorTerm{
 							MatchExpressions: []corev1.NodeSelectorRequirement{{
@@ -2221,6 +2271,10 @@ var _ = Describe("Node rendering tests", func() {
 
 					// The DaemonSet should have the correct configuration.
 					ds := dsResource.(*appsv1.DaemonSet)
+
+					// The pod template should have node critical priority
+					Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 					rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "IP_AUTODETECTION_METHOD", "interface=eth*")
 				})
 
@@ -2237,6 +2291,10 @@ var _ = Describe("Node rendering tests", func() {
 
 					// The DaemonSet should have the correct configuration.
 					ds := dsResource.(*appsv1.DaemonSet)
+
+					// The pod template should have node critical priority
+					Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 					rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "IP_AUTODETECTION_METHOD", "skip-interface=eth*")
 				})
 
@@ -2253,6 +2311,10 @@ var _ = Describe("Node rendering tests", func() {
 
 					// The DaemonSet should have the correct configuration.
 					ds := dsResource.(*appsv1.DaemonSet)
+
+					// The pod template should have node critical priority
+					Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 					rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "IP_AUTODETECTION_METHOD", "cidr=10.0.1.0/24,10.0.2.0/24")
 				})
 			})
@@ -2288,6 +2350,10 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := dsResource.(*appsv1.DaemonSet)
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				ns := ds.Spec.Template.Spec.NodeSelector
 				Expect(ns).To(HaveKey("projectcalico.org/operator-node-migration"))
 				Expect(ns["projectcalico.org/operator-node-migration"]).To(Equal("migrated"))
@@ -2659,6 +2725,9 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
 
 				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
@@ -3126,6 +3195,10 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := dsResource.(*appsv1.DaemonSet)
+
+				// The pod template should have node critical priority
+				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
+
 				rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "CALICO_IPV4POOL_CIDR", "192.168.1.0/16")
 
 				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")

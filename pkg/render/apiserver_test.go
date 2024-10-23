@@ -29,6 +29,7 @@ import (
 	"github.com/openshift/library-go/pkg/crypto"
 
 	calicov3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -93,7 +94,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
 
-		trustedBundle = certificatemanagement.CreateTrustedBundle()
+		trustedBundle = certificatemanagement.CreateTrustedBundle(nil)
 		replicas = 2
 
 		cfg = &render.APIServerConfiguration{

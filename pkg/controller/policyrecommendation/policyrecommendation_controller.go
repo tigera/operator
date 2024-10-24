@@ -288,6 +288,17 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
+	// Render a Policy Recommendation component for Windows if the cluster has Windows nodes.
+	hasWindowsNodes, err := common.HasWindowsNodes(r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "OS not found", err, logc)
+		return reconcile.Result{}, err
+	}
+	if hasWindowsNodes {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Unsupported OS (Windows)", err, logc)
+		return reconcile.Result{}, err
+	}
+
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {

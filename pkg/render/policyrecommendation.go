@@ -68,6 +68,7 @@ type PolicyRecommendationConfiguration struct {
 	PullSecrets                    []*corev1.Secret
 	TrustedBundle                  certificatemanagement.TrustedBundleRO
 	PolicyRecommendationCertSecret certificatemanagement.KeyPairInterface
+	OSType                         rmeta.OSType
 
 	Namespace         string
 	BindingNamespaces []string
@@ -94,6 +95,10 @@ func (pr *policyRecommendationComponent) ResolveImages(is *operatorv1.ImageSet) 
 	reg := pr.cfg.Installation.Registry
 	path := pr.cfg.Installation.ImagePath
 	prefix := pr.cfg.Installation.ImagePrefix
+
+	if pr.cfg.OSType != pr.SupportedOSType() {
+		return fmt.Errorf("unsupported OS %s, Policy Recommendation only supports %s", pr.cfg.OSType, pr.SupportedOSType())
+	}
 
 	var err error
 	pr.image, err = components.GetReference(components.ComponentPolicyRecommendation, reg, path, prefix, is)

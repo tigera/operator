@@ -596,6 +596,19 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 		{
+			// Kubernetes validating admission policy resources.
+			APIGroups: []string{"admissionregistration.k8s.io"},
+			Resources: []string{
+				"validatingadmissionpolicies",
+				"validatingadmissionpolicybindings",
+			},
+			Verbs: []string{
+				"get",
+				"list",
+				"watch",
+			},
+		},
+		{
 			// Core Calico backing storage.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{

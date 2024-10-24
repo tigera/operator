@@ -69,7 +69,7 @@ var Semantic = conversion.EqualitiesOrDie(
 	},
 )
 
-var standardContainerResources = sets.NewString(
+var standardContainerResources = sets.New[string](
 	string(core.ResourceCPU),
 	string(core.ResourceMemory),
 	string(core.ResourceEphemeralStorage),
@@ -106,7 +106,7 @@ func IsNativeResource(name core.ResourceName) bool {
 		strings.Contains(string(name), core.ResourceDefaultNamespacePrefix)
 }
 
-var standardResources = sets.NewString(
+var standardResources = sets.New[string](
 	string(core.ResourceCPU),
 	string(core.ResourceMemory),
 	string(core.ResourceEphemeralStorage),
@@ -134,7 +134,7 @@ func IsStandardResourceName(str string) bool {
 	return standardResources.Has(str) || IsQuotaHugePageResourceName(core.ResourceName(str))
 }
 
-var integerResources = sets.NewString(
+var integerResources = sets.New[string](
 	string(core.ResourcePods),
 	string(core.ResourceQuotas),
 	string(core.ResourceServices),

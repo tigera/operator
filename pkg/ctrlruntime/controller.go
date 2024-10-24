@@ -64,5 +64,5 @@ func NewController(name string, mgr manager.Manager, options controller.Options)
 }
 
 func (c *controler) WatchObject(object client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
-	return c.Watch(source.Kind(c.cach, object), eventhandler, predicates...)
+	return c.Watch(source.Kind(c.cach, object, eventhandler, predicates...))
 }

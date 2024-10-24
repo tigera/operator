@@ -62,6 +62,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/yaml"
 	// +kubebuilder:scaffold:imports
 )
@@ -241,11 +243,15 @@ func main() {
 	log.Info("Active operator: proceeding")
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr(),
-		Port:               9443,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   "operator-lock",
+		Scheme: scheme,
+		Metrics: server.Options{
+			BindAddress: metricsAddr(),
+		},
+		WebhookServer: webhook.NewServer(webhook.Options{
+			Port: 9443,
+		}),
+		LeaderElection:   enableLeaderElection,
+		LeaderElectionID: "operator-lock",
 		// We should test this again in the future to see if the problem with LicenseKey updates
 		// being missed is resolved. Prior to controller-runtime 0.7 we observed Test failures
 		// where LicenseKey updates would be missed and the client cache did not have the LicenseKey.

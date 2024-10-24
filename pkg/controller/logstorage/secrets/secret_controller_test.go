@@ -274,7 +274,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		By("Creating a fluentd certificate secret without all necessary usages")
 		cryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
 		Expect(err).NotTo(HaveOccurred())
-		tlsCfg, err := cryptoCA.MakeServerCertForDuration(sets.NewString("test"), tls.DefaultCertificateDuration, tls.SetServerAuth)
+		tlsCfg, err := cryptoCA.MakeServerCertForDuration(sets.New[string]("test"), tls.DefaultCertificateDuration, tls.SetServerAuth)
 		Expect(err).NotTo(HaveOccurred())
 		keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
 		Expect(tlsCfg.WriteCertConfig(crtContent, keyContent)).NotTo(HaveOccurred())

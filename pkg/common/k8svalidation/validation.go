@@ -481,9 +481,9 @@ func ValidateTopologyKey(fldPath *field.Path, topologyKey string) *field.Error {
 
 // ValidateWhenUnsatisfiable tests that the argument is a valid UnsatisfiableConstraintAction.
 func ValidateWhenUnsatisfiable(fldPath *field.Path, action core.UnsatisfiableConstraintAction) *field.Error {
-	supportedScheduleActions := sets.NewString(string(core.DoNotSchedule), string(core.ScheduleAnyway))
+	supportedScheduleActions := sets.New[string](string(core.DoNotSchedule), string(core.ScheduleAnyway))
 	if !supportedScheduleActions.Has(string(action)) {
-		return field.NotSupported(fldPath, action, supportedScheduleActions.List())
+		return field.NotSupported(fldPath, action, sets.List(supportedScheduleActions))
 	}
 	return nil
 }

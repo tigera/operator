@@ -90,13 +90,13 @@ type Endpoint struct {
 	HonorTimestamps *bool `json:"honorTimestamps,omitempty"`
 
 	// MetricRelabelConfigs to apply to samples before ingestion.
-	MetricRelabelConfigs []*v1.RelabelConfig `json:"metricRelabelings,omitempty"`
+	MetricRelabelConfigs []v1.RelabelConfig `json:"metricRelabelings,omitempty"`
 
 	// RelabelConfigs to apply to samples before scraping.
 	// Prometheus Operator automatically adds relabelings for a few standard Kubernetes fields.
 	// The original scrape job's name is available via the `__tmp_prometheus_job_name` label.
 	// More info: https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config
-	RelabelConfigs []*v1.RelabelConfig `json:"relabelings,omitempty"`
+	RelabelConfigs []v1.RelabelConfig `json:"relabelings,omitempty"`
 }
 
 // MonitorStatus defines the observed state of Tigera monitor.

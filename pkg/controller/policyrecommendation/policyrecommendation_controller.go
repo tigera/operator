@@ -288,6 +288,18 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
+	// Check if there are any Windows nodes in the cluster. Policy Recommendation is not supported
+	// in combination with Windows nodes.
+	hasWindowsNodes, err := common.HasWindowsNodes(r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to determine if there are Windows nodes", err, logc)
+		return reconcile.Result{}, err
+	}
+	if hasWindowsNodes {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Policy Recommendation is not supported in combination with Windows nodes", err, logc)
+		return reconcile.Result{}, err
+	}
+
 	license, err := utils.FetchLicenseKey(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {

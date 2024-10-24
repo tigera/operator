@@ -89,6 +89,8 @@ const (
 	// The default port used by calico/node to report Calico Enterprise internal metrics.
 	// This is separate from the calico/node prometheus metrics port, which is user configurable.
 	defaultNodeReporterPort = 9081
+
+	defaultFelixMetricsDefaultPort = 9091
 )
 
 const InstallationName string = "calico"
@@ -1135,17 +1137,23 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	nodeReporterMetricsPort := defaultNodeReporterPort
 	var nodePrometheusTLS certificatemanagement.KeyPairInterface
 	calicoVersion := components.CalicoRelease
+
+	felixPrometheusMetricsPort := defaultFelixMetricsDefaultPort
+
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
 
 		// Determine the port to use for nodeReporter metrics.
 		if felixConfiguration.Spec.PrometheusReporterPort != nil {
 			nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
 		}
-
 		if nodeReporterMetricsPort == 0 {
 			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
 			r.status.SetDegraded(operator.InvalidConfigurationError, "invalid metrics port", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+
+		if felixConfiguration.Spec.PrometheusMetricsPort != nil {
+			felixPrometheusMetricsPort = *felixConfiguration.Spec.PrometheusMetricsPort
 		}
 
 		nodePrometheusTLS, err = certificateManager.GetOrCreateKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
@@ -1349,21 +1357,23 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
-		K8sServiceEp:            k8sapi.Endpoint,
-		Installation:            &instance.Spec,
-		IPPools:                 crdPoolsToOperator(currentPools.Items),
-		LogCollector:            logCollector,
-		BirdTemplates:           birdTemplates,
-		TLS:                     typhaNodeTLS,
-		ClusterDomain:           r.clusterDomain,
-		NodeReporterMetricsPort: nodeReporterMetricsPort,
-		BGPLayouts:              bgpLayout,
-		NodeAppArmorProfile:     nodeAppArmorProfile,
-		MigrateNamespaces:       needNsMigration,
-		CanRemoveCNIFinalizer:   canRemoveCNI,
-		PrometheusServerTLS:     nodePrometheusTLS,
-		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
-		BindMode:                bgpConfiguration.Spec.BindMode,
+		K8sServiceEp:                  k8sapi.Endpoint,
+		Installation:                  &instance.Spec,
+		IPPools:                       crdPoolsToOperator(currentPools.Items),
+		LogCollector:                  logCollector,
+		BirdTemplates:                 birdTemplates,
+		TLS:                           typhaNodeTLS,
+		ClusterDomain:                 r.clusterDomain,
+		NodeReporterMetricsPort:       nodeReporterMetricsPort,
+		BGPLayouts:                    bgpLayout,
+		NodeAppArmorProfile:           nodeAppArmorProfile,
+		MigrateNamespaces:             needNsMigration,
+		CanRemoveCNIFinalizer:         canRemoveCNI,
+		PrometheusServerTLS:           nodePrometheusTLS,
+		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
+		BindMode:                      bgpConfiguration.Spec.BindMode,
+		FelixPrometheusMetricsEnabled: isFelixPrometheusMetricsEnabled(felixConfiguration),
+		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
 	}
 	components = append(components, render.Node(&nodeCfg))
 
@@ -1550,6 +1560,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	reqLogger.V(1).Info("Finished reconciling Installation")
 	return reconcile.Result{}, nil
+}
+
+func isFelixPrometheusMetricsEnabled(felixConfiguration *crdv1.FelixConfiguration) bool {
+	if felixConfiguration.Spec.PrometheusMetricsEnabled != nil {
+		return *felixConfiguration.Spec.PrometheusMetricsEnabled
+	}
+	return false
 }
 
 func readMTUFile() (int, error) {

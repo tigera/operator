@@ -1736,7 +1736,7 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 		},
 	}
 
-	if c.cfg.FelixPrometheusMetricsEnabled == true {
+	if c.cfg.FelixPrometheusMetricsEnabled {
 		felixMetricsPort := c.getFelixMetricsPort()
 
 		ports = append(ports, corev1.ServicePort{

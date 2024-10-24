@@ -74,8 +74,6 @@ var (
 	nodeBGPReporterPort int32 = 9900
 
 	NodeTLSSecretName = "node-certs"
-
-	felixMetricsDefaultPort int32 = 9091
 )
 
 // TyphaNodeTLS holds configuration for Node and Typha to establish TLS.
@@ -128,6 +126,8 @@ type NodeConfiguration struct {
 	BindMode string
 
 	FelixPrometheusMetricsEnabled bool
+
+	FelixPrometheusMetricsPort int
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -1737,10 +1737,12 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 	}
 
 	if c.cfg.FelixPrometheusMetricsEnabled == true {
+		felixMetricsPort := c.getFelixMetricsPort()
+
 		ports = append(ports, corev1.ServicePort{
 			Name:       "felix-metrics-port",
-			Port:       felixMetricsDefaultPort,
-			TargetPort: intstr.FromInt(int(felixMetricsDefaultPort)),
+			Port:       felixMetricsPort,
+			TargetPort: intstr.FromInt(int(felixMetricsPort)),
 			Protocol:   corev1.ProtocolTCP,
 		})
 	}
@@ -1762,6 +1764,14 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 			Ports:     ports,
 		},
 	}
+}
+
+func (c *nodeComponent) getFelixMetricsPort() int32 {
+	if c.cfg.Installation.NodeMetricsPort != nil {
+		return *c.cfg.Installation.NodeMetricsPort
+	}
+
+	return int32(c.cfg.FelixPrometheusMetricsPort)
 }
 
 // hostPathInitContainer creates an init container that changes the permissions on hostPath volumes

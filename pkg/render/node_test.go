@@ -133,12 +133,14 @@ var _ = Describe("Node rendering tests", func() {
 
 				// Create a default configuration.
 				cfg = render.NodeConfiguration{
-					K8sServiceEp:    k8sServiceEp,
-					Installation:    defaultInstance,
-					TLS:             typhaNodeTLS,
-					ClusterDomain:   defaultClusterDomain,
-					FelixHealthPort: 9099,
-					IPPools:         defaultInstance.CalicoNetwork.IPPools,
+					K8sServiceEp:                  k8sServiceEp,
+					Installation:                  defaultInstance,
+					TLS:                           typhaNodeTLS,
+					ClusterDomain:                 defaultClusterDomain,
+					FelixHealthPort:               9099,
+					IPPools:                       defaultInstance.CalicoNetwork.IPPools,
+					FelixPrometheusMetricsEnabled: false,
+					FelixPrometheusMetricsPort:    9098,
 				}
 			})
 
@@ -841,7 +843,85 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 				Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
+				//Expect 2 Ports when FelixPrometheusMetricsEnabled is false
+				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
+				Expect(len(ms.Spec.Ports)).To(Equal(2))
+
 				verifyProbesAndLifecycle(ds, false, true)
+			})
+
+			It("should render felix service metric with FelixPrometheusMetricPort when FelixPrometheusMetricsEnabled is true and nodeMetricsPort is nil", func() {
+
+				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				cfg.NodeReporterMetricsPort = 9081
+				cfg.FelixPrometheusMetricsEnabled = true
+
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+
+				expectedServicePorts := []corev1.ServicePort{
+					{
+						Name:       "calico-metrics-port",
+						Port:       int32(cfg.NodeReporterMetricsPort),
+						TargetPort: intstr.FromInt(cfg.NodeReporterMetricsPort),
+						Protocol:   corev1.ProtocolTCP,
+					},
+					{
+						Name:       "calico-bgp-metrics-port",
+						Port:       9900,
+						TargetPort: intstr.FromInt(int(9900)),
+						Protocol:   corev1.ProtocolTCP,
+					},
+					{
+						Name:       "felix-metrics-port",
+						Port:       9098,
+						TargetPort: intstr.FromInt(int(9098)),
+						Protocol:   corev1.ProtocolTCP,
+					},
+				}
+
+				//Expect 3 Ports when FelixPrometheusMetricsEnabled is true
+				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
+				Expect(ms.Spec.Ports).To(Equal(expectedServicePorts))
+			})
+
+			It("should render felix service metric with nodeMetricsPort when FelixPrometheusMetricsEnabled is true and nodeMetricsPort is not nil", func() {
+
+				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				cfg.NodeReporterMetricsPort = 9081
+				cfg.FelixPrometheusMetricsEnabled = true
+				var nodeMetricsPort int32 = 9099
+				cfg.Installation.NodeMetricsPort = &nodeMetricsPort
+
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+
+				expectedServicePorts := []corev1.ServicePort{
+					{
+						Name:       "calico-metrics-port",
+						Port:       int32(cfg.NodeReporterMetricsPort),
+						TargetPort: intstr.FromInt(cfg.NodeReporterMetricsPort),
+						Protocol:   corev1.ProtocolTCP,
+					},
+					{
+						Name:       "calico-bgp-metrics-port",
+						Port:       9900,
+						TargetPort: intstr.FromInt(int(9900)),
+						Protocol:   corev1.ProtocolTCP,
+					},
+					{
+						Name:       "felix-metrics-port",
+						Port:       nodeMetricsPort,
+						TargetPort: intstr.FromInt(int(nodeMetricsPort)),
+						Protocol:   corev1.ProtocolTCP,
+					},
+				}
+
+				//Expect 3 Ports when FelixPrometheusMetricsEnabled is true
+				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
+				Expect(ms.Spec.Ports).To(Equal(expectedServicePorts))
 			})
 
 			It("should render all resources with the appropriate permissions when running as non-privileged", func() {

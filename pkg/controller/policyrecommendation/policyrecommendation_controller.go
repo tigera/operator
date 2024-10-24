@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -430,6 +431,12 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, nil
 	}
 
+	// Render a Policy Recommendation component for Windows if the cluster has Windows nodes.
+	hasWindowsNodes, err := common.HasWindowsNodes(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
 		ClusterDomain:                  r.clusterDomain,
 		Installation:                   installation,
@@ -443,6 +450,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		TrustedBundle:                  trustedBundleRO,
 		PolicyRecommendationCertSecret: policyRecommendationKeyPair,
 		PolicyRecommendation:           policyRecommendation,
+		OSType:                         osType(hasWindowsNodes),
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -514,4 +522,12 @@ func (r *ReconcilePolicyRecommendation) createDefaultPolicyRecommendationScope(c
 	}
 
 	return nil
+}
+
+// osType returns the OS type of the nodes in the cluster.
+func osType(hasWindowsNodes bool) rmeta.OSType {
+	if hasWindowsNodes {
+		return rmeta.OSTypeWindows
+	}
+	return rmeta.OSTypeLinux
 }

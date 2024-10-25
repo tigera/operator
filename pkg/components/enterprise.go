@@ -150,7 +150,7 @@ var (
 	}
 
 	ComponentSecurityEventWebhooksProcessor = component{
-		Version:  "v3.20.0-1.1",
+		Version:  "v3.20.0-1.6",
 		Image:    "tigera/webhooks-processor",
 		Registry: "",
 	}

@@ -334,7 +334,7 @@ func (cm *certificateManager) GetOrCreateKeyPair(cli client.Client, secretName, 
 	}
 
 	// If we reach here, it means we need to create a new KeyPair.
-	tlsCfg, err := cm.MakeServerCertForDuration(sets.NewString(dnsNames...), tls.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
+	tlsCfg, err := cm.MakeServerCertForDuration(sets.New[string](dnsNames...), tls.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create signed cert pair: %s", err)
 	}
@@ -550,7 +550,7 @@ func certificateManagementKeyPair(ca *certificateManager, secretName, ns string,
 }
 
 func HasExpectedDNSNames(secretName, secretNamespace string, cert *x509.Certificate, expectedDNSNames []string) error {
-	dnsNames := sets.NewString(cert.DNSNames...)
+	dnsNames := sets.New[string](cert.DNSNames...)
 	if dnsNames.HasAll(expectedDNSNames...) {
 		return nil
 	}

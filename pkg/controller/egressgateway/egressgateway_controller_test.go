@@ -845,7 +845,7 @@ func (m *mockController) WatchObject(object client.Object, eventhandler handler.
 	return nil
 }
 
-func (m *mockController) Watch(src source.Source, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+func (m *mockController) Watch(src source.Source) error {
 	panic("not implemented")
 }
 

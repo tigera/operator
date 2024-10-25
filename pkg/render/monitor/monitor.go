@@ -852,7 +852,7 @@ func (mc *monitorComponent) tlsConfig(serverName string) *monitoringv1.TLSConfig
 		CertFile: mc.cfg.ClientTLSSecret.VolumeMountCertificateFilePath(),
 		CAFile:   mc.cfg.TrustedCertBundle.MountPath(),
 		SafeTLSConfig: monitoringv1.SafeTLSConfig{
-			ServerName: serverName,
+			ServerName: &serverName,
 		},
 	}
 }
@@ -919,6 +919,7 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 }
 
 func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMonitor {
+	serverName := render.ProjectCalicoAPIServerServiceName(mc.cfg.Installation.Variant)
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -940,7 +941,7 @@ func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMon
 					TLSConfig: &monitoringv1.TLSConfig{
 						CAFile: mc.cfg.TrustedCertBundle.MountPath(),
 						SafeTLSConfig: monitoringv1.SafeTLSConfig{
-							ServerName: render.ProjectCalicoAPIServerServiceName(mc.cfg.Installation.Variant),
+							ServerName: &serverName,
 						},
 					},
 				},
@@ -1394,7 +1395,7 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 					},
 				},
 			},
-			BearerTokenSecret:    ep.BearerTokenSecret,
+			BearerTokenSecret:    &ep.BearerTokenSecret,
 			HonorLabels:          ep.HonorLabels,
 			HonorTimestamps:      ep.HonorTimestamps,
 			MetricRelabelConfigs: ep.MetricRelabelConfigs,

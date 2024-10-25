@@ -562,6 +562,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("queryserver"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal("https"))
+		//nolint:staticcheck // Ignore SA1019 deprecated
 		Expect(servicemonitorObj.Spec.Endpoints[0].BearerTokenFile).To(Equal("/var/run/secrets/kubernetes.io/serviceaccount/token"))
 
 		// Role

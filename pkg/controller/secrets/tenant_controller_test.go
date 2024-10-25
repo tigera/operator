@@ -119,7 +119,7 @@ var _ = Describe("Tenant controller", func() {
 
 		cryptoCA, _ := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix + "@some-hash")
 		dnsNames := []string{"external.ingress.elastic"}
-		cfg, _ := cryptoCA.MakeServerCertForDuration(sets.NewString(dnsNames...), tls.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
+		cfg, _ := cryptoCA.MakeServerCertForDuration(sets.New[string](dnsNames...), tls.DefaultCertificateDuration, tls.SetServerAuth, tls.SetClientAuth)
 		keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
 		_ = cfg.WriteCertConfig(crtContent, keyContent)
 

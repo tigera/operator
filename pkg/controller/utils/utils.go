@@ -165,7 +165,7 @@ func AddDeploymentWatch(c ctrlruntime.Controller, name, namespace string) error 
 }
 
 func AddPeriodicReconcile(c ctrlruntime.Controller, period time.Duration, handler handler.EventHandler) error {
-	return c.Watch(&source.Channel{Source: createPeriodicReconcileChannel(period)}, handler)
+	return c.Watch(source.Channel(createPeriodicReconcileChannel(period), handler))
 }
 
 // AddSecretWatchWithLabel adds a secret watch for secrets with the given label in the given namespace.

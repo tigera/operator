@@ -258,7 +258,7 @@ endif
 BINDIR?=build/init/bin
 $(BINDIR)/kubectl:
 	mkdir -p $(BINDIR)
-	curl -L https://storage.googleapis.com/kubernetes-release/release/v1.25.6/bin/linux/$(ARCH)/kubectl -o $@
+	curl -sSf -L --retry 5 https://dl.k8s.io/release/v1.30.5/bin/linux/$(ARCH)/kubectl -o $@
 	chmod +x $@
 
 kubectl: $(BINDIR)/kubectl
@@ -298,7 +298,7 @@ run-fvs:
 
 ## Create a local kind dual stack cluster.
 KIND_KUBECONFIG?=./kubeconfig.yaml
-K8S_VERSION?=v1.21.14
+KINDEST_NODE_VERSION?=v1.30.4
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy
@@ -307,7 +307,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	$(BINDIR)/kind create cluster \
 	        --config ./deploy/kind-config.yaml \
 	        --kubeconfig $(KIND_KUBECONFIG) \
-	        --image kindest/node:$(K8S_VERSION)
+	        --image kindest/node:$(KINDEST_NODE_VERSION)
 
 	./deploy/scripts/ipv6_kind_cluster_update.sh
 	# Deploy resources needed in test env.

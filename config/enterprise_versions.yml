@@ -154,4 +154,3 @@ components:
   key-cert-provisioner:
     image: tigera/key-cert-provisioner
     version: release-calient-v3.20
-

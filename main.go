@@ -40,7 +40,6 @@ import (
 	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
@@ -49,7 +48,6 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -57,7 +55,6 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -205,12 +202,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	policySelector, err := labels.Parse(fmt.Sprintf("projectcalico.org/tier == %s", networkpolicy.TigeraComponentTierName))
-	if err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
-
 	// Because we only run this as a job that is set up by the operator, it should not be
 	// launched except by an operator that is the active operator. So we do not need to
 	// check that we're the active operator before running the AWS SG setup.
@@ -271,20 +262,6 @@ func main() {
 		// not being this mapper (which has since been rectified). It was a tough issue to figure out when the default
 		// had changed out from under us, so better to continue to explicitly set it as we know this is the mapper we want.
 		MapperProvider: apiutil.NewDynamicRESTMapper,
-
-		// NetworkPolicy is served through the Tigera API Server, which currently restricts List and Watch
-		// operations on NetworkPolicy to a single tier only, specified via label or field selector. If no
-		// selector is specified, List and Watch return policies from the 'default' tier. The manager cache
-		// must therefore apply a selector to specify the tier that the operator currently reconciles policy
-		// within so that it can receive the expected resources for List and Watch. If the operator needs to
-		// reconcile policy within multiple tiers, the API Server should be updated to serve policy from all
-		// tiers that the user is authorized for.
-		Cache: cache.Options{
-			ByObject: map[client.Object]cache.ByObject{
-				&v3.NetworkPolicy{}:       {Label: policySelector},
-				&v3.GlobalNetworkPolicy{}: {Label: policySelector},
-			},
-		},
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")

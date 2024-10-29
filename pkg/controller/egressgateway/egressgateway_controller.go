@@ -671,6 +671,11 @@ func updateEGWStatusConditions(cli client.Client, ctx context.Context, egw *oper
 	found := false
 	for idx, cond := range egw.Status.Conditions {
 		if cond.Type == string(ctype) {
+			if cond.Status == status &&
+				cond.Reason == reason &&
+				cond.Message == msg {
+				return
+			}
 			cond.Status = status
 			cond.Reason = reason
 			cond.Message = msg

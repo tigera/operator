@@ -373,9 +373,6 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 		return err
 	}
 
-	// Set the condition to progressing
-	setProgressing(r.client, ctx, egw, string(operatorv1.ResourceNotReady), "Reconciling")
-
 	egwVXLANPort := egressgateway.DefaultVXLANPort
 	egwVXLANVNI := egressgateway.DefaultVXLANVNI
 	if fc.Spec.EgressIPVXLANPort != nil {
@@ -652,22 +649,17 @@ func getUnreadyEgressGateway(egws []operatorv1.EgressGateway) *operatorv1.Egress
 
 // setDegraded updates the degraded status condition of the EGW resource.
 func setDegraded(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
-	updateEGWStatusConditions(cli, ctx, egw, operatorv1.ComponentDegraded, metav1.ConditionTrue, reason, msg, true)
+	updateEGWStatusConditions(cli, ctx, egw, operatorv1.ComponentDegraded, metav1.ConditionTrue, reason, msg)
 }
 
-// setProgressing updates the progressing status condition of the EGW resource.
-func setProgressing(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
-	updateEGWStatusConditions(cli, ctx, egw, operatorv1.ComponentProgressing, metav1.ConditionTrue, reason, msg, false)
-}
-
-// setProgressing updates the ready status condition of the EGW resource.
+// setAvailable updates the ready status condition of the EGW resource.
 func setAvailable(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, reason, msg string) {
-	updateEGWStatusConditions(cli, ctx, egw, operatorv1.ComponentAvailable, metav1.ConditionTrue, reason, msg, true)
+	updateEGWStatusConditions(cli, ctx, egw, operatorv1.ComponentAvailable, metav1.ConditionTrue, reason, msg)
 }
 
 // updateEGWStatusConditions sets the status conditions of the EGW resource and if updateStatus is True, status of the EGW resource
 // is updated in the datastore.
-func updateEGWStatusConditions(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, ctype operatorv1.StatusConditionType, status metav1.ConditionStatus, reason, msg string, updateStatus bool) {
+func updateEGWStatusConditions(cli client.Client, ctx context.Context, egw *operatorv1.EgressGateway, ctype operatorv1.StatusConditionType, status metav1.ConditionStatus, reason, msg string) {
 	found := false
 	for idx, cond := range egw.Status.Conditions {
 		if cond.Type == string(ctype) {
@@ -692,10 +684,8 @@ func updateEGWStatusConditions(cli client.Client, ctx context.Context, egw *oper
 		condition := metav1.Condition{Type: string(ctype), Status: status, Reason: reason, Message: msg, LastTransitionTime: metav1.NewTime(time.Now())}
 		egw.Status.Conditions = append(egw.Status.Conditions, condition)
 	}
-	if updateStatus {
-		if err := cli.Status().Update(ctx, egw); err != nil {
-			log.WithValues("Name", egw.Name, "Namespace", egw.Namespace, "error", err).Info("Error updating status")
-		}
+	if err := cli.Status().Update(ctx, egw); err != nil {
+		log.WithValues("Name", egw.Name, "Namespace", egw.Namespace, "error", err).Info("Error updating status")
 	}
 }
 

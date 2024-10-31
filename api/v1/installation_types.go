@@ -468,8 +468,10 @@ type CalicoNetworkSpec struct {
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	BGP *BGPOption `json:"bgp,omitempty"`
 
-	// IPPools contains a list of IP pools to create if none exist. At most one IP pool of each
-	// address family may be specified. If omitted, a single pool will be configured if needed.
+	// IPPools contains a list of IP pools to manage. If nil, a single IPv4 IP pool
+	// will be created by the operator. If an empty list is provided, the operator will not create any IP pools and will instead
+	// wait for IP pools to be created out-of-band.
+	// IP pools in this list will be reconciled by the operator and should not be modified out-of-band.
 	// +optional
 	// +kubebuilder:validation:MaxItems=25
 	IPPools []IPPool `json:"ipPools,omitempty"`

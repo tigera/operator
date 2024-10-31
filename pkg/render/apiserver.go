@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/api/pkg/lib/numorstring"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
@@ -69,8 +70,6 @@ const (
 	MultiTenantManagedClustersAccessClusterRoleName = "tigera-managed-cluster-access"
 	L7AdmissionControllerContainerName              = "calico-l7-admission-controller"
 	L7AdmissionControllerPort                       = 6443
-
-	SidecarMutatingWebhookConfigName = "tigera-sidecar-webhook-configuration"
 )
 
 var TigeraAPIServerEntityRule = v3.EntityRule{
@@ -293,7 +292,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.IsSidecarInjectionEnabled() {
 		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.sidecarMutatingWebhookConfig())
 	} else {
-		objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: SidecarMutatingWebhookConfigName}})
+		objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}})
 	}
 
 	podSecurityNamespaceLabel := PodSecurityStandard(PSSRestricted)
@@ -590,6 +589,19 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			// Kubernetes admin network policy resources.
 			APIGroups: []string{"policy.networking.k8s.io"},
 			Resources: []string{"adminnetworkpolicies"},
+			Verbs: []string{
+				"get",
+				"list",
+				"watch",
+			},
+		},
+		{
+			// Kubernetes validating admission policy resources.
+			APIGroups: []string{"admissionregistration.k8s.io"},
+			Resources: []string{
+				"validatingadmissionpolicies",
+				"validatingadmissionpolicybindings",
+			},
 			Verbs: []string{
 				"get",
 				"list",
@@ -1104,7 +1116,7 @@ func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWe
 			Kind:       "MutatingWebhookConfiguration",
 			APIVersion: "admissionregistration.k8s.io/v1",
 		},
-		ObjectMeta: metav1.ObjectMeta{Name: SidecarMutatingWebhookConfigName},
+		ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName},
 		Webhooks: []admregv1.MutatingWebhook{
 			{
 				AdmissionReviewVersions: []string{"v1"},
@@ -1316,7 +1328,11 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 	if c.hostNetwork() {
 		return rmeta.TolerateAll
 	}
-	return append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+	return tolerations
 }
 
 // networkPolicy returns a NP to allow traffic to the API server. This prevents it from

@@ -562,6 +562,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("queryserver"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal("https"))
+		//nolint:staticcheck // Ignore SA1019 deprecated
 		Expect(servicemonitorObj.Spec.Endpoints[0].BearerTokenFile).To(Equal("/var/run/secrets/kubernetes.io/serviceaccount/token"))
 
 		// Role
@@ -599,6 +600,31 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(rolebindingObj.Subjects[0].Kind).To(Equal("ServiceAccount"))
 		Expect(rolebindingObj.Subjects[0].Name).To(Equal("tigera-operator"))
 		Expect(rolebindingObj.Subjects[0].Namespace).To(Equal(common.OperatorNamespace()))
+	})
+
+	It("should render toleration on GKE", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		prometheusObj, ok := rtest.GetResource(resources, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
+		Expect(ok).To(BeTrue())
+		alertmanagerObj, ok := rtest.GetResource(resources, monitor.CalicoNodeAlertmanager, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind).(*monitoringv1.Alertmanager)
+		Expect(ok).To(BeTrue())
+
+		Expect(prometheusObj.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}))
+		Expect(alertmanagerObj.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}))
 	})
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
@@ -854,6 +880,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
 		Expect(toDelete).To(HaveLen(3))
 	})
+
 	It("Should render external prometheus resources with service monitor and custom token", func() {
 		cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
 			ServiceMonitor: &operatorv1.ServiceMonitor{
@@ -883,6 +910,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
 		Expect(toDelete).To(HaveLen(3))
 	})
+
 	It("Should render external prometheus resources without service monitor", func() {
 		cfg.Monitor.ExternalPrometheus = &operatorv1.ExternalPrometheus{
 			Namespace: "external-prometheus",
@@ -902,6 +930,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(toCreate).To(HaveLen(len(expectedResources)))
 		Expect(toDelete).To(HaveLen(3))
 	})
+
 	It("Should render typha service monitor if typha metrics are enabled", func() {
 		cfg.Installation.TyphaMetricsPort = ptr.Int32ToPtr(9093)
 		component := monitor.Monitor(cfg)

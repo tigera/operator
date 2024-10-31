@@ -18,13 +18,11 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/tls"
-	"github.com/tigera/operator/test"
-	"k8s.io/apimachinery/pkg/api/resource"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -44,7 +42,9 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
@@ -709,6 +709,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			}
 		}
 	})
+
 	It("should render with Syslog configuration", func() {
 		expectedResources := []struct {
 			name    string
@@ -793,6 +794,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			},
 		}))
 	})
+
 	It("should render with Syslog configuration with TLS and user's corporate CA", func() {
 		cfg.UseSyslogCertificate = true
 		var ps int32 = 180
@@ -1092,6 +1094,23 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		Expect(envs).To(Equal(expectedEnvVars))
+	})
+
+	It("should render EKS Cloudwatch Log toleration on GKE", func() {
+		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
+		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+
+		component := render.Fluentd(cfg)
+		resources, _ := component.Objects()
+		deploy := rtest.GetResource(resources, "eks-log-forwarder", "tigera-fluentd", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deploy).NotTo(BeNil())
+		Expect(deploy.Spec.Template.Spec.Tolerations).To(ContainElements(corev1.Toleration{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}))
 	})
 
 	It("should render with EKS Cloudwatch Log with resources", func() {

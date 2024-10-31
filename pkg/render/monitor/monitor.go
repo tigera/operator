@@ -402,13 +402,17 @@ func (mc *monitorComponent) prometheusOperatorClusterRoleBinding() *rbacv1.Clust
 }
 
 func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
-
 	resources := corev1.ResourceRequirements{}
 
 	if mc.cfg.Monitor.AlertManager != nil {
 		if mc.cfg.Monitor.AlertManager.AlertManagerSpec != nil {
 			resources = mc.cfg.Monitor.AlertManager.AlertManagerSpec.Resources
 		}
+	}
+
+	tolerations := mc.cfg.Installation.ControlPlaneTolerations
+	if mc.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
 	am := &monitoringv1.Alertmanager{
@@ -425,7 +429,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			Replicas:           mc.cfg.Installation.ControlPlaneReplicas,
 			SecurityContext:    securitycontext.NewNonRootPodContext(),
 			ServiceAccountName: PrometheusServiceAccountName,
-			Tolerations:        mc.cfg.Installation.ControlPlaneTolerations,
+			Tolerations:        tolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
 			Resources:          resources,
 		},
@@ -513,6 +517,11 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		env = append(env, mc.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
+	tolerations := mc.cfg.Installation.ControlPlaneTolerations
+	if mc.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
 	prometheus := &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -572,7 +581,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				SecurityContext:        securitycontext.NewNonRootPodContext(),
 				ServiceAccountName:     PrometheusServiceAccountName,
 				ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
-				Tolerations:            mc.cfg.Installation.ControlPlaneTolerations,
+				Tolerations:            tolerations,
 				Version:                components.ComponentCoreOSPrometheus.Version,
 				VolumeMounts:           volumeMounts,
 				Volumes:                volumes,
@@ -843,7 +852,7 @@ func (mc *monitorComponent) tlsConfig(serverName string) *monitoringv1.TLSConfig
 		CertFile: mc.cfg.ClientTLSSecret.VolumeMountCertificateFilePath(),
 		CAFile:   mc.cfg.TrustedCertBundle.MountPath(),
 		SafeTLSConfig: monitoringv1.SafeTLSConfig{
-			ServerName: serverName,
+			ServerName: &serverName,
 		},
 	}
 }
@@ -910,6 +919,7 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 }
 
 func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMonitor {
+	serverName := render.ProjectCalicoAPIServerServiceName(mc.cfg.Installation.Variant)
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -931,7 +941,7 @@ func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMon
 					TLSConfig: &monitoringv1.TLSConfig{
 						CAFile: mc.cfg.TrustedCertBundle.MountPath(),
 						SafeTLSConfig: monitoringv1.SafeTLSConfig{
-							ServerName: render.ProjectCalicoAPIServerServiceName(mc.cfg.Installation.Variant),
+							ServerName: &serverName,
 						},
 					},
 				},
@@ -1385,7 +1395,7 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 					},
 				},
 			},
-			BearerTokenSecret:    ep.BearerTokenSecret,
+			BearerTokenSecret:    &ep.BearerTokenSecret,
 			HonorLabels:          ep.HonorLabels,
 			HonorTimestamps:      ep.HonorTimestamps,
 			MetricRelabelConfigs: ep.MetricRelabelConfigs,

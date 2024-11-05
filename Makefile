@@ -6,9 +6,6 @@
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
 
-# Section for compatibility with kubebuilder / operator-sdk.
-CRD_OPTIONS ?= "crd"
-
 define yq_cmd
 	$(shell yq --version | grep v$1.* >/dev/null && which yq || echo docker run --rm --user="root" -i -v "$(shell pwd)":/workdir mikefarah/yq:$1 $(if $(shell [ $1 -lt 4 ] && echo "true"), yq,))
 endef

@@ -36,18 +36,6 @@ type IntrusionDetectionReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=intrusiondetections,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=intrusiondetections/status,verbs=get;update;patch
 
-//func (r *IntrusionDetectionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-//	_ = context.Background()
-//	_ = r.Log.WithValues("intrusiondetection", req.NamespacedName)
-//
-//	// your logic here
-//
-//	return ctrl.Result{}, nil
-//}
-
 func (r *IntrusionDetectionReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
 	return intrusiondetection.Add(mgr, opts)
-	// return ctrl.NewControllerManagedBy(mgr).
-	//	For(&operatorv1.IntrusionDetection{}).
-	//	Complete(r)
 }

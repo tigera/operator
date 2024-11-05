@@ -15,6 +15,7 @@ require (
 	github.com/hashicorp/go-version v1.7.0
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/onsi/ginkgo v1.16.5
+	github.com/onsi/ginkgo/v2 v2.20.1
 	github.com/onsi/gomega v1.34.2
 	github.com/openshift/api v0.0.0-20240924220842-3c700b6cb32b
 	github.com/openshift/library-go v0.0.0-20240930172803-190f286b06b1
@@ -39,8 +40,6 @@ require (
 	sigs.k8s.io/kind v0.24.0 // Do not remove, not used by code but used by build
 	sigs.k8s.io/yaml v1.4.0
 )
-
-require github.com/onsi/ginkgo/v2 v2.20.1
 
 require (
 	github.com/BurntSushi/toml v1.4.0 // indirect

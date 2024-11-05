@@ -178,4 +178,13 @@ resources:
   kind: TLSPassthroughRoute
   path: github.com/tigera/operator/api/v1
   version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: tigera.io
+  group: operator
+  kind: DemoResource
+  path: github.com/tigera/operator/api/v1
+  version: v1
 version: "3"

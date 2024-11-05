@@ -1,15 +1,210 @@
 domain: tigera.io
-layout: go.kubebuilder.io/v2
+layout:
+- go.kubebuilder.io/v3
 projectName: operator
 repo: github.com/tigera/operator
+version: "3"
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+
 resources:
 - controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
   domain: tigera.io
   group: operator
   kind: Installation
   path: github.com/tigera/operator/api/v1
   version: v1
-version: "3"
-plugins:
-  manifests.sdk.operatorframework.io/v2: {}
-  scorecard.sdk.operatorframework.io/v2: {}
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: APIServer
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: Monitor
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: LogCollector
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: TigeraStatus
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: EgressGateway
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: ImageSet
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: IntrusionDetection
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: PacketCaptureAPI
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: LogStorage
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: Authentication
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: ManagementCluster
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: ApplicationLayer
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: Manager
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: Tenant
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: ManagementClusterConnection
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: NonClusterHost
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: PolicyRecommendation
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: Compliance
+  path: github.com/tigera/operator/api/v1
+  version: v1
+
+- controller: true
+  api:
+    crdVersion: v1
+    namespaced: false
+  domain: tigera.io
+  group: operator
+  kind: TLSTerminatedRoute
+  path: github.com/tigera/operator/api/v1
+  version: v1

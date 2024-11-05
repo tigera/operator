@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"github.com/go-logr/logr"
@@ -22,32 +22,32 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/controller/logcollector"
+	"github.com/tigera/operator/pkg/controller/intrusiondetection"
 	"github.com/tigera/operator/pkg/controller/options"
 )
 
-// LogCollectorReconciler reconciles a LogCollector object
-type LogCollectorReconciler struct {
+// IntrusionDetectionReconciler reconciles a IntrusionDetection object
+type IntrusionDetectionReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=logcollectors,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=logcollectors/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=intrusiondetections,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=intrusiondetections/status,verbs=get;update;patch
 
-//func (r *LogCollectorReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+//func (r *IntrusionDetectionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 //	_ = context.Background()
-//	_ = r.Log.WithValues("logcollector", req.NamespacedName)
+//	_ = r.Log.WithValues("intrusiondetection", req.NamespacedName)
 //
 //	// your logic here
 //
 //	return ctrl.Result{}, nil
 //}
 
-func (r *LogCollectorReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return logcollector.Add(mgr, opts)
-	//return ctrl.NewControllerManagedBy(mgr).
-	//	For(&operatorv1.LogCollector{}).
+func (r *IntrusionDetectionReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return intrusiondetection.Add(mgr, opts)
+	// return ctrl.NewControllerManagedBy(mgr).
+	//	For(&operatorv1.IntrusionDetection{}).
 	//	Complete(r)
 }

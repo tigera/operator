@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"github.com/go-logr/logr"
@@ -22,32 +22,32 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/controller/manager"
+	"github.com/tigera/operator/pkg/controller/clusterconnection"
 	"github.com/tigera/operator/pkg/controller/options"
 )
 
-// ManagerReconciler reconciles a Manager object
-type ManagerReconciler struct {
+// ManagementClusterConnectionReconciler reconciles a ManagementClusterConnection object
+type ManagementClusterConnectionReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=managers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=managers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=managementclusterconnections,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=managementclusterconnections/status,verbs=get;update;patch
 
-//func (r *ManagerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+//func (r *ManagementClusterConnectionReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 //	_ = context.Background()
-//	_ = r.Log.WithValues("manager", req.NamespacedName)
+//	_ = r.Log.WithValues("managementclusterconnection", req.NamespacedName)
 //
 //	// your logic here
 //
 //	return ctrl.Result{}, nil
 //}
 
-func (r *ManagerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return manager.Add(mgr, opts)
-	//return ctrl.NewControllerManagedBy(mgr).
-	//	For(&operatorv1.Manager{}).
+func (r *ManagementClusterConnectionReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return clusterconnection.Add(mgr, opts)
+	// return ctrl.NewControllerManagedBy(mgr).
+	//	For(&operatorv1.ManagementClusterConnection{}).
 	//	Complete(r)
 }

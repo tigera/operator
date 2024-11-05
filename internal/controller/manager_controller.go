@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"github.com/go-logr/logr"
@@ -22,20 +22,32 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/controller/authentication"
+	"github.com/tigera/operator/pkg/controller/manager"
 	"github.com/tigera/operator/pkg/controller/options"
 )
 
-// AuthenticationReconciler reconciles an Authentication object
-type AuthenticationReconciler struct {
+// ManagerReconciler reconciles a Manager object
+type ManagerReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=authentications,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=authentications/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=managers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=managers/status,verbs=get;update;patch
 
-func (r *AuthenticationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return authentication.Add(mgr, opts)
+//func (r *ManagerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+//	_ = context.Background()
+//	_ = r.Log.WithValues("manager", req.NamespacedName)
+//
+//	// your logic here
+//
+//	return ctrl.Result{}, nil
+//}
+
+func (r *ManagerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return manager.Add(mgr, opts)
+	// return ctrl.NewControllerManagedBy(mgr).
+	//	For(&operatorv1.Manager{}).
+	//	Complete(r)
 }

@@ -32,7 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatortigeraiov1 "github.com/tigera/operator/api/v1"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -74,7 +74,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
 
-	err = operatorv1.AddToScheme(scheme.Scheme)
+	err = operatortigeraiov1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	//+kubebuilder:scaffold:scheme

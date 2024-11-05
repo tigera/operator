@@ -28,7 +28,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/active"
@@ -46,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/version"
 
+	operatortigeraiov1 "github.com/tigera/operator/api/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -80,7 +80,7 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensions.AddToScheme(scheme))
-	utilruntime.Must(operatorv1.AddToScheme(scheme))
+	utilruntime.Must(operatortigeraiov1.AddToScheme(scheme))
 	utilruntime.Must(apis.AddToScheme(scheme))
 }
 
@@ -159,7 +159,7 @@ func main() {
 		os.Exit(0)
 	}
 	if printCalicoCRDs != "" {
-		if err := showCRDs(operatorv1.Calico, printCalicoCRDs); err != nil {
+		if err := showCRDs(operatortigeraiov1.Calico, printCalicoCRDs); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
@@ -167,7 +167,7 @@ func main() {
 	}
 
 	if printEnterpriseCRDs != "" {
-		if err := showCRDs(operatorv1.TigeraSecureEnterprise, printEnterpriseCRDs); err != nil {
+		if err := showCRDs(operatortigeraiov1.TigeraSecureEnterprise, printEnterpriseCRDs); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
@@ -488,7 +488,7 @@ func metricsAddr() string {
 	return fmt.Sprintf("%s:%s", metricsHost, metricsPort)
 }
 
-func showCRDs(variant operatorv1.ProductVariant, outputType string) error {
+func showCRDs(variant operatortigeraiov1.ProductVariant, outputType string) error {
 	first := true
 	for _, v := range crds.GetCRDs(variant) {
 		if outputType != "all" {
@@ -521,9 +521,9 @@ func executePreDeleteHook(ctx context.Context, c client.Client) error {
 
 	// Clean up any custom-resources first - this will trigger teardown of pods deloyed
 	// by the operator, and give the operator a chance to clean up gracefully.
-	installation := &operatorv1.Installation{}
+	installation := &operatortigeraiov1.Installation{}
 	installation.Name = utils.DefaultInstanceKey.Name
-	apiserver := &operatorv1.APIServer{}
+	apiserver := &operatortigeraiov1.APIServer{}
 	apiserver.Name = utils.DefaultInstanceKey.Name
 	for _, o := range []client.Object{installation, apiserver} {
 		if err := c.Delete(ctx, o); err != nil {

@@ -1,0 +1,9 @@
+apiVersion: operator.tigera.io/v1
+kind: DemoResource
+metadata:
+  labels:
+    app.kubernetes.io/name: operator
+    app.kubernetes.io/managed-by: kustomize
+  name: demoresource-sample
+spec:
+  # TODO(user): Add fields here

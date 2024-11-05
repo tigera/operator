@@ -127,7 +127,6 @@ resources:
 - api:
     crdVersion: v1
     namespaced: true
-  controller: false
   domain: tigera.io
   group: operator
   kind: Tenant
@@ -167,7 +166,6 @@ resources:
   version: v1
 - api:
     crdVersion: v1
-  controller: false
   domain: tigera.io
   group: operator
   kind: TLSTerminatedRoute
@@ -175,7 +173,6 @@ resources:
   version: v1
 - api:
     crdVersion: v1
-  controller: false
   domain: tigera.io
   group: operator
   kind: TLSPassthroughRoute

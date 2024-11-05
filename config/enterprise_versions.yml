@@ -1,5 +1,5 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/enterprise.go.tpl
-title: release-calient-v3.20
+title: v3.20.0-2.0
 components:
   libcalico-go:
     version: release-calient-v3.20
@@ -154,4 +154,3 @@ components:
   key-cert-provisioner:
     image: tigera/key-cert-provisioner
     version: release-calient-v3.20
-

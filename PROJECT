@@ -15,7 +15,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: Installation
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -23,7 +23,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: APIServer
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -31,7 +31,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: Monitor
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -39,7 +39,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: LogCollector
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -47,7 +47,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: TigeraStatus
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -56,7 +56,7 @@ resources:
     namespaced: true
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: EgressGateway
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -64,7 +64,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: ImageSet
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -72,7 +72,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: IntrusionDetection
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -80,7 +80,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: PacketCaptureAPI
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -88,7 +88,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: LogStorage
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -96,7 +96,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: Authentication
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -104,7 +104,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: ManagementCluster
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -112,7 +112,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: ApplicationLayer
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -120,7 +120,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: Manager
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -128,7 +128,7 @@ resources:
     crdVersion: v1
     namespaced: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: Tenant
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -136,7 +136,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: ManagementClusterConnection
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -144,7 +144,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: NonClusterHost
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -152,7 +152,7 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: PolicyRecommendation
   path: github.com/tigera/operator/api/v1
   version: v1
@@ -160,21 +160,21 @@ resources:
     crdVersion: v1
   controller: true
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: Compliance
   path: github.com/tigera/operator/api/v1
   version: v1
 - api:
     crdVersion: v1
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: TLSTerminatedRoute
   path: github.com/tigera/operator/api/v1
   version: v1
 - api:
     crdVersion: v1
   domain: tigera.io
-  group: operator
+  group: operator.tigera.io
   kind: TLSPassthroughRoute
   path: github.com/tigera/operator/api/v1
   version: v1

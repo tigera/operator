@@ -3,18 +3,20 @@
 New APIs are added using the `operator-sdk` tool.
 
 ```
-operator-sdk create api --group=operator --version=v1 --kind=<Kind> --resource
+operator-sdk create api --group=operator.tigera.io --version=v1 --kind=<Kind> --resource --namespaced=false
 ```
 
 When modifying or adding CRDs, you will need to run `make gen-files` to update the auto-generated files. The tool
 might change the scope of existing resources to "Namespaced", so make sure to set them back to their desired state.
+
+See this demo pull request for more detail on adding both a controller and CRD: https://github.com/tigera/operator/pull/3587
 
 ### Adding a new controller
 
 New controllers are also added using the `operator-sdk` tool.
 
 ```
-operator-sdk create api --group=operator --version=v1 --kind=<Kind> --controller
+operator-sdk create api --group=operator.tigera.io --version=v1 --kind=<Kind> --controller
 ```
 
 New controllers will be created in the newer format so it should be considered if it is desirable to keep the

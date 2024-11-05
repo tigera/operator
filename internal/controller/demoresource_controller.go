@@ -17,14 +17,11 @@ limitations under the License.
 package controller
 
 import (
-	"context"
-
+	"github.com/tigera/operator/pkg/controller/demoresource"
+	"github.com/tigera/operator/pkg/controller/options"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
 // DemoResourceReconciler reconciles a DemoResource object
@@ -37,26 +34,7 @@ type DemoResourceReconciler struct {
 //+kubebuilder:rbac:groups=operator.tigera.io,resources=demoresources/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=operator.tigera.io,resources=demoresources/finalizers,verbs=update
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the DemoResource object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.3/pkg/reconcile
-func (r *DemoResourceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
-
-	// TODO(user): your logic here
-
-	return ctrl.Result{}, nil
-}
-
 // SetupWithManager sets up the controller with the Manager.
-func (r *DemoResourceReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&operatorv1.DemoResource{}).
-		Complete(r)
+func (r *DemoResourceReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return demoresource.Add(mgr, opts)
 }

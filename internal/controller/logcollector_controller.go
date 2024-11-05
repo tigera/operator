@@ -36,18 +36,6 @@ type LogCollectorReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=logcollectors,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=logcollectors/status,verbs=get;update;patch
 
-//func (r *LogCollectorReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-//	_ = context.Background()
-//	_ = r.Log.WithValues("logcollector", req.NamespacedName)
-//
-//	// your logic here
-//
-//	return ctrl.Result{}, nil
-//}
-
 func (r *LogCollectorReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
 	return logcollector.Add(mgr, opts)
-	// return ctrl.NewControllerManagedBy(mgr).
-	//	For(&operatorv1.LogCollector{}).
-	//	Complete(r)
 }

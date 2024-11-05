@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"github.com/go-logr/logr"
@@ -22,20 +22,20 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/packetcapture"
 )
 
-// PacketCaptureReconciler reconciles a PacketCapture object.
-type PacketCaptureReconciler struct {
+// IPPoolReconciler reconciles IP pools
+type IPPoolReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=packetcaptureapi,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=packetcaptureapi/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=installations,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=installations/status,verbs=get;update;patch
 
-func (pc *PacketCaptureReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return packetcapture.Add(mgr, opts)
+func (r *IPPoolReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return ippool.Add(mgr, opts)
 }

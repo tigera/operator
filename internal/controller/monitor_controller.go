@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,24 +14,28 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"github.com/go-logr/logr"
-	"github.com/tigera/operator/pkg/controller/csr"
-	"github.com/tigera/operator/pkg/controller/options"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/tigera/operator/pkg/controller/monitor"
+	"github.com/tigera/operator/pkg/controller/options"
 )
 
-// CSRReconciler reconciles CSRs.
-type CSRReconciler struct {
+// MonitorReconciler reconciles a Monitor object
+type MonitorReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-func (r *CSRReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return csr.Add(mgr, opts)
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=monitors,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=monitors/status,verbs=get;update;patch
+
+func (r *MonitorReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return monitor.Add(mgr, opts)
 }

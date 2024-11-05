@@ -16,9 +16,12 @@ package k8sapi
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"strings"
 
+	calicov3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operator "github.com/tigera/operator/api/v1"
 	v1 "k8s.io/api/core/v1"
 )
@@ -63,6 +66,38 @@ func (k8s ServiceEndpoint) EnvVars(hostNetworked bool, provider operator.Provide
 		{Name: "KUBERNETES_SERVICE_HOST", Value: k8s.Host},
 		{Name: "KUBERNETES_SERVICE_PORT", Value: k8s.Port},
 	}
+}
+
+// DestinationEntityRule returns an EntityRule to match the Host and Port
+// if the ServiceEndpoint was set. It returns nil if either was empty.
+func (k8s ServiceEndpoint) DestinationEntityRule() (*calicov3.EntityRule, error) {
+	if k8s.Host == "" || k8s.Port == "" {
+		return nil, nil
+	}
+
+	p, err := numorstring.PortFromString(k8s.Port)
+	if err != nil {
+		return nil, err
+	}
+
+	rule := calicov3.EntityRule{
+		Ports: []numorstring.Port{p},
+	}
+
+	ip := net.ParseIP(k8s.Host)
+	if ip == nil {
+		rule.Domains = []string{k8s.Host}
+	} else {
+		var netSuffix string
+		if ip.To4() != nil {
+			netSuffix = "/32"
+		} else {
+			netSuffix = "/128"
+		}
+		rule.Nets = []string{ip.String() + netSuffix}
+	}
+
+	return &rule, nil
 }
 
 func (k8s ServiceEndpoint) CNIAPIRoot() string {

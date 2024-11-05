@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"github.com/go-logr/logr"
@@ -22,20 +22,20 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/policyrecommendation"
 )
 
-// IPPoolReconciler reconciles IP pools
-type IPPoolReconciler struct {
+// PolicyRecommendationReconciler reconciles a PolicyRecommendation object.
+type PolicyRecommendationReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=installations,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=installations/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=policyrecommendations,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=policyrecommendations/status,verbs=get;update;patch
 
-func (r *IPPoolReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return ippool.Add(mgr, opts)
+func (pr *PolicyRecommendationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return policyrecommendation.Add(mgr, opts)
 }

@@ -41,7 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/controllers"
+	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -338,7 +338,7 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 	ctx, cancel := context.WithCancel(context.TODO())
 
 	// Setup all Controllers
-	err = controllers.AddToManager(mgr, options.AddOptions{
+	err = controller.AddToManager(mgr, options.AddOptions{
 		DetectedProvider:    operator.ProviderNone,
 		EnterpriseCRDExists: true,
 		ManageCRDs:          manageCRDs,

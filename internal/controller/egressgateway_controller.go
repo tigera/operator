@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,28 +14,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"github.com/go-logr/logr"
+	"github.com/tigera/operator/pkg/controller/egressgateway"
+	"github.com/tigera/operator/pkg/controller/options"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	"github.com/tigera/operator/pkg/controller/authentication"
-	"github.com/tigera/operator/pkg/controller/options"
 )
 
-// AuthenticationReconciler reconciles an Authentication object
-type AuthenticationReconciler struct {
+// EgressGatewayReconciler reconciles a EgressGateway object
+type EgressGatewayReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=authentications,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=authentications/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=egressgateways,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=egressgateways/status,verbs=get;update;patch
 
-func (r *AuthenticationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return authentication.Add(mgr, opts)
+func (r *EgressGatewayReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return egressgateway.Add(mgr, opts)
 }

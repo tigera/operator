@@ -14,24 +14,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"github.com/go-logr/logr"
-	"github.com/tigera/operator/pkg/controller/csr"
+	installation "github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// CSRReconciler reconciles CSRs.
-type CSRReconciler struct {
+type WindowsReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-func (r *CSRReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return csr.Add(mgr, opts)
+func (r *WindowsReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return installation.AddWindowsController(mgr, opts)
 }

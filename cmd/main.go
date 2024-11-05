@@ -27,9 +27,10 @@ import (
 	"github.com/cloudflare/cfssl/log"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/controllers"
+	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/awssgsetup"
@@ -426,7 +427,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	err = controllers.AddToManager(mgr, options)
+	err = controller.AddToManager(mgr, options)
 	if err != nil {
 		setupLog.Error(err, "unable to create controllers")
 		os.Exit(1)

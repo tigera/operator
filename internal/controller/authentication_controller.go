@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"github.com/go-logr/logr"
@@ -22,27 +22,20 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	apiserver "github.com/tigera/operator/pkg/controller/apiserver"
+	"github.com/tigera/operator/pkg/controller/authentication"
 	"github.com/tigera/operator/pkg/controller/options"
 )
 
-// APIServerReconciler reconciles a APIServer object
-type APIServerReconciler struct {
+// AuthenticationReconciler reconciles an Authentication object
+type AuthenticationReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=apiservers,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=apiservers/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=authentications,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=authentications/status,verbs=get;update;patch
 
-//func (r *APIServerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-//	return r.ras.Reconcile(req)
-//}
-
-func (r *APIServerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return apiserver.Add(mgr, opts)
-	//	return ctrl.NewControllerManagedBy(mgr).
-	//		For(&operatorv1.APIServer{}).
-	//		Complete(r)
+func (r *AuthenticationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return authentication.Add(mgr, opts)
 }

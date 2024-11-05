@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controllers
+package controller
 
 import (
 	"github.com/go-logr/logr"
@@ -22,20 +22,27 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/controller/ippool"
+	apiserver "github.com/tigera/operator/pkg/controller/apiserver"
 	"github.com/tigera/operator/pkg/controller/options"
 )
 
-// IPPoolReconciler reconciles IP pools
-type IPPoolReconciler struct {
+// APIServerReconciler reconciles a APIServer object
+type APIServerReconciler struct {
 	client.Client
 	Log    logr.Logger
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=installations,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=installations/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=apiservers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=apiservers/status,verbs=get;update;patch
 
-func (r *IPPoolReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
-	return ippool.Add(mgr, opts)
+//func (r *APIServerReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+//	return r.ras.Reconcile(req)
+//}
+
+func (r *APIServerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+	return apiserver.Add(mgr, opts)
+	//	return ctrl.NewControllerManagedBy(mgr).
+	//		For(&operatorv1.APIServer{}).
+	//		Complete(r)
 }

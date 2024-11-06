@@ -59,9 +59,9 @@ func CreateTLSSecret(
 	}
 
 	// localhost is the default hostname for the generated certificate if none are provided.
-	hostnamesSet := sets.NewString("localhost")
+	hostnamesSet := sets.New[string]("localhost")
 	if len(hostnames) > 0 {
-		hostnamesSet = sets.NewString(hostnames...)
+		hostnamesSet = sets.New[string](hostnames...)
 	}
 
 	// Default extensions if not provided such that the certificate is valid

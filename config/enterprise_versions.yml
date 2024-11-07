@@ -84,7 +84,7 @@ components:
     version: v3.20.0-1.0
   guardian:
     image: tigera/guardian
-    version: v3.20.0-1.5
+    version: v3.20.0-1.7
   tigera-cni:
     image: tigera/cni
     version: v3.20.0-1.0

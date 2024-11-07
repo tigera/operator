@@ -17,11 +17,18 @@ package clusterconnection_test
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-
 	"github.com/stretchr/testify/mock"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	appsv1 "k8s.io/api/apps/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -52,9 +59,10 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	var ctx context.Context
 	var cfg *operatorv1.ManagementClusterConnection
 	var r reconcile.Reconciler
-	var scheme *runtime.Scheme
+	var clientScheme *runtime.Scheme
 	var dpl *appsv1.Deployment
 	var mockStatus *status.MockStatus
+	var objTrackerWithCalls test.ObjectTrackerWithCalls
 
 	notReady := &utils.ReadyFlag{}
 	ready := &utils.ReadyFlag{}
@@ -62,13 +70,14 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 	BeforeEach(func() {
 		// Create a Kubernetes client.
-		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		err := operatorv1.SchemeBuilder.AddToScheme(scheme)
+		clientScheme = runtime.NewScheme()
+		Expect(apis.AddToScheme(clientScheme)).ShouldNot(HaveOccurred())
+		Expect(appsv1.SchemeBuilder.AddToScheme(clientScheme)).ShouldNot(HaveOccurred())
+		Expect(rbacv1.SchemeBuilder.AddToScheme(clientScheme)).ShouldNot(HaveOccurred())
+		err := operatorv1.SchemeBuilder.AddToScheme(clientScheme)
 		Expect(err).NotTo(HaveOccurred())
-		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+		objTrackerWithCalls = test.NewObjectTrackerWithCalls(clientScheme)
+		c = ctrlrfake.DefaultFakeClientBuilder(clientScheme).WithObjectTracker(&objTrackerWithCalls).Build()
 		ctx = context.Background()
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("Run").Return()
@@ -84,7 +93,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.Monitor{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		}))
-		r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
+		r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready)
 		dpl = &appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -162,7 +171,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 	Context("image reconciliation", func() {
 		It("should use builtin images", func() {
-			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
+			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready)
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -193,7 +202,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				},
 			})).ToNot(HaveOccurred())
 
-			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
+			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready)
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -229,7 +238,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			}
 			Expect(c.Create(ctx, licenseKey)).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
-			r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
+			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready)
 		})
 
 		Context("IP-based management cluster address", func() {
@@ -261,7 +270,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 
-				r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, notReady)
+				r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, notReady)
 				test.ExpectWaitForTierWatch(ctx, r, mockStatus)
 
 				policies := v3.NetworkPolicyList{}
@@ -298,7 +307,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				mockStatus.On("SetDegraded", operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", mock.Anything, mock.Anything).Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 
-				r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, ready)
+				r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready)
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 				mockStatus.AssertExpectations(GinkgoT())
@@ -310,7 +319,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 
-				r = clusterconnection.NewReconcilerWithShims(c, scheme, mockStatus, operatorv1.ProviderNone, notReady)
+				r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, notReady)
 				test.ExpectWaitForTierWatch(ctx, r, mockStatus)
 
 				policies := v3.NetworkPolicyList{}
@@ -338,7 +347,111 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Expect(policies.Items).To(HaveLen(0))
 			})
 		})
+
+		Context("Proxy detection", func() {
+			// Generate test cases based on the combinations of proxy address forms and proxy settings.
+			// Here we specify the base targets along with the base proxy IP, domain, and port that will be used for generation.
+			coreCases := generateCoreProxyTestCases("voltron.io:9000", "192.168.1.2:9000", "proxy.io", "10.1.2.3", "8080")
+
+			// In case we support multiple guardian replicas in the future, we test specific multi-pod scenarios.
+			multiPodCases := multiplePodCases()
+
+			testCases := append(coreCases, multiPodCases...)
+			for _, testCase := range testCases {
+				Describe(fmt.Sprintf("Proxy detection when %+v", prettyFormatTestCase(testCase)), func() {
+					// Set up the test based on the test case.
+					BeforeEach(func() {
+						for i, proxy := range testCase.podProxies {
+							createPodWithProxy(ctx, c, proxy, testCase.lowercase, i)
+						}
+
+						// Set the target
+						cfg.Spec.ManagementClusterAddr = testCase.target
+						err := c.Update(ctx, cfg)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It(fmt.Sprintf("detects proxy correctly when %+v", prettyFormatTestCase(testCase)), func() {
+						// First reconcile creates the guardian deployment without any availability condition.
+						_, err := r.Reconcile(ctx, reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+
+						// Validate that we made no calls to get Pods at this stage.
+						podGVR := schema.GroupVersionResource{
+							Version:  "v1",
+							Resource: "pods",
+						}
+						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(BeZero())
+
+						// Set the deployment to be unavailable. We need to recreate the deployment otherwise the status update is ignored.
+						gd := appsv1.Deployment{}
+						err = c.Get(ctx, client.ObjectKey{Name: "tigera-guardian", Namespace: "tigera-guardian"}, &gd)
+						Expect(err).NotTo(HaveOccurred())
+						err = c.Delete(ctx, &gd)
+						Expect(err).NotTo(HaveOccurred())
+						gd.ResourceVersion = ""
+						gd.Status.Conditions = []appsv1.DeploymentCondition{{
+							Type:               appsv1.DeploymentAvailable,
+							Status:             v1.ConditionFalse,
+							LastTransitionTime: metav1.Time{Time: time.Now()},
+						}}
+						err = c.Create(ctx, &gd)
+						Expect(err).NotTo(HaveOccurred())
+
+						// Reconcile again. We should see no calls since the deployment has not transitioned to available.
+						_, err = r.Reconcile(ctx, reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(Equal(0))
+
+						// Set the deployment to available.
+						err = c.Delete(ctx, &gd)
+						Expect(err).NotTo(HaveOccurred())
+						gd.ResourceVersion = ""
+						gd.Status.Conditions = []appsv1.DeploymentCondition{{
+							Type:               appsv1.DeploymentAvailable,
+							Status:             v1.ConditionTrue,
+							LastTransitionTime: metav1.Time{Time: time.Now().Add(time.Minute)},
+						}}
+						err = c.Create(ctx, &gd)
+						Expect(err).NotTo(HaveOccurred())
+
+						// Reconcile again. The proxy detection logic should kick in since the guardian deployment is ready.
+						_, err = r.Reconcile(ctx, reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(Equal(1))
+
+						// Resolve the rendered rule that governs egress from guardian to voltron.
+						policies := v3.NetworkPolicyList{}
+						Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+						Expect(policies.Items).To(HaveLen(2))
+						Expect(policies.Items[1].Name).To(Equal("allow-tigera.guardian-access"))
+						policy := policies.Items[1]
+
+						// Generate the expectation based on the test case, and compare the rendered rule to our expectation.
+						expectedEgressRules := getExpectedEgressRulesFromCase(testCase)
+						Expect(policy.Spec.Egress).To(HaveLen(6 + len(expectedEgressRules)))
+						for i, egressRule := range expectedEgressRules {
+							managementClusterEgressRule := policy.Spec.Egress[5+i]
+							if egressRule.hostIsIP {
+								Expect(managementClusterEgressRule.Destination.Nets).To(HaveLen(1))
+								Expect(managementClusterEgressRule.Destination.Nets[0]).To(Equal(fmt.Sprintf("%s/32", egressRule.host)))
+								Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(egressRule.port)))
+							} else {
+								Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{egressRule.host}))
+								Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(egressRule.port)))
+							}
+						}
+
+						// Reconcile again. Verify that we do not cause any additional query for pods now that we have resolved the proxy.
+						_, err = r.Reconcile(ctx, reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(Equal(1))
+					})
+				})
+			}
+		})
 	})
+
 	Context("Reconcile for Condition status", func() {
 		generation := int64(2)
 		It("should reconcile with empty tigerastatus conditions ", func() {
@@ -393,7 +506,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			Expect(instance.Status.Conditions[0].ObservedGeneration).To(Equal(generation))
 			Expect(c.Delete(ctx, ts)).NotTo(HaveOccurred())
 		})
-		It("should reconcile with creating new status condition  with multiple conditions as true", func() {
+		It("should reconcile with creating new status condition with multiple conditions as true", func() {
 			ts := &operatorv1.TigeraStatus{
 				ObjectMeta: metav1.ObjectMeta{Name: "management-cluster-connection"},
 				Spec:       operatorv1.TigeraStatusSpec{},
@@ -513,3 +626,312 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		})
 	})
 })
+
+func createPodWithProxy(ctx context.Context, c client.Client, config *proxyConfig, lowercase bool, replicaNum int) {
+	pod := v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-guardian" + strconv.Itoa(replicaNum),
+			Namespace: "tigera-guardian",
+			Labels: map[string]string{
+				"k8s-app":                "tigera-guardian",
+				"app.kubernetes.io/name": "tigera-guardian",
+			},
+		},
+		Spec: v1.PodSpec{
+			Containers: []v1.Container{{
+				Name: "tigera-guardian",
+				Env:  []v1.EnvVar{},
+			}},
+		},
+	}
+
+	if config != nil {
+		// Set the env vars.
+		httpsProxyVarName := "HTTPS_PROXY"
+		httpProxyVarName := "HTTP_PROXY"
+		noProxyVarName := "NO_PROXY"
+		if lowercase {
+			httpsProxyVarName = strings.ToLower(httpsProxyVarName)
+			httpProxyVarName = strings.ToLower(httpProxyVarName)
+			noProxyVarName = strings.ToLower(noProxyVarName)
+		}
+		// Environment variables that are empty can be represented as an unset variable or a set variable with an empty string.
+		// For our tests, we'll represent them as an unset variable.
+		if config.httpsProxy != "" {
+			pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, v1.EnvVar{
+				Name:  httpsProxyVarName,
+				Value: config.httpsProxy,
+			})
+			// Add a static HTTP_PROXY variable to catch any scenarios where the controller picks the wrong env var (Guardian uses HTTPS).
+			pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, v1.EnvVar{
+				Name:  httpProxyVarName,
+				Value: "http://wrong-proxy-url.com/",
+			})
+		}
+		if config.noProxy != "" {
+			pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, v1.EnvVar{
+				Name:  noProxyVarName,
+				Value: config.noProxy,
+			})
+		}
+	}
+
+	err := c.Create(ctx, &pod)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+type proxyTestCase struct {
+	lowercase  bool
+	target     string
+	podProxies []*proxyConfig
+}
+
+type proxyConfig struct {
+	httpsProxy string
+	noProxy    string
+}
+
+type expectedEgressRule struct {
+	host      string
+	port      uint16
+	hostIsIP  bool
+	isProxied bool
+}
+
+func generateCoreProxyTestCases(targetDomain, targetIP, proxyDomain, proxyIP, proxyPort string) []proxyTestCase {
+	var cases []proxyTestCase
+	// We will collect the cases by target type. Targets are in the form of ip:port or domain:port.
+	for _, target := range []string{targetDomain, targetIP} {
+		var casesByTargetType []proxyTestCase
+		// Generate the proxy strings. They can be http or https, use a domain or IP host, and can optionally specify a port.
+		var proxyStrings []string
+		for _, scheme := range []string{"http", "https"} {
+			for _, host := range []string{proxyDomain, proxyIP} {
+				for _, port := range []string{"", proxyPort} {
+					proxyString := fmt.Sprintf("%s://%s", scheme, host)
+					if port != "" {
+						proxyString = fmt.Sprintf("%s:%s", proxyString, port)
+					}
+					proxyStrings = append(proxyStrings, proxyString)
+				}
+			}
+		}
+		// Add base case: proxy is empty (empty and unset env vars are handled the same).
+		proxyStrings = append(proxyStrings, "")
+
+		// Generate the "no proxy" strings. They can either match or not match the target, can list one or many exemptions,
+		// and can optionally specify a port.
+		var noProxyStrings []string
+		for _, matchesTarget := range []bool{true, false} {
+			noProxyContainsPort := []bool{false}
+			if matchesTarget {
+				noProxyContainsPort = append(noProxyContainsPort, true)
+			}
+			for _, containsPort := range noProxyContainsPort {
+				for _, multipleExemptions := range []bool{true, false} {
+					host, port, err := net.SplitHostPort(target)
+					Expect(err).NotTo(HaveOccurred())
+					matchString := host
+					if containsPort {
+						matchString = fmt.Sprintf("%s:%s", matchString, port)
+					}
+
+					var noProxyString string
+					if matchesTarget {
+						noProxyString = matchString
+					} else {
+						noProxyString = "nomatch.com"
+					}
+
+					if multipleExemptions {
+						noProxyString = fmt.Sprintf("1.1.1.1,%s,nobueno.com", noProxyString)
+					}
+
+					noProxyStrings = append(noProxyStrings, noProxyString)
+				}
+			}
+		}
+		// Add base case: no-proxy is empty (empty and unset env vars are handled the same).
+		noProxyStrings = append(noProxyStrings, "")
+
+		// Create the cases based on the generated combinations of proxy strings.
+		// The env vars can be set as either lowercase or uppercase on the container, we express that possibility here.
+		for _, lowercase := range []bool{true, false} {
+			for _, proxyString := range proxyStrings {
+				for _, noProxyString := range noProxyStrings {
+					testCase := proxyTestCase{
+						lowercase: lowercase,
+						target:    target,
+					}
+					var podProxyConfig *proxyConfig
+					if proxyString != "" || noProxyString != "" {
+						podProxyConfig = &proxyConfig{
+							httpsProxy: proxyString,
+							noProxy:    noProxyString,
+						}
+					}
+					testCase.podProxies = []*proxyConfig{podProxyConfig}
+					casesByTargetType = append(casesByTargetType, testCase)
+				}
+			}
+		}
+		cases = append(cases, casesByTargetType...)
+	}
+	return cases
+}
+
+func getExpectedEgressRulesFromCase(c proxyTestCase) []expectedEgressRule {
+	var expectedEgressRules []expectedEgressRule
+	expectedEgressRulesAdded := map[expectedEgressRule]bool{}
+
+	for _, proxy := range c.podProxies {
+		var isProxied bool
+		if proxy != nil && proxy.httpsProxy != "" {
+			if proxy.noProxy == "" {
+				isProxied = true
+			} else {
+				var proxyIsExempt bool
+				for _, noProxySubstring := range strings.Split(proxy.noProxy, ",") {
+					if strings.Contains(c.target, noProxySubstring) {
+						proxyIsExempt = true
+						break
+					}
+				}
+				if !proxyIsExempt {
+					isProxied = true
+				}
+			}
+		}
+
+		var host string
+		var port uint16
+		if isProxied {
+			proxyURL, err := url.ParseRequestURI(proxy.httpsProxy)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Resolve port
+			hostSplit := strings.Split(proxyURL.Host, ":")
+			switch {
+			case len(hostSplit) == 2:
+				port64, err := strconv.ParseUint(hostSplit[1], 10, 16)
+				Expect(err).NotTo(HaveOccurred())
+				host = hostSplit[0]
+				port = uint16(port64)
+			case proxyURL.Scheme == "https":
+				host = proxyURL.Host
+				port = 443
+			default:
+				host = proxyURL.Host
+				port = 80
+			}
+
+			Expect(err).NotTo(HaveOccurred())
+		} else {
+			var portString string
+			var err error
+			host, portString, err = net.SplitHostPort(c.target)
+			Expect(err).NotTo(HaveOccurred())
+			port64, err := strconv.ParseUint(portString, 10, 16)
+			Expect(err).NotTo(HaveOccurred())
+			port = uint16(port64)
+		}
+
+		proxyPolicy := expectedEgressRule{
+			host:      host,
+			port:      port,
+			isProxied: isProxied,
+			hostIsIP:  net.ParseIP(host) != nil,
+		}
+
+		if !expectedEgressRulesAdded[proxyPolicy] {
+			expectedEgressRules = append(expectedEgressRules, proxyPolicy)
+			expectedEgressRulesAdded[proxyPolicy] = true
+		}
+	}
+
+	return expectedEgressRules
+}
+
+func multiplePodCases() []proxyTestCase {
+	return []proxyTestCase{
+		// Mainline case with multiple pods: both have the same proxy.
+		{
+			target: "voltron:9000",
+			podProxies: []*proxyConfig{
+				{
+					httpsProxy: "http://proxy.io/",
+					noProxy:    "nomatch",
+				},
+				{
+					httpsProxy: "http://proxy.io/",
+					noProxy:    "nomatch",
+				},
+			},
+		},
+		// Mainline case with multiple pods: neither have a proxy.
+		{
+			target:     "voltron:9000",
+			podProxies: []*proxyConfig{nil, nil},
+		},
+		// One pod has a proxy, one pod does not.
+		{
+			target:     "voltron:9000",
+			podProxies: []*proxyConfig{{httpsProxy: "http://proxy.io/", noProxy: "nomatch"}, nil},
+		},
+		// Pods have different proxies.
+		{
+			target: "voltron:9000",
+			podProxies: []*proxyConfig{
+				{
+					httpsProxy: "http://proxy.io/",
+					noProxy:    "nomatch",
+				},
+				{
+					httpsProxy: "http://proxy-number-two.io/",
+					noProxy:    "nomatch",
+				},
+			},
+		},
+		// Pods have different proxies, but one of them is exempt from the proxy.
+		{
+			target: "voltron:9000",
+			podProxies: []*proxyConfig{
+				{
+					httpsProxy: "http://proxy.io/",
+					noProxy:    "nomatch",
+				},
+				{
+					httpsProxy: "http://proxy-number-two.io/",
+					noProxy:    "voltron",
+				},
+			},
+		},
+		// Pods have different proxies, but both of them are exempt from the proxy.
+		{
+			target: "voltron:9000",
+			podProxies: []*proxyConfig{
+				{
+					httpsProxy: "http://proxy.io/",
+					noProxy:    "voltron",
+				},
+				{
+					httpsProxy: "http://proxy-number-two.io/",
+					noProxy:    "voltron",
+				},
+			},
+		},
+	}
+}
+
+func prettyFormatTestCase(testCase proxyTestCase) string {
+	var containerProxies []string
+	for _, containerProxy := range testCase.podProxies {
+		if containerProxy == nil {
+			containerProxies = append(containerProxies, "nil")
+		} else {
+			containerProxies = append(containerProxies, fmt.Sprintf("{httpsProxy: %s, noProxy: %s}", containerProxy.httpsProxy, containerProxy.noProxy))
+		}
+	}
+
+	return fmt.Sprintf("lowercase: %v, target: %s, containerProxies: [%s]", testCase.lowercase, testCase.target, strings.Join(containerProxies, ","))
+}

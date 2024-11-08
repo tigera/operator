@@ -1,153 +1,153 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/enterprise.go.tpl
-title: v3.19.3
+title: v3.19.4
 components:
   libcalico-go:
-    version: v3.19.3
+    version: v3.19.4
   cnx-manager:
     image: tigera/cnx-manager
-    version: v3.19.3
+    version: v3.19.4
   voltron:
     image: tigera/voltron
-    version: v3.19.3
+    version: v3.19.4
   cnx-apiserver:
     image: tigera/cnx-apiserver
-    version: v3.19.3
+    version: v3.19.4
   cnx-queryserver:
     image: tigera/cnx-queryserver
-    version: v3.19.3
+    version: v3.19.4
   cnx-kube-controllers:
     image: tigera/kube-controllers
-    version: v3.19.3
+    version: v3.19.4
   typha:
     image: tigera/typha
-    version: v3.19.3
+    version: v3.19.4
   cnx-node:
     image: tigera/cnx-node
-    version: v3.19.3
+    version: v3.19.4
   cnx-node-windows:
     image: tigera/cnx-node-windows
-    version: v3.19.3
+    version: v3.19.4
   fluentd:
     image: tigera/fluentd
-    version: v3.19.3
+    version: v3.19.4
   fluentd-windows:
     image: tigera/fluentd-windows
-    version: v3.19.3
+    version: v3.19.4
   es-proxy:
     image: tigera/es-proxy
-    version: v3.19.3
+    version: v3.19.4
   linseed:
     image: tigera/linseed
-    version: v3.19.3
+    version: v3.19.4
   es-gateway:
     image: tigera/es-gateway
-    version: v3.19.3
+    version: v3.19.4
   dex:
     image: tigera/dex
-    version: v3.19.3
+    version: v3.19.4
   eck-kibana:
     version: 7.17.25
   kibana:
     image: tigera/kibana
-    version: v3.19.3
+    version: v3.19.4
   eck-elasticsearch:
     version: 7.17.25
   elasticsearch:
     image: tigera/elasticsearch
-    version: v3.19.3
+    version: v3.19.4
   elastic-tsee-installer:
     image: tigera/intrusion-detection-job-installer
-    version: v3.19.3
+    version: v3.19.4
   es-curator:
     image: tigera/es-curator
-    version: v3.19.3
+    version: v3.19.4
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
-    version: v3.19.3
+    version: v3.19.4
   security-event-webhooks-processor:
     image: tigera/webhooks-processor
-    version: v3.19.3
+    version: v3.19.4
   compliance-controller:
     image: tigera/compliance-controller
-    version: v3.19.3
+    version: v3.19.4
   compliance-reporter:
     image: tigera/compliance-reporter
-    version: v3.19.3
+    version: v3.19.4
   compliance-snapshotter:
     image: tigera/compliance-snapshotter
-    version: v3.19.3
+    version: v3.19.4
   compliance-server:
     image: tigera/compliance-server
-    version: v3.19.3
+    version: v3.19.4
   compliance-benchmarker:
     image: tigera/compliance-benchmarker
-    version: v3.19.3
+    version: v3.19.4
   guardian:
     image: tigera/guardian
-    version: v3.19.3
+    version: v3.19.4
   tigera-cni:
     image: tigera/cni
-    version: v3.19.3
+    version: v3.19.4
   tigera-cni-windows:
     image: tigera/cni-windows
-    version: v3.19.3
+    version: v3.19.4
   elasticsearch-metrics:
     image: tigera/elasticsearch-metrics
-    version: v3.19.3
+    version: v3.19.4
   packetcapture:
     image: tigera/packetcapture
-    version: v3.19.3
+    version: v3.19.4
   policy-recommendation:
     image: tigera/policy-recommendation
-    version: v3.19.3
+    version: v3.19.4
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
     version: v2.48.1
   prometheus:
     image: tigera/prometheus
-    version: v3.19.3
+    version: v3.19.4
   # coreos-prometheus holds the version of alertmanager built for tigera/alertmanager,
   # which prometheus operator uses to validate.
   coreos-alertmanager:
     version: v0.25.0
   alertmanager:
     image: tigera/alertmanager
-    version: v3.19.3
+    version: v3.19.4
   tigera-prometheus-service:
     image: tigera/prometheus-service
-    version: v3.19.3
+    version: v3.19.4
   deep-packet-inspection:
     image: tigera/deep-packet-inspection
-    version: v3.19.3
+    version: v3.19.4
   flexvol:
     image: tigera/pod2daemon-flexvol
-    version: v3.19.3
+    version: v3.19.4
   csi:
     image: tigera/csi
-    version: v3.19.3
+    version: v3.19.4
   csi-node-driver-registrar:
     image: tigera/node-driver-registrar
-    version: v3.19.3
+    version: v3.19.4
   # The components below are third-party images that have been retagged under
   # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:
     image: tigera/eck-operator
-    version: v3.19.3
+    version: v3.19.4
   eck-elasticsearch-operator:
     version: 2.6.1
   l7-collector:
     image: tigera/l7-collector
-    version: v3.19.3
+    version: v3.19.4
   envoy:
     image: tigera/envoy
-    version: v3.19.3
+    version: v3.19.4
   dikastes:
     image: tigera/dikastes
-    version: v3.19.3
+    version: v3.19.4
   egress-gateway:
     image: tigera/egress-gateway
-    version: v3.19.3
+    version: v3.19.4
   key-cert-provisioner:
     image: tigera/key-cert-provisioner
-    version: v3.19.3
+    version: v3.19.4

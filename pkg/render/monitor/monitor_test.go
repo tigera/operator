@@ -237,7 +237,6 @@ var _ = Describe("monitor rendering tests", func() {
 			APIGroups: []string{""},
 			Resources: []string{
 				"configmaps",
-				"secrets",
 			},
 			Verbs: []string{"*"},
 		}))
@@ -991,7 +990,9 @@ func expectedBaseResources() []resource {
 	return []resource{
 		{"tigera-prometheus", "", "", "v1", "Namespace"},
 		{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
+		{"calico-prometheus-operator-secret", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 		{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
+		{"calico-prometheus-operator-secret", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 		{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
 		{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 		{"calico-prometheus-operator", "tigera-prometheus", "", "v1", "ServiceAccount"},

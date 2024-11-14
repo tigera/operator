@@ -624,9 +624,7 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -buildvcs=false -o $(BINDIR)/gen-versions ./hack/gen-versions'
 
-# $(1) is the github project
-# $(2) is the branch or tag to fetch
-# $(3) is the directory name to use
+# $(1) is the product
 define prep_local_crds
     $(eval dir := $(1))
 	rm -rf pkg/crds/$(dir)
@@ -634,6 +632,10 @@ define prep_local_crds
 	mkdir -p pkg/crds/$(dir)
 	mkdir -p .crds/$(dir)
 endef
+
+# $(1) is the github project
+# $(2) is the branch or tag to fetch
+# $(3) is the directory name to use
 define fetch_crds
     $(eval project := $(1))
     $(eval branch := $(2))
@@ -643,7 +645,8 @@ define fetch_crds
 endef
 define copy_crds
     $(eval dir := $(1))
-	@cp .crds/$(dir)/libcalico-go/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
+		$(eval prod := $(2))
+	@cp $(dir)/libcalico-go/config/crd/* pkg/crds/$(prod)/ && echo "Copied $(prod) CRDs"
 endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
@@ -652,6 +655,8 @@ endef
 .PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
 
 CALICO?=projectcalico/calico
+CALICO_CRDS_DIR?=.crds/calico
+DEFAULT_OS_CRDS_DIR?=.crds/calico
 read-libcalico-calico-version:
 	$(eval CALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
@@ -659,15 +664,17 @@ read-libcalico-calico-version:
 	if [ -z "$(CALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
-	$(call copy_crds,"calico")
+	$(call copy_crds, $(CALICO_CRDS_DIR),"calico")
 
 prepare-for-calico-crds:
 	$(call prep_local_crds,"calico")
 
 fetch-calico-crds: prepare-for-calico-crds read-libcalico-calico-version
-	$(call fetch_crds,$(CALICO),$(CALICO_BRANCH),"calico")
+	$(if $(filter $(DEFAULT_OS_CRDS_DIR),$(CALICO_CRDS_DIR)), $(call fetch_crds,$(CALICO),$(CALICO_BRANCH),"calico"))
 
 CALICO_ENTERPRISE?=tigera/calico-private
+ENTERPRISE_CRDS_DIR?=.crds/enterprise
+DEFAULT_EE_CRDS_DIR=.crds/enterprise
 read-libcalico-enterprise-version:
 	$(eval CALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
@@ -675,13 +682,14 @@ read-libcalico-enterprise-version:
 	if [ -z "$(CALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds
-	$(call copy_crds,"enterprise")
+	$(call copy_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 
 prepare-for-enterprise-crds:
 	$(call prep_local_crds,"enterprise")
 
 fetch-enterprise-crds: prepare-for-enterprise-crds  read-libcalico-enterprise-version
-	$(call fetch_crds,$(CALICO_ENTERPRISE),$(CALICO_ENTERPRISE_BRANCH),"enterprise")
+	$(if $(filter $(DEFAULT_EE_CRDS_DIR),$(ENTERPRISE_CRDS_DIR)), $(call fetch_crds,$(CALICO_ENTERPRISE),$(CALICO_ENTERPRISE_BRANCH),"enterprise"))
+# $(if $(filter ".crds/enterprise",$(ENTERPRISE_CRDS_DIR)),$(call fetch_crds,$(CALICO_ENTERPRISE),$(CALICO_ENTERPRISE_BRANCH),"enterprise"))
 
 .PHONY: prepull-image
 prepull-image:

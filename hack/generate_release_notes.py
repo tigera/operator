@@ -184,6 +184,7 @@ if __name__ == "__main__":
 
     # Write release notes out to a file.
     with open(FILENAME, "w", encoding="utf-8") as f:
+        f.write(f"{VERSION}\n")
         f.write(f"{date}\n\n")
 
         f.write("#### Included Calico versions\n\n")

@@ -9,7 +9,7 @@ fi
 if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 	echo "tag ${tag} does not match the format vX.Y.Z"
 	exit 1
-fi	
+fi
 
 if [[ ! "$(git rev-parse --abbrev-ref HEAD)" =~ (release-v*.*|master) ]]; then
 	echo "not on 'master' or 'release-vX.Y'"
@@ -28,3 +28,6 @@ make release VERSION=${tag}
 
 echo "Publish release ${tag}"
 make release-publish-images VERSION=${tag}
+
+echo "Create ${tag} release on GitHub"
+make release-github VERSION=${tag}

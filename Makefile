@@ -533,6 +533,7 @@ release-publish: release-prereqs
 	git push origin $(VERSION)
 
 	$(MAKE) release-publish-images IMAGETAG=$(VERSION)
+	$(MAKE) release-github
 
 	@echo "Finalize the GitHub release based on the pushed tag."
 	@echo ""
@@ -542,6 +543,18 @@ release-publish: release-prereqs
 	@echo ""
 	@echo "  make VERSION=$(VERSION) release-publish-latest"
 	@echo ""
+
+release-github: hack/bin/hub release-notes
+	@echo "Creating github release for $(VERSION)"
+	hack/bin/hub release create --draft --file $(VERSION)-release-notes.md $(VERSION)
+
+HUB_VERSION?=2.14.2
+hack/bin/hub:
+	mkdir -p hack/bin
+	curl -sSL -o hack/bin/hub.tgz https://github.com/mislav/hub/releases/download/v$(HUB_VERSION)/hub-linux-amd64-$(HUB_VERSION).tgz
+	tar -zxvf hack/bin/hub.tgz -C hack/bin/ hub-linux-amd64-$(HUB_VERSION)/bin/hub --strip-components=2
+	chmod +x $@
+	rm hack/bin/hub.tgz
 
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:
@@ -689,7 +702,6 @@ prepare-for-enterprise-crds:
 
 fetch-enterprise-crds: prepare-for-enterprise-crds  read-libcalico-enterprise-version
 	$(if $(filter $(DEFAULT_EE_CRDS_DIR),$(ENTERPRISE_CRDS_DIR)), $(call fetch_crds,$(CALICO_ENTERPRISE),$(CALICO_ENTERPRISE_BRANCH),"enterprise"))
-# $(if $(filter ".crds/enterprise",$(ENTERPRISE_CRDS_DIR)),$(call fetch_crds,$(CALICO_ENTERPRISE),$(CALICO_ENTERPRISE_BRANCH),"enterprise"))
 
 .PHONY: prepull-image
 prepull-image:

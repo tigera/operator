@@ -533,6 +533,7 @@ release-publish: release-prereqs
 	git push origin $(VERSION)
 
 	$(MAKE) release-publish-images IMAGETAG=$(VERSION)
+	$(MAKE) release-github
 
 	@echo "Finalize the GitHub release based on the pushed tag."
 	@echo ""
@@ -542,6 +543,18 @@ release-publish: release-prereqs
 	@echo ""
 	@echo "  make VERSION=$(VERSION) release-publish-latest"
 	@echo ""
+
+release-github: hack/bin/hub release-notes
+	@echo "Creating github release for $(VERSION)"
+	hack/bin/hub release create --draft --file $(VERSION)-release-notes.md $(VERSION)
+
+HUB_VERSION?=2.14.2
+hack/bin/hub:
+	mkdir -p hack/bin
+	curl -sSL -o hack/bin/hub.tgz https://github.com/mislav/hub/releases/download/v$(HUB_VERSION)/hub-linux-amd64-$(HUB_VERSION).tgz
+	tar -zxvf hack/bin/hub.tgz -C hack/bin/ hub-linux-amd64-$(HUB_VERSION)/bin/hub --strip-components=2
+	chmod +x $@
+	rm hack/bin/hub.tgz
 
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:
@@ -626,11 +639,11 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 
 # $(1) is the product
 define prep_local_crds
-    $(eval dir := $(1))
-	rm -rf pkg/crds/$(dir)
-	rm -rf .crds/$(dir)
-	mkdir -p pkg/crds/$(dir)
-	mkdir -p .crds/$(dir)
+    $(eval product := $(1))
+	rm -rf pkg/crds/$(product)
+	rm -rf .crds/$(product)
+	mkdir -p pkg/crds/$(product)
+	mkdir -p .crds/$(product)
 endef
 
 # $(1) is the github project
@@ -645,8 +658,8 @@ define fetch_crds
 endef
 define copy_crds
     $(eval dir := $(1))
-		$(eval prod := $(2))
-	@cp $(dir)/libcalico-go/config/crd/* pkg/crds/$(prod)/ && echo "Copied $(prod) CRDs"
+		$(eval product := $(2))
+	@cp $(dir)/libcalico-go/config/crd/* pkg/crds/$(product)/ && echo "Copied $(product) CRDs"
 endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
@@ -689,7 +702,6 @@ prepare-for-enterprise-crds:
 
 fetch-enterprise-crds: prepare-for-enterprise-crds  read-libcalico-enterprise-version
 	$(if $(filter $(DEFAULT_EE_CRDS_DIR),$(ENTERPRISE_CRDS_DIR)), $(call fetch_crds,$(CALICO_ENTERPRISE),$(CALICO_ENTERPRISE_BRANCH),"enterprise"))
-# $(if $(filter ".crds/enterprise",$(ENTERPRISE_CRDS_DIR)),$(call fetch_crds,$(CALICO_ENTERPRISE),$(CALICO_ENTERPRISE_BRANCH),"enterprise"))
 
 .PHONY: prepull-image
 prepull-image:

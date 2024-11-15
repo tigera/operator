@@ -544,17 +544,17 @@ release-publish: release-prereqs
 	@echo "  make VERSION=$(VERSION) release-publish-latest"
 	@echo ""
 
-release-github: hack/bin/hub release-notes
+release-github: hack/bin/gh release-notes
 	@echo "Creating github release for $(VERSION)"
-	hack/bin/hub release create --draft --file $(VERSION)-release-notes.md $(VERSION)
+	hack/bin/gh release create $(VERSION) --title $(VERSION) --draft --notes-file $(VERSION)-release-notes.md
 
-HUB_VERSION?=2.14.2
-hack/bin/hub:
+GITHUB_CLI_VERSION?=2.62.0
+hack/bin/gh:
 	mkdir -p hack/bin
-	curl -sSL -o hack/bin/hub.tgz https://github.com/mislav/hub/releases/download/v$(HUB_VERSION)/hub-linux-amd64-$(HUB_VERSION).tgz
-	tar -zxvf hack/bin/hub.tgz -C hack/bin/ hub-linux-amd64-$(HUB_VERSION)/bin/hub --strip-components=2
+	curl -sSL -o hack/bin/gh.tgz https://github.com/cli/cli/releases/download/v$(GITHUB_CLI_VERSION)/gh_$(GITHUB_CLI_VERSION)_linux_amd64.tar.gz
+	tar -zxvf hack/bin/gh.tgz -C hack/bin/ gh_$(GITHUB_CLI_VERSION)_linux_amd64/bin/gh/bin/hub --strip-components=2
 	chmod +x $@
-	rm hack/bin/hub.tgz
+	rm hack/bin/gh.tgz
 
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:

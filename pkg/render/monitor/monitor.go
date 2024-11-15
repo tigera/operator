@@ -188,12 +188,12 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	// Create role and role bindings first.
 	// Operator needs the create/update roles for Alertmanager configuration secret for example.
 
-	roles := mc.operatorRole()
+	roles := mc.operatorRoles()
 	for _, r := range roles {
 		toCreate = append(toCreate, r)
 	}
 
-	bindings := mc.operatorRoleBinding()
+	bindings := mc.operatorRoleBindings()
 	for _, rb := range bindings {
 		toCreate = append(toCreate, rb)
 	}
@@ -956,101 +956,101 @@ func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMon
 	}
 }
 
-func (mc *monitorComponent) operatorRole() []*rbacv1.Role {
-	// list and watch have to be cluster scopes for watches to work.
-	// In controller-runtime, watches are by default non-namespaced.
-	prometheusRole := &rbacv1.Role{
-		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      TigeraPrometheusRole,
-			Namespace: common.TigeraPrometheusNamespace,
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"monitoring.coreos.com"},
-				Resources: []string{
-					"alertmanagers",
-					"podmonitors",
-					"prometheuses",
-					"prometheusrules",
-					"servicemonitors",
-					"thanosrulers",
-				},
-				Verbs: []string{
-					"create",
-					"delete",
-					"get",
-					"list",
-					"update",
-					"watch",
-				},
-			},
-		},
-	}
+func (mc *monitorComponent) operatorRoles() []*rbacv1.Role {
 
-	secretRole := &rbacv1.Role{
-		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: CalicoPrometheusOperatorSecret, Namespace: common.TigeraPrometheusNamespace},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{""},
-				Resources: []string{
-					"secrets",
-				},
-				Verbs: []string{
-					"create",
-					"delete",
-					"get",
-					"list",
-					"update",
-					"watch",
-				},
-			},
-		},
-	}
-
-	return []*rbacv1.Role{prometheusRole, secretRole}
-}
-
-func (mc *monitorComponent) operatorRoleBinding() []*rbacv1.RoleBinding {
-	prometheusBinding := &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      TigeraPrometheusRoleBinding,
-			Namespace: common.TigeraPrometheusNamespace,
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     TigeraPrometheusRole,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      common.OperatorServiceAccount(),
-				Namespace: common.OperatorNamespace(),
-			},
-		},
-	}
-
-	secretBinding := &rbacv1.RoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: CalicoPrometheusOperatorSecret, Namespace: common.TigeraPrometheusNamespace},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      CalicoPrometheusOperator,
+	return []*rbacv1.Role{
+		// list and watch have to be cluster scopes for watches to work.
+		// In controller-runtime, watches are by default non-namespaced.
+		{
+			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      TigeraPrometheusRole,
 				Namespace: common.TigeraPrometheusNamespace,
 			},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"monitoring.coreos.com"},
+					Resources: []string{
+						"alertmanagers",
+						"podmonitors",
+						"prometheuses",
+						"prometheusrules",
+						"servicemonitors",
+						"thanosrulers",
+					},
+					Verbs: []string{
+						"create",
+						"delete",
+						"get",
+						"list",
+						"update",
+						"watch",
+					},
+				},
+			},
 		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     CalicoPrometheusOperatorSecret,
+		{
+			TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: CalicoPrometheusOperatorSecret, Namespace: common.TigeraPrometheusNamespace},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{
+						"secrets",
+					},
+					Verbs: []string{
+						"create",
+						"delete",
+						"get",
+						"list",
+						"update",
+						"watch",
+					},
+				},
+			},
 		},
 	}
+}
 
-	return []*rbacv1.RoleBinding{prometheusBinding, secretBinding}
+func (mc *monitorComponent) operatorRoleBindings() []*rbacv1.RoleBinding {
+
+	return []*rbacv1.RoleBinding{
+		{
+			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      TigeraPrometheusRoleBinding,
+				Namespace: common.TigeraPrometheusNamespace,
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     TigeraPrometheusRole,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      common.OperatorServiceAccount(),
+					Namespace: common.OperatorNamespace(),
+				},
+			},
+		},
+		{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: CalicoPrometheusOperatorSecret, Namespace: common.TigeraPrometheusNamespace},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      CalicoPrometheusOperator,
+					Namespace: common.TigeraPrometheusNamespace,
+				},
+			},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     CalicoPrometheusOperatorSecret,
+			},
+		},
+	}
 }
 
 // Creates a network policy to allow traffic to Alertmanager (TCP port 9093).

@@ -1737,7 +1737,7 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 	}
 
 	if c.cfg.FelixPrometheusMetricsEnabled {
-		felixMetricsPort := c.getFelixMetricsPort()
+		felixMetricsPort := int32(c.cfg.FelixPrometheusMetricsPort)
 
 		ports = append(ports, corev1.ServicePort{
 			Name:       "felix-metrics-port",
@@ -1764,14 +1764,6 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 			Ports:     ports,
 		},
 	}
-}
-
-func (c *nodeComponent) getFelixMetricsPort() int32 {
-	if c.cfg.Installation.NodeMetricsPort != nil {
-		return *c.cfg.Installation.NodeMetricsPort
-	}
-
-	return int32(c.cfg.FelixPrometheusMetricsPort)
 }
 
 // hostPathInitContainer creates an init container that changes the permissions on hostPath volumes

@@ -17,6 +17,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"net/url"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -440,6 +441,13 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Failed to process the authentication CR.", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	if keyValidatorConfig != nil {
+		if _, err := url.Parse(keyValidatorConfig.Issuer()); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError,
+				"Authentication Issuer is not a valid URL", err, reqLogger)
+		}
 	}
 
 	reqLogger.V(3).Info("rendering components")

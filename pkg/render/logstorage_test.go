@@ -217,13 +217,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				esContainer := resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
 				Expect(*esContainer.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 				Expect(*esContainer.SecurityContext.Privileged).To(BeFalse())
-				Expect(*esContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+				Expect(*esContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(1000))
 				Expect(*esContainer.SecurityContext.RunAsNonRoot).To(BeFalse())
-				Expect(*esContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+				Expect(*esContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(1000))
 				Expect(esContainer.SecurityContext.Capabilities).To(Equal(
 					&corev1.Capabilities{
 						Drop: []corev1.Capability{"ALL"},
-						Add:  []corev1.Capability{"SETGID", "SETUID", "SYS_CHROOT"},
 					},
 				))
 				Expect(esContainer.SecurityContext.SeccompProfile).To(Equal(
@@ -242,9 +241,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				// Check that the expected config made it's way to the Elastic CR
 				Expect(nodeSet.Config.Data).Should(Equal(map[string]interface{}{
-					"node.master":                     "true",
-					"node.data":                       "true",
-					"node.ingest":                     "true",
+					"node.roles":                      []string{"data", "ingest", "master", "remote_cluster_client"},
 					"cluster.max_shards_per_node":     10000,
 					"ingest.geoip.downloader.enabled": false,
 				}))
@@ -970,12 +967,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                     "true",
-						"node.data":                       "true",
-						"node.ingest":                     "true",
-						"cluster.max_shards_per_node":     10000,
-						"ingest.geoip.downloader.enabled": false,
-						"node.attr.zone":                  "us-west-2a",
+						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
+						"cluster.max_shards_per_node":                     10000,
+						"ingest.geoip.downloader.enabled":                 false,
+						"node.attr.zone":                                  "us-west-2a",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
 
@@ -991,12 +986,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[1].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                     "true",
-						"node.data":                       "true",
-						"node.ingest":                     "true",
-						"cluster.max_shards_per_node":     10000,
-						"ingest.geoip.downloader.enabled": false,
-						"node.attr.zone":                  "us-west-2b",
+						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
+						"cluster.max_shards_per_node":                     10000,
+						"ingest.geoip.downloader.enabled":                 false,
+						"node.attr.zone":                                  "us-west-2b",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
 				})
@@ -1063,13 +1056,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[0].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                     "true",
-						"node.data":                       "true",
-						"node.ingest":                     "true",
-						"cluster.max_shards_per_node":     10000,
-						"ingest.geoip.downloader.enabled": false,
-						"node.attr.zone":                  "us-west-2a",
-						"node.attr.rack":                  "rack1",
+						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
+						"cluster.max_shards_per_node":                     10000,
+						"ingest.geoip.downloader.enabled":                 false,
+						"node.attr.zone":                                  "us-west-2a",
+						"node.attr.rack":                                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",
 					}))
 
@@ -1094,13 +1085,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					}))
 					Expect(nodeSets[1].Config.Data).Should(Equal(map[string]interface{}{
-						"node.master":                     "true",
-						"node.data":                       "true",
-						"node.ingest":                     "true",
-						"cluster.max_shards_per_node":     10000,
-						"ingest.geoip.downloader.enabled": false,
-						"node.attr.zone":                  "us-west-2b",
-						"node.attr.rack":                  "rack1",
+						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
+						"cluster.max_shards_per_node":                     10000,
+						"ingest.geoip.downloader.enabled":                 false,
+						"node.attr.zone":                                  "us-west-2b",
+						"node.attr.rack":                                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",
 					}))
 				})

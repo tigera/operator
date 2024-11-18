@@ -16,6 +16,7 @@ package networkpolicy
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -89,6 +90,22 @@ func CreateSourceEntityRule(namespace string, deploymentName string) v3.EntityRu
 	return v3.EntityRule{
 		Selector:          fmt.Sprintf("k8s-app == '%s'", deploymentName),
 		NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", namespace),
+	}
+}
+
+// GetOIDCEgressRule creates egress rule for oidc connection.
+// the result will include an egress rules with the urlString passed in:
+//  1. egress rule: egress rule assuming the oidc is external to the cluster
+func GetOIDCEgressRule(parsedURL *url.URL) v3.Rule {
+	hostname := parsedURL.Hostname()
+	OIDCEntityRuleExternal := v3.EntityRule{
+		Domains: []string{hostname},
+	}
+
+	return v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &TCPProtocol,
+		Destination: OIDCEntityRuleExternal,
 	}
 }
 

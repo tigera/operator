@@ -359,7 +359,7 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		},
 	}
 
-	sc := securitycontext.NewRootContext(false)
+	sc := securitycontext.NewNonRootContext()
 	// Set the user and group to be the default elasticsearch ID
 	sc.RunAsUser = ptr.Int64ToPtr(1000)
 	sc.RunAsGroup = ptr.Int64ToPtr(1000)

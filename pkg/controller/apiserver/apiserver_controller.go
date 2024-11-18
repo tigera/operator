@@ -209,6 +209,7 @@ type ReconcileAPIServer struct {
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	helper := utils.NewNamespaceHelper(r.multiTenant, render.QueryserverNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling APIServer")
 
@@ -294,6 +295,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	includeV3NetworkPolicy := false
 	if installationSpec.Variant == operatorv1.TigeraSecureEnterprise {
+		trustedBundle = certificateManager.CreateTrustedBundle()
 		applicationLayer, err = utils.GetApplicationLayer(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ApplicationLayer", err, reqLogger)
@@ -360,7 +362,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		} else if prometheusCertificate != nil {
-			trustedBundle = certificateManager.CreateTrustedBundle(prometheusCertificate)
+			trustedBundle.AddCertificates(prometheusCertificate)
 		}
 	}
 
@@ -382,6 +384,43 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
 
+	var authenticationCR *operatorv1.Authentication
+	// Fetch the Authentication spec. If present, we use it to configure user authentication.
+	authenticationCR, err = utils.GetAuthentication(ctx, r.client)
+	if err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// set auth type in the config
+	authType := ""
+
+	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+		r.status.SetDegraded(operatorv1.ResourceNotReady,
+			fmt.Sprintf("Authentication is not ready authenticationCR status: %s", authenticationCR.Status.State),
+			nil, reqLogger)
+		return reconcile.Result{}, nil
+	} else if authenticationCR != nil && !utils.IsDexDisabled(authenticationCR) {
+		// Do not include DEX TLS Secret Name if authentication CR does not have type Dex
+		secret := render.DexTLSSecretName
+		certificate, err := certificateManager.GetCertificate(r.client, secret, helper.TruthNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Failed to retrieve %s", secret),
+				err, reqLogger)
+			return reconcile.Result{}, err
+		} else if certificate == nil {
+			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secret))
+			r.status.SetDegraded(operatorv1.ResourceNotReady,
+				fmt.Sprintf("Waiting for secret '%s' to become available", secret),
+				nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		trustedBundle.AddCertificates(certificate)
+	}
+
+	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+	reqLogger.Info("keyValidatorConfig: ", keyValidatorConfig)
+
 	apiServerCfg := render.APIServerConfiguration{
 		K8SServiceEndpoint:          k8sapi.Endpoint,
 		Installation:                installationSpec,
@@ -395,6 +434,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		OpenShift:                   r.provider.IsOpenShift(),
 		TrustedBundle:               trustedBundle,
 		MultiTenant:                 r.multiTenant,
+		KeyValidatorConfig:          keyValidatorConfig,
+		AuthType:                    authType,
 	}
 
 	component, err := render.APIServer(&apiServerCfg)

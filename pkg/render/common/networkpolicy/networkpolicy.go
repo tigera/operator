@@ -16,6 +16,7 @@ package networkpolicy
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -90,6 +91,49 @@ func CreateSourceEntityRule(namespace string, deploymentName string) v3.EntityRu
 		Selector:          fmt.Sprintf("k8s-app == '%s'", deploymentName),
 		NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", namespace),
 	}
+}
+
+// GetOIDCEgressRules creates egress rules for oidc connection.
+// the result will include one or two egress rules depending on the urlString passed in.
+// if hostname - parsed from the urlString - is of form <string>.<string> we create two egress rules:
+//  1. egress rule#1: egress rule assuming the oidc is external to the cluster (this rule is always created)
+//  2. egress rule#2: egress rule assuming the oidc is an internal svc where the url is <svc-name>.<svc-namespace>
+func GetOIDCEgressRules(urlString string) []v3.Rule {
+	oidcEgressRules := []v3.Rule{}
+
+	parsedURL, err := url.Parse(urlString)
+	if err != nil {
+		panic(err)
+	}
+
+	hostname := parsedURL.Hostname()
+	OIDCEntityRuleExternal := v3.EntityRule{
+		Domains: []string{hostname},
+	}
+
+	oidcEgressRules = append(oidcEgressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &TCPProtocol,
+		Destination: OIDCEntityRuleExternal,
+	})
+
+	hostnameParts := strings.Split(hostname, ".")
+
+	if len(hostnameParts) == 2 {
+		OIDCEntityRuleInternal := v3.EntityRule{
+			Services: &v3.ServiceMatch{
+				Namespace: hostnameParts[1],
+				Name:      hostnameParts[0],
+			},
+		}
+		oidcEgressRules = append(oidcEgressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &TCPProtocol,
+			Destination: OIDCEntityRuleInternal,
+		})
+	}
+
+	return oidcEgressRules
 }
 
 // AppendServiceSelectorDNSEgressRules is equivalent to AppendDNSEgressRules, utilizing service selector instead of label selector and ports.

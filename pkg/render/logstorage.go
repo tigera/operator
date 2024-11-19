@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -358,15 +359,10 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		},
 	}
 
-	sc := securitycontext.NewRootContext(false)
-	// These capabilities are required for docker-entrypoint.sh.
-	// See: https://github.com/elastic/elasticsearch/blob/7.17/distribution/docker/src/docker/bin/docker-entrypoint.sh.
-	// TODO Consider removing for Elasticsearch v8+.
-	sc.Capabilities.Add = []corev1.Capability{
-		"SETGID",
-		"SETUID",
-		"SYS_CHROOT",
-	}
+	sc := securitycontext.NewNonRootContext()
+	// Set the user and group to be the default elasticsearch ID
+	sc.RunAsUser = ptr.Int64ToPtr(1000)
+	sc.RunAsGroup = ptr.Int64ToPtr(1000)
 
 	esContainer := corev1.Container{
 		Name: "elasticsearch",
@@ -717,9 +713,12 @@ func (es *elasticsearchComponent) nodeSets() []esv1.NodeSet {
 // NodeSet
 func (es *elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentVolumeClaim) esv1.NodeSet {
 	config := map[string]interface{}{
-		"node.master":                 "true",
-		"node.data":                   "true",
-		"node.ingest":                 "true",
+		"node.roles": []string{
+			"data",
+			"ingest",
+			"master",
+			"remote_cluster_client",
+		},
 		"cluster.max_shards_per_node": 10000,
 		// Disable geoip downloader. This removes an error from the startup logs, because our network policy blocks it.
 		"ingest.geoip.downloader.enabled": false,

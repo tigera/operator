@@ -56,3 +56,19 @@ func PatchFelixConfiguration(ctx context.Context, c client.Client, patchFn func(
 
 	return fc, nil
 }
+
+func GetFelixConfiguration(ctx context.Context, c client.Client) (*crdv1.FelixConfiguration, error) {
+	fc := &crdv1.FelixConfiguration{}
+	err := c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+	if err != nil && !errors.IsNotFound(err) {
+		return nil, fmt.Errorf("unable to read FelixConfiguration: %w", err)
+	}
+	return fc, nil
+}
+
+func IsFelixPrometheusMetricsEnabled(felixConfiguration *crdv1.FelixConfiguration) bool {
+	if felixConfiguration.Spec.PrometheusMetricsEnabled != nil {
+		return *felixConfiguration.Spec.PrometheusMetricsEnabled
+	}
+	return false
+}

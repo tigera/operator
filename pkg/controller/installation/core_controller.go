@@ -1372,7 +1372,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		PrometheusServerTLS:           nodePrometheusTLS,
 		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
 		BindMode:                      bgpConfiguration.Spec.BindMode,
-		FelixPrometheusMetricsEnabled: isFelixPrometheusMetricsEnabled(felixConfiguration),
+		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
 	}
 	components = append(components, render.Node(&nodeCfg))
@@ -1560,13 +1560,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	reqLogger.V(1).Info("Finished reconciling Installation")
 	return reconcile.Result{}, nil
-}
-
-func isFelixPrometheusMetricsEnabled(felixConfiguration *crdv1.FelixConfiguration) bool {
-	if felixConfiguration.Spec.PrometheusMetricsEnabled != nil {
-		return *felixConfiguration.Spec.PrometheusMetricsEnabled
-	}
-	return false
 }
 
 func readMTUFile() (int, error) {

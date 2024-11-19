@@ -380,6 +380,9 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	felixConfiguration, err := utils.GetFelixConfiguration(ctx, r.client)
+	if err != nil {
+		log.Error(err, "Error retrieving Felix configuration")
+	}
 
 	monitorCfg := &monitor.Config{
 		Monitor:                       instance.Spec,

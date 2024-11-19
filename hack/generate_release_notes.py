@@ -63,21 +63,20 @@ def issues_in_milestone() -> list:
     milestone_issues = repo.get_issues(
         milestone=m, state="closed", labels=["release-note-required"]
     )
+    # If there are no issues in the milestone, raise an error.
+    if len(milestone_issues) == 0:
+        raise ReleaseNoteError(f"no issues found for milestone {m.title}")
     open_issues = [
         issue for issue in milestone_issues if issue.as_pull_request().state == "open"
     ]
-    merged_issues = [
-        issue for issue in milestone_issues if issue.as_pull_request().merged
-    ]
-    # If there are open issues, raise an error.
+    # If there are open issues in the milestone, raise an error.
     if len(open_issues) > 0:
         raise ReleaseNoteError(
-            f"{len(open_issues)} PRs are still open, remove from milestone... skipping"
+            f"{len(open_issues)} PRs are still open, remove from milestone"
         )
-    # Since we only want merged PRs, raise an error if there are none.
-    if len(merged_issues) == 0:
-        raise ReleaseNoteError(f"no issues found for milestone {m.title}")
-    return merged_issues
+
+    # Return only the merged PRs
+    return [issue for issue in milestone_issues if issue.as_pull_request().merged]
 
 
 def extract_release_notes(issue: Issue) -> list:
@@ -121,7 +120,7 @@ def kind(issue: Issue) -> str:
 def enterprise_feature(issue: Issue) -> bool:
     """Check if the issue is an enterprise feature.
 
-    Args:
+    Args:ReleaseNoteError
         issue (Issue): GitHub issue
 
     Returns:

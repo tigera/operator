@@ -1174,7 +1174,7 @@ func (m *managedClusterLogStorage) ResolveImages(is *operatorv1.ImageSet) error 
 }
 
 func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objsToDelete []client.Object) {
-	// ManagedClusters simply need the namespace, role, and binding created so that Linseed in the management cluster has permissions
+	// ManagedClusters simply need the namespace, role, and binding created so that Linseed/kube-controller in the management cluster has permissions
 	// to create token secrets in the managed cluster.
 	toCreate := []client.Object{}
 	roles, clusterRole, bindings, clusterRB := m.externalRolesAndBindings()

@@ -106,17 +106,11 @@ git push --tags
 
 ## Release notes and milestones
 
-1. Run the following command to generate release notes for the release
+1. Go to https://github.com/tigera/operator/releases and edit the draft release for the release tag; check the release notes.
 
-   ```
-   make release-notes VERSION=<TAG> GITHUB_TOKEN=<access-token>
-   ```
+2. Close the milestone for this release. https://github.com/tigera/operator/milestones
 
-1. Go to https://github.com/tigera/operator/releases and edit the release tag to include the generated release notes, and update the title.
-
-1. Close the milestone for this release. https://github.com/tigera/operator/milestones
-
-1. Go to https://github.com/tigera/operator/milestones and create any new milestones that should exist
+3. Go to https://github.com/tigera/operator/milestones and create any new milestones that should exist
    - Create the next patch version
    - If a new minor was released (`.0`), also ensure the next minor has been created (this should have already been created as part of [Preparing a new release branch](#preparing-a-new-release-branch))
 

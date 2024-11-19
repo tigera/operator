@@ -167,6 +167,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
 					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.EsManagerRole, Namespace: render.ElasticsearchNamespace}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.EsManagerRoleBinding, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 				}
 
 				component := render.LogStorage(cfg)
@@ -251,19 +255,23 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 
 			It("should render an elasticsearch Component and delete the Elasticsearch ExternalService as well as Curator components", func() {
-				expectedCreateResources := []resourceTestObj{
-					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
-					{render.ElasticsearchPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-					{render.ElasticsearchInternalPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-					{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-					{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
-					{relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &corev1.ConfigMap{}, nil},
-					{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
-					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+				expectedCreateResources := []client.Object{
+					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchNamespace}},
+					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPolicyName, Namespace: render.ElasticsearchNamespace}},
+					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchInternalPolicyName, Namespace: render.ElasticsearchNamespace}},
+					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ElasticsearchNamespace}},
+					&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: render.ElasticsearchNamespace}},
+					&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch", Namespace: render.ElasticsearchNamespace}},
+					&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: common.OperatorNamespace()}},
+					&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
+					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.EsManagerRole, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.EsManagerRoleBinding, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 				}
 
 				expectedDeleteResources := []resourceTestObj{
@@ -285,8 +293,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				component := render.LogStorage(cfg)
 
 				createResources, deleteResources := component.Objects()
-
-				compareResources(createResources, expectedCreateResources)
+				rtest.ExpectResources(createResources, expectedCreateResources)
+				//compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, expectedDeleteResources)
 			})
 
@@ -300,31 +308,35 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				cfg.ElasticsearchKeyPair, cfg.TrustedBundle = getTLS(cfg.Installation)
 
-				expectedCreateResources := []resourceTestObj{
-					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
-					{render.ElasticsearchPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-					{render.ElasticsearchInternalPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-					{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-					{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
-					{relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &corev1.ConfigMap{}, nil},
-					{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
-					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+				expectedCreateResources := []client.Object{
+					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchNamespace}},
+					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPolicyName, Namespace: render.ElasticsearchNamespace}},
+					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchInternalPolicyName, Namespace: render.ElasticsearchNamespace}},
+					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ElasticsearchNamespace}},
+					&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: render.ElasticsearchNamespace}},
+					&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch", Namespace: render.ElasticsearchNamespace}},
+					&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: common.OperatorNamespace()}},
+					&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
+					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.EsManagerRole, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.EsManagerRoleBinding, Namespace: render.ElasticsearchNamespace}},
 					// Certificate management comes with two additional cluster role bindings:
-					{relasticsearch.UnusedCertSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
-					{render.TigeraElasticsearchInternalCertSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
+					&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.UnusedCertSecret, Namespace: common.OperatorNamespace()}},
+					&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraElasticsearchInternalCertSecret, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 				}
+
 				cfg.UnusedTLSSecret = &corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.UnusedCertSecret, Namespace: common.OperatorNamespace()},
 				}
 				component := render.LogStorage(cfg)
 
 				createResources, deleteResources := component.Objects()
-
-				compareResources(createResources, expectedCreateResources)
+				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
@@ -384,26 +396,29 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			})
 
 			It("should render correctly", func() {
-				expectedCreateResources := []resourceTestObj{
-					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
-					{render.ElasticsearchPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-					{render.ElasticsearchInternalPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-					{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-					{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-					{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
-					{relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &corev1.ConfigMap{}, nil},
-					{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
-					{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
-					{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-					{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+				expectedCreateResources := []client.Object{
+					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchNamespace}},
+					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchPolicyName, Namespace: render.ElasticsearchNamespace}},
+					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchInternalPolicyName, Namespace: render.ElasticsearchNamespace}},
+					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ElasticsearchNamespace}},
+					&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: render.ElasticsearchNamespace}},
+					&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch", Namespace: render.ElasticsearchNamespace}},
+					&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.ClusterConfigConfigMapName, Namespace: common.OperatorNamespace()}},
+					&esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
+					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.EsManagerRole, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.EsManagerRoleBinding, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 				}
 
 				cfg.Provider = operatorv1.ProviderNone
 				component := render.LogStorage(cfg)
 				createResources, deleteResources := component.Objects()
-
-				compareResources(createResources, expectedCreateResources)
+				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
@@ -548,28 +563,32 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		Context("Initial creation", func() {
 			It("creates Managed cluster logstorage components", func() {
-				expectedCreateResources := []resourceTestObj{
-					{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
-					{render.ESGatewayServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
-						svc := resource.(*corev1.Service)
-						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
-						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
-					}},
-					{render.LinseedServiceName, render.ElasticsearchNamespace, &corev1.Service{}, func(resource runtime.Object) {
-						svc := resource.(*corev1.Service)
-						Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
-						Expect(svc.Spec.ExternalName).Should(Equal(fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain)))
-					}},
-					{"tigera-linseed-secrets", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-linseed-configmaps", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-linseed-namespaces", "", &rbacv1.ClusterRole{}, nil},
-					{"tigera-linseed", "calico-system", &rbacv1.RoleBinding{}, nil},
-					{"tigera-linseed", "tigera-operator", &rbacv1.RoleBinding{}, nil},
-					{"tigera-linseed", "", &rbacv1.ClusterRoleBinding{}, nil},
+				expectedCreateResources := []client.Object{
+					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchNamespace}},
+					&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.ESGatewayServiceName, Namespace: render.ElasticsearchNamespace},
+						Spec: corev1.ServiceSpec{
+							Type: corev1.ServiceTypeExternalName, ExternalName: fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain),
+						},
+					},
+					&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.LinseedServiceName, Namespace: render.ElasticsearchNamespace},
+						Spec: corev1.ServiceSpec{
+							Type:         corev1.ServiceTypeExternalName,
+							ExternalName: fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain),
+						},
+					},
+					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-secrets"}},
+					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-configmaps"}},
+					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-namespaces"}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "calico-system"}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-operator"}},
+					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed"}},
+					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 				}
+
 				component := render.NewManagedClusterLogStorage(cfg)
 				createResources, deleteResources := component.Objects()
-				compareResources(createResources, expectedCreateResources)
+				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{})
 			})
 		})

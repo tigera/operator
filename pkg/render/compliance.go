@@ -1680,6 +1680,9 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 
+	// add oidc egress rules
+	egressRules = append(egressRules, networkpolicy.GetOIDCEgressRules(c.cfg.KeyValidatorConfig.Issuer())...)
+
 	egressRules = append(egressRules, []v3.Rule{
 		{
 			Action:      v3.Allow,

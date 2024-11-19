@@ -18,6 +18,9 @@ import (
 	"fmt"
 	"strings"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
+	"github.com/tigera/operator/pkg/render/common/authentication"
 	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -28,9 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/api/pkg/lib/numorstring"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -126,6 +126,8 @@ type APIServerConfiguration struct {
 	OpenShift                   bool
 	TrustedBundle               certificatemanagement.TrustedBundle
 	MultiTenant                 bool
+	KeyValidatorConfig          authentication.KeyValidatorConfig
+	AuthType                    string
 }
 
 type apiServerComponent struct {
@@ -497,10 +499,14 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 			Destination: networkpolicy.PrometheusEntityRule,
 		},
 		{
-			// Pass to subsequent tiers for further enforcement
-			Action: v3.Pass,
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: DexEntityRule,
 		},
 	}...)
+
+	oidcEgressRules := networkpolicy.GetOIDCEgressRules(cfg.KeyValidatorConfig.Issuer())
+	egressRules = append(egressRules, oidcEgressRules...)
 
 	if r, err := cfg.K8SServiceEndpoint.DestinationEntityRule(); r != nil && err == nil {
 		egressRules = append(egressRules, v3.Rule{
@@ -509,6 +515,12 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 			Destination: *r,
 		})
 	}
+
+	// add pass after all egress rules
+	egressRules = append(egressRules, v3.Rule{
+		// Pass to subsequent tiers for further enforcement
+		Action: v3.Pass,
+	})
 
 	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
 	ingressPorts := networkpolicy.Ports(443, APIServerPort, QueryServerPort, 10443)
@@ -1252,6 +1264,10 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+	}
+
+	if c.cfg.KeyValidatorConfig != nil {
+		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
 	volumeMounts := []corev1.VolumeMount{

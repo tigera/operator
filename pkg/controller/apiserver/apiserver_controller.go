@@ -17,7 +17,9 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"net/url"
 
+	"github.com/tigera/operator/pkg/render/common/authentication"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -292,8 +294,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var applicationLayer *operatorv1.ApplicationLayer
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
+	var keyValidatorConfig authentication.KeyValidatorConfig
 	includeV3NetworkPolicy := false
 	if installationSpec.Variant == operatorv1.TigeraSecureEnterprise {
+		trustedBundle = certificateManager.CreateTrustedBundle()
 		applicationLayer, err = utils.GetApplicationLayer(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ApplicationLayer", err, reqLogger)
@@ -360,7 +364,51 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		} else if prometheusCertificate != nil {
-			trustedBundle = certificateManager.CreateTrustedBundle(prometheusCertificate)
+			trustedBundle.AddCertificates(prometheusCertificate)
+		}
+
+		var authenticationCR *operatorv1.Authentication
+		// Fetch the Authentication spec. If present, we use it to configure user authentication.
+		authenticationCR, err = utils.GetAuthentication(ctx, r.client)
+		if err != nil && !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+			r.status.SetDegraded(operatorv1.ResourceNotReady,
+				fmt.Sprintf("Authentication is not ready authenticationCR status: %s", authenticationCR.Status.State),
+				nil, reqLogger)
+			return reconcile.Result{}, nil
+		} else if authenticationCR != nil && !utils.IsDexDisabled(authenticationCR) {
+			// Do not include DEX TLS Secret Name if authentication CR does not have type Dex
+			secret := render.DexTLSSecretName
+			certificate, err := certificateManager.GetCertificate(r.client, secret, common.OperatorNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Failed to retrieve %s", secret),
+					err, reqLogger)
+				return reconcile.Result{}, err
+			} else if certificate == nil {
+				reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secret))
+				r.status.SetDegraded(operatorv1.ResourceNotReady,
+					fmt.Sprintf("Waiting for secret '%s' to become available", secret),
+					nil, reqLogger)
+				return reconcile.Result{}, nil
+			}
+			trustedBundle.AddCertificates(certificate)
+		}
+
+		keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get KeyValidator Config", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		if keyValidatorConfig != nil {
+			if _, err := url.Parse(keyValidatorConfig.Issuer()); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError,
+					"Authentication Issuer is not a valid URL", err, reqLogger)
+			}
 		}
 	}
 
@@ -395,6 +443,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		OpenShift:                   r.provider.IsOpenShift(),
 		TrustedBundle:               trustedBundle,
 		MultiTenant:                 r.multiTenant,
+		KeyValidatorConfig:          keyValidatorConfig,
 	}
 
 	component, err := render.APIServer(&apiServerCfg)

@@ -552,7 +552,7 @@ GITHUB_CLI_VERSION?=2.62.0
 hack/bin/gh:
 	mkdir -p hack/bin
 	curl -sSL -o hack/bin/gh.tgz https://github.com/cli/cli/releases/download/v$(GITHUB_CLI_VERSION)/gh_$(GITHUB_CLI_VERSION)_linux_amd64.tar.gz
-	tar -zxvf hack/bin/gh.tgz -C hack/bin/ gh_$(GITHUB_CLI_VERSION)_linux_amd64/bin/gh/bin/hub --strip-components=2
+	tar -zxvf hack/bin/gh.tgz -C hack/bin/ gh_$(GITHUB_CLI_VERSION)_linux_amd64/bin/gh --strip-components=2
 	chmod +x $@
 	rm hack/bin/gh.tgz
 
@@ -568,15 +568,14 @@ endif
 check-milestone: hack/bin/gh var-require-all-VERSION-GITHUB_TOKEN
 	@gh extension install valeriobelli/gh-milestone
 	@echo "Checking milestone $(VERSION) exists"
-	@gh milestone list --query $(VERSION) --repo $(REPO) --state all --json title | \
-		jq 'if .[0] == {} then error("milestone for release does not exist") else empty end'
+	$(eval MILESTONE_NUMBER := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state all --json title --jq '.[0].title' | grep $(VERSION)))
+	$(if $(MILESTONE_NUMBER),,$(error Milestone $(VERSION) does not exist))
 	@echo "Checking $(VERSION) milestone has no open PRs"
-	@gh search prs --milestone $(VERSION)  --repo $(REPO) --state open --json number | \
-		jq 'if . == [] then empty else error("there are open PRs in milestone") end'
-	$(eval MILESTONE_NUMBER := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json number --jq '.[0].number'))
+	$(eval OPEN_PRS := $(shell gh search prs --milestone $(VERSION) --repo $(REPO) --state open --json number --jq '.[].number'))
+	$(if $(OPEN_PRS),$(error Milestone $(VERSION) has open PRs))
 	@echo "Checking milestone $(VERSION) is closed"
-	@gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json title | \
-		jq 'if . == [] then empty else error("milestone for release is not closed, please close and start this process again") end'
+	$(eval MILESTONE_CLOSED := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json title --jq '.[0].title'))
+	$(if $(MILESTONE_CLOSED),,$(error Milestone $(VERSION) is not closed))
 
 release-prep: check-milestone var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
 	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml

@@ -123,7 +123,11 @@ var _ = Describe("apiserver controller tests", func() {
 					IssuerURL: "https://localhost:9443/dex",
 				},
 			},
+			Status: operatorv1.AuthenticationStatus{
+				State: "Ready",
+			},
 		})).ToNot(HaveOccurred())
+
 		dexSecret, err := secret.CreateTLSSecret(cryptoCA, render.DexTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, time.Hour, nil, dns.GetServiceDNSNames(render.DexTLSSecretName, render.DexNamespace, dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, dexSecret)).ToNot(HaveOccurred())
@@ -149,6 +153,9 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
+		mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
 	})
 
 	Context("verify reconciliation", func() {

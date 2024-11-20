@@ -97,6 +97,17 @@
         }
       },
       {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "selector": "k8s-app == 'tigera-dex'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-dex'",
+          "ports" : [
+            5556
+          ]
+        }
+      },
+      {
         "action": "Pass"
       }
     ]

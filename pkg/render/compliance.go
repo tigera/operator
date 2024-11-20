@@ -17,6 +17,7 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
+	"net/url"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -28,7 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render/common/authentication"
@@ -1680,6 +1680,13 @@ func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.Net
 	}
 
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
+
+	// add oidc egress rule
+	if c.cfg.KeyValidatorConfig != nil {
+		if parsedURL, err := url.Parse(c.cfg.KeyValidatorConfig.Issuer()); err == nil {
+			egressRules = append(egressRules, networkpolicy.GetOIDCEgressRule(parsedURL))
+		}
+	}
 
 	egressRules = append(egressRules, []v3.Rule{
 		{

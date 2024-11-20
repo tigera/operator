@@ -88,7 +88,7 @@ CGO_ENABLED=0
 endif
 
 ###############################################################################
-
+REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
 GO_BUILD_VER?=v0.94
@@ -565,7 +565,20 @@ ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
 endif
 
-release-prep: var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
+check-milestone: hack/bin/gh var-require-all-VERSION-GITHUB_TOKEN
+	@gh extension install valeriobelli/gh-milestone
+	@echo "Checking milestone $(VERSION) exists"
+	@gh milestone list --query $(VERSION) --repo $(REPO) --state all --json title | \
+		jq 'if .[0] == {} then error("milestone for release does not exist") else empty end'
+	@echo "Checking $(VERSION) milestone has no open PRs"
+	@gh search prs --milestone $(VERSION)  --repo $(REPO) --state open --json number | \
+		jq 'if . == [] then empty else error("there are open PRs in milestone") end'
+	$(eval MILESTONE_NUMBER := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json number --jq '.[0].number'))
+	@echo "Checking milestone $(VERSION) is closed"
+	@gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json title | \
+		jq 'if . == [] then empty else error("milestone for release is not closed, please close and start this process again") end'
+
+release-prep: check-milestone var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
 	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
 	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
 	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go

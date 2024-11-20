@@ -14,14 +14,19 @@ For a major or minor release, you will need to create:
 
 To create a new release branch:
 
-1. If needed, fetch the latest changes from the repository with `git fetch <remote>`
-2. Create a new branch based on the target minor version:
+1. If needed, fetch the latest changes from the repository remote `<remote>`:
+
+    ```sh
+    git fetch <remote>
+    ```
+
+1. Create a new branch based on the target minor version:
 
    ```sh
    git checkout <remote>/master -b release-vX.Y
    ```
 
-3. Push the new branch to the repository:
+1. Push the new branch to the repository:
 
    ```sh
    git push <remote> release-vX.Y
@@ -51,10 +56,9 @@ This ensures that new PRs against master will be automatically given the correct
 
 ## Preparing for the release
 
-
 - Create any new milestones that should exist
-   - Create the next patch version
-   - If a new minor was released (`.0`), also ensure the next minor has been created (this should have already been created as part of [Preparing a new release branch](#preparing-a-new-release-branch))
+  - Create the next patch version
+  - If a new minor was released (`.0`), also ensure the next minor has been created (this should have already been created as part of [Preparing a new release branch](#preparing-a-new-release-branch))
 - Review the milestone for this release and ensure it is accurate. https://github.com/tigera/operator/milestones
   - Move any open PRs to a new milestone (*likely* the newly created one)
   - Close the milestone for the release
@@ -99,11 +103,11 @@ Go to the PR created and:
 
 1. Merge your PR to the release branch
 
-1. Create a git tag for the new commit on the release branch and push it:
+1. Create a git tag `<tag>` for the new commit on the release branch and push it:
 
     ```sh
-    git tag v1.30.3
-    git push --tags
+    git tag <tag> # e.g git tag v1.30.2
+    git push <remote> <tag> # e.g git push origin v1.30.2
     ```
 
 1. Log in to semaphore and find the new build for the release branch commit, and

@@ -64,7 +64,7 @@ def issues_in_milestone() -> list:
         milestone=m, state="closed", labels=["release-note-required"]
     )
     # If there are no issues in the milestone, raise an error.
-    if len(milestone_issues) == 0:
+    if milestone_issues.totalCount == 0:
         raise ReleaseNoteError(f"no issues found for milestone {m.title}")
     open_issues = [
         issue for issue in milestone_issues if issue.as_pull_request().state == "open"

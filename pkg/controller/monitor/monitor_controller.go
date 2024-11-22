@@ -381,7 +381,8 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	felixConfiguration, err := utils.GetFelixConfiguration(ctx, r.client)
 	if err != nil {
-		log.Error(err, "Error retrieving Felix configuration")
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Felix configuration", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	monitorCfg := &monitor.Config{

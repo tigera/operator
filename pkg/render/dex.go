@@ -470,6 +470,12 @@ func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
 					Source:      networkpolicy.PrometheusSourceEntityRule,
 					Destination: dexIngressPortDestination,
 				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      networkpolicy.DefaultHelper().APIServerSourceEntityRule(),
+					Destination: dexIngressPortDestination,
+				},
 			},
 			Egress: egressRules,
 		},

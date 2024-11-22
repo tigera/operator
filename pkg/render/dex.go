@@ -115,7 +115,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs := []client.Object{
 		CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider, PSSRestricted),
-		c.allowTigeraNetworkPolicy(),
+		c.allowTigeraNetworkPolicy(c.cfg.Installation.Variant),
 		networkpolicy.AllowTigeraDefaultDeny(DexNamespace),
 		c.serviceAccount(),
 		c.deployment(),
@@ -393,7 +393,7 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 	}
 }
 
-func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
+func (c *dexComponent) allowTigeraNetworkPolicy(installationVariant operatorv1.ProductVariant) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 	egressRules = append(egressRules, []v3.Rule{
@@ -468,6 +468,12 @@ func (c *dexComponent) allowTigeraNetworkPolicy() *v3.NetworkPolicy {
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Source:      networkpolicy.PrometheusSourceEntityRule,
+					Destination: dexIngressPortDestination,
+				},
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      networkpolicy.DefaultHelper().APIServerSourceEntityRule(installationVariant),
 					Destination: dexIngressPortDestination,
 				},
 			},

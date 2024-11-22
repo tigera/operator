@@ -78,6 +78,19 @@
           "selector": "k8s-app == 'tigera-prometheus'",
           "namespaceSelector": "name == 'tigera-prometheus'"
         }
+      },
+      {
+        "action": "Allow",
+        "destination": {
+          "ports": [
+            5556
+          ]
+        },
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'tigera-apiserver'",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-system'"
+        }
       }
     ],
     "egress": [

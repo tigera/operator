@@ -279,6 +279,10 @@ func (h *NetworkPolicyHelper) ManagerSourceEntityRule() v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("tigera-manager"), "tigera-manager")
 }
 
+func (h *NetworkPolicyHelper) APIServerSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-system"), "tigera-apiserver")
+}
+
 func (h *NetworkPolicyHelper) PolicyRecommendationSourceEntityRule() v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("tigera-policy-recommendation"), "tigera-policy-recommendation")
 }

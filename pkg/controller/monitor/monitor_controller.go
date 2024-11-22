@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"reflect"
 
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -141,6 +143,10 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 	err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("monitor-controller failed to watch ManagementClusterConnection resource: %w", err)
+	}
+
+	if err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
 	for _, secret := range []string{
@@ -373,18 +379,25 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	felixConfiguration, err := utils.GetFelixConfiguration(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Felix configuration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	monitorCfg := &monitor.Config{
-		Monitor:                  instance.Spec,
-		Installation:             install,
-		PullSecrets:              pullSecrets,
-		AlertmanagerConfigSecret: alertmanagerConfigSecret,
-		KeyValidatorConfig:       keyValidatorConfig,
-		ServerTLSSecret:          serverTLSSecret,
-		ClientTLSSecret:          clientTLSSecret,
-		ClusterDomain:            r.clusterDomain,
-		TrustedCertBundle:        trustedBundle,
-		OpenShift:                r.provider.IsOpenShift(),
-		KubeControllerPort:       kubeControllersMetricsPort,
+		Monitor:                       instance.Spec,
+		Installation:                  install,
+		PullSecrets:                   pullSecrets,
+		AlertmanagerConfigSecret:      alertmanagerConfigSecret,
+		KeyValidatorConfig:            keyValidatorConfig,
+		ServerTLSSecret:               serverTLSSecret,
+		ClientTLSSecret:               clientTLSSecret,
+		ClusterDomain:                 r.clusterDomain,
+		TrustedCertBundle:             trustedBundle,
+		OpenShift:                     r.provider.IsOpenShift(),
+		KubeControllerPort:            kubeControllersMetricsPort,
+		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 	}
 
 	// Render prometheus component

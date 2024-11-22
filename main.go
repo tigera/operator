@@ -354,6 +354,15 @@ func main() {
 	}
 	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
 
+	// If configured to managed CRDs, do a preliminary install of them here. The Installation controller
+	// will reconcile them as well, but we need to make sure they are installed before we start the rest of the controllers.
+	if manageCRDs {
+		if err := crds.Ensure(mgr.GetClient()); err != nil {
+			setupLog.Error(err, "Failed to ensure CRDs are created")
+			os.Exit(1)
+		}
+	}
+
 	// Determine if we're running in single or multi-tenant mode.
 	multiTenant, err := utils.MultiTenant(ctx, clientset)
 	if err != nil {

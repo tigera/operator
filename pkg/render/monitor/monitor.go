@@ -121,17 +121,18 @@ func MonitorPolicy(cfg *Config) render.Component {
 
 // Config contains all the config information needed to render the Monitor component.
 type Config struct {
-	Monitor                  operatorv1.MonitorSpec
-	Installation             *operatorv1.InstallationSpec
-	PullSecrets              []*corev1.Secret
-	AlertmanagerConfigSecret *corev1.Secret
-	KeyValidatorConfig       authentication.KeyValidatorConfig
-	ServerTLSSecret          certificatemanagement.KeyPairInterface
-	ClientTLSSecret          certificatemanagement.KeyPairInterface
-	ClusterDomain            string
-	TrustedCertBundle        certificatemanagement.TrustedBundle
-	OpenShift                bool
-	KubeControllerPort       int
+	Monitor                       operatorv1.MonitorSpec
+	Installation                  *operatorv1.InstallationSpec
+	PullSecrets                   []*corev1.Secret
+	AlertmanagerConfigSecret      *corev1.Secret
+	KeyValidatorConfig            authentication.KeyValidatorConfig
+	ServerTLSSecret               certificatemanagement.KeyPairInterface
+	ClientTLSSecret               certificatemanagement.KeyPairInterface
+	ClusterDomain                 string
+	TrustedCertBundle             certificatemanagement.TrustedBundle
+	OpenShift                     bool
+	KubeControllerPort            int
+	FelixPrometheusMetricsEnabled bool
 }
 
 type monitorComponent struct {
@@ -812,6 +813,35 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 }
 
 func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMonitor {
+	endpoints := []monitoringv1.Endpoint{
+		{
+			HonorLabels:   true,
+			Interval:      "5s",
+			Port:          "calico-metrics-port",
+			ScrapeTimeout: "5s",
+			Scheme:        "https",
+			TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
+		},
+		{
+			HonorLabels:   true,
+			Interval:      "5s",
+			Port:          "calico-bgp-metrics-port",
+			ScrapeTimeout: "5s",
+			Scheme:        "https",
+			TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
+		},
+	}
+
+	if mc.cfg.FelixPrometheusMetricsEnabled {
+		endpoints = append(endpoints, monitoringv1.Endpoint{
+			HonorLabels:   true,
+			Interval:      "5s",
+			Port:          "felix-metrics-port",
+			ScrapeTimeout: "5s",
+			Scheme:        "http",
+		})
+	}
+
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -830,24 +860,7 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{"calico-system"}},
-			Endpoints: []monitoringv1.Endpoint{
-				{
-					HonorLabels:   true,
-					Interval:      "5s",
-					Port:          "calico-metrics-port",
-					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
-				},
-				{
-					HonorLabels:   true,
-					Interval:      "5s",
-					Port:          "calico-bgp-metrics-port",
-					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
-				},
-			},
+			Endpoints:         endpoints,
 		},
 	}
 }

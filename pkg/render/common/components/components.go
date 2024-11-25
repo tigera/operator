@@ -16,6 +16,7 @@ package components
 
 import (
 	"fmt"
+	"reflect"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -43,9 +44,18 @@ type replicatedPodResource struct {
 	deploymentStrategy *appsv1.DeploymentStrategy // Deployments only
 }
 
+func GetMetadata(overrides components.ReplicatedPodResourceOverrides) *operator.Metadata {
+	if _, hasMetadata := reflect.TypeOf(overrides).Elem().FieldByName("Metadata"); hasMetadata {
+		return reflect.ValueOf(overrides).Elem().FieldByName("Metadata").Interface().(*operator.Metadata)
+	}
+	return nil
+}
+
 // applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
 func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides components.ReplicatedPodResourceOverrides) *replicatedPodResource {
-	if metadata := overrides.GetMetadata(); metadata != nil {
+	// If `overrides` has a Metadata field, and it's non-nil, non-clashing labels and annotations from that
+	// metadata are added into `r.labels` and `r.annotations`.
+	if metadata := GetMetadata(overrides); metadata != nil {
 		if len(metadata.Labels) > 0 {
 			r.labels = common.MapExistsOrInitialize(r.labels)
 			common.MergeMaps(metadata.Labels, r.labels)

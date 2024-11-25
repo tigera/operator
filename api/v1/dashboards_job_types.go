@@ -29,10 +29,6 @@ type DashboardsJob struct {
 	Spec *DashboardsJobSpec `json:"spec,omitempty"`
 }
 
-func (in *DashboardsJob) GetMetadata() *Metadata {
-	return nil
-}
-
 func (in *DashboardsJob) GetMinReadySeconds() *int32 {
 	return nil
 }

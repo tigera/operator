@@ -108,10 +108,6 @@ type CalicoKubeControllersDeploymentSpec struct {
 	Template *CalicoKubeControllersDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CalicoKubeControllersDeployment) GetMetadata() *Metadata {
-	return c.Metadata
-}
-
 func (c *CalicoKubeControllersDeployment) GetMinReadySeconds() *int32 {
 	if c.Spec != nil {
 		return c.Spec.MinReadySeconds

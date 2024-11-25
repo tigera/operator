@@ -179,15 +179,17 @@ func (d *dexBaseCfg) Issuer() string {
 
 func (d *dexBaseCfg) RedirectURIs() []string {
 	redirectURIs := []string{
+		// These call-back urls are used by the manager in order to obtain an access token.
 		"https://localhost:9443/login/oidc/callback",
 		"https://127.0.0.1:9443/login/oidc/callback",
-		"https://localhost:9443/tigera-kibana/api/security/oidc/callback",
-		"https://127.0.0.1:9443/tigera-kibana/api/security/oidc/callback",
+		// These call-back urls are used by the manager in order to refresh the access tokens.
+		"https://localhost:9443/login/oidc/silent-callback",
+		"https://127.0.0.1:9443/login/oidc/silent-callback",
 	}
 
 	if d.baseURL != "" && !strings.Contains(d.baseURL, "localhost") && !strings.Contains(d.baseURL, "127.0.0.1") {
 		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/login/oidc/callback", d.baseURL))
-		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/tigera-kibana/api/security/oidc/callback", d.baseURL))
+		redirectURIs = append(redirectURIs, fmt.Sprintf("%s/login/oidc/silent-callback", d.baseURL))
 	}
 
 	return redirectURIs

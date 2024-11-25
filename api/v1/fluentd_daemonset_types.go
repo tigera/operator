@@ -88,10 +88,6 @@ type FluentdDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *FluentdDaemonSet) GetMetadata() *Metadata {
-	return nil
-}
-
 func (c *FluentdDaemonSet) GetMinReadySeconds() *int32 {
 	return nil
 }

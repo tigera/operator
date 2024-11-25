@@ -85,10 +85,6 @@ type KibanaInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *Kibana) GetMetadata() *Metadata {
-	return nil
-}
-
 func (c *Kibana) GetMinReadySeconds() *int32 {
 	return nil
 }

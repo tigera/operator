@@ -86,10 +86,6 @@ type L7LogCollectorDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *L7LogCollectorDaemonSet) GetMetadata() *Metadata {
-	return nil
-}
-
 func (c *L7LogCollectorDaemonSet) GetMinReadySeconds() *int32 {
 	return nil
 }

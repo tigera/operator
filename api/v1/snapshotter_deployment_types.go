@@ -88,10 +88,6 @@ type ComplianceSnapshotterDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceSnapshotterDeployment) GetMetadata() *Metadata {
-	return nil
-}
-
 func (c *ComplianceSnapshotterDeployment) GetMinReadySeconds() *int32 {
 	return nil
 }

@@ -426,10 +426,6 @@ func (c *EgressGateway) GetMinReadySeconds() *int32 {
 	return nil
 }
 
-func (c *EgressGateway) GetMetadata() *Metadata {
-	return nil
-}
-
 func init() {
 	SchemeBuilder.Register(&EgressGateway{}, &EgressGatewayList{})
 }

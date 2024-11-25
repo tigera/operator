@@ -15,14 +15,17 @@
 package crds
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"path"
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 
@@ -183,4 +186,22 @@ func ToRuntimeObjects(crds ...*apiextenv1.CustomResourceDefinition) []client.Obj
 		objs = append(objs, crd)
 	}
 	return objs
+}
+
+// Ensure ensures that the CRDs necessary for bootstrapping exist in the cluster.
+// Further reconciliation of the CRDs is handled by the core controller.
+func Ensure(c client.Client) error {
+	// Ensure Calico CRDs exist, which will allow us to bootstrap.
+	for _, crd := range GetCRDs(opv1.Calico) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := c.Create(ctx, crd); err != nil {
+			// Ignore if the CRD already exists
+			if !errors.IsAlreadyExists(err) {
+				cancel()
+				return fmt.Errorf("failed to create CustomResourceDefinition %s: %s", crd.Name, err)
+			}
+		}
+		cancel()
+	}
+	return nil
 }

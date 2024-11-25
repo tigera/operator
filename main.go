@@ -105,6 +105,10 @@ func main() {
 	var manageCRDs bool
 	var preDelete bool
 
+	// bootstrapCRDs is a flag that can be used to install the CRDs and exit. This is useful for
+	// workflows that use an init container to install CustomResources prior to the operator starting.
+	var bootstrapCRDs bool
+
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -124,6 +128,7 @@ func main() {
 		"Operator should manage the projectcalico.org and operator.tigera.io CRDs.")
 	flag.BoolVar(&preDelete, "pre-delete", false,
 		"Run helm pre-deletion hook logic, then exit.")
+	flag.BoolVar(&bootstrapCRDs, "bootstrap-crds", false, "Install CRDs and exist")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -285,6 +290,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// If configured to managed CRDs, do a preliminary install of them here. The Installation controller
+	// will reconcile them as well, but we need to make sure they are installed before we start the rest of the controllers.
+	if bootstrapCRDs || manageCRDs {
+		if err := crds.Ensure(mgr.GetClient()); err != nil {
+			setupLog.Error(err, "Failed to ensure CRDs are created")
+			os.Exit(1)
+		}
+
+		if bootstrapCRDs {
+			setupLog.Info("CRDs installed successfully")
+			os.Exit(0)
+		}
+	}
+
 	// Start a goroutine to handle termination.
 	go func() {
 		// Cancel the main context when we are done.
@@ -360,15 +379,6 @@ func main() {
 		os.Exit(1)
 	}
 	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
-
-	// If configured to managed CRDs, do a preliminary install of them here. The Installation controller
-	// will reconcile them as well, but we need to make sure they are installed before we start the rest of the controllers.
-	if manageCRDs {
-		if err := crds.Ensure(mgr.GetClient()); err != nil {
-			setupLog.Error(err, "Failed to ensure CRDs are created")
-			os.Exit(1)
-		}
-	}
 
 	// Determine if we're running in single or multi-tenant mode.
 	multiTenant, err := utils.MultiTenant(ctx, clientset)

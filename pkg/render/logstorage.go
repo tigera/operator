@@ -107,6 +107,8 @@ const (
 	EsManagerRole        = "es-manager"
 	EsManagerRoleBinding = "es-manager"
 
+	CalicoKubeControllerSecret = "calico-kube-controller-secrets"
+
 	ElasticsearchTLSHashAnnotation = "hash.operator.tigera.io/es-secrets"
 )
 
@@ -245,6 +247,14 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 	if es.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		toCreate = append(toCreate, es.elasticsearchClusterRole(), es.elasticsearchClusterRoleBinding())
+	}
+
+	roles, bindings := es.elasticsearchRolesAndBindings()
+	for _, r := range roles {
+		toCreate = append(toCreate, r)
+	}
+	for _, b := range bindings {
+		toCreate = append(toCreate, b)
 	}
 
 	// Curator is no longer supported in ElasticSearch beyond version 8 so remove its resources here unconditionally so
@@ -997,6 +1007,79 @@ func (es *elasticsearchComponent) elasticsearchInternalAllowTigeraPolicy() *v3.N
 	}
 }
 
+func (es *elasticsearchComponent) elasticsearchRolesAndBindings() ([]*rbacv1.Role, []*rbacv1.RoleBinding) {
+
+	secretsRole := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CalicoKubeControllerSecret,
+			Namespace: ElasticsearchNamespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"create", "delete", "deletecollection", "get", "list", "update", "watch"},
+			},
+		},
+	}
+
+	operatorSecretsRole := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CalicoKubeControllerSecret,
+			Namespace: common.OperatorNamespace(),
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"create", "delete", "deletecollection", "get", "list", "update", "watch"},
+			},
+		},
+	}
+
+	secretBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CalicoKubeControllerSecret,
+			Namespace: ElasticsearchNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     CalicoKubeControllerSecret,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "calico-kube-controllers",
+				Namespace: common.CalicoNamespace,
+			},
+		},
+	}
+
+	// Bind the secrets permission to the operator namespace. This binding now adds permissions for kube controllers to manipulate
+	// secrets in the tigera-operator namespace
+	operatorSecretBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CalicoKubeControllerSecret,
+			Namespace: common.OperatorNamespace(),
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     CalicoKubeControllerSecret,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "calico-kube-controllers",
+				Namespace: common.CalicoNamespace,
+			},
+		},
+	}
+
+	return []*rbacv1.Role{secretsRole, operatorSecretsRole}, []*rbacv1.RoleBinding{secretBinding, operatorSecretBinding}
+}
+
 // overrideResourceRequirements replaces individual ResourceRequirements field's default value with user's value.
 // - If user provided both Limits and Requests, use them.
 // - If user provided just Limits, and Limits is <= default Requests, set Requests value as user's Limits value,
@@ -1099,6 +1182,7 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 		m.elasticsearchExternalService(),
 		m.linseedExternalService(),
 	)
+
 	for _, r := range roles {
 		toCreate = append(toCreate, r)
 	}
@@ -1108,6 +1192,14 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 
 	for _, crb := range clusterRB {
 		toCreate = append(toCreate, crb)
+	}
+
+	kcRoles, kcBindings := m.kubeControllerRolesAndBindings()
+	for _, role := range kcRoles {
+		toCreate = append(toCreate, role)
+	}
+	for _, binding := range kcBindings {
+		toCreate = append(toCreate, binding)
 	}
 
 	return toCreate, nil
@@ -1259,4 +1351,48 @@ func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.C
 	}
 
 	return []*rbacv1.ClusterRole{secretsRole, configMapsRole, namespacesRole}, []*rbacv1.RoleBinding{configMapBinding, secretBinding}, []*rbacv1.ClusterRoleBinding{namespacesBinding}
+}
+
+// In managed clusters we need to provision roles and bindings for kubecontrollers to provide permissions
+// to manipulate secrets
+func (m managedClusterLogStorage) kubeControllersRolesAndBindings() ([]*rbacv1.Role, []*rbacv1.RoleBinding) {
+
+	// Create Role and Binding to the operator namespace for kubecontroller to manipulate the needed secrets.
+	operatorSecretsRole := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CalicoKubeControllerSecret,
+			Namespace: common.OperatorNamespace(),
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"create", "delete", "deletecollection", "get", "list", "update", "watch"},
+			},
+		},
+	}
+
+	// Bind the secrets permission to the operator namespace. This binding now adds permissions for kube controllers to create
+	// its public cert secret in the tigera-operator namespace
+	operatorSecretBinding := &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      CalicoKubeControllerSecret,
+			Namespace: common.OperatorNamespace(),
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     CalicoKubeControllerSecret,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      "calico-kube-controllers",
+				Namespace: common.CalicoNamespace,
+			},
+		},
+	}
+
+	return []*rbacv1.Role{operatorSecretsRole}, []*rbacv1.RoleBinding{operatorSecretBinding}
+
 }

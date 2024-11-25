@@ -103,10 +103,6 @@ type CSINodeDriverDaemonSetSpec struct {
 	Template *CSINodeDriverDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CSINodeDriverDaemonSet) GetMetadata() *Metadata {
-	return c.Metadata
-}
-
 func (c *CSINodeDriverDaemonSet) GetMinReadySeconds() *int32 {
 	if c.Spec != nil {
 		return c.Spec.MinReadySeconds

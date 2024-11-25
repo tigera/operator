@@ -88,10 +88,6 @@ type ElasticsearchMetricsDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ElasticsearchMetricsDeployment) GetMetadata() *Metadata {
-	return nil
-}
-
 func (c *ElasticsearchMetricsDeployment) GetMinReadySeconds() *int32 {
 	return nil
 }

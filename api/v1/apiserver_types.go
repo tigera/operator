@@ -187,10 +187,6 @@ type APIServerDeploymentSpec struct {
 	Template *APIServerDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *APIServerDeployment) GetMetadata() *Metadata {
-	return c.Metadata
-}
-
 func (c *APIServerDeployment) GetMinReadySeconds() *int32 {
 	if c.Spec != nil {
 		return c.Spec.MinReadySeconds

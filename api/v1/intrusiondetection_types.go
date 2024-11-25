@@ -206,10 +206,6 @@ type IntrusionDetectionControllerDeploymentInitContainer struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *IntrusionDetectionControllerDeployment) GetMetadata() *Metadata {
-	return nil
-}
-
 func (c *IntrusionDetectionControllerDeployment) GetMinReadySeconds() *int32 {
 	return nil
 }

@@ -88,10 +88,6 @@ type ComplianceBenchmarkerDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceBenchmarkerDaemonSet) GetMetadata() *Metadata {
-	return nil
-}
-
 func (c *ComplianceBenchmarkerDaemonSet) GetMinReadySeconds() *int32 {
 	return nil
 }

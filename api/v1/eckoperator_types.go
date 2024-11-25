@@ -86,10 +86,6 @@ type ECKOperatorStatefulSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ECKOperatorStatefulSet) GetMetadata() *Metadata {
-	return nil
-}
-
 func (c *ECKOperatorStatefulSet) GetMinReadySeconds() *int32 {
 	return nil
 }

@@ -88,10 +88,6 @@ type LinseedDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *LinseedDeployment) GetMetadata() *Metadata {
-	return nil
-}
-
 func (c *LinseedDeployment) GetMinReadySeconds() *int32 {
 	return nil
 }

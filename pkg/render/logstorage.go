@@ -1355,7 +1355,7 @@ func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.C
 
 // In managed clusters we need to provision roles and bindings for kubecontrollers to provide permissions
 // to manipulate secrets
-func (m managedClusterLogStorage) kubeControllerRolesAndBindings() ([]*rbacv1.Role, []*rbacv1.RoleBinding) {
+func (m managedClusterLogStorage) kubeControllersRolesAndBindings() ([]*rbacv1.Role, []*rbacv1.RoleBinding) {
 
 	// Create Role and Binding to the operator namespace for kubecontroller to manipulate the needed secrets.
 	operatorSecretsRole := &rbacv1.Role{

@@ -415,6 +415,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		return fmt.Errorf("Installation spec.FIPSMode=%v combined with spec.Variant=%s is not supported", *instance.Spec.FIPSMode, instance.Spec.Variant)
 	}
 
+	if instance.Spec.KubernetesProvider != operatorv1.ProviderAKS && instance.Spec.Azure != nil {
+		return fmt.Errorf("Installation spec.Azure should be set only for AKS provider")
+	}
+
 	return nil
 }
 

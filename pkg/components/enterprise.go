@@ -18,7 +18,7 @@
 package components
 
 var (
-	EnterpriseRelease string = "v3.20.0-2.0"
+	EnterpriseRelease string = "v3.20.0-2.2"
 
 	ComponentAPIServer = Component{
 		Version:  "v3.20.0-2.0",

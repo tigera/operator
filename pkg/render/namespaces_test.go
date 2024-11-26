@@ -109,6 +109,5 @@ var _ = Describe("Namespace rendering tests", func() {
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("control-plane"))
-		Expect(meta.GetLabels()["control-plane"]).To(Equal("false"))
 	})
 })

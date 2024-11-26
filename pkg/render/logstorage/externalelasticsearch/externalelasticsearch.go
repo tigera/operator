@@ -48,7 +48,7 @@ func (e externalElasticsearch) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (e externalElasticsearch) Objects() (toCreate, toDelete []client.Object) {
-	toCreate = append(toCreate, render.CreateNamespace(render.ElasticsearchNamespace, e.installation.KubernetesProvider, render.PSSBaseline))
+	toCreate = append(toCreate, render.CreateNamespace(render.ElasticsearchNamespace, e.installation.KubernetesProvider, render.PSSBaseline, e.installation.Azure))
 	toCreate = append(toCreate, e.clusterConfig.ConfigMap())
 	toCreate = append(toCreate, e.oidcUserRole())
 	toCreate = append(toCreate, e.oidcUserRoleBinding())

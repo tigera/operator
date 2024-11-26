@@ -190,9 +190,14 @@ func ToRuntimeObjects(crds ...*apiextenv1.CustomResourceDefinition) []client.Obj
 
 // Ensure ensures that the CRDs necessary for bootstrapping exist in the cluster.
 // Further reconciliation of the CRDs is handled by the core controller.
-func Ensure(c client.Client) error {
+func Ensure(c client.Client, variant string) error {
 	// Ensure Calico CRDs exist, which will allow us to bootstrap.
-	for _, crd := range GetCRDs(opv1.Calico) {
+	for _, crd := range GetCRDs(opv1.ProductVariant(variant)) {
+		// Skip the Tenant CRD - this is only used in Calico Cloud.
+		if crd.Name == "tenants.projectcalico.org" {
+			continue
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		if err := c.Create(ctx, crd); err != nil {
 			// Ignore if the CRD already exists

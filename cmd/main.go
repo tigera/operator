@@ -104,31 +104,34 @@ func main() {
 	var sgSetup bool
 	var manageCRDs bool
 	var preDelete bool
+	var variant string
 
 	// bootstrapCRDs is a flag that can be used to install the CRDs and exit. This is useful for
 	// workflows that use an init container to install CustomResources prior to the operator starting.
 	var bootstrapCRDs bool
 
-	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&urlOnlyKubeconfig, "url-only-kubeconfig", "",
-		"Path to a kubeconfig, but only for the apiserver url.")
-	flag.BoolVar(&showVersion, "version", false,
-		"Show version information")
-	flag.StringVar(&printImages, "print-images", "",
-		"Print the default images the operator could deploy and exit. Possible values: list")
-	flag.StringVar(&printCalicoCRDs, "print-calico-crds", "",
-		"Print the Calico CRDs the operator has bundled then exit. Possible values: all, <crd prefix>. If a value other than 'all' is specified, the first CRD with a prefix of the specified value will be printed.")
-	flag.StringVar(&printEnterpriseCRDs, "print-enterprise-crds", "",
-		"Print the Enterprise CRDs the operator has bundled then exit. Possible values: all, <crd prefix>. If a value other than 'all' is specified, the first CRD with a prefix of the specified value will be printed.")
-	flag.BoolVar(&sgSetup, "aws-sg-setup", false,
-		"Setup Security Groups in AWS (should only be used on OpenShift).")
-	flag.BoolVar(&manageCRDs, "manage-crds", false,
-		"Operator should manage the projectcalico.org and operator.tigera.io CRDs.")
-	flag.BoolVar(&preDelete, "pre-delete", false,
-		"Run helm pre-deletion hook logic, then exit.")
-	flag.BoolVar(&bootstrapCRDs, "bootstrap-crds", false, "Install CRDs and exist")
+	flag.BoolVar(
+		&enableLeaderElection, "enable-leader-election", true,
+		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.",
+	)
+	flag.StringVar(
+		&printCalicoCRDs, "print-calico-crds", "",
+		`Print the Calico CRDs the operator has bundled then exit. Possible values: all, <crd prefix>.
+If a value other than 'all' is specified, the first CRD with a prefix of the specified value will be printed.`,
+	)
+	flag.StringVar(
+		&printEnterpriseCRDs, "print-enterprise-crds", "",
+		`Print the Enterprise CRDs the operator has bundled then exit. Possible values: all, <crd prefix>.
+If a value other than 'all' is specified, the first CRD with a prefix of the specified value will be printed.`,
+	)
+	flag.StringVar(&urlOnlyKubeconfig, "url-only-kubeconfig", "", "Path to a kubeconfig, but only for the apiserver url.")
+	flag.BoolVar(&showVersion, "version", false, "Show version information")
+	flag.StringVar(&printImages, "print-images", "", "Print the default images the operator could deploy and exit. Possible values: list")
+	flag.BoolVar(&sgSetup, "aws-sg-setup", false, "Setup Security Groups in AWS (should only be used on OpenShift).")
+	flag.BoolVar(&manageCRDs, "manage-crds", false, "Operator should manage the projectcalico.org and operator.tigera.io CRDs.")
+	flag.BoolVar(&preDelete, "pre-delete", false, "Run helm pre-deletion hook logic, then exit.")
+	flag.BoolVar(&bootstrapCRDs, "bootstrap-crds", false, "Install CRDs and exit")
+	flag.StringVar(&variant, "variant", string(operatortigeraiov1.Calico), "Default product variant to assume during boostrapping.")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
@@ -274,10 +277,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// If configured to managed CRDs, do a preliminary install of them here. The Installation controller
+	// If configured to manage CRDs, do a preliminary install of them here. The Installation controller
 	// will reconcile them as well, but we need to make sure they are installed before we start the rest of the controllers.
 	if bootstrapCRDs || manageCRDs {
-		if err := crds.Ensure(mgr.GetClient()); err != nil {
+		if err := crds.Ensure(mgr.GetClient(), variant); err != nil {
 			setupLog.Error(err, "Failed to ensure CRDs are created")
 			os.Exit(1)
 		}

@@ -194,7 +194,7 @@ func Ensure(c client.Client, variant string) error {
 	// Ensure Calico CRDs exist, which will allow us to bootstrap.
 	for _, crd := range GetCRDs(opv1.ProductVariant(variant)) {
 		// Skip the Tenant CRD - this is only used in Calico Cloud.
-		if crd.Name == "tenants.projectcalico.org" {
+		if crd.Name == "tenants.operator.tigera.io" {
 			continue
 		}
 

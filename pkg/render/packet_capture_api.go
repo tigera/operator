@@ -108,6 +108,9 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 	objs := []client.Object{
 		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSRestricted, pc.cfg.Installation.Azure),
 	}
+
+	// Create RoleBinding for the operator to manipulate secrets in the tigera-packetcapture namespace
+	objs = append(objs, OperatorSecretsRoleBinding(PacketCaptureNamespace))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.cfg.PullSecrets...)...)...)
 
 	objs = append(objs,

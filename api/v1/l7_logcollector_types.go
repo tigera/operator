@@ -86,10 +86,6 @@ type L7LogCollectorDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *L7LogCollectorDaemonSet) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *L7LogCollectorDaemonSet) GetInitContainers() []v1.Container {
 	if c != nil {
 		if c.Spec.Template != nil {

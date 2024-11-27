@@ -15,16 +15,12 @@
 package components
 
 import (
-	opv1 "github.com/tigera/operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
 // ReplicatedPodResourceOverrides represents a type that contains the data needed to override a component DaemonSet or Deployment resource.
 type ReplicatedPodResourceOverrides interface {
-	// GetPodTemplateMetadata returns metadata used to override a DaemonSet/Deployment pod template's metadata.
-	GetPodTemplateMetadata() *opv1.Metadata
-
 	// GetInitContainers returns the containers used to override a DaemonSet/Deployment's init containers.
 	// Only containers with fields specified (other than its name) should be returned.
 	GetInitContainers() []corev1.Container

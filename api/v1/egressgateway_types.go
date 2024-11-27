@@ -414,14 +414,6 @@ func (c *EgressGateway) GetPriorityClassName() string {
 	return ""
 }
 
-func (c *EgressGateway) GetPodTemplateMetadata() *Metadata {
-	if c.Spec.Template != nil {
-		m := &Metadata{Labels: c.Spec.Template.Metadata.Labels, Annotations: c.Spec.Template.Metadata.Annotations}
-		return m
-	}
-	return nil
-}
-
 func init() {
 	SchemeBuilder.Register(&EgressGateway{}, &EgressGatewayList{})
 }

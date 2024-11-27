@@ -88,10 +88,6 @@ type EKSLogForwarderDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *EKSLogForwarderDeployment) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *EKSLogForwarderDeployment) GetInitContainers() []v1.Container {
 	if c != nil {
 		if c.Spec.Template != nil {

@@ -72,6 +72,43 @@ func GetMinReadySeconds(overrides components.ReplicatedPodResourceOverrides) *in
 	return nil
 }
 
+func GetPodTemplateMetadata(overrides components.ReplicatedPodResourceOverrides) *operator.Metadata {
+	value := getField(overrides, "Spec", "Template", "Metadata")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	// SPECIAL CASE: EgressGateway uses a different type for its metadata.
+	if v, egressGatewayCase := value.Interface().(*operator.EgressGatewayMetadata); egressGatewayCase {
+		return &operator.Metadata{Labels: v.Labels, Annotations: v.Annotations}
+	}
+	return value.Interface().(*operator.Metadata)
+}
+
+func getField(overrides components.ReplicatedPodResourceOverrides, fieldNames ...string) (value reflect.Value) {
+	typ := reflect.TypeOf(overrides)
+	for _, fieldName := range fieldNames {
+		if typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
+		}
+		field, hasField := typ.FieldByName(fieldName)
+		if !hasField {
+			return
+		}
+		typ = field.Type
+	}
+	value = reflect.ValueOf(overrides)
+	for _, fieldName := range fieldNames {
+		if value.Kind() == reflect.Pointer {
+			if value.IsNil() {
+				return
+			}
+			value = value.Elem()
+		}
+		value = value.FieldByName(fieldName)
+	}
+	return
+}
+
 // applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
 func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides components.ReplicatedPodResourceOverrides) *replicatedPodResource {
 	// If `overrides` has a Metadata field, and it's non-nil, non-clashing labels and annotations from that
@@ -92,7 +129,11 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 	if minReadySeconds := GetMinReadySeconds(overrides); minReadySeconds != nil {
 		r.minReadySeconds = minReadySeconds
 	}
-	if podTemplateMetadata := overrides.GetPodTemplateMetadata(); podTemplateMetadata != nil {
+
+	// If `overrides` has a Spec.Template.Metadata field, and it's non-nil, non-clashing labels
+	// and annotations from that metadata are added into the labels and annotations of
+	// `r.podTemplateSpec`.
+	if podTemplateMetadata := GetPodTemplateMetadata(overrides); podTemplateMetadata != nil {
 		if len(podTemplateMetadata.Labels) > 0 {
 			r.podTemplateSpec.Labels = common.MapExistsOrInitialize(r.podTemplateSpec.Labels)
 			common.MergeMaps(podTemplateMetadata.Labels, r.podTemplateSpec.Labels)

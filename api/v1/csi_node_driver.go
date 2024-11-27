@@ -103,15 +103,6 @@ type CSINodeDriverDaemonSetSpec struct {
 	Template *CSINodeDriverDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CSINodeDriverDaemonSet) GetPodTemplateMetadata() *Metadata {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			return c.Spec.Template.Metadata
-		}
-	}
-	return nil
-}
-
 func (c *CSINodeDriverDaemonSet) GetInitContainers() []v1.Container {
 	// InitContainers aren't needed for CSI Node Driver DaemonSet resources.
 	return nil

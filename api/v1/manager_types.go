@@ -130,10 +130,6 @@ type ManagerList struct {
 	Items           []Manager `json:"items"`
 }
 
-func (c *ManagerDeployment) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *ManagerDeployment) GetInitContainers() []v1.Container {
 	if c != nil {
 		if c.Spec.Template != nil {

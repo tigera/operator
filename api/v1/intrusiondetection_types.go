@@ -206,10 +206,6 @@ type IntrusionDetectionControllerDeploymentInitContainer struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *IntrusionDetectionControllerDeployment) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *IntrusionDetectionControllerDeployment) GetInitContainers() []corev1.Container {
 	if c != nil {
 		if c.Spec.Template != nil {

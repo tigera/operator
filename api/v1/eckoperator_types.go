@@ -86,10 +86,6 @@ type ECKOperatorStatefulSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ECKOperatorStatefulSet) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *ECKOperatorStatefulSet) GetInitContainers() []v1.Container {
 	if c != nil {
 		if c.Spec.Template != nil {

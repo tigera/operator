@@ -88,10 +88,6 @@ type ComplianceBenchmarkerDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceBenchmarkerDaemonSet) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *ComplianceBenchmarkerDaemonSet) GetInitContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

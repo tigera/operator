@@ -88,10 +88,6 @@ type ComplianceSnapshotterDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceSnapshotterDeployment) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *ComplianceSnapshotterDeployment) GetInitContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

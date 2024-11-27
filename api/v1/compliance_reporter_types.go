@@ -80,10 +80,6 @@ type ComplianceReporterPodTemplateInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceReporterPodTemplate) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *ComplianceReporterPodTemplate) GetInitContainers() []v1.Container {
 	if c.Template != nil {
 		if c.Template.Spec != nil {

@@ -86,10 +86,6 @@ type GuardianDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *GuardianDeployment) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *GuardianDeployment) GetInitContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

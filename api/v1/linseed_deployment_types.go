@@ -88,10 +88,6 @@ type LinseedDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *LinseedDeployment) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *LinseedDeployment) GetInitContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

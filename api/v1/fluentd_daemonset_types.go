@@ -88,10 +88,6 @@ type FluentdDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *FluentdDaemonSet) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *FluentdDaemonSet) GetInitContainers() []v1.Container {
 	if c != nil {
 		if c.Spec.Template != nil {

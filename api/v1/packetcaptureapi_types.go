@@ -133,10 +133,6 @@ type PacketCaptureAPIList struct {
 	Items           []PacketCaptureAPI `json:"items"`
 }
 
-func (c *PacketCaptureAPIDeployment) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
 func (c *PacketCaptureAPIDeployment) GetInitContainers() []v1.Container {
 	if c != nil {
 		if c.Spec.Template != nil {

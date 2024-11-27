@@ -246,10 +246,24 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Create role binding to manipulate secrets in tigera-elasticsearch namespace.
+	esRoleBinding := render.OperatorSecretsRoleBinding(render.ElasticsearchNamespace)
+	if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(esRoleBinding), r.status); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Multitenant clusters do not get kibana, so namespace creation can be skipped.
 	if !r.multiTenant {
 		kbNamespace := render.CreateNamespace(kibana.Namespace, install.KubernetesProvider, render.PSSBaseline, install.Azure)
 		if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(kbNamespace), r.status); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		// Create role binding to manipulate secrets in tigera-kibana namespace.
+		kbRoleBinding := render.OperatorSecretsRoleBinding(kibana.Namespace)
+		if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(kbRoleBinding), r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}

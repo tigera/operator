@@ -271,6 +271,8 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	var objs, toDelete []client.Object
 	objs = append(objs, CreateNamespace(LogCollectorNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged, c.cfg.Installation.Azure))
 	objs = append(objs, c.allowTigeraPolicy())
+	// Create RoleBinding for the operator to manipulate secrets in the tigera-fluentd namespace
+	objs = append(objs, OperatorSecretsRoleBinding(LogCollectorNamespace))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs, c.metricsService())
 

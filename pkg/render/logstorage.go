@@ -227,7 +227,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Elasticsearch CRs
-	toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged))
+	toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged, es.cfg.Installation.Azure))
 	toCreate = append(toCreate, es.elasticsearchAllowTigeraPolicy())
 	toCreate = append(toCreate, es.elasticsearchInternalAllowTigeraPolicy())
 	toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(ElasticsearchNamespace))
@@ -1178,7 +1178,7 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 	toCreate := []client.Object{}
 	roles, bindings, clusterRB := m.linseedExternalRolesAndBindings()
 	toCreate = append(toCreate,
-		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged),
+		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged, m.cfg.Installation.Azure),
 		m.elasticsearchExternalService(),
 		m.linseedExternalService(),
 	)

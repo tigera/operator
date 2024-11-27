@@ -479,6 +479,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		Tenant:                    tenant,
 		HasNoLicense:              hasNoLicense,
 		SyslogForwardingIsEnabled: syslogForwardingIsEnabled(lc),
+		Azure:                     network.Azure,
 	})
 	intrusionDetectionComponent := render.IntrusionDetection(intrusionDetectionCfg)
 

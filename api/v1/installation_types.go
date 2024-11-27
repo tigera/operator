@@ -198,7 +198,29 @@ type InstallationSpec struct {
 	// Kubernetes Service CIDRs. Specifying this is required when using Calico for Windows.
 	// +optional
 	ServiceCIDRs []string `json:"serviceCIDRs,omitempty"`
+
+	// Azure is used to configure azure provider specific options.
+	// +optional
+	Azure *Azure `json:"azure,omitempty"`
 }
+
+type Azure struct {
+	// PolicyMode determines whether the "control-plane" label is applied to namespaces. It offers two options: Default and Manual.
+	// The Default option adds the "control-plane" label to the required namespaces.
+	// The Manual option does not apply the "control-plane" label to any namespace.
+	// Default: Default
+	// +optional
+	// +kubebuilder:validation:Enum=Default;Manual
+	// +kubebuilder:default:=Default
+	PolicyMode *PolicyMode `json:"policyMode,omitempty"`
+}
+
+type PolicyMode string
+
+const (
+	Default PolicyMode = "Default"
+	Manual  PolicyMode = "Manual"
+)
 
 type Logging struct {
 	// Customized logging specification for calico-cni plugin

@@ -58,7 +58,7 @@ var _ = Describe("Namespace rendering tests", func() {
 		Expect(meta.GetAnnotations()["security.openshift.io/scc.podSecurityLabelSync"]).To(Equal("false"))
 	})
 
-	It("should render a namespace for aks", func() {
+	It("should render a namespace for aks with control-plane label when Azure is nil and PodSecurityStandard is privileged", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderAKS
 		component := render.Namespaces(cfg)
 		resources, _ := component.Objects()
@@ -67,5 +67,47 @@ var _ = Describe("Namespace rendering tests", func() {
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetLabels()["control-plane"]).To(Equal("true"))
+	})
+
+	It("should render a namespace for aks with control-plane label when Azure.PolicyMode is nil and PodSecurityStandard is privileged", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderAKS
+		cfg.Installation.Azure = &operatorv1.Azure{}
+		component := render.Namespaces(cfg)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(1))
+		rtest.ExpectResourceTypeAndObjectMetadata(resources[0], "calico-system", "", "", "v1", "Namespace")
+		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
+		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
+		Expect(meta.GetLabels()["control-plane"]).To(Equal("true"))
+	})
+
+	It("should render a namespace for aks with control-plane label when Azure.PolicyMode is Default and PodSecurityStandard is privileged", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderAKS
+		policyMode := operatorv1.Default
+		cfg.Installation.Azure = &operatorv1.Azure{
+			PolicyMode: &policyMode,
+		}
+		component := render.Namespaces(cfg)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(1))
+		rtest.ExpectResourceTypeAndObjectMetadata(resources[0], "calico-system", "", "", "v1", "Namespace")
+		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
+		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
+		Expect(meta.GetLabels()["control-plane"]).To(Equal("true"))
+	})
+
+	It("should render a namespace for aks without control-plane label when Azure.PolicyMode is Manual", func() {
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderAKS
+		policyMode := operatorv1.Manual
+		cfg.Installation.Azure = &operatorv1.Azure{
+			PolicyMode: &policyMode,
+		}
+		component := render.Namespaces(cfg)
+		resources, _ := component.Objects()
+		Expect(len(resources)).To(Equal(1))
+		rtest.ExpectResourceTypeAndObjectMetadata(resources[0], "calico-system", "", "", "v1", "Namespace")
+		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
+		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
+		Expect(meta.GetLabels()).NotTo(ContainElement("control-plane"))
 	})
 })

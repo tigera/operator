@@ -245,7 +245,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider, PSSPrivileged),
+		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider, PSSPrivileged, c.cfg.Installation.Azure),
 		c.tigeraApiServerClusterRole(),
 		c.tigeraApiServerClusterRoleBinding(),
 		c.uisettingsgroupGetterClusterRole(),
@@ -303,7 +303,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	// Global OSS-only objects.
 	globalCalicoObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider, podSecurityNamespaceLabel),
+		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider, podSecurityNamespaceLabel, c.cfg.Installation.Azure),
 	}
 
 	// Compile the final arrays based on the variant.

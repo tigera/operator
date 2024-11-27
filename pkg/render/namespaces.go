@@ -53,7 +53,7 @@ func (c *namespaceComponent) SupportedOSType() rmeta.OSType {
 
 func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	ns := []client.Object{
-		CreateNamespace(common.CalicoNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged),
+		CreateNamespace(common.CalicoNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged, c.cfg.Installation.Azure),
 	}
 
 	// If we're terminating, we don't want to delete the namespace right away.
@@ -85,7 +85,7 @@ const (
 	PSSRestricted = "restricted"
 )
 
-func CreateNamespace(name string, provider operatorv1.Provider, pss PodSecurityStandard) *corev1.Namespace {
+func CreateNamespace(name string, provider operatorv1.Provider, pss PodSecurityStandard, azure *operatorv1.Azure) *corev1.Namespace {
 	ns := &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -108,7 +108,16 @@ func CreateNamespace(name string, provider operatorv1.Provider, pss PodSecurityS
 		ns.Annotations["security.openshift.io/scc.podSecurityLabelSync"] = "false"
 		ns.Labels["openshift.io/run-level"] = "0"
 	case operatorv1.ProviderAKS:
-		ns.Labels["control-plane"] = "true"
+		if applyAzurePolicy(azure, pss) {
+			ns.Labels["control-plane"] = "true"
+		}
 	}
 	return ns
+}
+
+func applyAzurePolicy(azure *operatorv1.Azure, pss PodSecurityStandard) bool {
+	if azure == nil || azure.PolicyMode == nil || *azure.PolicyMode == operatorv1.Default {
+		return PSSPrivileged == pss
+	}
+	return false
 }

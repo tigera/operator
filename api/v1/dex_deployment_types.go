@@ -88,10 +88,6 @@ type DexDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *DexDeployment) GetMinReadySeconds() *int32 {
-	return nil
-}
-
 func (c *DexDeployment) GetPodTemplateMetadata() *Metadata {
 	return nil
 }

@@ -86,10 +86,6 @@ type GuardianDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *GuardianDeployment) GetMinReadySeconds() *int32 {
-	return nil
-}
-
 func (c *GuardianDeployment) GetPodTemplateMetadata() *Metadata {
 	return nil
 }

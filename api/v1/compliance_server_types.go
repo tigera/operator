@@ -88,10 +88,6 @@ type ComplianceServerDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceServerDeployment) GetMinReadySeconds() *int32 {
-	return nil
-}
-
 func (c *ComplianceServerDeployment) GetPodTemplateMetadata() *Metadata {
 	return nil
 }

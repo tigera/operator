@@ -42,7 +42,7 @@ func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodRe
 			return fmt.Errorf("metadata is invalid: %w", err)
 		}
 	}
-	if minReadySeconds := overrides.GetMinReadySeconds(); minReadySeconds != nil {
+	if minReadySeconds := rcc.GetMinReadySeconds(overrides); minReadySeconds != nil {
 		if *minReadySeconds < 0 {
 			return fmt.Errorf("spec.MinReadySeconds must be greater than or equal to 0")
 		}

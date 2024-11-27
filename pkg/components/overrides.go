@@ -22,9 +22,6 @@ import (
 
 // ReplicatedPodResourceOverrides represents a type that contains the data needed to override a component DaemonSet or Deployment resource.
 type ReplicatedPodResourceOverrides interface {
-	// GetMinReadySeconds returns the value used to override a DaemonSet/Deployment's minReadySeconds.
-	GetMinReadySeconds() *int32
-
 	// GetPodTemplateMetadata returns metadata used to override a DaemonSet/Deployment pod template's metadata.
 	GetPodTemplateMetadata() *opv1.Metadata
 

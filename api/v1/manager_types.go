@@ -130,10 +130,6 @@ type ManagerList struct {
 	Items           []Manager `json:"items"`
 }
 
-func (c *ManagerDeployment) GetMinReadySeconds() *int32 {
-	return nil
-}
-
 func (c *ManagerDeployment) GetPodTemplateMetadata() *Metadata {
 	return nil
 }

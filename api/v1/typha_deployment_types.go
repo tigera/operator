@@ -159,13 +159,6 @@ type TyphaDeploymentStrategy struct {
 	RollingUpdate *appsv1.RollingUpdateDeployment `json:"rollingUpdate,omitempty" protobuf:"bytes,2,opt,name=rollingUpdate"`
 }
 
-func (c *TyphaDeployment) GetMinReadySeconds() *int32 {
-	if c.Spec != nil {
-		return c.Spec.MinReadySeconds
-	}
-	return nil
-}
-
 func (c *TyphaDeployment) GetPodTemplateMetadata() *Metadata {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

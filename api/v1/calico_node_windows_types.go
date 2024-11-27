@@ -127,13 +127,6 @@ type CalicoNodeWindowsDaemonSetSpec struct {
 	Template *CalicoNodeWindowsDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CalicoNodeWindowsDaemonSet) GetMinReadySeconds() *int32 {
-	if c.Spec != nil {
-		return c.Spec.MinReadySeconds
-	}
-	return nil
-}
-
 func (c *CalicoNodeWindowsDaemonSet) GetPodTemplateMetadata() *Metadata {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

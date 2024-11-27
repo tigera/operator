@@ -133,10 +133,6 @@ type PacketCaptureAPIList struct {
 	Items           []PacketCaptureAPI `json:"items"`
 }
 
-func (c *PacketCaptureAPIDeployment) GetMinReadySeconds() *int32 {
-	return nil
-}
-
 func (c *PacketCaptureAPIDeployment) GetPodTemplateMetadata() *Metadata {
 	return nil
 }

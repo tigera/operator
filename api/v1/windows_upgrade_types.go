@@ -105,13 +105,6 @@ type CalicoWindowsUpgradeDaemonSetSpec struct {
 	Template *CalicoWindowsUpgradeDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CalicoWindowsUpgradeDaemonSet) GetMinReadySeconds() *int32 {
-	if c.Spec != nil {
-		return c.Spec.MinReadySeconds
-	}
-	return nil
-}
-
 func (c *CalicoWindowsUpgradeDaemonSet) GetPodTemplateMetadata() *Metadata {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

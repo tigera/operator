@@ -51,6 +51,27 @@ func GetMetadata(overrides components.ReplicatedPodResourceOverrides) *operator.
 	return nil
 }
 
+func GetMinReadySeconds(overrides components.ReplicatedPodResourceOverrides) *int32 {
+	if specField, hasSpec := reflect.TypeOf(overrides).Elem().FieldByName("Spec"); hasSpec {
+		specType := specField.Type
+		// Usually the Spec field is a pointer, but EgressGateway is an exception.
+		if specType.Kind() == reflect.Pointer {
+			specType = specType.Elem()
+		}
+		if _, hasMinReadySeconds := specType.FieldByName("MinReadySeconds"); hasMinReadySeconds {
+			specValue := reflect.ValueOf(overrides).Elem().FieldByName("Spec")
+			if specValue.Kind() == reflect.Pointer {
+				if specValue.IsNil() {
+					return nil
+				}
+				specValue = specValue.Elem()
+			}
+			return specValue.FieldByName("MinReadySeconds").Interface().(*int32)
+		}
+	}
+	return nil
+}
+
 // applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
 func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides components.ReplicatedPodResourceOverrides) *replicatedPodResource {
 	// If `overrides` has a Metadata field, and it's non-nil, non-clashing labels and annotations from that
@@ -65,7 +86,10 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 			common.MergeMaps(metadata.Annotations, r.annotations)
 		}
 	}
-	if minReadySeconds := overrides.GetMinReadySeconds(); minReadySeconds != nil {
+
+	// If `overrides` has a Spec.MinReadySeconds field. and it's non-nil, it sets
+	// `r.minReadySeconds`.
+	if minReadySeconds := GetMinReadySeconds(overrides); minReadySeconds != nil {
 		r.minReadySeconds = minReadySeconds
 	}
 	if podTemplateMetadata := overrides.GetPodTemplateMetadata(); podTemplateMetadata != nil {

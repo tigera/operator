@@ -99,6 +99,9 @@ func (e *eck) Objects() ([]client.Object, []client.Object) {
 		e.operatorAllowTigeraPolicy(),
 	)
 
+	// Create RoleBinding for operator to manipulate secrets to tigera-eck-operator namespace
+	toCreate = append(toCreate, render.OperatorSecretsRoleBinding(OperatorNamespace))
+
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(OperatorNamespace, e.cfg.PullSecrets...)...)...)
 
 	toCreate = append(toCreate,

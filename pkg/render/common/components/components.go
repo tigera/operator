@@ -45,31 +45,19 @@ type replicatedPodResource struct {
 }
 
 func GetMetadata(overrides components.ReplicatedPodResourceOverrides) *operator.Metadata {
-	if _, hasMetadata := reflect.TypeOf(overrides).Elem().FieldByName("Metadata"); hasMetadata {
-		return reflect.ValueOf(overrides).Elem().FieldByName("Metadata").Interface().(*operator.Metadata)
+	value := getField(overrides, "Metadata")
+	if !value.IsValid() || value.IsNil() {
+		return nil
 	}
-	return nil
+	return value.Interface().(*operator.Metadata)
 }
 
 func GetMinReadySeconds(overrides components.ReplicatedPodResourceOverrides) *int32 {
-	if specField, hasSpec := reflect.TypeOf(overrides).Elem().FieldByName("Spec"); hasSpec {
-		specType := specField.Type
-		// Usually the Spec field is a pointer, but EgressGateway is an exception.
-		if specType.Kind() == reflect.Pointer {
-			specType = specType.Elem()
-		}
-		if _, hasMinReadySeconds := specType.FieldByName("MinReadySeconds"); hasMinReadySeconds {
-			specValue := reflect.ValueOf(overrides).Elem().FieldByName("Spec")
-			if specValue.Kind() == reflect.Pointer {
-				if specValue.IsNil() {
-					return nil
-				}
-				specValue = specValue.Elem()
-			}
-			return specValue.FieldByName("MinReadySeconds").Interface().(*int32)
-		}
+	value := getField(overrides, "Spec", "MinReadySeconds")
+	if !value.IsValid() || value.IsNil() {
+		return nil
 	}
-	return nil
+	return value.Interface().(*int32)
 }
 
 func GetPodTemplateMetadata(overrides components.ReplicatedPodResourceOverrides) *operator.Metadata {

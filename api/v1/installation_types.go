@@ -206,7 +206,7 @@ type InstallationSpec struct {
 
 type Azure struct {
 	// PolicyMode determines whether the "control-plane" label is applied to namespaces. It offers two options: Default and Manual.
-	// The Default option adds the "control-plane" label to namespaces that have the PodSecurityStandard set to privileged.
+	// The Default option adds the "control-plane" label to the required namespaces.
 	// The Manual option does not apply the "control-plane" label to any namespace.
 	// Default: Default
 	// +optional

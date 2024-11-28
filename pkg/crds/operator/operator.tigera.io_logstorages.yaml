@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.11.3
+    controller-gen.kubebuilder.io/version: v0.14.0
   name: logstorages.operator.tigera.io
 spec:
   group: operator.tigera.io
@@ -16,20 +16,25 @@ spec:
   - name: v1
     schema:
       openAPIV3Schema:
-        description: LogStorage installs the components required for Tigera flow and
-          DNS log storage. At most one instance of this resource is supported. It
-          must be named "tigera-secure". When created, this installs an Elasticsearch
-          cluster for use by Calico Enterprise.
+        description: |-
+          LogStorage installs the components required for Tigera flow and DNS log storage. At most one instance
+          of this resource is supported. It must be named "tigera-secure". When created, this installs an Elasticsearch cluster for use by
+          Calico Enterprise.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -37,9 +42,9 @@ spec:
             description: Specification of the desired state for Tigera log storage.
             properties:
               componentResources:
-                description: ComponentResources can be used to customize the resource
-                  requirements for each component. Only ECKOperator is supported for
-                  this spec.
+                description: |-
+                  ComponentResources can be used to customize the resource requirements for each component.
+                  Only ECKOperator is supported for this spec.
                 items:
                   description: The ComponentResource struct associates a ResourceRequirements
                     with a component by name
@@ -54,18 +59,19 @@ spec:
                         and requests for compute resources such as cpu and memory.
                       properties:
                         claims:
-                          description: "Claims lists the names of resources, defined
-                            in spec.resourceClaims, that are used by this container.
-                            \n This is an alpha field and requires enabling the DynamicResourceAllocation
-                            feature gate. \n This field is immutable. It can only
-                            be set for containers."
+                          description: |-
+                            Claims lists the names of resources, defined in spec.resourceClaims,
+                            that are used by this container.
+                            This is an alpha field and requires enabling the
+                            DynamicResourceAllocation feature gate.
+                            This field is immutable. It can only be set for containers.
                           items:
                             description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                             properties:
                               name:
-                                description: Name must match the name of one entry
-                                  in pod.spec.resourceClaims of the Pod where this
-                                  field is used. It makes that resource available
+                                description: |-
+                                  Name must match the name of one entry in pod.spec.resourceClaims of
+                                  the Pod where this field is used. It makes that resource available
                                   inside a container.
                                 type: string
                             required:
@@ -82,8 +88,9 @@ spec:
                             - type: string
                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                             x-kubernetes-int-or-string: true
-                          description: 'Limits describes the maximum amount of compute
-                            resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                          description: |-
+                            Limits describes the maximum amount of compute resources allowed.
+                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                           type: object
                         requests:
                           additionalProperties:
@@ -92,11 +99,11 @@ spec:
                             - type: string
                             pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                             x-kubernetes-int-or-string: true
-                          description: 'Requests describes the minimum amount of compute
-                            resources required. If Requests is omitted for a container,
-                            it defaults to Limits if that is explicitly specified,
-                            otherwise to an implementation-defined value. More info:
-                            https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                          description: |-
+                            Requests describes the minimum amount of compute resources required.
+                            If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                            otherwise to an implementation-defined value.
+                            More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                           type: object
                       type: object
                   required:
@@ -107,12 +114,10 @@ spec:
               dataNodeSelector:
                 additionalProperties:
                   type: string
-                description: DataNodeSelector gives you more control over the node
-                  that Elasticsearch will run on. The contents of DataNodeSelector
-                  will be added to the PodSpec of the Elasticsearch nodes. For the
-                  pod to be eligible to run on a node, the node must have each of
-                  the indicated key-value pairs as labels as well as access to the
-                  specified StorageClassName.
+                description: |-
+                  DataNodeSelector gives you more control over the node that Elasticsearch will run on. The contents of DataNodeSelector will
+                  be added to the PodSpec of the Elasticsearch nodes. For the pod to be eligible to run on a node, the node must have
+                  each of the indicated key-value pairs as labels as well as access to the specified StorageClassName.
                 type: object
               indices:
                 description: Index defines the configuration for the indices in the
@@ -141,20 +146,15 @@ spec:
                         Elasticsearch Node Set
                       properties:
                         selectionAttributes:
-                          description: SelectionAttributes defines K8s node attributes
-                            a NodeSet should use when setting the Node Affinity selectors
-                            and Elasticsearch cluster awareness attributes for the
-                            Elasticsearch nodes. The list of SelectionAttributes are
-                            used to define Node Affinities and set the node awareness
-                            configuration in the running Elasticsearch instance.
+                          description: |-
+                            SelectionAttributes defines K8s node attributes a NodeSet should use when setting the Node Affinity selectors and
+                            Elasticsearch cluster awareness attributes for the Elasticsearch nodes. The list of SelectionAttributes are used
+                            to define Node Affinities and set the node awareness configuration in the running Elasticsearch instance.
                           items:
-                            description: NodeSetSelectionAttribute defines a K8s node
-                              "attribute" the Elasticsearch nodes should be aware
-                              of. The "Name" and "Value" are used together to set
-                              the "awareness" attributes in Elasticsearch, while the
-                              "NodeLabel" and "Value" are used together to define
-                              Node Affinity for the Pods created for the Elasticsearch
-                              nodes.
+                            description: |-
+                              NodeSetSelectionAttribute defines a K8s node "attribute" the Elasticsearch nodes should be aware of. The "Name" and "Value"
+                              are used together to set the "awareness" attributes in Elasticsearch, while the "NodeLabel" and "Value" are used together
+                              to define Node Affinity for the Pods created for the Elasticsearch nodes.
                             properties:
                               name:
                                 type: string
@@ -175,19 +175,20 @@ spec:
                       and requirements for the Elasticsearch cluster.
                     properties:
                       claims:
-                        description: "Claims lists the names of resources, defined
-                          in spec.resourceClaims, that are used by this container.
-                          \n This is an alpha field and requires enabling the DynamicResourceAllocation
-                          feature gate. \n This field is immutable. It can only be
-                          set for containers."
+                        description: |-
+                          Claims lists the names of resources, defined in spec.resourceClaims,
+                          that are used by this container.
+                          This is an alpha field and requires enabling the
+                          DynamicResourceAllocation feature gate.
+                          This field is immutable. It can only be set for containers.
                         items:
                           description: ResourceClaim references one entry in PodSpec.ResourceClaims.
                           properties:
                             name:
-                              description: Name must match the name of one entry in
-                                pod.spec.resourceClaims of the Pod where this field
-                                is used. It makes that resource available inside a
-                                container.
+                              description: |-
+                                Name must match the name of one entry in pod.spec.resourceClaims of
+                                the Pod where this field is used. It makes that resource available
+                                inside a container.
                               type: string
                           required:
                           - name
@@ -203,8 +204,9 @@ spec:
                           - type: string
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
-                        description: 'Limits describes the maximum amount of compute
-                          resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                        description: |-
+                          Limits describes the maximum amount of compute resources allowed.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                         type: object
                       requests:
                         additionalProperties:
@@ -213,10 +215,11 @@ spec:
                           - type: string
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
-                        description: 'Requests describes the minimum amount of compute
-                          resources required. If Requests is omitted for a container,
-                          it defaults to Limits if that is explicitly specified, otherwise
-                          to an implementation-defined value. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                        description: |-
+                          Requests describes the minimum amount of compute resources required.
+                          If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                          otherwise to an implementation-defined value.
+                          More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                         type: object
                     type: object
                 type: object
@@ -225,109 +228,108 @@ spec:
                   cluster before it is cleared.
                 properties:
                   auditReports:
-                    description: 'AuditReports configures the retention period for
-                      audit logs, in days.  Logs written on a day that started at
-                      least this long ago are removed.  To keep logs for at least
-                      x days, use a retention period of x+1. Default: 91'
+                    description: |-
+                      AuditReports configures the retention period for audit logs, in days.  Logs written on a day that started at least this long ago are
+                      removed.  To keep logs for at least x days, use a retention period of x+1.
+                      Default: 91
                     format: int32
                     type: integer
                   bgpLogs:
-                    description: 'BGPLogs configures the retention period for BGP
-                      logs, in days.  Logs written on a day that started at least
-                      this long ago are removed.  To keep logs for at least x days,
-                      use a retention period of x+1. Default: 8'
+                    description: |-
+                      BGPLogs configures the retention period for BGP logs, in days.  Logs written on a day that started at least this long ago
+                      are removed.  To keep logs for at least x days, use a retention period of x+1.
+                      Default: 8
                     format: int32
                     type: integer
                   complianceReports:
-                    description: 'ComplianceReports configures the retention period
-                      for compliance reports, in days. Reports are output from the
-                      analysis of the system state and audit events for compliance
-                      reporting. Consult the Compliance Reporting documentation for
-                      more details on reports. Logs written on a day that started
-                      at least this long ago are removed.  To keep logs for at least
-                      x days, use a retention period of x+1. Default: 91'
+                    description: |-
+                      ComplianceReports configures the retention period for compliance reports, in days. Reports are output
+                      from the analysis of the system state and audit events for compliance reporting.
+                      Consult the Compliance Reporting documentation for more details on reports.
+                      Logs written on a day that started at least this long ago are
+                      removed.  To keep logs for at least x days, use a retention period of x+1.
+                      Default: 91
                     format: int32
                     type: integer
                   dnsLogs:
-                    description: 'DNSLogs configures the retention period for DNS
-                      logs, in days.  Logs written on a day that started at least
-                      this long ago are removed.  To keep logs for at least x days,
-                      use a retention period of x+1. Default: 8'
+                    description: |-
+                      DNSLogs configures the retention period for DNS logs, in days.  Logs written on a day that started at least this long ago
+                      are removed.  To keep logs for at least x days, use a retention period of x+1.
+                      Default: 8
                     format: int32
                     type: integer
                   flows:
-                    description: 'Flows configures the retention period for flow logs,
-                      in days.  Logs written on a day that started at least this long
-                      ago are removed.  To keep logs for at least x days, use a retention
-                      period of x+1. Default: 8'
+                    description: |-
+                      Flows configures the retention period for flow logs, in days.  Logs written on a day that started at least this long ago
+                      are removed.  To keep logs for at least x days, use a retention period of x+1.
+                      Default: 8
                     format: int32
                     type: integer
                   snapshots:
-                    description: 'Snapshots configures the retention period for snapshots,
-                      in days. Snapshots are periodic captures of resources which
-                      along with audit events are used to generate reports. Consult
-                      the Compliance Reporting documentation for more details on snapshots.
+                    description: |-
+                      Snapshots configures the retention period for snapshots, in days. Snapshots are periodic captures
+                      of resources which along with audit events are used to generate reports.
+                      Consult the Compliance Reporting documentation for more details on snapshots.
                       Logs written on a day that started at least this long ago are
-                      removed.  To keep logs for at least x days, use a retention
-                      period of x+1. Default: 91'
+                      removed.  To keep logs for at least x days, use a retention period of x+1.
+                      Default: 91
                     format: int32
                     type: integer
                 type: object
               storageClassName:
-                description: 'StorageClassName will populate the PersistentVolumeClaim.StorageClassName
-                  that is used to provision disks to the Tigera Elasticsearch cluster.
-                  The StorageClassName should only be modified when no LogStorage
-                  is currently active. We recommend choosing a storage class dedicated
-                  to Tigera LogStorage only. Otherwise, data retention cannot be guaranteed
-                  during upgrades. See https://docs.tigera.io/maintenance/upgrading
-                  for up-to-date instructions. Default: tigera-elasticsearch'
+                description: |-
+                  StorageClassName will populate the PersistentVolumeClaim.StorageClassName that is used to provision disks to the
+                  Tigera Elasticsearch cluster. The StorageClassName should only be modified when no LogStorage is currently
+                  active. We recommend choosing a storage class dedicated to Tigera LogStorage only. Otherwise, data retention
+                  cannot be guaranteed during upgrades. See https://docs.tigera.io/maintenance/upgrading for up-to-date instructions.
+                  Default: tigera-elasticsearch
                 type: string
             type: object
           status:
             description: Most recently observed state for Tigera log storage.
             properties:
               conditions:
-                description: Conditions represents the latest observed set of conditions
-                  for the component. A component may be one or more of Ready, Progressing,
-                  Degraded or other customer types.
+                description: |-
+                  Conditions represents the latest observed set of conditions for the component. A component may be one or more of
+                  Ready, Progressing, Degraded or other customer types.
                 items:
                   description: "Condition contains details for one aspect of the current
-                    state of this API Resource. --- This struct is intended for direct
-                    use as an array at the field path .status.conditions.  For example,
-                    \n type FooStatus struct{ // Represents the observations of a
-                    foo's current state. // Known .status.conditions.type are: \"Available\",
-                    \"Progressing\", and \"Degraded\" // +patchMergeKey=type // +patchStrategy=merge
-                    // +listType=map // +listMapKey=type Conditions []metav1.Condition
-                    `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\"
-                    protobuf:\"bytes,1,rep,name=conditions\"` \n // other fields }"
+                    state of this API Resource.\n---\nThis struct is intended for
+                    direct use as an array at the field path .status.conditions.  For
+                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
+                    observations of a foo's current state.\n\t    // Known .status.conditions.type
+                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
+                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
+                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
+                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
+                    \   // other fields\n\t}"
                   properties:
                     lastTransitionTime:
-                      description: lastTransitionTime is the last time the condition
-                        transitioned from one status to another. This should be when
-                        the underlying condition changed.  If that is not known, then
-                        using the time when the API field changed is acceptable.
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
                       format: date-time
                       type: string
                     message:
-                      description: message is a human readable message indicating
-                        details about the transition. This may be an empty string.
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
                       maxLength: 32768
                       type: string
                     observedGeneration:
-                      description: observedGeneration represents the .metadata.generation
-                        that the condition was set based upon. For instance, if .metadata.generation
-                        is currently 12, but the .status.conditions[x].observedGeneration
-                        is 9, the condition is out of date with respect to the current
-                        state of the instance.
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
                       format: int64
                       minimum: 0
                       type: integer
                     reason:
-                      description: reason contains a programmatic identifier indicating
-                        the reason for the condition's last transition. Producers
-                        of specific condition types may define expected values and
-                        meanings for this field, and whether the values are considered
-                        a guaranteed API. The value should be a CamelCase string.
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
                         This field may not be empty.
                       maxLength: 1024
                       minLength: 1
@@ -341,11 +343,12 @@ spec:
                       - Unknown
                       type: string
                     type:
-                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                        --- Many .condition.type values are consistent across resources
-                        like Available, but because arbitrary conditions can be useful
-                        (see .node.status.conditions), the ability to deconflict is
-                        important. The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      description: |-
+                        type of condition in CamelCase or in foo.example.com/CamelCase.
+                        ---
+                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
+                        useful (see .node.status.conditions), the ability to deconflict is important.
+                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
                       maxLength: 316
                       pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                       type: string
@@ -358,15 +361,14 @@ spec:
                   type: object
                 type: array
               elasticsearchHash:
-                description: ElasticsearchHash represents the current revision and
-                  configuration of the installed Elasticsearch cluster. This is an
-                  opaque string which can be monitored for changes to perform actions
-                  when Elasticsearch is modified.
+                description: |-
+                  ElasticsearchHash represents the current revision and configuration of the installed Elasticsearch cluster. This
+                  is an opaque string which can be monitored for changes to perform actions when Elasticsearch is modified.
                 type: string
               kibanaHash:
-                description: KibanaHash represents the current revision and configuration
-                  of the installed Kibana dashboard. This is an opaque string which
-                  can be monitored for changes to perform actions when Kibana is modified.
+                description: |-
+                  KibanaHash represents the current revision and configuration of the installed Kibana dashboard. This
+                  is an opaque string which can be monitored for changes to perform actions when Kibana is modified.
                 type: string
               state:
                 description: State provides user-readable status.

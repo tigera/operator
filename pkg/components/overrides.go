@@ -20,10 +20,6 @@ import (
 
 // ReplicatedPodResourceOverrides represents a type that contains the data needed to override a component DaemonSet or Deployment resource.
 type ReplicatedPodResourceOverrides interface {
-	// GetInitContainers returns the containers used to override a DaemonSet/Deployment's init containers.
-	// Only containers with fields specified (other than its name) should be returned.
-	GetInitContainers() []corev1.Container
-
 	// GetContainers returns the containers used to override a DaemonSet/Deployment's containers.
 	// Only containers with fields specified (other than its name) should be returned.
 	GetContainers() []corev1.Container

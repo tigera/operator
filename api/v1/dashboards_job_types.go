@@ -28,10 +28,6 @@ type DashboardsJob struct {
 	Spec *DashboardsJobSpec `json:"spec,omitempty"`
 }
 
-func (in *DashboardsJob) GetInitContainers() []v1.Container {
-	return nil
-}
-
 func (in *DashboardsJob) GetContainers() []v1.Container {
 	if in.Spec != nil {
 		if in.Spec.Template != nil {

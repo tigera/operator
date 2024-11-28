@@ -52,7 +52,7 @@ func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodRe
 			return fmt.Errorf("spec.Template.Metadata is invalid: %w", err)
 		}
 	}
-	if initContainers := overrides.GetInitContainers(); len(initContainers) > 0 {
+	if initContainers := rcc.GetInitContainers(overrides); len(initContainers) > 0 {
 		for _, c := range initContainers {
 			if err := validateInitContainerFn(c); err != nil {
 				return fmt.Errorf("spec.Template.Spec.InitContainers[%q] is invalid: %w", c.Name, err)

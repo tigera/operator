@@ -107,11 +107,6 @@ type CalicoKubeControllersDeploymentSpec struct {
 	Template *CalicoKubeControllersDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CalicoKubeControllersDeployment) GetInitContainers() []v1.Container {
-	// no init containers defined
-	return nil
-}
-
 func (c *CalicoKubeControllersDeployment) GetContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

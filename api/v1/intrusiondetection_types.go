@@ -205,29 +205,6 @@ type IntrusionDetectionControllerDeploymentInitContainer struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *IntrusionDetectionControllerDeployment) GetInitContainers() []corev1.Container {
-	if c != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.InitContainers != nil {
-					cs := make([]corev1.Container, len(c.Spec.Template.Spec.InitContainers))
-					for i, v := range c.Spec.Template.Spec.InitContainers {
-						// Only copy and return the init container if it has resources set.
-						if v.Resources == nil {
-							continue
-						}
-						c := corev1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
-					}
-					return cs
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
 func (c *IntrusionDetectionControllerDeployment) GetContainers() []corev1.Container {
 	if c != nil {
 		if c.Spec != nil {

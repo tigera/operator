@@ -104,11 +104,6 @@ type CalicoWindowsUpgradeDaemonSetSpec struct {
 	Template *CalicoWindowsUpgradeDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CalicoWindowsUpgradeDaemonSet) GetInitContainers() []v1.Container {
-	// no init containers defined
-	return nil
-}
-
 func (c *CalicoWindowsUpgradeDaemonSet) GetContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

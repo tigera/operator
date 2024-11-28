@@ -91,7 +91,36 @@ func GetDeploymentStrategy(overrides components.ReplicatedPodResourceOverrides) 
 	}
 }
 
+func GetInitContainers(overrides components.ReplicatedPodResourceOverrides) []corev1.Container {
+	value := getField(overrides, "Spec", "Template", "Spec", "InitContainers")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return valueToContainers(value)
+}
+
+func valueToContainers(value reflect.Value) []corev1.Container {
+	cs := make([]corev1.Container, 0, value.Len())
+	for _, v := range value.Seq2() {
+		name := v.FieldByName("Name")
+		resources := v.FieldByName("Resources")
+		if !resources.IsNil() {
+			cs = append(cs, corev1.Container{
+				Name:      name.String(),
+				Resources: *(resources.Interface().(*corev1.ResourceRequirements)),
+			})
+		}
+	}
+	return cs
+}
+
 func getField(overrides components.ReplicatedPodResourceOverrides, fieldNames ...string) (value reflect.Value) {
+	// SPECIAL CASE: ComplianceReporterPodTemplate doesn't follow the Spec, Template, Spec, ...
+	// pattern that all our other override structures follow.  Instead it skips the top-level
+	// Spec and has Template, Spec, ...
+	if _, isComplianceReporterPodTemplate := overrides.(*operator.ComplianceReporterPodTemplate); isComplianceReporterPodTemplate {
+		fieldNames = fieldNames[1:]
+	}
 	typ := reflect.TypeOf(overrides)
 	for _, fieldName := range fieldNames {
 		if typ.Kind() == reflect.Pointer {
@@ -163,9 +192,14 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 		r.deploymentStrategy = ds
 	}
 
-	if initContainers := overrides.GetInitContainers(); initContainers != nil {
+	// If `overrides` has a Spec.Template.Spec.InitContainers field, and it includes containers
+	// with the same name as those in `r.podTemplateSpec.Spec.InitContainers`, and with non-nil
+	// `Resources`, those resources replace those for the corresponding container in
+	// `r.podTemplateSpec.Spec.InitContainers`.
+	if initContainers := GetInitContainers(overrides); initContainers != nil {
 		mergeContainers(r.podTemplateSpec.Spec.InitContainers, initContainers)
 	}
+
 	if containers := overrides.GetContainers(); containers != nil {
 		mergeContainers(r.podTemplateSpec.Spec.Containers, containers)
 	}

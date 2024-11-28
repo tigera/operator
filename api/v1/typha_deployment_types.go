@@ -159,28 +159,6 @@ type TyphaDeploymentStrategy struct {
 	RollingUpdate *appsv1.RollingUpdateDeployment `json:"rollingUpdate,omitempty" protobuf:"bytes,2,opt,name=rollingUpdate"`
 }
 
-func (c *TyphaDeployment) GetInitContainers() []v1.Container {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.InitContainers != nil {
-					cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
-					for i, v := range c.Spec.Template.Spec.InitContainers {
-						// Only copy and return the init container if it has resources set.
-						if v.Resources == nil {
-							continue
-						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
-					}
-					return cs
-				}
-			}
-		}
-	}
-	return nil
-}
-
 func (c *TyphaDeployment) GetContainers() []v1.Container {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

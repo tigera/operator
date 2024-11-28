@@ -28,28 +28,6 @@ type DashboardsJob struct {
 	Spec *DashboardsJobSpec `json:"spec,omitempty"`
 }
 
-func (in *DashboardsJob) GetContainers() []v1.Container {
-	if in.Spec != nil {
-		if in.Spec.Template != nil {
-			if in.Spec.Template.Spec != nil {
-				if in.Spec.Template.Spec.Containers != nil {
-					cs := make([]v1.Container, len(in.Spec.Template.Spec.Containers))
-					for i, v := range in.Spec.Template.Spec.Containers {
-						// Only copy and return the container if it has resources set.
-						if v.Resources == nil {
-							continue
-						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
-					}
-					return cs
-				}
-			}
-		}
-	}
-	return nil
-}
-
 func (in *DashboardsJob) GetAffinity() *v1.Affinity {
 	return nil
 }

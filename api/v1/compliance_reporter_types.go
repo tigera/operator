@@ -79,26 +79,6 @@ type ComplianceReporterPodTemplateInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceReporterPodTemplate) GetContainers() []v1.Container {
-	if c.Template != nil {
-		if c.Template.Spec != nil {
-			if c.Template.Spec.Containers != nil {
-				cs := make([]v1.Container, len(c.Template.Spec.Containers))
-				for i, v := range c.Template.Spec.Containers {
-					// Only copy and return the container if it has resources set.
-					if v.Resources == nil {
-						continue
-					}
-					c := v1.Container{Name: v.Name, Resources: *v.Resources}
-					cs[i] = c
-				}
-				return cs
-			}
-		}
-	}
-	return nil
-}
-
 func (c *ComplianceReporterPodTemplate) GetAffinity() *v1.Affinity {
 	return nil
 }

@@ -129,30 +129,6 @@ type ManagerList struct {
 	Items           []Manager `json:"items"`
 }
 
-func (c *ManagerDeployment) GetContainers() []v1.Container {
-	if c != nil {
-		if c.Spec != nil {
-			if c.Spec.Template != nil {
-				if c.Spec.Template.Spec != nil {
-					if c.Spec.Template.Spec.Containers != nil {
-						cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-						for i, v := range c.Spec.Template.Spec.Containers {
-							// Only copy and return the init container if it has resources set.
-							if v.Resources == nil {
-								continue
-							}
-							c := v1.Container{Name: v.Name, Resources: *v.Resources}
-							cs[i] = c
-						}
-						return cs
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
-
 func (c *ManagerDeployment) GetAffinity() *v1.Affinity {
 	return nil
 }

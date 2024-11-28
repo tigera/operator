@@ -59,7 +59,7 @@ func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodRe
 			}
 		}
 	}
-	if containers := overrides.GetContainers(); len(containers) > 0 {
+	if containers := rcc.GetContainers(overrides); len(containers) > 0 {
 		for _, c := range containers {
 			if err := validateContainerFn(c); err != nil {
 				return fmt.Errorf("spec.Template.Spec.Containers[%q] is invalid: %w", c.Name, err)

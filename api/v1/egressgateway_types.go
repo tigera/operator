@@ -339,27 +339,6 @@ func (c *EgressGateway) GetTopologySpreadConstraints() []v1.TopologySpreadConstr
 	return nil
 }
 
-func (c *EgressGateway) GetContainers() []v1.Container {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			if c.Spec.Template.Spec.Containers != nil {
-				cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-				for i, v := range c.Spec.Template.Spec.Containers {
-					// Only copy and return the container if it has resources set.
-					if v.Resources == nil {
-						continue
-					}
-					c := v1.Container{Name: v.Name, Resources: *v.Resources}
-					cs[i] = c
-				}
-				return cs
-			}
-		}
-	}
-
-	return nil
-}
-
 func (c *EgressGateway) GetTolerations() []v1.Toleration {
 	if c.Spec.Template != nil {
 		if c.Spec.Template.Spec != nil {

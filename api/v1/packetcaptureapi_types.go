@@ -132,30 +132,6 @@ type PacketCaptureAPIList struct {
 	Items           []PacketCaptureAPI `json:"items"`
 }
 
-func (c *PacketCaptureAPIDeployment) GetContainers() []v1.Container {
-	if c != nil {
-		if c.Spec != nil {
-			if c.Spec.Template != nil {
-				if c.Spec.Template.Spec != nil {
-					if c.Spec.Template.Spec.Containers != nil {
-						cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-						for i, v := range c.Spec.Template.Spec.Containers {
-							// Only copy and return the init container if it has resources set.
-							if v.Resources == nil {
-								continue
-							}
-							c := v1.Container{Name: v.Name, Resources: *v.Resources}
-							cs[i] = c
-						}
-						return cs
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
-
 func (c *PacketCaptureAPIDeployment) GetAffinity() *v1.Affinity {
 	return nil
 }

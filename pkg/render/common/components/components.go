@@ -99,6 +99,14 @@ func GetInitContainers(overrides components.ReplicatedPodResourceOverrides) []co
 	return valueToContainers(value)
 }
 
+func GetContainers(overrides components.ReplicatedPodResourceOverrides) []corev1.Container {
+	value := getField(overrides, "Spec", "Template", "Spec", "Containers")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return valueToContainers(value)
+}
+
 func valueToContainers(value reflect.Value) []corev1.Container {
 	cs := make([]corev1.Container, 0, value.Len())
 	for _, v := range value.Seq2() {
@@ -200,9 +208,14 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 		mergeContainers(r.podTemplateSpec.Spec.InitContainers, initContainers)
 	}
 
-	if containers := overrides.GetContainers(); containers != nil {
+	// If `overrides` has a Spec.Template.Spec.Containers field, and it includes containers with
+	// the same name as those in `r.podTemplateSpec.Spec.InitContainers`, and with non-nil
+	// `Resources`, those resources replace those for the corresponding container in
+	// `r.podTemplateSpec.Spec.Containers`.
+	if containers := GetContainers(overrides); containers != nil {
 		mergeContainers(r.podTemplateSpec.Spec.Containers, containers)
 	}
+
 	if affinity := overrides.GetAffinity(); affinity != nil {
 		r.podTemplateSpec.Spec.Affinity = affinity
 	}

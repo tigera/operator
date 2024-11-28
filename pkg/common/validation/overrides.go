@@ -93,7 +93,7 @@ func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodRe
 		return fmt.Errorf("spec.Template.Spec.TerminationGracePeriodSeconds is invalid: cannot be negative")
 	}
 
-	if st := overrides.GetDeploymentStrategy(); st != nil {
+	if st := rcc.GetDeploymentStrategy(overrides); st != nil {
 		if err := k8svalidation.ValidateDeploymentStrategy(st, field.NewPath("spec", "strategy")); err.ToAggregate() != nil {
 			return fmt.Errorf("spec.Strategy is invalid: %w", err.ToAggregate())
 		}

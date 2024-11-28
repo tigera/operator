@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -193,10 +192,6 @@ func (c *PacketCaptureAPIDeployment) GetNodeSelector() map[string]string {
 }
 
 func (c *PacketCaptureAPIDeployment) GetTolerations() []v1.Toleration {
-	return nil
-}
-
-func (c *PacketCaptureAPIDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
 

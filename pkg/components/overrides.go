@@ -15,7 +15,6 @@
 package components
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -40,8 +39,6 @@ type ReplicatedPodResourceOverrides interface {
 
 	// GetTolerations returns the value used to override a DaemonSet/Deployment's tolerations.
 	GetTolerations() []corev1.Toleration
-
-	GetDeploymentStrategy() *appsv1.DeploymentStrategy
 
 	// GetPriorityClassName() returns the value used to override a DaemonSet/Deployment's priorityClassName.
 	GetPriorityClassName() string

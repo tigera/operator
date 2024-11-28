@@ -80,6 +80,17 @@ func GetTerminationGracePeriodSeconds(overrides components.ReplicatedPodResource
 	return value.Interface().(*int64)
 }
 
+func GetDeploymentStrategy(overrides components.ReplicatedPodResourceOverrides) *appsv1.DeploymentStrategy {
+	value := getField(overrides, "Spec", "Strategy", "RollingUpdate")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return &appsv1.DeploymentStrategy{
+		Type:          appsv1.RollingUpdateDeploymentStrategyType,
+		RollingUpdate: value.Interface().(*appsv1.RollingUpdateDeployment),
+	}
+}
+
 func getField(overrides components.ReplicatedPodResourceOverrides, fieldNames ...string) (value reflect.Value) {
 	typ := reflect.TypeOf(overrides)
 	for _, fieldName := range fieldNames {
@@ -146,9 +157,12 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 		r.podTemplateSpec.Spec.TerminationGracePeriodSeconds = tgp
 	}
 
-	if ds := overrides.GetDeploymentStrategy(); ds != nil {
+	// If `overrides` has a Spec.Strategy.RollingUpdate field, and it's non-nil, it sets
+	// `r.deploymentStrategy`.
+	if ds := GetDeploymentStrategy(overrides); ds != nil {
 		r.deploymentStrategy = ds
 	}
+
 	if initContainers := overrides.GetInitContainers(); initContainers != nil {
 		mergeContainers(r.podTemplateSpec.Spec.InitContainers, initContainers)
 	}

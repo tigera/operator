@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -378,10 +377,6 @@ func (c *EgressGateway) GetContainers() []v1.Container {
 		}
 	}
 
-	return nil
-}
-
-func (c *EgressGateway) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
 

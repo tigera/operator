@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -172,10 +171,6 @@ func (c *CalicoKubeControllersDeployment) GetTolerations() []v1.Toleration {
 			}
 		}
 	}
-	return nil
-}
-
-func (c *CalicoKubeControllersDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }
 

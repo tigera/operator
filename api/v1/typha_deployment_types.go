@@ -247,16 +247,6 @@ func (c *TyphaDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *TyphaDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	if c.Spec != nil && c.Spec.Strategy != nil && c.Spec.Strategy.RollingUpdate != nil {
-		return &appsv1.DeploymentStrategy{
-			Type:          appsv1.RollingUpdateDeploymentStrategyType,
-			RollingUpdate: c.Spec.Strategy.RollingUpdate,
-		}
-	}
-	return nil
-}
-
 func (c *TyphaDeployment) GetPriorityClassName() string {
 	return ""
 }

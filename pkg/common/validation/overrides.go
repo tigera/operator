@@ -88,7 +88,7 @@ func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodRe
 		}
 	}
 
-	tgp := overrides.GetTerminationGracePeriodSeconds()
+	tgp := rcc.GetTerminationGracePeriodSeconds(overrides)
 	if tgp != nil && *tgp < 0 {
 		return fmt.Errorf("spec.Template.Spec.TerminationGracePeriodSeconds is invalid: cannot be negative")
 	}

@@ -168,10 +168,6 @@ func (c *CSINodeDriverDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *CSINodeDriverDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *CSINodeDriverDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

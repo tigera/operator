@@ -146,10 +146,6 @@ func (c *GuardianDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *GuardianDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *GuardianDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

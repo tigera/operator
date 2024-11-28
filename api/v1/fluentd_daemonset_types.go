@@ -151,10 +151,6 @@ func (c *FluentdDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *FluentdDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *FluentdDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

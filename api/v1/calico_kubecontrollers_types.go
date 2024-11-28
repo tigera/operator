@@ -175,10 +175,6 @@ func (c *CalicoKubeControllersDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *CalicoKubeControllersDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *CalicoKubeControllersDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

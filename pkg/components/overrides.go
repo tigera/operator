@@ -41,8 +41,6 @@ type ReplicatedPodResourceOverrides interface {
 	// GetTolerations returns the value used to override a DaemonSet/Deployment's tolerations.
 	GetTolerations() []corev1.Toleration
 
-	GetTerminationGracePeriodSeconds() *int64
-
 	GetDeploymentStrategy() *appsv1.DeploymentStrategy
 
 	// GetPriorityClassName() returns the value used to override a DaemonSet/Deployment's priorityClassName.

@@ -209,10 +209,6 @@ func (c *CalicoNodeDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *CalicoNodeDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *CalicoNodeDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

@@ -275,10 +275,6 @@ func (c *APIServerDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *APIServerDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *APIServerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

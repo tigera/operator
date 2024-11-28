@@ -170,10 +170,6 @@ func (c *CalicoWindowsUpgradeDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *CalicoWindowsUpgradeDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *CalicoWindowsUpgradeDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

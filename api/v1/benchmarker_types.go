@@ -148,10 +148,6 @@ func (c *ComplianceBenchmarkerDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *ComplianceBenchmarkerDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *ComplianceBenchmarkerDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

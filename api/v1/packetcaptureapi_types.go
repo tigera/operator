@@ -196,10 +196,6 @@ func (c *PacketCaptureAPIDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *PacketCaptureAPIDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *PacketCaptureAPIDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

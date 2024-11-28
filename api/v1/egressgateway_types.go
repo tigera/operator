@@ -313,15 +313,6 @@ func (c *EgressGateway) GetLogSeverity() string {
 	return string(*c.Spec.LogSeverity)
 }
 
-func (c *EgressGateway) GetTerminationGracePeriodSeconds() *int64 {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			return c.Spec.Template.Spec.TerminationGracePeriodSeconds
-		}
-	}
-	return nil
-}
-
 func (c *EgressGateway) GetNodeSelector() map[string]string {
 	if c.Spec.Template != nil {
 		if c.Spec.Template.Spec != nil {

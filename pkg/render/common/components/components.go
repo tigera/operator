@@ -72,6 +72,14 @@ func GetPodTemplateMetadata(overrides components.ReplicatedPodResourceOverrides)
 	return value.Interface().(*operator.Metadata)
 }
 
+func GetTerminationGracePeriodSeconds(overrides components.ReplicatedPodResourceOverrides) *int64 {
+	value := getField(overrides, "Spec", "Template", "Spec", "TerminationGracePeriodSeconds")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(*int64)
+}
+
 func getField(overrides components.ReplicatedPodResourceOverrides, fieldNames ...string) (value reflect.Value) {
 	typ := reflect.TypeOf(overrides)
 	for _, fieldName := range fieldNames {
@@ -131,9 +139,13 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 			common.MergeMaps(podTemplateMetadata.Annotations, r.podTemplateSpec.Annotations)
 		}
 	}
-	if tgp := overrides.GetTerminationGracePeriodSeconds(); tgp != nil {
+
+	// If `overrides` has a Spec.Template.Spec.TerminationGracePeriodSeconds field, and it's
+	// non-nil, it sets the Spec.TerminationGracePeriodSeconds field of `r.podTemplateSpec`.
+	if tgp := GetTerminationGracePeriodSeconds(overrides); tgp != nil {
 		r.podTemplateSpec.Spec.TerminationGracePeriodSeconds = tgp
 	}
+
 	if ds := overrides.GetDeploymentStrategy(); ds != nil {
 		r.deploymentStrategy = ds
 	}

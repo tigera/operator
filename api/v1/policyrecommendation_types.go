@@ -188,10 +188,6 @@ func (c *PolicyRecommendationDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *PolicyRecommendationDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *PolicyRecommendationDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

@@ -269,10 +269,6 @@ func (c *IntrusionDetectionControllerDeployment) GetTolerations() []corev1.Toler
 	return nil
 }
 
-func (c *IntrusionDetectionControllerDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *IntrusionDetectionControllerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

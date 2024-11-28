@@ -247,17 +247,6 @@ func (c *TyphaDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *TyphaDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.TerminationGracePeriodSeconds
-			}
-		}
-	}
-	return nil
-}
-
 func (c *TyphaDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	if c.Spec != nil && c.Spec.Strategy != nil && c.Spec.Strategy.RollingUpdate != nil {
 		return &appsv1.DeploymentStrategy{

@@ -148,10 +148,6 @@ func (c *ElasticsearchMetricsDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *ElasticsearchMetricsDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *ElasticsearchMetricsDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

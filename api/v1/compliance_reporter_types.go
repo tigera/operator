@@ -136,10 +136,6 @@ func (c *ComplianceReporterPodTemplate) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *ComplianceReporterPodTemplate) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *ComplianceReporterPodTemplate) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

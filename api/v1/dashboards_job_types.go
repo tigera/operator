@@ -71,10 +71,6 @@ func (in *DashboardsJob) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (in *DashboardsJob) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (in *DashboardsJob) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

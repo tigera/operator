@@ -149,10 +149,6 @@ func (c *L7LogCollectorDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *L7LogCollectorDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *L7LogCollectorDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

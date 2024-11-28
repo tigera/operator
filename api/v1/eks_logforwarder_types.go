@@ -151,10 +151,6 @@ func (c *EKSLogForwarderDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }
 
-func (c *EKSLogForwarderDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
 func (c *EKSLogForwarderDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
 	return nil
 }

@@ -411,6 +411,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
+	if instance.Spec.KubernetesProvider != operatorv1.ProviderAKS && instance.Spec.Azure != nil {
+		return fmt.Errorf("Installation spec.Azure should be set only for AKS provider")
+	}
+
 	return nil
 }
 

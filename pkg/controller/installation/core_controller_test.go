@@ -1557,6 +1557,41 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(0))
 		})
+
+		It("should set default spec.Azure if provider is AKS", func() {
+			cr.Spec.KubernetesProvider = operator.ProviderAKS
+
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policyMode := operator.Default
+			azure := &operator.Azure{
+				PolicyMode: &policyMode,
+			}
+			instance := &operator.Installation{}
+
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, instance)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(instance.Spec.Azure).NotTo(BeNil())
+			Expect(instance.Spec.Azure).To(Equal(azure))
+		})
+
+		It("should not set default spec.Azure if provider is not AKS", func() {
+			cr.Spec.KubernetesProvider = operator.ProviderEKS
+
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			instance := &operator.Installation{}
+
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, instance)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(instance.Spec.Azure).To(BeNil())
+		})
 	})
 
 	Context("Using EKS networking", func() {

@@ -444,7 +444,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	reqLogger.V(3).Info("rendering components")
 
-	namespaceComp := render.NewPassthrough(render.CreateNamespace(helper.InstallNamespace(), network.KubernetesProvider, render.PSSPrivileged))
+	namespaceComp := render.NewPassthrough(render.CreateNamespace(helper.InstallNamespace(), network.KubernetesProvider, render.PSSPrivileged, network.Azure))
 
 	hasNoLicense := !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider.IsOpenShift()

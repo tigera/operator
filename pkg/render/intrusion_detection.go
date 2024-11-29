@@ -1303,6 +1303,7 @@ type IntrusionDetectionNamespaceConfiguration struct {
 	Namespace                 string
 	KubernetesProvider        operatorv1.Provider
 	HasNoLicense              bool
+	Azure                     *operatorv1.Azure
 }
 
 func (c *intrusionDetectionNamespaceComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -1324,7 +1325,7 @@ func (c *intrusionDetectionNamespaceComponent) Objects() ([]client.Object, []cli
 	objs := []client.Object{}
 	if !c.cfg.Tenant.MultiTenant() {
 		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
-		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.KubernetesProvider, PodSecurityStandard(pss)))
+		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.KubernetesProvider, PodSecurityStandard(pss), c.cfg.Azure))
 	}
 
 	if c.cfg.HasNoLicense {

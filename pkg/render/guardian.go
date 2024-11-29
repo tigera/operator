@@ -120,7 +120,7 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(GuardianNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
+		CreateNamespace(GuardianNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PullSecrets...)...)...)
@@ -135,7 +135,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 
 		// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
 		// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
-		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted),
+		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
 		managerServiceAccount(ManagerNamespace),
 		managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil),
 		managerClusterRoleBinding([]string{ManagerNamespace}),

@@ -131,7 +131,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	flag.BoolVar(&manageCRDs, "manage-crds", false, "Operator should manage the projectcalico.org and operator.tigera.io CRDs.")
 	flag.BoolVar(&preDelete, "pre-delete", false, "Run helm pre-deletion hook logic, then exit.")
 	flag.BoolVar(&bootstrapCRDs, "bootstrap-crds", false, "Install CRDs and exit")
-	flag.StringVar(&variant, "variant", string(operatortigeraiov1.Calico), "Default product variant to assume during boostrapping.")
+	flag.StringVar(&variant, "variant", string(operatorv1.Calico), "Default product variant to assume during boostrapping.")
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)

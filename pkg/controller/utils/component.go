@@ -324,7 +324,13 @@ func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component 
 		}
 	}
 
+	// Name of Namespace where Operator is currently running
+	operatorNamespace := common.OperatorNamespace()
+
 	for _, obj := range objsToDelete {
+		if obj.GetName() == operatorNamespace && obj.GetObjectKind().GroupVersionKind().Kind == "Namespace" {
+			panic(fmt.Sprintf("Attempt to delete Operators Namespace", operatorNamespace))
+		}
 		err := c.client.Delete(ctx, obj)
 		if err != nil && !errors.IsNotFound(err) {
 			logCtx := ContextLoggerForResource(c.log, obj)

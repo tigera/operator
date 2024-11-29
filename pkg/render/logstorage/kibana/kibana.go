@@ -156,7 +156,7 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 		// - securityContext.capabilities.drop=["ALL"]
 		// - securityContext.runAsNonRoot=true
 		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
-		toCreate = append(toCreate, render.CreateNamespace(Namespace, k.cfg.Installation.KubernetesProvider, render.PSSBaseline))
+		toCreate = append(toCreate, render.CreateNamespace(Namespace, k.cfg.Installation.KubernetesProvider, render.PSSBaseline, k.cfg.Installation.Azure))
 		toCreate = append(toCreate, k.allowTigeraPolicy())
 		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(Namespace))
 		toCreate = append(toCreate, k.serviceAccount())

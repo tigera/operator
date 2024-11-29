@@ -243,14 +243,14 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 
 	// Before we can create secrets, we need to ensure the tigera-elasticsearch namespace exists.
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
-	esNamespace := render.CreateNamespace(render.ElasticsearchNamespace, install.KubernetesProvider, render.PSSPrivileged)
+	esNamespace := render.CreateNamespace(render.ElasticsearchNamespace, install.KubernetesProvider, render.PSSPrivileged, install.Azure)
 	if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(esNamespace), r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	if kibanaEnabled {
 		// Create the Namespace.
-		kbNamespace := render.CreateNamespace(kibana.Namespace, install.KubernetesProvider, render.PSSBaseline)
+		kbNamespace := render.CreateNamespace(kibana.Namespace, install.KubernetesProvider, render.PSSBaseline, install.Azure)
 		if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(kbNamespace), r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err

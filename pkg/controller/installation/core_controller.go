@@ -721,6 +721,11 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 		instance.Spec.NodeUpdateStrategy.Type = appsv1.RollingUpdateDaemonSetStrategyType
 	}
 
+	if instance.Spec.KubernetesProvider == operator.ProviderAKS && instance.Spec.Azure == nil {
+		defaultPolicyMode := operator.Default
+		instance.Spec.Azure = &operator.Azure{PolicyMode: &defaultPolicyMode}
+	}
+
 	return nil
 }
 

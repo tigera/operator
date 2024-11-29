@@ -105,9 +105,9 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	}
 
 	if d.cfg.HasNoLicense {
-		toDelete = append(toDelete, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
+		toDelete = append(toDelete, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged, d.cfg.Installation.Azure))
 	} else {
-		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged))
+		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged, d.cfg.Installation.Azure))
 	}
 
 	// This secret is deprecated in this namespace and should be removed in upgrade scenarios

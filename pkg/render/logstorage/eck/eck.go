@@ -95,7 +95,7 @@ func (e *eck) Objects() ([]client.Object, []client.Object) {
 	var toCreate, toDelete []client.Object
 
 	toCreate = append(toCreate,
-		render.CreateNamespace(OperatorNamespace, e.cfg.Installation.KubernetesProvider, render.PSSRestricted),
+		render.CreateNamespace(OperatorNamespace, e.cfg.Installation.KubernetesProvider, render.PSSRestricted, e.cfg.Installation.Azure),
 		e.operatorAllowTigeraPolicy(),
 	)
 

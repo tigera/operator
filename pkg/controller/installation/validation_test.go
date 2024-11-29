@@ -407,6 +407,20 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
+	It("should allow Spec.Azure to be set for AKS provider", func() {
+		instance.Spec.KubernetesProvider = operator.ProviderAKS
+		instance.Spec.Azure = &operator.Azure{}
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not allow Spec.Azure to be set for non AKS provider", func() {
+		instance.Spec.KubernetesProvider = operator.ProviderGKE
+		instance.Spec.Azure = &operator.Azure{}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
 	Describe("validate Calico CNI plugin Type", func() {
 		DescribeTable("test invalid IPAM",
 			func(ipam operator.IPAMPluginType) {

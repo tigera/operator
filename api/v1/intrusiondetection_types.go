@@ -205,10 +205,6 @@ type IntrusionDetectionControllerDeploymentInitContainer struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *IntrusionDetectionControllerDeployment) GetAffinity() *corev1.Affinity {
-	return nil
-}
-
 func (c *IntrusionDetectionControllerDeployment) GetTopologySpreadConstraints() []corev1.TopologySpreadConstraint {
 	return nil
 }

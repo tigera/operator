@@ -122,6 +122,14 @@ func valueToContainers(value reflect.Value) []corev1.Container {
 	return cs
 }
 
+func GetAffinity(overrides components.ReplicatedPodResourceOverrides) *corev1.Affinity {
+	value := getField(overrides, "Spec", "Template", "Spec", "Affinity")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(*corev1.Affinity)
+}
+
 func getField(overrides components.ReplicatedPodResourceOverrides, fieldNames ...string) (value reflect.Value) {
 	// SPECIAL CASE: ComplianceReporterPodTemplate doesn't follow the Spec, Template, Spec, ...
 	// pattern that all our other override structures follow.  Instead it skips the top-level
@@ -218,9 +226,12 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 		mergeContainers(r.podTemplateSpec.Spec.Containers, containers)
 	}
 
-	if affinity := overrides.GetAffinity(); affinity != nil {
+	// If `overrides` has a Spec.Template.Spec.Affinity field, and it's non-nil, it sets
+	// `r.podTemplateSpec.Spec.Affinity`.
+	if affinity := GetAffinity(overrides); affinity != nil {
 		r.podTemplateSpec.Spec.Affinity = affinity
 	}
+
 	if nodeSelector := overrides.GetNodeSelector(); nodeSelector != nil {
 		r.podTemplateSpec.Spec.NodeSelector = common.MapExistsOrInitialize(r.podTemplateSpec.Spec.NodeSelector)
 		common.MergeMaps(nodeSelector, r.podTemplateSpec.Spec.NodeSelector)

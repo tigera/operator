@@ -79,10 +79,6 @@ type ComplianceReporterPodTemplateInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceReporterPodTemplate) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (c *ComplianceReporterPodTemplate) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }

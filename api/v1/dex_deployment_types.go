@@ -87,10 +87,6 @@ type DexDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *DexDeployment) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (c *DexDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }

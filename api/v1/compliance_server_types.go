@@ -87,10 +87,6 @@ type ComplianceServerDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceServerDeployment) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (c *ComplianceServerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }

@@ -85,10 +85,6 @@ type L7LogCollectorDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *L7LogCollectorDaemonSet) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (c *L7LogCollectorDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }

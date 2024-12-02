@@ -87,10 +87,6 @@ type LinseedDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *LinseedDeployment) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (c *LinseedDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }

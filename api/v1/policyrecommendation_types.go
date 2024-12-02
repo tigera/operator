@@ -123,10 +123,6 @@ type PolicyRecommendationList struct {
 	Items           []PolicyRecommendation `json:"items"`
 }
 
-func (c *PolicyRecommendationDeployment) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (c *PolicyRecommendationDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }

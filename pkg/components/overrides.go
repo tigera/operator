@@ -20,9 +20,6 @@ import (
 
 // ReplicatedPodResourceOverrides represents a type that contains the data needed to override a component DaemonSet or Deployment resource.
 type ReplicatedPodResourceOverrides interface {
-	// GetAffinity returns the value used to override a DaemonSet/Deployment's affinity.
-	GetAffinity() *corev1.Affinity
-
 	// GetNodeSelector returns the value used to override a DaemonSet/Deployment's nodeSelector.
 	GetNodeSelector() map[string]string
 

@@ -87,10 +87,6 @@ type EKSLogForwarderDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *EKSLogForwarderDeployment) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (c *EKSLogForwarderDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }

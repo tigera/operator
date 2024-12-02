@@ -186,17 +186,6 @@ type APIServerDeploymentSpec struct {
 	Template *APIServerDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *APIServerDeployment) GetAffinity() *v1.Affinity {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.Affinity
-			}
-		}
-	}
-	return nil
-}
-
 func (c *APIServerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

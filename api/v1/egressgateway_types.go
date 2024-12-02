@@ -321,15 +321,6 @@ func (c *EgressGateway) GetNodeSelector() map[string]string {
 	return nil
 }
 
-func (c *EgressGateway) GetAffinity() *v1.Affinity {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			return c.Spec.Template.Spec.Affinity
-		}
-	}
-	return nil
-}
-
 func (c *EgressGateway) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	if c.Spec.Template != nil {
 		if c.Spec.Template.Spec != nil {

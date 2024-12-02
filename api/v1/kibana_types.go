@@ -84,10 +84,6 @@ type KibanaInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *Kibana) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (c *Kibana) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }

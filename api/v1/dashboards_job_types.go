@@ -28,10 +28,6 @@ type DashboardsJob struct {
 	Spec *DashboardsJobSpec `json:"spec,omitempty"`
 }
 
-func (in *DashboardsJob) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (in *DashboardsJob) GetNodeSelector() map[string]string {
 	return nil
 }

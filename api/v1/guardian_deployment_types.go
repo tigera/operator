@@ -85,10 +85,6 @@ type GuardianDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *GuardianDeployment) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (c *GuardianDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }

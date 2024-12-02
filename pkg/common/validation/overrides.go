@@ -66,7 +66,7 @@ func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodRe
 			}
 		}
 	}
-	if affinity := overrides.GetAffinity(); affinity != nil {
+	if affinity := rcc.GetAffinity(overrides); affinity != nil {
 		if errs := k8svalidation.ValidateAffinity(affinity, field.NewPath("spec", "template", "spec", "affinity")); errs.ToAggregate() != nil {
 			return fmt.Errorf("spec.Template.Spec.Affinity is invalid: %w", errs.ToAggregate())
 		}

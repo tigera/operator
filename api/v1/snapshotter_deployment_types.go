@@ -87,10 +87,6 @@ type ComplianceSnapshotterDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceSnapshotterDeployment) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (c *ComplianceSnapshotterDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }

@@ -132,10 +132,6 @@ type PacketCaptureAPIList struct {
 	Items           []PacketCaptureAPI `json:"items"`
 }
 
-func (c *PacketCaptureAPIDeployment) GetAffinity() *v1.Affinity {
-	return nil
-}
-
 func (c *PacketCaptureAPIDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }

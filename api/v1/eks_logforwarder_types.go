@@ -87,10 +87,6 @@ type EKSLogForwarderDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *EKSLogForwarderDeployment) GetTolerations() []v1.Toleration {
-	return nil
-}
-
 func (c *EKSLogForwarderDeployment) GetPriorityClassName() string {
 	return ""
 }

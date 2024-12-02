@@ -186,17 +186,6 @@ type APIServerDeploymentSpec struct {
 	Template *APIServerDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *APIServerDeployment) GetTolerations() []v1.Toleration {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.Tolerations
-			}
-		}
-	}
-	return nil
-}
-
 func (c *APIServerDeployment) GetPriorityClassName() string {
 	return ""
 }

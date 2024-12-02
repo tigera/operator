@@ -85,10 +85,6 @@ type L7LogCollectorDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *L7LogCollectorDaemonSet) GetTolerations() []v1.Toleration {
-	return nil
-}
-
 func (c *L7LogCollectorDaemonSet) GetPriorityClassName() string {
 	return ""
 }

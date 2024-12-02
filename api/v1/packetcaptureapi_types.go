@@ -132,10 +132,6 @@ type PacketCaptureAPIList struct {
 	Items           []PacketCaptureAPI `json:"items"`
 }
 
-func (c *PacketCaptureAPIDeployment) GetTolerations() []v1.Toleration {
-	return nil
-}
-
 func (c *PacketCaptureAPIDeployment) GetPriorityClassName() string {
 	return ""
 }

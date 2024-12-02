@@ -87,10 +87,6 @@ type ComplianceControllerDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceControllerDeployment) GetTolerations() []v1.Toleration {
-	return nil
-}
-
 func (c *ComplianceControllerDeployment) GetPriorityClassName() string {
 	return ""
 }

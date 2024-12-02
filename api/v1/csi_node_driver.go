@@ -102,17 +102,6 @@ type CSINodeDriverDaemonSetSpec struct {
 	Template *CSINodeDriverDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CSINodeDriverDaemonSet) GetTolerations() []v1.Toleration {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.Tolerations
-			}
-		}
-	}
-	return nil
-}
-
 func (c *CSINodeDriverDaemonSet) GetPriorityClassName() string {
 	return ""
 }

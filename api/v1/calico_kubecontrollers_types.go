@@ -107,17 +107,6 @@ type CalicoKubeControllersDeploymentSpec struct {
 	Template *CalicoKubeControllersDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CalicoKubeControllersDeployment) GetTolerations() []v1.Toleration {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.Tolerations
-			}
-		}
-	}
-	return nil
-}
-
 func (c *CalicoKubeControllersDeployment) GetPriorityClassName() string {
 	return ""
 }

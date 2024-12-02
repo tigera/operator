@@ -14,15 +14,8 @@
 
 package components
 
-import (
-	corev1 "k8s.io/api/core/v1"
-)
-
 // ReplicatedPodResourceOverrides represents a type that contains the data needed to override a component DaemonSet or Deployment resource.
 type ReplicatedPodResourceOverrides interface {
-	// GetTolerations returns the value used to override a DaemonSet/Deployment's tolerations.
-	GetTolerations() []corev1.Toleration
-
 	// GetPriorityClassName() returns the value used to override a DaemonSet/Deployment's priorityClassName.
 	GetPriorityClassName() string
 }

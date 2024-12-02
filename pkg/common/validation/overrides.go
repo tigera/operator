@@ -82,7 +82,7 @@ func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodRe
 		}
 	}
 
-	if tolerations := overrides.GetTolerations(); len(tolerations) > 0 {
+	if tolerations := rcc.GetTolerations(overrides); len(tolerations) > 0 {
 		if errs := k8svalidation.ValidateTolerations(tolerations, field.NewPath("spec", "template", "spec", "tolerations")); errs.ToAggregate() != nil {
 			return fmt.Errorf("spec.Template.Spec.Tolerations is invalid: %w", errs.ToAggregate())
 		}

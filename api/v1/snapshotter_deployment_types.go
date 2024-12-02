@@ -87,10 +87,6 @@ type ComplianceSnapshotterDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceSnapshotterDeployment) GetTolerations() []v1.Toleration {
-	return nil
-}
-
 func (c *ComplianceSnapshotterDeployment) GetPriorityClassName() string {
 	return ""
 }

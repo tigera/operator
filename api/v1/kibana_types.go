@@ -84,10 +84,6 @@ type KibanaInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *Kibana) GetTolerations() []v1.Toleration {
-	return nil
-}
-
 func (c *Kibana) GetPriorityClassName() string {
 	return ""
 }

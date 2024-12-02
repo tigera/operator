@@ -87,10 +87,6 @@ type DexDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *DexDeployment) GetTolerations() []v1.Toleration {
-	return nil
-}
-
 func (c *DexDeployment) GetPriorityClassName() string {
 	return ""
 }

@@ -87,10 +87,6 @@ type FluentdDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *FluentdDaemonSet) GetTolerations() []v1.Toleration {
-	return nil
-}
-
 func (c *FluentdDaemonSet) GetPriorityClassName() string {
 	return ""
 }

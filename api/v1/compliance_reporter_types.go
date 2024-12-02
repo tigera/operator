@@ -79,10 +79,6 @@ type ComplianceReporterPodTemplateInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceReporterPodTemplate) GetTolerations() []v1.Toleration {
-	return nil
-}
-
 func (c *ComplianceReporterPodTemplate) GetPriorityClassName() string {
 	return ""
 }

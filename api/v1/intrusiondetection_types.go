@@ -205,10 +205,6 @@ type IntrusionDetectionControllerDeploymentInitContainer struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *IntrusionDetectionControllerDeployment) GetTolerations() []corev1.Toleration {
-	return nil
-}
-
 func (c *IntrusionDetectionControllerDeployment) GetPriorityClassName() string {
 	return ""
 }

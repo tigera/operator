@@ -103,14 +103,3 @@ type CalicoWindowsUpgradeDaemonSetSpec struct {
 	// +optional
 	Template *CalicoWindowsUpgradeDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
-
-func (c *CalicoWindowsUpgradeDaemonSet) GetTolerations() []v1.Toleration {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.Tolerations
-			}
-		}
-	}
-	return nil
-}

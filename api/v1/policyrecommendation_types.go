@@ -123,10 +123,6 @@ type PolicyRecommendationList struct {
 	Items           []PolicyRecommendation `json:"items"`
 }
 
-func (c *PolicyRecommendationDeployment) GetTolerations() []v1.Toleration {
-	return nil
-}
-
 func (c *PolicyRecommendationDeployment) GetPriorityClassName() string {
 	return ""
 }

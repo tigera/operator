@@ -87,10 +87,6 @@ type LinseedDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *LinseedDeployment) GetTolerations() []v1.Toleration {
-	return nil
-}
-
 func (c *LinseedDeployment) GetPriorityClassName() string {
 	return ""
 }

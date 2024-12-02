@@ -158,7 +158,3 @@ type TyphaDeploymentStrategy struct {
 	// +optional
 	RollingUpdate *appsv1.RollingUpdateDeployment `json:"rollingUpdate,omitempty" protobuf:"bytes,2,opt,name=rollingUpdate"`
 }
-
-func (c *TyphaDeployment) GetPriorityClassName() string {
-	return ""
-}

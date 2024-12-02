@@ -86,7 +86,3 @@ type ElasticsearchMetricsDeploymentInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *ElasticsearchMetricsDeployment) GetPriorityClassName() string {
-	return ""
-}

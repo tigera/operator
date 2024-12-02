@@ -86,7 +86,3 @@ type ComplianceControllerDeploymentInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *ComplianceControllerDeployment) GetPriorityClassName() string {
-	return ""
-}

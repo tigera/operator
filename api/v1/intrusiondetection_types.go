@@ -205,10 +205,6 @@ type IntrusionDetectionControllerDeploymentInitContainer struct {
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *IntrusionDetectionControllerDeployment) GetPriorityClassName() string {
-	return ""
-}
-
 func init() {
 	SchemeBuilder.Register(&IntrusionDetection{}, &IntrusionDetectionList{})
 }

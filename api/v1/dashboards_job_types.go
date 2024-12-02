@@ -28,10 +28,6 @@ type DashboardsJob struct {
 	Spec *DashboardsJobSpec `json:"spec,omitempty"`
 }
 
-func (in *DashboardsJob) GetPriorityClassName() string {
-	return ""
-}
-
 // DashboardsJobSpec defines configuration for the Dashboards job.
 type DashboardsJobSpec struct {
 

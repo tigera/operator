@@ -16,6 +16,4 @@ package components
 
 // ReplicatedPodResourceOverrides represents a type that contains the data needed to override a component DaemonSet or Deployment resource.
 type ReplicatedPodResourceOverrides interface {
-	// GetPriorityClassName() returns the value used to override a DaemonSet/Deployment's priorityClassName.
-	GetPriorityClassName() string
 }

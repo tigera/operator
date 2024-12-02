@@ -154,6 +154,14 @@ func GetTolerations(overrides components.ReplicatedPodResourceOverrides) []corev
 	return value.Interface().([]corev1.Toleration)
 }
 
+func GetPriorityClassName(overrides components.ReplicatedPodResourceOverrides) string {
+	value := getField(overrides, "Spec", "Template", "Spec", "PriorityClassName")
+	if !value.IsValid() {
+		return ""
+	}
+	return value.String()
+}
+
 func getField(overrides components.ReplicatedPodResourceOverrides, fieldNames ...string) (value reflect.Value) {
 	// SPECIAL CASE: ComplianceReporterPodTemplate doesn't follow the Spec, Template, Spec, ...
 	// pattern that all our other override structures follow.  Instead it skips the top-level
@@ -275,7 +283,9 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 		r.podTemplateSpec.Spec.Tolerations = tolerations
 	}
 
-	if priorityClassName := overrides.GetPriorityClassName(); priorityClassName != "" {
+	// If `overrides` has a Spec.Template.Spec.PriorityClassName field, and it's non-empty, it
+	// sets `r.podTemplateSpec.Spec.PriorityClassName`.
+	if priorityClassName := GetPriorityClassName(overrides); priorityClassName != "" {
 		r.podTemplateSpec.Spec.PriorityClassName = priorityClassName
 	}
 

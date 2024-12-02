@@ -84,7 +84,3 @@ type ECKOperatorStatefulSetInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *ECKOperatorStatefulSet) GetPriorityClassName() string {
-	return ""
-}

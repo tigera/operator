@@ -86,7 +86,3 @@ type ComplianceBenchmarkerDaemonSetInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *ComplianceBenchmarkerDaemonSet) GetPriorityClassName() string {
-	return ""
-}

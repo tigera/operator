@@ -83,7 +83,3 @@ type KibanaInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *Kibana) GetPriorityClassName() string {
-	return ""
-}

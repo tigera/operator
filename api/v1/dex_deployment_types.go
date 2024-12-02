@@ -86,7 +86,3 @@ type DexDeploymentInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *DexDeployment) GetPriorityClassName() string {
-	return ""
-}

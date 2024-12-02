@@ -106,7 +106,3 @@ type CalicoKubeControllersDeploymentSpec struct {
 	// +optional
 	Template *CalicoKubeControllersDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
-
-func (c *CalicoKubeControllersDeployment) GetPriorityClassName() string {
-	return ""
-}

@@ -185,7 +185,3 @@ type APIServerDeploymentSpec struct {
 	// +optional
 	Template *APIServerDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
-
-func (c *APIServerDeployment) GetPriorityClassName() string {
-	return ""
-}

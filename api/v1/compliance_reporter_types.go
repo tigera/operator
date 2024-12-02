@@ -78,7 +78,3 @@ type ComplianceReporterPodTemplateInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *ComplianceReporterPodTemplate) GetPriorityClassName() string {
-	return ""
-}

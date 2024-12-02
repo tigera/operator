@@ -312,16 +312,6 @@ func (c *EgressGateway) GetLogSeverity() string {
 	return string(*c.Spec.LogSeverity)
 }
 
-func (c *EgressGateway) GetPriorityClassName() string {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			return c.Spec.Template.Spec.PriorityClassName
-		}
-	}
-
-	return ""
-}
-
 func init() {
 	SchemeBuilder.Register(&EgressGateway{}, &EgressGatewayList{})
 }

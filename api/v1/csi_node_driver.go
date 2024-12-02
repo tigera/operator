@@ -101,7 +101,3 @@ type CSINodeDriverDaemonSetSpec struct {
 	// +optional
 	Template *CSINodeDriverDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
-
-func (c *CSINodeDriverDaemonSet) GetPriorityClassName() string {
-	return ""
-}

@@ -84,7 +84,3 @@ type GuardianDeploymentInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *GuardianDeployment) GetPriorityClassName() string {
-	return ""
-}

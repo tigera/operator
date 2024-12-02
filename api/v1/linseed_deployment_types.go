@@ -86,7 +86,3 @@ type LinseedDeploymentInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *LinseedDeployment) GetPriorityClassName() string {
-	return ""
-}

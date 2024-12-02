@@ -86,7 +86,3 @@ type FluentdDaemonSetInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *FluentdDaemonSet) GetPriorityClassName() string {
-	return ""
-}

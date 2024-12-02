@@ -132,10 +132,6 @@ type PacketCaptureAPIList struct {
 	Items           []PacketCaptureAPI `json:"items"`
 }
 
-func (c *PacketCaptureAPIDeployment) GetPriorityClassName() string {
-	return ""
-}
-
 func init() {
 	SchemeBuilder.Register(&PacketCaptureAPI{}, &PacketCaptureAPIList{})
 }

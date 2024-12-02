@@ -84,7 +84,3 @@ type L7LogCollectorDaemonSetInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *L7LogCollectorDaemonSet) GetPriorityClassName() string {
-	return ""
-}

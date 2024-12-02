@@ -86,7 +86,3 @@ type EKSLogForwarderDeploymentInitContainer struct {
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
-
-func (c *EKSLogForwarderDeployment) GetPriorityClassName() string {
-	return ""
-}

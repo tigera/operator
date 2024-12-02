@@ -129,10 +129,6 @@ type ManagerList struct {
 	Items           []Manager `json:"items"`
 }
 
-func (c *ManagerDeployment) GetPriorityClassName() string {
-	return ""
-}
-
 func init() {
 	SchemeBuilder.Register(&Manager{}, &ManagerList{})
 }

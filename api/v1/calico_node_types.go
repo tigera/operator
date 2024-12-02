@@ -125,7 +125,3 @@ type CalicoNodeDaemonSetSpec struct {
 	// +optional
 	Template *CalicoNodeDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
-
-func (c *CalicoNodeDaemonSet) GetPriorityClassName() string {
-	return ""
-}

@@ -123,10 +123,6 @@ type PolicyRecommendationList struct {
 	Items           []PolicyRecommendation `json:"items"`
 }
 
-func (c *PolicyRecommendationDeployment) GetPriorityClassName() string {
-	return ""
-}
-
 func init() {
 	SchemeBuilder.Register(&PolicyRecommendation{}, &PolicyRecommendationList{})
 }

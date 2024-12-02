@@ -127,7 +127,9 @@ func getField(overrides components.ReplicatedPodResourceOverrides, fieldNames ..
 	// pattern that all our other override structures follow.  Instead it skips the top-level
 	// Spec and has Template, Spec, ...
 	if _, isComplianceReporterPodTemplate := overrides.(*operator.ComplianceReporterPodTemplate); isComplianceReporterPodTemplate {
-		fieldNames = fieldNames[1:]
+		if fieldNames[0] == "Spec" {
+			fieldNames = fieldNames[1:]
+		}
 	}
 	typ := reflect.TypeOf(overrides)
 	for _, fieldName := range fieldNames {

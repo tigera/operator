@@ -91,10 +91,6 @@ func (c *DexDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstr
 	return nil
 }
 
-func (c *DexDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *DexDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }

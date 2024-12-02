@@ -91,10 +91,6 @@ func (c *EKSLogForwarderDeployment) GetTopologySpreadConstraints() []v1.Topology
 	return nil
 }
 
-func (c *EKSLogForwarderDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *EKSLogForwarderDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }

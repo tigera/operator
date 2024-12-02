@@ -91,10 +91,6 @@ func (c *ElasticsearchMetricsDeployment) GetTopologySpreadConstraints() []v1.Top
 	return nil
 }
 
-func (c *ElasticsearchMetricsDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *ElasticsearchMetricsDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }

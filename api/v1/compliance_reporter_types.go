@@ -83,10 +83,6 @@ func (c *ComplianceReporterPodTemplate) GetTopologySpreadConstraints() []v1.Topo
 	return nil
 }
 
-func (c *ComplianceReporterPodTemplate) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *ComplianceReporterPodTemplate) GetTolerations() []v1.Toleration {
 	return nil
 }

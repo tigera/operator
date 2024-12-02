@@ -88,10 +88,6 @@ func (c *Kibana) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
 	return nil
 }
 
-func (c *Kibana) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *Kibana) GetTolerations() []v1.Toleration {
 	return nil
 }

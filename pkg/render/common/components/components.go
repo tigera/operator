@@ -130,6 +130,14 @@ func GetAffinity(overrides components.ReplicatedPodResourceOverrides) *corev1.Af
 	return value.Interface().(*corev1.Affinity)
 }
 
+func GetNodeSelector(overrides components.ReplicatedPodResourceOverrides) map[string]string {
+	value := getField(overrides, "Spec", "Template", "Spec", "NodeSelector")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(map[string]string)
+}
+
 func getField(overrides components.ReplicatedPodResourceOverrides, fieldNames ...string) (value reflect.Value) {
 	// SPECIAL CASE: ComplianceReporterPodTemplate doesn't follow the Spec, Template, Spec, ...
 	// pattern that all our other override structures follow.  Instead it skips the top-level
@@ -232,10 +240,13 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 		r.podTemplateSpec.Spec.Affinity = affinity
 	}
 
-	if nodeSelector := overrides.GetNodeSelector(); nodeSelector != nil {
+	// If `overrides` has a Spec.Template.Spec.NodeSelector field, and it's a non-nil map,
+	// non-clashing entries from that map are added into `r.podTemplateSpec.Spec.NodeSelector`.
+	if nodeSelector := GetNodeSelector(overrides); nodeSelector != nil {
 		r.podTemplateSpec.Spec.NodeSelector = common.MapExistsOrInitialize(r.podTemplateSpec.Spec.NodeSelector)
 		common.MergeMaps(nodeSelector, r.podTemplateSpec.Spec.NodeSelector)
 	}
+
 	if constraints := overrides.GetTopologySpreadConstraints(); constraints != nil {
 		r.podTemplateSpec.Spec.TopologySpreadConstraints = constraints
 	}

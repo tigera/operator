@@ -209,10 +209,6 @@ func (c *IntrusionDetectionControllerDeployment) GetTopologySpreadConstraints() 
 	return nil
 }
 
-func (c *IntrusionDetectionControllerDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *IntrusionDetectionControllerDeployment) GetTolerations() []corev1.Toleration {
 	return nil
 }

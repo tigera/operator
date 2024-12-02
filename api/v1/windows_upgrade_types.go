@@ -109,17 +109,6 @@ func (c *CalicoWindowsUpgradeDaemonSet) GetTopologySpreadConstraints() []v1.Topo
 	return nil
 }
 
-func (c *CalicoWindowsUpgradeDaemonSet) GetNodeSelector() map[string]string {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.NodeSelector
-			}
-		}
-	}
-	return nil
-}
-
 func (c *CalicoWindowsUpgradeDaemonSet) GetTolerations() []v1.Toleration {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

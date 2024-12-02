@@ -89,10 +89,6 @@ func (c *GuardianDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadC
 	return nil
 }
 
-func (c *GuardianDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *GuardianDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }

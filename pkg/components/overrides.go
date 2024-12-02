@@ -20,9 +20,6 @@ import (
 
 // ReplicatedPodResourceOverrides represents a type that contains the data needed to override a component DaemonSet or Deployment resource.
 type ReplicatedPodResourceOverrides interface {
-	// GetNodeSelector returns the value used to override a DaemonSet/Deployment's nodeSelector.
-	GetNodeSelector() map[string]string
-
 	// GetTopologySpreadConstraints returns topology spread constraints to use.
 	GetTopologySpreadConstraints() []corev1.TopologySpreadConstraint
 

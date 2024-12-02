@@ -89,10 +89,6 @@ func (c *ECKOperatorStatefulSet) GetTopologySpreadConstraints() []v1.TopologySpr
 	return nil
 }
 
-func (c *ECKOperatorStatefulSet) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *ECKOperatorStatefulSet) GetTolerations() []v1.Toleration {
 	return nil
 }

@@ -114,17 +114,6 @@ func (c *CalicoKubeControllersDeployment) GetTopologySpreadConstraints() []v1.To
 	return nil
 }
 
-func (c *CalicoKubeControllersDeployment) GetNodeSelector() map[string]string {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.NodeSelector
-			}
-		}
-	}
-	return nil
-}
-
 func (c *CalicoKubeControllersDeployment) GetTolerations() []v1.Toleration {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

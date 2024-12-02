@@ -89,10 +89,6 @@ func (c *L7LogCollectorDaemonSet) GetTopologySpreadConstraints() []v1.TopologySp
 	return nil
 }
 
-func (c *L7LogCollectorDaemonSet) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *L7LogCollectorDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }

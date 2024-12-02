@@ -107,17 +107,6 @@ func (c *CSINodeDriverDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpr
 	return nil
 }
 
-func (c *CSINodeDriverDaemonSet) GetNodeSelector() map[string]string {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.NodeSelector
-			}
-		}
-	}
-	return nil
-}
-
 func (c *CSINodeDriverDaemonSet) GetTolerations() []v1.Toleration {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

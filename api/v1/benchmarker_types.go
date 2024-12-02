@@ -91,10 +91,6 @@ func (c *ComplianceBenchmarkerDaemonSet) GetTopologySpreadConstraints() []v1.Top
 	return nil
 }
 
-func (c *ComplianceBenchmarkerDaemonSet) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *ComplianceBenchmarkerDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }

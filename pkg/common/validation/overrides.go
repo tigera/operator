@@ -71,7 +71,7 @@ func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodRe
 			return fmt.Errorf("spec.Template.Spec.Affinity is invalid: %w", errs.ToAggregate())
 		}
 	}
-	if nodeSelector := overrides.GetNodeSelector(); len(nodeSelector) > 0 {
+	if nodeSelector := rcc.GetNodeSelector(overrides); len(nodeSelector) > 0 {
 		if err := k8svalidation.ValidatePodSpecNodeSelector(nodeSelector, field.NewPath("spec", "template", "spec", "nodeSelector")); err.ToAggregate() != nil {
 			return fmt.Errorf("spec.Template.Spec.NodeSelector is invalid: %w", err.ToAggregate())
 		}

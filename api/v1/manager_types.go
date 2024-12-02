@@ -133,10 +133,6 @@ func (c *ManagerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadCo
 	return nil
 }
 
-func (c *ManagerDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *ManagerDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }

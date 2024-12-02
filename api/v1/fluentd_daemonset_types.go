@@ -91,10 +91,6 @@ func (c *FluentdDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadCon
 	return nil
 }
 
-func (c *FluentdDaemonSet) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *FluentdDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }

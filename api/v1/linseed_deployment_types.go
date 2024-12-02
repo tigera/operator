@@ -91,10 +91,6 @@ func (c *LinseedDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadCo
 	return nil
 }
 
-func (c *LinseedDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *LinseedDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }

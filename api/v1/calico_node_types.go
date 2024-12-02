@@ -131,17 +131,6 @@ func (c *CalicoNodeDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpread
 	return nil
 }
 
-func (c *CalicoNodeDaemonSet) GetNodeSelector() map[string]string {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.NodeSelector
-			}
-		}
-	}
-	return nil
-}
-
 func (c *CalicoNodeDaemonSet) GetTolerations() []v1.Toleration {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

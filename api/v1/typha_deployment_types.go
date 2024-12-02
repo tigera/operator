@@ -170,17 +170,6 @@ func (c *TyphaDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadCons
 	return nil
 }
 
-func (c *TyphaDeployment) GetNodeSelector() map[string]string {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.NodeSelector
-			}
-		}
-	}
-	return nil
-}
-
 func (c *TyphaDeployment) GetTolerations() []v1.Toleration {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

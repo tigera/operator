@@ -136,10 +136,6 @@ func (c *PacketCaptureAPIDeployment) GetTopologySpreadConstraints() []v1.Topolog
 	return nil
 }
 
-func (c *PacketCaptureAPIDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
 func (c *PacketCaptureAPIDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }

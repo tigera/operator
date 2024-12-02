@@ -344,6 +344,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 			hdler,
 			reqLogger,
 			gwTrustedBundle,
+			logStorage,
 		); err != nil {
 			return reconcile.Result{}, err
 		}

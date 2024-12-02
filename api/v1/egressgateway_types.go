@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -311,123 +310,6 @@ type EgressGatewayList struct {
 
 func (c *EgressGateway) GetLogSeverity() string {
 	return string(*c.Spec.LogSeverity)
-}
-
-func (c *EgressGateway) GetTerminationGracePeriodSeconds() *int64 {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			return c.Spec.Template.Spec.TerminationGracePeriodSeconds
-		}
-	}
-	return nil
-}
-
-func (c *EgressGateway) GetNodeSelector() map[string]string {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			return c.Spec.Template.Spec.NodeSelector
-		}
-	}
-	return nil
-}
-
-func (c *EgressGateway) GetAffinity() *v1.Affinity {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			return c.Spec.Template.Spec.Affinity
-		}
-	}
-	return nil
-}
-
-func (c *EgressGateway) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			return c.Spec.Template.Spec.TopologySpreadConstraints
-		}
-	}
-	return nil
-}
-
-func (c *EgressGateway) GetInitContainers() []v1.Container {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			if c.Spec.Template.Spec.InitContainers != nil {
-				cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
-				for i, v := range c.Spec.Template.Spec.InitContainers {
-					// Only copy and return the init container if it has resources set.
-					if v.Resources == nil {
-						continue
-					}
-					c := v1.Container{Name: v.Name, Resources: *v.Resources}
-					cs[i] = c
-				}
-				return cs
-			}
-		}
-	}
-	return nil
-}
-
-func (c *EgressGateway) GetContainers() []v1.Container {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			if c.Spec.Template.Spec.Containers != nil {
-				cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-				for i, v := range c.Spec.Template.Spec.Containers {
-					// Only copy and return the container if it has resources set.
-					if v.Resources == nil {
-						continue
-					}
-					c := v1.Container{Name: v.Name, Resources: *v.Resources}
-					cs[i] = c
-				}
-				return cs
-			}
-		}
-	}
-
-	return nil
-}
-
-func (c *EgressGateway) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	return nil
-}
-
-func (c *EgressGateway) GetTolerations() []v1.Toleration {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			return c.Spec.Template.Spec.Tolerations
-		}
-	}
-
-	return nil
-}
-
-func (c *EgressGateway) GetPriorityClassName() string {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			return c.Spec.Template.Spec.PriorityClassName
-		}
-	}
-
-	return ""
-}
-
-func (c *EgressGateway) GetPodTemplateMetadata() *Metadata {
-	if c.Spec.Template != nil {
-		m := &Metadata{Labels: c.Spec.Template.Metadata.Labels, Annotations: c.Spec.Template.Metadata.Annotations}
-		return m
-	}
-	return nil
-}
-
-func (c *EgressGateway) GetMinReadySeconds() *int32 {
-	return nil
-}
-
-func (c *EgressGateway) GetMetadata() *Metadata {
-	return nil
 }
 
 func init() {

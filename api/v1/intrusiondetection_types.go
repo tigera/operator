@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -204,93 +203,6 @@ type IntrusionDetectionControllerDeploymentInitContainer struct {
 	// If omitted, the IntrusionDetectionController Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetMetadata() *Metadata {
-	return nil
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetMinReadySeconds() *int32 {
-	return nil
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetInitContainers() []corev1.Container {
-	if c != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.InitContainers != nil {
-					cs := make([]corev1.Container, len(c.Spec.Template.Spec.InitContainers))
-					for i, v := range c.Spec.Template.Spec.InitContainers {
-						// Only copy and return the init container if it has resources set.
-						if v.Resources == nil {
-							continue
-						}
-						c := corev1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
-					}
-					return cs
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetContainers() []corev1.Container {
-	if c != nil {
-		if c.Spec != nil {
-			if c.Spec.Template != nil {
-				if c.Spec.Template.Spec != nil {
-					if c.Spec.Template.Spec.Containers != nil {
-						cs := make([]corev1.Container, len(c.Spec.Template.Spec.Containers))
-						for i, v := range c.Spec.Template.Spec.Containers {
-							// Only copy and return the init container if it has resources set.
-							if v.Resources == nil {
-								continue
-							}
-							c := corev1.Container{Name: v.Name, Resources: *v.Resources}
-							cs[i] = c
-						}
-						return cs
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetAffinity() *corev1.Affinity {
-	return nil
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetTopologySpreadConstraints() []corev1.TopologySpreadConstraint {
-	return nil
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetTolerations() []corev1.Toleration {
-	return nil
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	return nil
-}
-
-func (c *IntrusionDetectionControllerDeployment) GetPriorityClassName() string {
-	return ""
 }
 
 func init() {

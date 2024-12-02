@@ -15,7 +15,6 @@
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -122,94 +121,6 @@ type PolicyRecommendationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PolicyRecommendation `json:"items"`
-}
-
-func (c *PolicyRecommendationDeployment) GetMetadata() *Metadata {
-	return nil
-}
-
-func (c *PolicyRecommendationDeployment) GetMinReadySeconds() *int32 {
-	return nil
-}
-
-func (c *PolicyRecommendationDeployment) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
-func (c *PolicyRecommendationDeployment) GetInitContainers() []v1.Container {
-	if c != nil {
-		if c.Spec != nil {
-			if c.Spec.Template != nil {
-				if c.Spec.Template.Spec != nil {
-					if c.Spec.Template.Spec.InitContainers != nil {
-						cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
-						for i, v := range c.Spec.Template.Spec.InitContainers {
-							// Only copy and return the init container if it has resources set.
-							if v.Resources == nil {
-								continue
-							}
-							c := v1.Container{Name: v.Name, Resources: *v.Resources}
-							cs[i] = c
-						}
-						return cs
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (c *PolicyRecommendationDeployment) GetContainers() []v1.Container {
-	if c != nil {
-		if c.Spec != nil {
-			if c.Spec.Template != nil {
-				if c.Spec.Template.Spec != nil {
-					if c.Spec.Template.Spec.Containers != nil {
-						cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-						for i, v := range c.Spec.Template.Spec.Containers {
-							// Only copy and return the init container if it has resources set.
-							if v.Resources == nil {
-								continue
-							}
-							c := v1.Container{Name: v.Name, Resources: *v.Resources}
-							cs[i] = c
-						}
-						return cs
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (c *PolicyRecommendationDeployment) GetAffinity() *v1.Affinity {
-	return nil
-}
-
-func (c *PolicyRecommendationDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	return nil
-}
-
-func (c *PolicyRecommendationDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
-func (c *PolicyRecommendationDeployment) GetTolerations() []v1.Toleration {
-	return nil
-}
-
-func (c *PolicyRecommendationDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
-func (c *PolicyRecommendationDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	return nil
-}
-
-func (c *PolicyRecommendationDeployment) GetPriorityClassName() string {
-	return ""
 }
 
 func init() {

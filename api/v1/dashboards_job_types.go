@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -27,72 +26,6 @@ type DashboardsJob struct {
 	// Spec is the specification of the dashboards job.
 	// +optional
 	Spec *DashboardsJobSpec `json:"spec,omitempty"`
-}
-
-func (in *DashboardsJob) GetMetadata() *Metadata {
-	return nil
-}
-
-func (in *DashboardsJob) GetMinReadySeconds() *int32 {
-	return nil
-}
-
-func (in *DashboardsJob) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
-func (in *DashboardsJob) GetInitContainers() []v1.Container {
-	return nil
-}
-
-func (in *DashboardsJob) GetContainers() []v1.Container {
-	if in.Spec != nil {
-		if in.Spec.Template != nil {
-			if in.Spec.Template.Spec != nil {
-				if in.Spec.Template.Spec.Containers != nil {
-					cs := make([]v1.Container, len(in.Spec.Template.Spec.Containers))
-					for i, v := range in.Spec.Template.Spec.Containers {
-						// Only copy and return the container if it has resources set.
-						if v.Resources == nil {
-							continue
-						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
-					}
-					return cs
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (in *DashboardsJob) GetAffinity() *v1.Affinity {
-	return nil
-}
-
-func (in *DashboardsJob) GetNodeSelector() map[string]string {
-	return nil
-}
-
-func (in *DashboardsJob) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	return nil
-}
-
-func (in *DashboardsJob) GetTolerations() []v1.Toleration {
-	return nil
-}
-
-func (in *DashboardsJob) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
-func (in *DashboardsJob) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	return nil
-}
-
-func (in *DashboardsJob) GetPriorityClassName() string {
-	return ""
 }
 
 // DashboardsJobSpec defines configuration for the Dashboards job.

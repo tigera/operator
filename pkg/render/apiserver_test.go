@@ -1958,6 +1958,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 				Value:    "bar",
 			}
 
+			priorityclassname := "priority"
+
 			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
 				Metadata: &operatorv1.Metadata{
 					Labels:      map[string]string{"top-level": "label1"},
@@ -1986,8 +1988,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 							NodeSelector: map[string]string{
 								"custom-node-selector": "value",
 							},
-							Affinity:    affinity,
-							Tolerations: []corev1.Toleration{toleration},
+							Affinity:          affinity,
+							Tolerations:       []corev1.Toleration{toleration},
+							PriorityClassName: priorityclassname,
 						},
 					},
 				},
@@ -2047,6 +2050,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+			Expect(d.Spec.Template.Spec.PriorityClassName).To(Equal(priorityclassname))
 		})
 
 		It("should override a ControlPlaneNodeSelector when specified", func() {

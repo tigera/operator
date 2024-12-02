@@ -1044,7 +1044,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.cfg.Installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
 			},
 			Selector: c.deploymentSelector(),
 			Template: corev1.PodTemplateSpec{
@@ -1066,6 +1066,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					InitContainers:     initContainers,
 					Containers:         containers,
 					Volumes:            c.apiServerVolumes(),
+					PriorityClassName:  c.priorityClassName(),
 				},
 			},
 		},

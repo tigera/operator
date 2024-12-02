@@ -21,7 +21,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/tigera/operator/pkg/common/k8svalidation"
-	"github.com/tigera/operator/pkg/components"
 	rcc "github.com/tigera/operator/pkg/render/common/components"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
@@ -36,7 +35,7 @@ var NoContainersDefined ValidateContainer = func(container corev1.Container) err
 
 // ValidateReplicatedPodResourceOverrides validates the given replicated pod resource overrides.
 // validateContainerFn and validateInitContainerFn are used to validate the container overrides.
-func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodResourceOverrides, validateContainerFn ValidateContainer, validateInitContainerFn ValidateContainer) error {
+func ValidateReplicatedPodResourceOverrides(overrides any, validateContainerFn ValidateContainer, validateInitContainerFn ValidateContainer) error {
 	if md := rcc.GetMetadata(overrides); md != nil {
 		if err := validateMetadata(md); err != nil {
 			return fmt.Errorf("metadata is invalid: %w", err)

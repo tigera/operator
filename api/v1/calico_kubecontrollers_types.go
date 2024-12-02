@@ -107,13 +107,6 @@ type CalicoKubeControllersDeploymentSpec struct {
 	Template *CalicoKubeControllersDeploymentPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CalicoKubeControllersDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	// TopologySpreadConstraints don't apply to kube-controllers since we only ever run a single
-	// replica of this deployment. kube-controllers is designed to be a singleton. Other scheduling
-	// mechanisms like node selector and tolerations should be used instead.
-	return nil
-}
-
 func (c *CalicoKubeControllersDeployment) GetTolerations() []v1.Toleration {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

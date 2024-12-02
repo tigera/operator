@@ -28,10 +28,6 @@ type DashboardsJob struct {
 	Spec *DashboardsJobSpec `json:"spec,omitempty"`
 }
 
-func (in *DashboardsJob) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	return nil
-}
-
 func (in *DashboardsJob) GetTolerations() []v1.Toleration {
 	return nil
 }

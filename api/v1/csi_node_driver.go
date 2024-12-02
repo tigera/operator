@@ -102,11 +102,6 @@ type CSINodeDriverDaemonSetSpec struct {
 	Template *CSINodeDriverDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CSINodeDriverDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	// TopologySpreadConstraints aren't needed for Calico DaemonSet resources.
-	return nil
-}
-
 func (c *CSINodeDriverDaemonSet) GetTolerations() []v1.Toleration {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

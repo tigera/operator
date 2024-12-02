@@ -126,11 +126,6 @@ type CalicoNodeWindowsDaemonSetSpec struct {
 	Template *CalicoNodeWindowsDaemonSetPodTemplateSpec `json:"template,omitempty"`
 }
 
-func (c *CalicoNodeWindowsDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	// TopologySpreadConstraints aren't needed for Calico DaemonSet resources.
-	return nil
-}
-
 func (c *CalicoNodeWindowsDaemonSet) GetTolerations() []v1.Toleration {
 	if c.Spec != nil {
 		if c.Spec.Template != nil {

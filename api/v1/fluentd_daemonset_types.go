@@ -87,10 +87,6 @@ type FluentdDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *FluentdDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	return nil
-}
-
 func (c *FluentdDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }

@@ -87,10 +87,6 @@ type ElasticsearchMetricsDeploymentInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ElasticsearchMetricsDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	return nil
-}
-
 func (c *ElasticsearchMetricsDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }

@@ -76,7 +76,7 @@ func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodRe
 			return fmt.Errorf("spec.Template.Spec.NodeSelector is invalid: %w", err.ToAggregate())
 		}
 	}
-	if topologySpreadConstraints := overrides.GetTopologySpreadConstraints(); len(topologySpreadConstraints) > 0 {
+	if topologySpreadConstraints := rcc.GetTopologySpreadConstraints(overrides); len(topologySpreadConstraints) > 0 {
 		if err := k8svalidation.ValidateTopologySpreadConstraints(topologySpreadConstraints, field.NewPath("spec", "template", "spec", "topologySpreadConstraints")); err.ToAggregate() != nil {
 			return fmt.Errorf("spec.Template.Spec.TopologySpreadConstraints is invalid: %w", err.ToAggregate())
 		}

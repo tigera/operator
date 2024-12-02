@@ -87,10 +87,6 @@ type ComplianceBenchmarkerDaemonSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ComplianceBenchmarkerDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	return nil
-}
-
 func (c *ComplianceBenchmarkerDaemonSet) GetTolerations() []v1.Toleration {
 	return nil
 }

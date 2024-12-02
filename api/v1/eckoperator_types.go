@@ -85,10 +85,6 @@ type ECKOperatorStatefulSetInitContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-func (c *ECKOperatorStatefulSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	return nil
-}
-
 func (c *ECKOperatorStatefulSet) GetTolerations() []v1.Toleration {
 	return nil
 }

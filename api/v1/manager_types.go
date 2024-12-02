@@ -129,10 +129,6 @@ type ManagerList struct {
 	Items           []Manager `json:"items"`
 }
 
-func (c *ManagerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	return nil
-}
-
 func (c *ManagerDeployment) GetTolerations() []v1.Toleration {
 	return nil
 }

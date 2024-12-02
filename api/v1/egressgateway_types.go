@@ -312,15 +312,6 @@ func (c *EgressGateway) GetLogSeverity() string {
 	return string(*c.Spec.LogSeverity)
 }
 
-func (c *EgressGateway) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	if c.Spec.Template != nil {
-		if c.Spec.Template.Spec != nil {
-			return c.Spec.Template.Spec.TopologySpreadConstraints
-		}
-	}
-	return nil
-}
-
 func (c *EgressGateway) GetTolerations() []v1.Toleration {
 	if c.Spec.Template != nil {
 		if c.Spec.Template.Spec != nil {

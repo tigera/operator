@@ -96,6 +96,43 @@ var _ = Describe("Common components render tests", func() {
 		}
 	})
 
+	var findUnhandled func(handledFields []string, prefix string, typ reflect.Type) (unhandledFields []string)
+	findUnhandled = func(handledFields []string, prefix string, typ reflect.Type) (unhandledFields []string) {
+		for typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice {
+			typ = typ.Elem()
+		}
+		if typ.Kind() == reflect.Struct {
+			numFields := typ.NumField()
+		nextField:
+			for i := 0; i < numFields; i++ {
+				fullName := prefix + typ.Field(i).Name
+				isPrefix := false
+				for _, handledField := range handledFields {
+					if fullName == handledField {
+						// The current dotted field name is
+						// one that we handle.
+						continue nextField
+					}
+					if strings.HasPrefix(handledField, fullName) {
+						isPrefix = true
+					}
+				}
+				if isPrefix {
+					// The current dotted field name is a prefix
+					// of (at least) one that we handle.
+					// Recurse to check its sub-fields.
+					unhandledFields = append(unhandledFields, findUnhandled(handledFields, fullName+".", typ.Field(i).Type)...)
+				} else {
+					// The current dotted field name isn't
+					// handled itself, and isn't a prefix
+					// either, so it must be unhandled.
+					unhandledFields = append(unhandledFields, fullName)
+				}
+			}
+		}
+		return
+	}
+
 	DescribeTable("check for unhandled fields",
 		func(overrides any, expectUnhandled bool, allowedExtraFields ...string) {
 			// Call applyReplicatedPodResourceOverrides to discover all the fields that
@@ -109,44 +146,7 @@ var _ = Describe("Common components render tests", func() {
 			applyReplicatedPodResourceOverrides(r, overrides)
 
 			// Now traverse the structure to find any unhandled fields.
-			unhandledFields := []string{}
-			var findUnhandled func(prefix string, typ reflect.Type)
-			findUnhandled = func(prefix string, typ reflect.Type) {
-				for typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice {
-					typ = typ.Elem()
-				}
-				if typ.Kind() == reflect.Struct {
-					numFields := typ.NumField()
-				nextField:
-					for i := 0; i < numFields; i++ {
-						fullName := prefix + typ.Field(i).Name
-						isPrefix := false
-						for _, handledField := range handledFields {
-							if fullName == handledField {
-								// The current dotted field name is
-								// one that we handle.
-								continue nextField
-							}
-							if strings.HasPrefix(handledField, fullName) {
-								isPrefix = true
-							}
-						}
-						if isPrefix {
-							// The current dotted field name is a prefix
-							// of (at least) one that we handle.
-							// Recurse to check its sub-fields.
-							findUnhandled(fullName+".", typ.Field(i).Type)
-						} else {
-							// The current dotted field name isn't
-							// handled itself, and isn't a prefix
-							// either, so it must be unhandled.
-							unhandledFields = append(unhandledFields, fullName)
-						}
-					}
-				}
-
-			}
-			findUnhandled("", reflect.TypeOf(overrides))
+			unhandledFields := findUnhandled(handledFields, "", reflect.TypeOf(overrides))
 			if expectUnhandled {
 				Expect(unhandledFields).NotTo(BeEmpty())
 			} else {

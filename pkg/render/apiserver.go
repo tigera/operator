@@ -21,7 +21,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
-	"github.com/tigera/operator/pkg/render/common/authentication"
 	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +31,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/tigera/operator/pkg/render/common/authentication"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -128,6 +129,7 @@ type APIServerConfiguration struct {
 	TrustedBundle               certificatemanagement.TrustedBundle
 	MultiTenant                 bool
 	KeyValidatorConfig          authentication.KeyValidatorConfig
+	KubernetesVersion           *common.VersionInfo
 }
 
 type apiServerComponent struct {
@@ -1246,7 +1248,11 @@ func (c *apiServerComponent) startUpArgs() []string {
 			args = append(args, fmt.Sprintf("--tunnelSecretName=%s", c.cfg.ManagementCluster.Spec.TLS.SecretName))
 		}
 	}
-
+	if c.cfg.KubernetesVersion.Major < 2 && c.cfg.KubernetesVersion.Minor < 30 {
+		// Disable this API as it is not available by default. If we don't, the server fails to start, due to trying to
+		// establish watches for unavailable APIs.
+		args = append(args, "--enable-validating-admission-policy=false")
+	}
 	return args
 }
 

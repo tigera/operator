@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/render/common/authentication"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -50,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/common/authentication"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -100,6 +100,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		clusterDomain:       opts.ClusterDomain,
 		tierWatchReady:      &utils.ReadyFlag{},
 		multiTenant:         opts.MultiTenant,
+		kubernetesVersion:   opts.KubernetesVersion,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -202,6 +203,7 @@ type ReconcileAPIServer struct {
 	clusterDomain       string
 	tierWatchReady      *utils.ReadyFlag
 	multiTenant         bool
+	kubernetesVersion   *common.VersionInfo
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -436,6 +438,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		TrustedBundle:               trustedBundle,
 		MultiTenant:                 r.multiTenant,
 		KeyValidatorConfig:          keyValidatorConfig,
+		KubernetesVersion:           r.kubernetesVersion,
 	}
 
 	component, err := render.APIServer(&apiServerCfg)

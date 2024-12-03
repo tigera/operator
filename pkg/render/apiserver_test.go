@@ -1206,6 +1206,25 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
 		})
+
+		It("should disable ValidatingAdmissionPolicy on older k8s versions", func() {
+			cfg.KubernetesVersion = &common.VersionInfo{
+				Major: 1,
+				Minor: 28,
+			}
+			component, err := render.APIServer(cfg)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			resources, _ := component.Objects()
+			d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Containers[0].Args).To(ConsistOf([]string{
+				"--secure-port=5443",
+				"--tls-private-key-file=/tigera-apiserver-certs/tls.key",
+				"--tls-cert-file=/tigera-apiserver-certs/tls.crt",
+				"--audit-policy-file=/etc/tigera/audit/policy.conf",
+				"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
+				"--enable-validating-admission-policy=false",
+			}))
+		})
 	})
 })
 

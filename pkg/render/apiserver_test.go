@@ -104,6 +104,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			OpenShift:          true,
 			TLSKeyPair:         kp,
 			TrustedBundle:      trustedBundle,
+			KubernetesVersion: &common.VersionInfo{
+				Major: 1,
+				Minor: 31,
+			},
 		}
 	})
 
@@ -344,6 +348,21 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		svc := rtest.GetResource(resources, "tigera-api", "tigera-system", "", "v1", "Service").(*corev1.Service)
 		Expect(svc.GetObjectMeta().GetLabels()).To(HaveLen(1))
 		Expect(svc.GetObjectMeta().GetLabels()).To(HaveKeyWithValue("k8s-app", "tigera-api"))
+
+		apiserverClusterRole := rtest.GetResource(resources,
+			"calico-crds", "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(apiserverClusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"admissionregistration.k8s.io"},
+			Resources: []string{
+				"validatingadmissionpolicies",
+				"validatingadmissionpolicybindings",
+			},
+			Verbs: []string{
+				"get",
+				"list",
+				"watch",
+			},
+		}))
 	},
 		Entry("default cluster domain", dns.DefaultClusterDomain),
 		Entry("custom cluster domain", "custom-domain.internal"),

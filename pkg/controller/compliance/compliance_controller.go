@@ -446,6 +446,9 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	namespaceComp := render.NewPassthrough(render.CreateNamespace(helper.InstallNamespace(), network.KubernetesProvider, render.PSSPrivileged, network.Azure))
 
+	// Create RoleBinding for the operator to manipulate secrets in the compliance namespace
+	opSecretsRB := render.NewPassthrough(render.OperatorSecretsRoleBinding(helper.InstallNamespace()))
+
 	hasNoLicense := !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider.IsOpenShift()
 	complianceCfg := &render.ComplianceConfiguration{
@@ -495,7 +498,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		TrustedBundle: bundleMaker,
 	})
 
-	for _, comp := range []render.Component{namespaceComp, certificateComponent, comp} {
+	for _, comp := range []render.Component{namespaceComp, opSecretsRB, certificateComponent, comp} {
 		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, err

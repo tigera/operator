@@ -576,13 +576,6 @@ func executePreDeleteHook(ctx context.Context, c client.Client) error {
 // verifyConfiguration verifies that the final configuration of the operator is correct before starting any controllers.
 func verifyConfiguration(ctx context.Context, cs kubernetes.Interface, opts options.AddOptions) error {
 
-	if _, err := cs.CoreV1().Namespaces().Get(ctx, render.ElasticsearchNamespace, metav1.GetOptions{}); err != nil {
-		fmt.Println("VAKUMAR Check namespace exist for elastic")
-		if errors.IsNotFound(err) {
-			return nil
-		}
-	}
-
 	if opts.ElasticExternal {
 		// There should not be an internal-es cert
 		if _, err := cs.CoreV1().Secrets(render.ElasticsearchNamespace).Get(ctx, render.TigeraElasticsearchInternalCertSecret, metav1.GetOptions{}); err != nil {
@@ -593,20 +586,8 @@ func verifyConfiguration(ctx context.Context, cs kubernetes.Interface, opts opti
 		}
 		return fmt.Errorf("refusing to run: configured as external ES but secret/%s found which suggests internal ES", render.TigeraElasticsearchInternalCertSecret)
 	} else {
-
-		fmt.Println("VAKUMAR Internal elastic")
-		// List all namespaces in the cluster
-		namespaces, err := cs.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
-		if err != nil {
-			log.Fatalf("Error listing namespaces: %s", err.Error())
-		}
-		fmt.Println("VAKUMAR Namespaces in the cluster:")
-		for _, ns := range namespaces.Items {
-			fmt.Println(ns.Name)
-		}
-
 		// There should not be an external-es cert
-		_, err = cs.CoreV1().Secrets(render.ElasticsearchNamespace).Get(ctx, logstorage.ExternalCertsSecret, metav1.GetOptions{})
+		_, err := cs.CoreV1().Secrets(render.ElasticsearchNamespace).Get(ctx, logstorage.ExternalCertsSecret, metav1.GetOptions{})
 		if err != nil {
 			if errors.IsNotFound(err) {
 				return nil

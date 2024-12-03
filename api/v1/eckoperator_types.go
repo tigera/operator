@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -84,91 +83,4 @@ type ECKOperatorStatefulSetInitContainer struct {
 	// If omitted, the ECKOperator StatefulSet will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *ECKOperatorStatefulSet) GetMetadata() *Metadata {
-	return nil
-}
-
-func (c *ECKOperatorStatefulSet) GetMinReadySeconds() *int32 {
-	return nil
-}
-
-func (c *ECKOperatorStatefulSet) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
-func (c *ECKOperatorStatefulSet) GetInitContainers() []v1.Container {
-	if c != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.InitContainers != nil {
-					cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
-					for i, v := range c.Spec.Template.Spec.InitContainers {
-						// Only copy and return the init container if it has resources set.
-						if v.Resources == nil {
-							continue
-						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
-					}
-					return cs
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-func (c *ECKOperatorStatefulSet) GetContainers() []v1.Container {
-	if c != nil {
-		if c.Spec != nil {
-			if c.Spec.Template != nil {
-				if c.Spec.Template.Spec != nil {
-					if c.Spec.Template.Spec.Containers != nil {
-						cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-						for i, v := range c.Spec.Template.Spec.Containers {
-							// Only copy and return the init container if it has resources set.
-							if v.Resources == nil {
-								continue
-							}
-							c := v1.Container{Name: v.Name, Resources: *v.Resources}
-							cs[i] = c
-						}
-						return cs
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (c *ECKOperatorStatefulSet) GetAffinity() *v1.Affinity {
-	return nil
-}
-
-func (c *ECKOperatorStatefulSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	return nil
-}
-
-func (c *ECKOperatorStatefulSet) GetNodeSelector() map[string]string {
-	return nil
-}
-
-func (c *ECKOperatorStatefulSet) GetTolerations() []v1.Toleration {
-	return nil
-}
-
-func (c *ECKOperatorStatefulSet) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
-func (c *ECKOperatorStatefulSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	return nil
-}
-
-func (c *ECKOperatorStatefulSet) GetPriorityClassName() string {
-	return ""
 }

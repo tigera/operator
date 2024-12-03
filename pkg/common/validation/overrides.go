@@ -21,7 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/tigera/operator/pkg/common/k8svalidation"
-	"github.com/tigera/operator/pkg/components"
+	rcc "github.com/tigera/operator/pkg/render/common/components"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
@@ -35,64 +35,64 @@ var NoContainersDefined ValidateContainer = func(container corev1.Container) err
 
 // ValidateReplicatedPodResourceOverrides validates the given replicated pod resource overrides.
 // validateContainerFn and validateInitContainerFn are used to validate the container overrides.
-func ValidateReplicatedPodResourceOverrides(overrides components.ReplicatedPodResourceOverrides, validateContainerFn ValidateContainer, validateInitContainerFn ValidateContainer) error {
-	if md := overrides.GetMetadata(); md != nil {
+func ValidateReplicatedPodResourceOverrides(overrides any, validateContainerFn ValidateContainer, validateInitContainerFn ValidateContainer) error {
+	if md := rcc.GetMetadata(overrides); md != nil {
 		if err := validateMetadata(md); err != nil {
 			return fmt.Errorf("metadata is invalid: %w", err)
 		}
 	}
-	if minReadySeconds := overrides.GetMinReadySeconds(); minReadySeconds != nil {
+	if minReadySeconds := rcc.GetMinReadySeconds(overrides); minReadySeconds != nil {
 		if *minReadySeconds < 0 {
 			return fmt.Errorf("spec.MinReadySeconds must be greater than or equal to 0")
 		}
 	}
-	if md := overrides.GetPodTemplateMetadata(); md != nil {
+	if md := rcc.GetPodTemplateMetadata(overrides); md != nil {
 		if err := validateMetadata(md); err != nil {
 			return fmt.Errorf("spec.Template.Metadata is invalid: %w", err)
 		}
 	}
-	if initContainers := overrides.GetInitContainers(); len(initContainers) > 0 {
+	if initContainers := rcc.GetInitContainers(overrides); len(initContainers) > 0 {
 		for _, c := range initContainers {
 			if err := validateInitContainerFn(c); err != nil {
 				return fmt.Errorf("spec.Template.Spec.InitContainers[%q] is invalid: %w", c.Name, err)
 			}
 		}
 	}
-	if containers := overrides.GetContainers(); len(containers) > 0 {
+	if containers := rcc.GetContainers(overrides); len(containers) > 0 {
 		for _, c := range containers {
 			if err := validateContainerFn(c); err != nil {
 				return fmt.Errorf("spec.Template.Spec.Containers[%q] is invalid: %w", c.Name, err)
 			}
 		}
 	}
-	if affinity := overrides.GetAffinity(); affinity != nil {
+	if affinity := rcc.GetAffinity(overrides); affinity != nil {
 		if errs := k8svalidation.ValidateAffinity(affinity, field.NewPath("spec", "template", "spec", "affinity")); errs.ToAggregate() != nil {
 			return fmt.Errorf("spec.Template.Spec.Affinity is invalid: %w", errs.ToAggregate())
 		}
 	}
-	if nodeSelector := overrides.GetNodeSelector(); len(nodeSelector) > 0 {
+	if nodeSelector := rcc.GetNodeSelector(overrides); len(nodeSelector) > 0 {
 		if err := k8svalidation.ValidatePodSpecNodeSelector(nodeSelector, field.NewPath("spec", "template", "spec", "nodeSelector")); err.ToAggregate() != nil {
 			return fmt.Errorf("spec.Template.Spec.NodeSelector is invalid: %w", err.ToAggregate())
 		}
 	}
-	if topologySpreadConstraints := overrides.GetTopologySpreadConstraints(); len(topologySpreadConstraints) > 0 {
+	if topologySpreadConstraints := rcc.GetTopologySpreadConstraints(overrides); len(topologySpreadConstraints) > 0 {
 		if err := k8svalidation.ValidateTopologySpreadConstraints(topologySpreadConstraints, field.NewPath("spec", "template", "spec", "topologySpreadConstraints")); err.ToAggregate() != nil {
 			return fmt.Errorf("spec.Template.Spec.TopologySpreadConstraints is invalid: %w", err.ToAggregate())
 		}
 	}
 
-	if tolerations := overrides.GetTolerations(); len(tolerations) > 0 {
+	if tolerations := rcc.GetTolerations(overrides); len(tolerations) > 0 {
 		if errs := k8svalidation.ValidateTolerations(tolerations, field.NewPath("spec", "template", "spec", "tolerations")); errs.ToAggregate() != nil {
 			return fmt.Errorf("spec.Template.Spec.Tolerations is invalid: %w", errs.ToAggregate())
 		}
 	}
 
-	tgp := overrides.GetTerminationGracePeriodSeconds()
+	tgp := rcc.GetTerminationGracePeriodSeconds(overrides)
 	if tgp != nil && *tgp < 0 {
 		return fmt.Errorf("spec.Template.Spec.TerminationGracePeriodSeconds is invalid: cannot be negative")
 	}
 
-	if st := overrides.GetDeploymentStrategy(); st != nil {
+	if st := rcc.GetDeploymentStrategy(overrides); st != nil {
 		if err := k8svalidation.ValidateDeploymentStrategy(st, field.NewPath("spec", "strategy")); err.ToAggregate() != nil {
 			return fmt.Errorf("spec.Strategy is invalid: %w", err.ToAggregate())
 		}

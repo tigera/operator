@@ -158,8 +158,13 @@ func GetPriorityClassName(overrides any) string {
 	if !value.IsValid() {
 		return ""
 	}
-	return value.String()
+	if value.Kind() == reflect.String {
+		return value.Interface().(string)
+	}
+	return ""
 }
+
+var getFieldHookUT = func(fieldNames []string) {}
 
 func getField(overrides any, fieldNames ...string) (value reflect.Value) {
 	// SPECIAL CASE: ComplianceReporterPodTemplate doesn't follow the Spec, Template, Spec, ...
@@ -170,6 +175,11 @@ func getField(overrides any, fieldNames ...string) (value reflect.Value) {
 			fieldNames = fieldNames[1:]
 		}
 	}
+
+	// Call a hook that UT can use to check for any fields that are (accidentally) present in a
+	// customization structure, but which we don't handle.
+	getFieldHookUT(fieldNames)
+
 	typ := reflect.TypeOf(overrides)
 	for _, fieldName := range fieldNames {
 		if typ.Kind() == reflect.Pointer {

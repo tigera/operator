@@ -158,7 +158,10 @@ func GetPriorityClassName(overrides any) string {
 	if !value.IsValid() {
 		return ""
 	}
-	return value.String()
+	if value.Kind() == reflect.String {
+		return value.String()
+	}
+	return ""
 }
 
 func getField(overrides any, fieldNames ...string) (value reflect.Value) {

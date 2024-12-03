@@ -71,7 +71,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				Registry:             "testregistry.com/",
 			}
 			replicas = 2
-			kp, bundle := getTLS(cli, installation)
+			kp, bundle := getTLS(installation)
 
 			cfg = &Config{
 				Installation: installation,
@@ -339,7 +339,10 @@ var _ = Describe("ES Gateway rendering tests", func() {
 	})
 })
 
-func getTLS(cli client.Client, installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
+func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
+	scheme := runtime.NewScheme()
+	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+	cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 	Expect(err).NotTo(HaveOccurred())

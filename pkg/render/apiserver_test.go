@@ -108,44 +108,40 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	DescribeTable("should render an API server with default configuration", func(clusterDomain string) {
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-ca-bundle", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-audit-policy", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-access-calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-delegate-auth"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-auth-reader", Namespace: "kube-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&apiregv1.APIService{ObjectMeta: metav1.ObjectMeta{Name: "v3.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ui-user"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-network-admin"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
+
 		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
@@ -166,6 +162,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		// - 2 ClusterRole and binding for auth configmap
 		// - 2 calico policy passthru ClusterRole and binding
 		// - 2 tiered policy passthru ClusterRole and binding
+		// - 1 Role binding for tigera-operator to manage secrets
 		// - 1 delegate auth binding
 		// - 1 auth reader binding
 		// - 2 webhook reader ClusterRole and binding
@@ -173,11 +170,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		// - 1 api server
 		// - 1 service registration
 		// - 1 Server service
-		Expect(resources).To(HaveLen(len(expectedResources)))
 
-		for _, expectedRes := range expectedResources {
-			rtest.ExpectResourceInList(resources, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
+		rtest.ExpectResources(resources, expectedResources)
+
+		//	fmt.Printf("resource: %+v", resources)
 
 		ns := rtest.GetResource(resources, "tigera-system", "", "", "v1", "Namespace").(*corev1.Namespace)
 		rtest.ExpectResourceTypeAndObjectMetadata(ns, "tigera-system", "", "", "v1", "Namespace")
@@ -367,43 +363,38 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render an API server with custom configuration", func() {
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-ca-bundle", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-audit-policy", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-access-calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-delegate-auth"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-auth-reader", Namespace: "kube-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&apiregv1.APIService{ObjectMeta: metav1.ObjectMeta{Name: "v3.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ui-user"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-network-admin"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
 
 		component, err := render.APIServer(cfg)
@@ -411,9 +402,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		// Should render the correct resources.
-		// Expect same number as above
-		Expect(resources).To(HaveLen(len(expectedResources)))
+		rtest.ExpectResources(resources, expectedResources)
 
 		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
 		rtest.ExpectResourceTypeAndObjectMetadata(dep, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
@@ -423,43 +412,38 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render needed resources for k8s kube-controller", func() {
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-ca-bundle", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-audit-policy", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-access-calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-delegate-auth"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-auth-reader", Namespace: "kube-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&apiregv1.APIService{ObjectMeta: metav1.ObjectMeta{Name: "v3.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ui-user"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-network-admin"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
 
 		component, err := render.APIServer(cfg)
@@ -467,7 +451,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		Expect(resources).To(HaveLen(len(expectedResources)))
+		rtest.ExpectResources(resources, expectedResources)
 
 		// Should render the correct resources.
 		cr := rtest.GetResource(resources, "calico-tier-getter", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
@@ -500,43 +484,38 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-ca-bundle", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-audit-policy", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-access-calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-delegate-auth"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-auth-reader", Namespace: "kube-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&apiregv1.APIService{ObjectMeta: metav1.ObjectMeta{Name: "v3.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ui-user"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-network-admin"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
 
 		cfg.Installation.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
@@ -545,7 +524,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		Expect(resources).To(HaveLen(len(expectedResources)))
+		rtest.ExpectResources(resources, expectedResources)
 
 		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 
@@ -570,43 +549,38 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should include a ClusterRole and ClusterRoleBindings for reading webhook configuration", func() {
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-ca-bundle", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-audit-policy", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-access-calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-delegate-auth"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-auth-reader", Namespace: "kube-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&apiregv1.APIService{ObjectMeta: metav1.ObjectMeta{Name: "v3.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ui-user"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-network-admin"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
 
 		component, err := render.APIServer(cfg)
@@ -614,7 +588,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		Expect(resources).To(HaveLen(len(expectedResources)))
+		rtest.ExpectResources(resources, expectedResources)
 
 		// Should render the correct resources.
 		cr := rtest.GetResource(resources, "tigera-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
@@ -738,51 +712,43 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		resources, _ := component.Objects()
 
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-ca-bundle", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: render.APIServerSecretsRBACName, ns: "tigera-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
-			{name: render.APIServerSecretsRBACName, ns: "tigera-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-audit-policy", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-access-calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-delegate-auth"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-auth-reader", Namespace: "kube-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&apiregv1.APIService{ObjectMeta: metav1.ObjectMeta{Name: "v3.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ui-user"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-network-admin"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerSecretsRBACName, Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerSecretsRBACName, Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
 
-		for _, expectedRes := range expectedResources {
-			rtest.ExpectResourceInList(resources, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
-		Expect(resources).To(HaveLen(len(expectedResources)))
+		rtest.ExpectResources(resources, expectedResources)
 
 		By("Validating the newly created tunnel secret")
 		tunnelSecret, err := certificatemanagement.CreateSelfSignedSecret(render.VoltronTunnelSecretName, common.OperatorNamespace(), "tigera-voltron", []string{"voltron"})
@@ -848,6 +814,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}},
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerSecretsRBACName, Namespace: "tigera-system"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerSecretsRBACName, Namespace: "tigera-system"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: "tigera-system"}},
 		}
 		rtest.ExpectResources(resources, expected)
 
@@ -894,49 +861,41 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "tigera-system", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "tigera-audit-policy", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-ca-bundle", ns: "tigera-system", group: "", version: "v1", kind: "ConfigMap"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettings-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "tigera-api", ns: "tigera-system", group: "", version: "v1", kind: "Service"},
-			{name: "tigera-apiserver", ns: "tigera-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-uisettingsgroup-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "tigera-ui-user", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-network-admin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "tigera-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-audit-policy", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-access-calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-delegate-auth"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-auth-reader", Namespace: "kube-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&apiregv1.APIService{ObjectMeta: metav1.ObjectMeta{Name: "v3.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ui-user"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-network-admin"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: "tigera-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
+		rtest.ExpectResources(resources, expectedResources)
 
-		for _, expectedRes := range expectedResources {
-			rtest.ExpectResourceInList(resources, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
-		Expect(resources).To(HaveLen(len(expectedResources)))
 		dep := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
 		deploy, ok := dep.(*appsv1.Deployment)
@@ -1605,33 +1564,29 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	})
 
 	DescribeTable("should render an API server with default configuration", func(clusterDomain string) {
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
-			{name: "calico-apiserver", ns: "", group: "", version: "v1", kind: "Namespace"},
-			{name: "calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-apiserver", ns: "calico-apiserver", group: "", version: "v1", kind: "ServiceAccount"},
-			{name: "calico-apiserver-access-calico-crds", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tier-getter", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-tiered-policy-passthrough", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-extension-apiserver-auth-access", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-apiserver-delegate-auth", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-apiserver-auth-reader", ns: "kube-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "v3.projectcalico.org", ns: "", group: "apiregistration.k8s.io", version: "v1", kind: "APIService"},
-			{name: "calico-apiserver", ns: "calico-apiserver", group: "apps", version: "v1", kind: "Deployment"},
-			{name: "calico-api", ns: "calico-apiserver", group: "", version: "v1", kind: "Service"},
-			{name: "calico-apiserver", ns: "calico-apiserver", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
-			{name: "calico-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: "calico-apiserver-webhook-reader", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "allow-apiserver", ns: "calico-apiserver", group: "networking.k8s.io", version: "v1", kind: "NetworkPolicy"},
+		expectedResources := []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-access-calico-crds"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tier-getter"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-tiered-policy-passthrough"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-extension-apiserver-auth-access"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-delegate-auth"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-auth-reader", Namespace: "kube-system"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&apiregv1.APIService{ObjectMeta: metav1.ObjectMeta{Name: "v3.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "calico-api", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
+
 		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
@@ -1642,10 +1597,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		resources, _ := component.Objects()
 
-		for _, expectedRes := range expectedResources {
-			rtest.ExpectResourceInList(resources, expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
-		Expect(len(resources)).To(Equal(len(expectedResources)))
+		rtest.ExpectResources(resources, expectedResources)
 
 		ns := rtest.GetResource(resources, "calico-apiserver", "", "", "v1", "Namespace").(*corev1.Namespace)
 		rtest.ExpectResourceTypeAndObjectMetadata(ns, "calico-apiserver", "", "", "v1", "Namespace")
@@ -1728,6 +1680,10 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		clusterRoleBinding := rtest.GetResource(resources, "calico-extension-apiserver-auth-access", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(clusterRoleBinding.RoleRef.Name).To(Equal("calico-extension-apiserver-auth-access"))
+
+		operatorSecretsRoleBinding := rtest.GetResource(resources, "tigera-operator-secrets", "calico-apiserver", "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(operatorSecretsRoleBinding.RoleRef.Name).To(Equal("tigera-operator-secrets"))
+
 	},
 		Entry("default cluster domain", dns.DefaultClusterDomain),
 		Entry("custom cluster domain", "custom-domain.internal"),
@@ -1754,6 +1710,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-webhook-reader"}, TypeMeta: metav1.TypeMeta{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRole"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRoleBinding"}},
 			&netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{APIVersion: "networking.k8s.io/v1", Kind: "NetworkPolicy"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: "calico-apiserver"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
 
 		component, err := render.APIServer(cfg)

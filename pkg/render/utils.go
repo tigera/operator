@@ -49,12 +49,13 @@ func ManagerService(tenant *operatorv1.Tenant) string {
 	return fmt.Sprintf("https://tigera-manager.%s.svc:9443", ManagerNamespace)
 }
 
-// OperatorSecretsRoleBinding binds tigera-operator-secrets ClusterRole to manipulate secrets in the
-// given namespace
-func OperatorSecretsRoleBinding(namespace string) *rbacv1.RoleBinding {
+// CreateOperatorSecretsRoleBinding binds the tigera-operator-secrets ClusterRole to the operator's ServiceAccount
+// in the given namespace, granting permission to manipulate secrets.
+func CreateOperatorSecretsRoleBinding(namespace string) *rbacv1.RoleBinding {
 	// Bind the secrets permission to the given namespace. This binding now adds permissions for operator to manipulate
 	// secrets in the given namespace
 	operatorSecretBinding := &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TigeraOperatorSecrets,
 			Namespace: namespace,

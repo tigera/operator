@@ -109,7 +109,7 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	} else {
 		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged, d.cfg.Installation.Azure))
 		// Create RoleBinding for the operator to manipulate secrets in tigera-dpi namespace
-		toCreate = append(toCreate, render.OperatorSecretsRoleBinding(DeepPacketInspectionNamespace))
+		toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(DeepPacketInspectionNamespace))
 	}
 
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {

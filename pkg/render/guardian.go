@@ -124,7 +124,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		CreateNamespace(GuardianNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
 	}
 
-	objs = append(objs, OperatorSecretsRoleBinding(GuardianNamespace))
+	objs = append(objs, CreateOperatorSecretsRoleBinding(GuardianNamespace))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs,
 		c.serviceAccount(),

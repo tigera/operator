@@ -575,7 +575,6 @@ func executePreDeleteHook(ctx context.Context, c client.Client) error {
 
 // verifyConfiguration verifies that the final configuration of the operator is correct before starting any controllers.
 func verifyConfiguration(ctx context.Context, cs kubernetes.Interface, opts options.AddOptions) error {
-
 	if opts.ElasticExternal {
 		// There should not be an internal-es cert
 		if _, err := cs.CoreV1().Secrets(render.ElasticsearchNamespace).Get(ctx, render.TigeraElasticsearchInternalCertSecret, metav1.GetOptions{}); err != nil {

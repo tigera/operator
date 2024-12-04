@@ -95,11 +95,12 @@ var _ = Describe("Namespace rendering tests", func() {
 		cfg.Installation.Azure = &operatorv1.Azure{}
 		component := render.Namespaces(cfg)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(1))
+		Expect(len(resources)).To(Equal(2))
 		rtest.ExpectResourceTypeAndObjectMetadata(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetLabels()["control-plane"]).To(Equal("true"))
+		rtest.ExpectResourceTypeAndObjectMetadata(resources[1], "tigera-operator-secrets", "calico-system", "rbac.authorization.k8s.io", "v1", "RoleBinding")
 	})
 
 	It("should render a namespace for aks with control-plane label when Azure.PolicyMode is Default and PodSecurityStandard is privileged", func() {
@@ -110,11 +111,12 @@ var _ = Describe("Namespace rendering tests", func() {
 		}
 		component := render.Namespaces(cfg)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(1))
+		Expect(len(resources)).To(Equal(2))
 		rtest.ExpectResourceTypeAndObjectMetadata(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetLabels()["control-plane"]).To(Equal("true"))
+		rtest.ExpectResourceTypeAndObjectMetadata(resources[1], "tigera-operator-secrets", "calico-system", "rbac.authorization.k8s.io", "v1", "RoleBinding")
 	})
 
 	It("should render a namespace for aks without control-plane label when Azure.PolicyMode is Manual", func() {
@@ -125,10 +127,11 @@ var _ = Describe("Namespace rendering tests", func() {
 		}
 		component := render.Namespaces(cfg)
 		resources, _ := component.Objects()
-		Expect(len(resources)).To(Equal(1))
+		Expect(len(resources)).To(Equal(2))
 		rtest.ExpectResourceTypeAndObjectMetadata(resources[0], "calico-system", "", "", "v1", "Namespace")
 		meta := resources[0].(metav1.ObjectMetaAccessor).GetObjectMeta()
 		Expect(meta.GetLabels()).NotTo(ContainElement("openshift.io/run-level"))
 		Expect(meta.GetLabels()).NotTo(ContainElement("control-plane"))
+		rtest.ExpectResourceTypeAndObjectMetadata(resources[1], "tigera-operator-secrets", "calico-system", "rbac.authorization.k8s.io", "v1", "RoleBinding")
 	})
 })

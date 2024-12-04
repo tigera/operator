@@ -108,9 +108,14 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 		toDelete = append(toDelete, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged, d.cfg.Installation.Azure))
 	} else {
 		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged, d.cfg.Installation.Azure))
-		// Create RoleBinding for the operator to manipulate secrets in tigera-dpi namespace
-		toCreate = append(toCreate, render.OperatorSecretsRoleBinding(DeepPacketInspectionNamespace))
+		toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(DeepPacketInspectionNamespace))
 	}
+
+	// This secret is deprecated in this namespace and should be removed in upgrade scenarios
+	toDelete = append(toDelete, &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace},
+	})
 
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
 		toDelete = append(toDelete, d.dpiAllowTigeraPolicy())
@@ -131,12 +136,6 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiClusterRoleBinding(),
 			d.dpiDaemonset(),
 		)
-
-		// This secret is deprecated in this namespace and should be removed in upgrade scenarios
-		toDelete = append(toDelete, &corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace},
-		})
 	}
 	if d.cfg.ManagementCluster {
 		// We always want to create these permissions when a management

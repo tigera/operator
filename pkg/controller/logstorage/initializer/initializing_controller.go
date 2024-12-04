@@ -246,8 +246,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Create role binding to manipulate secrets in tigera-elasticsearch namespace.
-	esRoleBinding := render.OperatorSecretsRoleBinding(render.ElasticsearchNamespace)
+	esRoleBinding := render.CreateOperatorSecretsRoleBinding(render.ElasticsearchNamespace)
 	if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(esRoleBinding), r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
@@ -261,8 +260,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 
-		// Create role binding to manipulate secrets in tigera-kibana namespace.
-		kbRoleBinding := render.OperatorSecretsRoleBinding(kibana.Namespace)
+		kbRoleBinding := render.CreateOperatorSecretsRoleBinding(kibana.Namespace)
 		if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(kbRoleBinding), r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err

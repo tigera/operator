@@ -170,10 +170,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		// - 1 api server
 		// - 1 service registration
 		// - 1 Server service
-
 		rtest.ExpectResources(resources, expectedResources)
-
-		//	fmt.Printf("resource: %+v", resources)
 
 		ns := rtest.GetResource(resources, "tigera-system", "", "", "v1", "Namespace").(*corev1.Namespace)
 		rtest.ExpectResourceTypeAndObjectMetadata(ns, "tigera-system", "", "", "v1", "Namespace")

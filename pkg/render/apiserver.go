@@ -305,6 +305,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Global OSS-only objects.
 	globalCalicoObjects := []client.Object{
 		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider, podSecurityNamespaceLabel, c.cfg.Installation.Azure),
+		OperatorSecretsRoleBinding(rmeta.APIServerNamespace(operatorv1.Calico)),
 	}
 
 	// Compile the final arrays based on the variant.

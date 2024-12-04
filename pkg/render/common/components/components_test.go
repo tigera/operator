@@ -183,6 +183,7 @@ var _ = Describe("Common components render tests", func() {
 		),
 		Entry("EKSLogForwarderDeployment", &v1.EKSLogForwarderDeployment{}, false),
 		Entry("ElasticsearchMetricsDeployment", &v1.ElasticsearchMetricsDeployment{}, false),
+		Entry("ESGatewayDeployment", &v1.ESGatewayDeployment{}, false),
 		Entry("FluentdDaemonSet", &v1.FluentdDaemonSet{}, false),
 		Entry("GuardianDeployment", &v1.GuardianDeployment{}, false),
 		Entry("IntrusionDetectionControllerDeployment", &v1.IntrusionDetectionControllerDeployment{}, false),

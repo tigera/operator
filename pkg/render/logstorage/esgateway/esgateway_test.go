@@ -24,6 +24,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,11 +40,14 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/testutils"
+	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("ES Gateway rendering tests", func() {
@@ -51,11 +55,16 @@ var _ = Describe("ES Gateway rendering tests", func() {
 		var installation *operatorv1.InstallationSpec
 		var replicas int32
 		var cfg *Config
+		var cli client.Client
 		clusterDomain := "cluster.local"
 		expectedPolicy := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-gateway.json")
 		expectedPolicyForOpenshift := testutils.GetExpectedPolicyFromFile("../../testutils/expected_policies/es-gateway_ocp.json")
 
 		BeforeEach(func() {
+			scheme := runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+
 			installation = &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
@@ -63,6 +72,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			}
 			replicas = 2
 			kp, bundle := getTLS(installation)
+
 			cfg = &Config{
 				Installation: installation,
 				PullSecrets: []*corev1.Secret{
@@ -203,6 +213,69 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
+		})
+
+		It("should render deployment with resource requests and limits", func() {
+			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
+			certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+
+			esGatewayTLS, err := certificateManager.GetOrCreateKeyPair(cli, render.TigeraElasticsearchGatewaySecret, common.OperatorNamespace(), []string{""})
+			Expect(err).NotTo(HaveOccurred())
+			cfg.ESGatewayKeyPair = esGatewayTLS
+
+			esGatewayResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					"cpu":     resource.MustParse("2"),
+					"memory":  resource.MustParse("300Mi"),
+					"storage": resource.MustParse("20Gi"),
+				},
+				Requests: corev1.ResourceList{
+					"cpu":     resource.MustParse("1"),
+					"memory":  resource.MustParse("150Mi"),
+					"storage": resource.MustParse("10Gi"),
+				},
+			}
+			cfg.LogStorage = &operatorv1.LogStorage{
+				Spec: operatorv1.LogStorageSpec{
+					ESGatewayDeployment: &operatorv1.ESGatewayDeployment{
+						Spec: &operatorv1.ESGatewayDeploymentSpec{
+							Template: &operatorv1.ESGatewayDeploymentPodTemplateSpec{
+								Spec: &operatorv1.ESGatewayDeploymentPodSpec{
+									InitContainers: []operatorv1.ESGatewayDeploymentInitContainer{{
+										Name:      "tigera-secure-elasticsearch-cert-key-cert-provisioner",
+										Resources: &esGatewayResources,
+									}},
+									Containers: []operatorv1.ESGatewayDeploymentContainer{{
+										Name:      "tigera-secure-es-gateway",
+										Resources: &esGatewayResources,
+									}},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			component := EsGateway(cfg)
+			resources, _ := component.Objects()
+			d, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(ok).To(BeTrue(), "Deployment not found")
+
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+			container := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-secure-es-gateway")
+			Expect(container).NotTo(BeNil())
+			Expect(container.Resources).To(Equal(esGatewayResources))
+
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			initContainer := test.GetContainer(d.Spec.Template.Spec.InitContainers, "tigera-secure-elasticsearch-cert-key-cert-provisioner")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Resources).To(Equal(esGatewayResources))
+
 		})
 
 		Context("allow-tigera rendering", func() {

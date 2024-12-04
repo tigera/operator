@@ -67,6 +67,9 @@ type LogStorageSpec struct {
 
 	// ElasticsearchMetricsDeployment configures the tigera-elasticsearch-metric Deployment.
 	ElasticsearchMetricsDeployment *ElasticsearchMetricsDeployment `json:"elasticsearchMetricsDeployment,omitempty"`
+
+	// ESGatewayDeployment configures the es-gateway Deployment.
+	ESGatewayDeployment *ESGatewayDeployment `json:"esGatewayDeployment,omitempty"`
 }
 
 // LogStorageStatus defines the observed state of Tigera flow and DNS log storage.

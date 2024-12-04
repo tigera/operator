@@ -154,6 +154,7 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, render.CreateNamespace(Namespace, k.cfg.Installation.KubernetesProvider, render.PSSBaseline, k.cfg.Installation.Azure))
 		toCreate = append(toCreate, k.allowTigeraPolicy())
 		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(Namespace))
+		toCreate = append(toCreate, render.OperatorSecretsRoleBinding(Namespace))
 		toCreate = append(toCreate, k.serviceAccount())
 
 		if k.cfg.Installation.KubernetesProvider.IsOpenShift() {

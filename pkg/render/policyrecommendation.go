@@ -112,9 +112,7 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	// recommendation cluster role
 	objs := []client.Object{
 		CreateNamespace(pr.cfg.Namespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted, pr.cfg.Installation.Azure),
-
-		// Create RoleBinding for the operator to manipulate secrets in the tigera-policy-recommendation namespace
-		OperatorSecretsRoleBinding(pr.cfg.Namespace),
+		CreateOperatorSecretsRoleBinding(pr.cfg.Namespace),
 
 		pr.serviceAccount(),
 		pr.clusterRole(),

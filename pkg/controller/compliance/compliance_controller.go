@@ -445,9 +445,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.V(3).Info("rendering components")
 
 	namespaceComp := render.NewPassthrough(render.CreateNamespace(helper.InstallNamespace(), network.KubernetesProvider, render.PSSPrivileged, network.Azure))
-
-	// Create RoleBinding for the operator to manipulate secrets in the compliance namespace
-	opSecretsRB := render.NewPassthrough(render.OperatorSecretsRoleBinding(helper.InstallNamespace()))
+	opSecretsRB := render.NewPassthrough(render.CreateOperatorSecretsRoleBinding(helper.InstallNamespace()))
 
 	hasNoLicense := !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider.IsOpenShift()

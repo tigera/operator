@@ -159,7 +159,7 @@ func GetPriorityClassName(overrides any) string {
 		return ""
 	}
 	if value.Kind() == reflect.String {
-		return value.Interface().(string)
+		return value.String()
 	}
 	return ""
 }

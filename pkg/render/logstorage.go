@@ -232,6 +232,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate = append(toCreate, es.elasticsearchInternalAllowTigeraPolicy())
 	toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(ElasticsearchNamespace))
 
+	toCreate = append(toCreate, CreateOperatorSecretsRoleBinding(ElasticsearchNamespace))
+
 	if len(es.cfg.PullSecrets) > 0 {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
 	}
@@ -1177,10 +1179,12 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 	// to create token secrets in the managed cluster.
 	toCreate := []client.Object{}
 	roles, bindings, clusterRB := m.linseedExternalRolesAndBindings()
+	fmt.Println("VAKUMAR creating elastic namespace at managed cluster")
 	toCreate = append(toCreate,
 		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged, m.cfg.Installation.Azure),
 		m.elasticsearchExternalService(),
 		m.linseedExternalService(),
+		CreateOperatorSecretsRoleBinding(ElasticsearchNamespace),
 	)
 
 	for _, r := range roles {

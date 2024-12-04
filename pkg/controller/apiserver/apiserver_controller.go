@@ -100,6 +100,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPISe
 		clusterDomain:       opts.ClusterDomain,
 		tierWatchReady:      &utils.ReadyFlag{},
 		multiTenant:         opts.MultiTenant,
+		kubernetesVersion:   opts.KubernetesVersion,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -202,6 +203,7 @@ type ReconcileAPIServer struct {
 	clusterDomain       string
 	tierWatchReady      *utils.ReadyFlag
 	multiTenant         bool
+	kubernetesVersion   *common.VersionInfo
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -437,6 +439,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		TrustedBundle:               trustedBundle,
 		MultiTenant:                 r.multiTenant,
 		KeyValidatorConfig:          keyValidatorConfig,
+		KubernetesVersion:           r.kubernetesVersion,
 	}
 
 	component, err := render.APIServer(&apiServerCfg)

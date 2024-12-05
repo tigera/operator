@@ -271,6 +271,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	var objs, toDelete []client.Object
 	objs = append(objs, CreateNamespace(LogCollectorNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged, c.cfg.Installation.Azure))
 	objs = append(objs, c.allowTigeraPolicy())
+	objs = append(objs, CreateOperatorSecretsRoleBinding(LogCollectorNamespace))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs, c.metricsService())
 

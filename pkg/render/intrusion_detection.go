@@ -1322,6 +1322,7 @@ func (c *intrusionDetectionNamespaceComponent) Objects() ([]client.Object, []cli
 	if !c.cfg.Tenant.MultiTenant() {
 		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
 		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.KubernetesProvider, PodSecurityStandard(pss), c.cfg.Azure))
+		objs = append(objs, CreateOperatorSecretsRoleBinding(c.cfg.Namespace))
 	}
 
 	if c.cfg.HasNoLicense {

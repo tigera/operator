@@ -605,7 +605,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 		{
 			// Kubernetes admin network policy resources.
 			APIGroups: []string{"policy.networking.k8s.io"},
-			Resources: []string{"adminnetworkpolicies"},
+			Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
 			Verbs: []string{
 				"get",
 				"list",

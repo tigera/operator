@@ -61,6 +61,7 @@ var _ = Describe("authentication controller tests", func() {
 		mockStatus          *status.MockStatus
 		readyFlag           *utils.ReadyFlag
 		idpSecret           *corev1.Secret
+		installation        *operatorv1.Installation
 		auth                *operatorv1.Authentication
 		objTrackerWithCalls test.ObjectTrackerWithCalls
 		replicas            int32
@@ -95,7 +96,8 @@ var _ = Describe("authentication controller tests", func() {
 		certificateManager, err := certificatemanager.Create(cli, nil, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-		Expect(cli.Create(ctx, &operatorv1.Installation{
+
+		installation = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "default",
 			},
@@ -108,7 +110,8 @@ var _ = Describe("authentication controller tests", func() {
 				Variant:              operatorv1.TigeraSecureEnterprise,
 				Registry:             "some.registry.org/",
 			},
-		})).To(BeNil())
+		}
+		Expect(cli.Create(ctx, installation)).To(BeNil())
 		Expect(cli.Create(ctx, &operatorv1.APIServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
@@ -641,6 +644,102 @@ var _ = Describe("authentication controller tests", func() {
 				})
 			}
 		})
+	})
+
+	Context("Proxy setting", func() {
+		DescribeTable("sets the proxy", func(http, https, noProxy bool) {
+			// Setup valid auth configuration.
+			auth.Spec.OIDC = &operatorv1.AuthenticationOIDC{
+				IssuerURL:      "https://example.com",
+				UsernameClaim:  "email",
+				GroupsClaim:    "group",
+				GroupsPrefix:   "g",
+				UsernamePrefix: "u",
+			}
+			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
+			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
+
+			// Set up the proxy.
+			installationCopy := installation.DeepCopy()
+			installationCopy.Spec.Proxy = &operatorv1.Proxy{}
+			if http {
+				installationCopy.Spec.Proxy.HTTPProxy = "test-http-proxy"
+			}
+			if https {
+				installationCopy.Spec.Proxy.HTTPSProxy = "test-https-proxy"
+			}
+			if noProxy {
+				installationCopy.Spec.Proxy.NoProxy = "test-no-proxy"
+			}
+			err := cli.Update(ctx, installationCopy)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Reconcile to create the dex deployment.
+			r := ReconcileAuthentication{
+				client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: readyFlag,
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Get the deployment and validate the env vars.
+			dd := appsv1.Deployment{}
+			err = cli.Get(ctx, client.ObjectKey{Name: "tigera-dex", Namespace: "tigera-dex"}, &dd)
+			Expect(err).NotTo(HaveOccurred())
+
+			var expectedEnvVars []corev1.EnvVar
+			if http {
+				expectedEnvVars = append(expectedEnvVars,
+					corev1.EnvVar{
+						Name:  "HTTP_PROXY",
+						Value: "test-http-proxy",
+					},
+					corev1.EnvVar{
+						Name:  "http_proxy",
+						Value: "test-http-proxy",
+					},
+				)
+			}
+
+			if https {
+				expectedEnvVars = append(expectedEnvVars,
+					corev1.EnvVar{
+						Name:  "HTTPS_PROXY",
+						Value: "test-https-proxy",
+					},
+					corev1.EnvVar{
+						Name:  "https_proxy",
+						Value: "test-https-proxy",
+					},
+				)
+			}
+
+			if noProxy {
+				expectedEnvVars = append(expectedEnvVars,
+					corev1.EnvVar{
+						Name:  "NO_PROXY",
+						Value: "test-no-proxy",
+					},
+					corev1.EnvVar{
+						Name:  "no_proxy",
+						Value: "test-no-proxy",
+					},
+				)
+			}
+
+			Expect(dd.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(dd.Spec.Template.Spec.Containers[0].Env).To(ContainElements(expectedEnvVars))
+		},
+			Entry("http/https/noProxy", true, true, true),
+			Entry("http", true, false, false),
+			Entry("https", false, true, false),
+			Entry("http/https", true, true, false),
+			Entry("http/noProxy", true, false, true),
+			Entry("https/noProxy", false, true, true),
+		)
 	})
 
 	tls, err := secret.CreateTLSSecret(nil, "a", "a", corev1.TLSPrivateKeyKey, corev1.TLSCertKey, time.Hour, nil, "a")

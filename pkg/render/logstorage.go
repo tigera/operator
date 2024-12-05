@@ -1179,7 +1179,6 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 	// to create token secrets in the managed cluster.
 	toCreate := []client.Object{}
 	roles, bindings, clusterRB := m.linseedExternalRolesAndBindings()
-	fmt.Println("VAKUMAR creating elastic namespace at managed cluster")
 	toCreate = append(toCreate,
 		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged, m.cfg.Installation.Azure),
 		m.elasticsearchExternalService(),

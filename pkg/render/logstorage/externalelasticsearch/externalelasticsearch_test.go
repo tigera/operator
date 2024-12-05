@@ -20,7 +20,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -29,12 +28,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 )
-
-type resourceTestObj struct {
-	name string
-	ns   string
-	typ  runtime.Object
-}
 
 var _ = Describe("External Elasticsearch rendering tests", func() {
 	Context("External Elasticsearch components", func() {

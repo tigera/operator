@@ -978,14 +978,6 @@ var _ = Describe("monitor rendering tests", func() {
 	})
 })
 
-type resource struct {
-	name    string
-	ns      string
-	group   string
-	version string
-	kind    string
-}
-
 // expectedBaseResources These are the expected resources in the most basic setup.
 func expectedBaseResources() []client.Object {
 	return []client.Object{

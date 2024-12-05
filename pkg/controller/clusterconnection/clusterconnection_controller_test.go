@@ -24,6 +24,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -58,6 +59,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	var c client.Client
 	var ctx context.Context
 	var cfg *operatorv1.ManagementClusterConnection
+	var installation *operatorv1.Installation
 	var r reconcile.Reconciler
 	var clientScheme *runtime.Scheme
 	var dpl *appsv1.Deployment
@@ -135,22 +137,22 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		}
 		err = c.Create(ctx, cfg)
 		Expect(err).NotTo(HaveOccurred())
-		err = c.Create(
-			ctx,
-			&operatorv1.Installation{
-				Spec: operatorv1.InstallationSpec{
-					Variant:  operatorv1.TigeraSecureEnterprise,
-					Registry: "some.registry.org/",
+
+		installation = &operatorv1.Installation{
+			Spec: operatorv1.InstallationSpec{
+				Variant:  operatorv1.TigeraSecureEnterprise,
+				Registry: "some.registry.org/",
+			},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Status: operatorv1.InstallationStatus{
+				Variant: operatorv1.TigeraSecureEnterprise,
+				Computed: &operatorv1.InstallationSpec{
+					Registry:           "my-reg",
+					KubernetesProvider: operatorv1.ProviderNone,
 				},
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-				Status: operatorv1.InstallationStatus{
-					Variant: operatorv1.TigeraSecureEnterprise,
-					Computed: &operatorv1.InstallationSpec{
-						Registry:           "my-reg",
-						KubernetesProvider: operatorv1.ProviderNone,
-					},
-				},
-			})
+			},
+		}
+		err = c.Create(ctx, installation)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -450,6 +452,85 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				})
 			}
 		})
+	})
+
+	Context("Proxy setting", func() {
+		DescribeTable("sets the proxy", func(http, https, noProxy bool) {
+			installationCopy := installation.DeepCopy()
+			installationCopy.Spec.Proxy = &operatorv1.Proxy{}
+
+			if http {
+				installationCopy.Spec.Proxy.HTTPProxy = "test-http-proxy"
+			}
+			if https {
+				installationCopy.Spec.Proxy.HTTPSProxy = "test-https-proxy"
+			}
+			if noProxy {
+				installationCopy.Spec.Proxy.NoProxy = "test-no-proxy"
+			}
+
+			err := c.Update(ctx, installationCopy)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Reconcile creates the guardian deployment.
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Get the deployment and validate the env vars.
+			gd := appsv1.Deployment{}
+			err = c.Get(ctx, client.ObjectKey{Name: "tigera-guardian", Namespace: "tigera-guardian"}, &gd)
+			Expect(err).NotTo(HaveOccurred())
+
+			var expectedEnvVars []v1.EnvVar
+			if http {
+				expectedEnvVars = append(expectedEnvVars,
+					v1.EnvVar{
+						Name:  "HTTP_PROXY",
+						Value: "test-http-proxy",
+					},
+					v1.EnvVar{
+						Name:  "http_proxy",
+						Value: "test-http-proxy",
+					},
+				)
+			}
+
+			if https {
+				expectedEnvVars = append(expectedEnvVars,
+					v1.EnvVar{
+						Name:  "HTTPS_PROXY",
+						Value: "test-https-proxy",
+					},
+					v1.EnvVar{
+						Name:  "https_proxy",
+						Value: "test-https-proxy",
+					},
+				)
+			}
+
+			if noProxy {
+				expectedEnvVars = append(expectedEnvVars,
+					v1.EnvVar{
+						Name:  "NO_PROXY",
+						Value: "test-no-proxy",
+					},
+					v1.EnvVar{
+						Name:  "no_proxy",
+						Value: "test-no-proxy",
+					},
+				)
+			}
+
+			Expect(gd.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(gd.Spec.Template.Spec.Containers[0].Env).To(ContainElements(expectedEnvVars))
+		},
+			Entry("http/https/noProxy", true, true, true),
+			Entry("http", true, false, false),
+			Entry("https", false, true, false),
+			Entry("http/https", true, true, false),
+			Entry("http/noProxy", true, false, true),
+			Entry("https/noProxy", false, true, true),
+		)
 	})
 
 	Context("Reconcile for Condition status", func() {

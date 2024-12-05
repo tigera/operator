@@ -238,6 +238,9 @@ func (c *dexComponent) deployment() client.Object {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
+	envVars := c.cfg.DexConfig.RequiredEnv("")
+	envVars = append(envVars, c.cfg.Installation.Proxy.EnvVars()...)
+
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -266,7 +269,7 @@ func (c *dexComponent) deployment() client.Object {
 							Name:            DexObjectName,
 							Image:           c.image,
 							ImagePullPolicy: ImagePullPolicy(),
-							Env:             c.cfg.DexConfig.RequiredEnv(""),
+							Env:             envVars,
 							LivenessProbe:   c.probe(),
 							SecurityContext: securitycontext.NewNonRootContext(),
 

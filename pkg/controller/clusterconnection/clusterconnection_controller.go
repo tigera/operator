@@ -410,8 +410,8 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	// Ensure the allow-tigera tier exists, before rendering any network policies within it.
-	includeV3NetworkPolicy := false
+	// Ensure the allow-tigera tier exists and can support enterprise policy, before rendering any network policies within it.
+	includeEgressNetworkPolicy := false
 	if err := r.Client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that the
 		// License becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from reconciliation
@@ -421,25 +421,25 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 	} else {
-		includeV3NetworkPolicy = true
+		// The Tier has been created
 
-		// The Tier has been created, which means that this controller's reconciliation should no longer be a dependency
-		// of the License being deployed. If NetworkPolicy requires license features, it should now be safe to validate
-		// License presence and sufficiency.
-		if egressAccessControlRequired(managementClusterConnection.Spec.ManagementClusterAddr, r.resolvedPodProxies, log) {
+		if !egressAccessControlRequired(managementClusterConnection.Spec.ManagementClusterAddr, r.resolvedPodProxies, log) {
+			// We're not concerned about the Enterprise License because we don't need domain based policy
+			includeEgressNetworkPolicy = true
+		} else {
 			license, err := utils.FetchLicenseKey(ctx, r.Client)
-			if err != nil {
-				if k8serrors.IsNotFound(err) {
-					r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+			if err == nil {
+				if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", nil, reqLogger)
 					return reconcile.Result{}, nil
 				}
+				// We have a license and egress is enabled
+				includeEgressNetworkPolicy = true
+			} else if err != nil && k8serrors.IsNotFound(err) {
+				// No license but continue on and do not include the network policy
+			} else {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
 				return reconcile.Result{}, err
-			}
-
-			if !utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", nil, reqLogger)
-				return reconcile.Result{}, nil
 			}
 		}
 	}
@@ -463,7 +463,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// In managed clusters, the clusterconnection controller is a dependency for the License to be created. In case the
 	// License is unavailable and reconciliation of non-NetworkPolicy resources in the clusterconnection controller
 	// would resolve it, we render network policies last to prevent a chicken-and-egg scenario.
-	if includeV3NetworkPolicy {
+	if includeEgressNetworkPolicy {
 		policyComponent, err := render.GuardianPolicy(guardianCfg)
 		if err != nil {
 			log.Error(err, "Failed to create NetworkPolicy component for Guardian, policy will be omitted")

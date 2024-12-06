@@ -38,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -65,6 +66,7 @@ var _ = Describe("Kibana rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-kibana", Namespace: kibana.Namespace}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: kibana.Namespace}},
 			&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.CRName, Namespace: kibana.Namespace}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: kibana.Namespace}},
 		}
 
 		BeforeEach(func() {

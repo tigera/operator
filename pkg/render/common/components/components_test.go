@@ -137,13 +137,9 @@ var _ = Describe("Common components render tests", func() {
 		func(overrides any, expectUnhandled bool, allowedExtraFields ...string) {
 			// Call applyReplicatedPodResourceOverrides to discover all the fields that
 			// we handle.
-			handledFields := allowedExtraFields
-			getFieldHookUT = func(fieldNames []string) {
-				dottedName := strings.Join(fieldNames, ".")
-				handledFields = append(handledFields, dottedName)
-			}
 			r := &replicatedPodResource{}
 			applyReplicatedPodResourceOverrides(r, overrides)
+			handledFields := append(overrideFieldsHandledInLastApplyCall, allowedExtraFields...)
 
 			// Now traverse the structure to find any unhandled fields.
 			unhandledFields := findUnhandled(handledFields, "", reflect.TypeOf(overrides))

@@ -16,8 +16,11 @@ package render
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -29,13 +32,11 @@ import (
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/api/pkg/lib/numorstring"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -126,6 +127,8 @@ type APIServerConfiguration struct {
 	OpenShift                   bool
 	TrustedBundle               certificatemanagement.TrustedBundle
 	MultiTenant                 bool
+	KeyValidatorConfig          authentication.KeyValidatorConfig
+	KubernetesVersion           *common.VersionInfo
 }
 
 type apiServerComponent struct {
@@ -243,7 +246,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider, PSSPrivileged),
+		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider, PSSPrivileged, c.cfg.Installation.Azure),
 		c.tigeraApiServerClusterRole(),
 		c.tigeraApiServerClusterRoleBinding(),
 		c.uisettingsgroupGetterClusterRole(),
@@ -301,7 +304,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	// Global OSS-only objects.
 	globalCalicoObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider, podSecurityNamespaceLabel),
+		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider, podSecurityNamespaceLabel, c.cfg.Installation.Azure),
 	}
 
 	// Compile the final arrays based on the variant.
@@ -497,10 +500,18 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 			Destination: networkpolicy.PrometheusEntityRule,
 		},
 		{
-			// Pass to subsequent tiers for further enforcement
-			Action: v3.Pass,
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: DexEntityRule,
 		},
 	}...)
+
+	if cfg.KeyValidatorConfig != nil {
+		if parsedURL, err := url.Parse(cfg.KeyValidatorConfig.Issuer()); err == nil {
+			oidcEgressRule := networkpolicy.GetOIDCEgressRule(parsedURL)
+			egressRules = append(egressRules, oidcEgressRule)
+		}
+	}
 
 	if r, err := cfg.K8SServiceEndpoint.DestinationEntityRule(); r != nil && err == nil {
 		egressRules = append(egressRules, v3.Rule{
@@ -509,6 +520,12 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 			Destination: *r,
 		})
 	}
+
+	// add pass after all egress rules
+	egressRules = append(egressRules, v3.Rule{
+		// Pass to subsequent tiers for further enforcement
+		Action: v3.Pass,
+	})
 
 	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
 	ingressPorts := networkpolicy.Ports(443, APIServerPort, QueryServerPort, 10443)
@@ -588,20 +605,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 		{
 			// Kubernetes admin network policy resources.
 			APIGroups: []string{"policy.networking.k8s.io"},
-			Resources: []string{"adminnetworkpolicies"},
-			Verbs: []string{
-				"get",
-				"list",
-				"watch",
-			},
-		},
-		{
-			// Kubernetes validating admission policy resources.
-			APIGroups: []string{"admissionregistration.k8s.io"},
-			Resources: []string{
-				"validatingadmissionpolicies",
-				"validatingadmissionpolicybindings",
-			},
+			Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
 			Verbs: []string{
 				"get",
 				"list",
@@ -642,7 +646,23 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 	}
-
+	if c.cfg.KubernetesVersion == nil || !(c.cfg.KubernetesVersion != nil && c.cfg.KubernetesVersion.Major < 2 && c.cfg.KubernetesVersion.Minor < 30) {
+		// If the kubernetes version is higher than 1.30, we add extra RBAC permissions to allow establishing watches.
+		// https://v1-30.docs.kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/
+		rules = append(rules, rbacv1.PolicyRule{
+			// Kubernetes validating admission policy resources.
+			APIGroups: []string{"admissionregistration.k8s.io"},
+			Resources: []string{
+				"validatingadmissionpolicies",
+				"validatingadmissionpolicybindings",
+			},
+			Verbs: []string{
+				"get",
+				"list",
+				"watch",
+			},
+		})
+	}
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1230,7 +1250,11 @@ func (c *apiServerComponent) startUpArgs() []string {
 			args = append(args, fmt.Sprintf("--tunnelSecretName=%s", c.cfg.ManagementCluster.Spec.TLS.SecretName))
 		}
 	}
-
+	if c.cfg.KubernetesVersion != nil && c.cfg.KubernetesVersion.Major < 2 && c.cfg.KubernetesVersion.Minor < 30 {
+		// Disable this API as it is not available by default. If we don't, the server fails to start, due to trying to
+		// establish watches for unavailable APIs.
+		args = append(args, "--enable-validating-admission-policy=false")
+	}
 	return args
 }
 
@@ -1252,6 +1276,10 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+	}
+
+	if c.cfg.KeyValidatorConfig != nil {
+		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
 	volumeMounts := []corev1.VolumeMount{

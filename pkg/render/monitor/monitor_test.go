@@ -237,7 +237,6 @@ var _ = Describe("monitor rendering tests", func() {
 			APIGroups: []string{""},
 			Resources: []string{
 				"configmaps",
-				"secrets",
 			},
 			Verbs: []string{"*"},
 		}))
@@ -976,6 +975,32 @@ var _ = Describe("monitor rendering tests", func() {
 			},
 		}))
 	})
+
+	It("Should render serviceMonitor with felix endpoint if FelixPrometheusMetricsEnabled", func() {
+		cfg.FelixPrometheusMetricsEnabled = true
+		component := monitor.Monitor(cfg)
+		toCreate, _ := component.Objects()
+		servicemonitorObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
+		Expect(ok).To(BeTrue())
+
+		Expect(servicemonitorObj.Spec.Endpoints).To(HaveLen(3))
+		Expect(servicemonitorObj.Spec.Endpoints[0].HonorLabels).To(BeTrue())
+		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
+		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("calico-metrics-port"))
+		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
+		Expect(servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal("https"))
+		Expect(servicemonitorObj.Spec.Endpoints[1].HonorLabels).To(BeTrue())
+		Expect(servicemonitorObj.Spec.Endpoints[1].Interval).To(BeEquivalentTo("5s"))
+		Expect(servicemonitorObj.Spec.Endpoints[1].Port).To(Equal("calico-bgp-metrics-port"))
+		Expect(servicemonitorObj.Spec.Endpoints[1].ScrapeTimeout).To(BeEquivalentTo("5s"))
+		Expect(servicemonitorObj.Spec.Endpoints[1].Scheme).To(Equal("https"))
+		Expect(servicemonitorObj.Spec.Endpoints[2].HonorLabels).To(BeTrue())
+		Expect(servicemonitorObj.Spec.Endpoints[2].Interval).To(BeEquivalentTo("5s"))
+		Expect(servicemonitorObj.Spec.Endpoints[2].Port).To(Equal("felix-metrics-port"))
+		Expect(servicemonitorObj.Spec.Endpoints[2].ScrapeTimeout).To(BeEquivalentTo("5s"))
+		Expect(servicemonitorObj.Spec.Endpoints[2].Scheme).To(Equal("http"))
+
+	})
 })
 
 type resource struct {
@@ -991,7 +1016,9 @@ func expectedBaseResources() []resource {
 	return []resource{
 		{"tigera-prometheus", "", "", "v1", "Namespace"},
 		{"tigera-prometheus-role", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
+		{"calico-prometheus-operator-secret", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "Role"},
 		{"tigera-prometheus-role-binding", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
+		{"calico-prometheus-operator-secret", common.TigeraPrometheusNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding"},
 		{"tigera-pull-secret", common.TigeraPrometheusNamespace, "", "", ""},
 		{"alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret"},
 		{"calico-prometheus-operator", "tigera-prometheus", "", "v1", "ServiceAccount"},

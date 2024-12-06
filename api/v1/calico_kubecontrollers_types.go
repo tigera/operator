@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -106,103 +105,4 @@ type CalicoKubeControllersDeploymentSpec struct {
 	// Template describes the calico-kube-controllers Deployment pod that will be created.
 	// +optional
 	Template *CalicoKubeControllersDeploymentPodTemplateSpec `json:"template,omitempty"`
-}
-
-func (c *CalicoKubeControllersDeployment) GetMetadata() *Metadata {
-	return c.Metadata
-}
-
-func (c *CalicoKubeControllersDeployment) GetMinReadySeconds() *int32 {
-	if c.Spec != nil {
-		return c.Spec.MinReadySeconds
-	}
-	return nil
-}
-
-func (c *CalicoKubeControllersDeployment) GetPodTemplateMetadata() *Metadata {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			return c.Spec.Template.Metadata
-		}
-	}
-	return nil
-}
-
-func (c *CalicoKubeControllersDeployment) GetInitContainers() []v1.Container {
-	// no init containers defined
-	return nil
-}
-
-func (c *CalicoKubeControllersDeployment) GetContainers() []v1.Container {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.Containers != nil {
-					cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-					for i, v := range c.Spec.Template.Spec.Containers {
-						// Only copy and return the container if it has resources set.
-						if v.Resources == nil {
-							continue
-						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
-					}
-					return cs
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (c *CalicoKubeControllersDeployment) GetAffinity() *v1.Affinity {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.Affinity
-			}
-		}
-	}
-	return nil
-}
-
-func (c *CalicoKubeControllersDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	// TopologySpreadConstraints don't apply to kube-controllers since we only ever run a single
-	// replica of this deployment. kube-controllers is designed to be a singleton. Other scheduling
-	// mechanisms like node selector and tolerations should be used instead.
-	return nil
-}
-
-func (c *CalicoKubeControllersDeployment) GetNodeSelector() map[string]string {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.NodeSelector
-			}
-		}
-	}
-	return nil
-}
-
-func (c *CalicoKubeControllersDeployment) GetTolerations() []v1.Toleration {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.Tolerations
-			}
-		}
-	}
-	return nil
-}
-
-func (c *CalicoKubeControllersDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
-func (c *CalicoKubeControllersDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	return nil
-}
-
-func (c *CalicoKubeControllersDeployment) GetPriorityClassName() string {
-	return ""
 }

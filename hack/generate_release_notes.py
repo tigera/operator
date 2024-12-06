@@ -47,27 +47,36 @@ def issues_in_milestone() -> list:
     """
     repo = g.get_repo("tigera/operator")
 
-    # Find the milestone. This finds all open milestones.
-    milestones = repo.get_milestones()
-    for m in milestones:
-        if m.title == VERSION:
-            # Found the milestone in this repo - look for issues (but only
-            # ones that have been closed!)
-            print(f"  found milestone {m.title}")
-            milestone_issues = repo.get_issues(
-                milestone=m, state="closed", labels=["release-note-required"]
-            )
-            issues = []
-            for issue in milestone_issues:
-                pr = issue.as_pull_request()
-                if pr.merged:
-                    # Filter out PRs which are closed but not merged.
-                    issues.append(issue)
-                elif pr.state == "open":
-                    print(f"WARNING: {pr.number} is still open, remove from milestione... skipping")
-            if len(issues) == 0:
-                raise ReleaseNoteError(f"no issues found for milestone {m.title}")
-            return issues
+    # Find the milestone to get the id.
+    milestones = repo.get_milestones(state="all")
+    # Filter for the milestone we're interested in.
+    milestone = [m for m in milestones if m.title == VERSION]
+    m = milestone[0] if milestone else None
+    if not m:
+        raise ReleaseNoteError(f"milestone {VERSION} not found")
+    # Ensure the milestone is closed before generating release notes.
+    if m.state != "closed":
+        raise ReleaseNoteError(
+            f"milestone {m.title} is not closed, please close it before generating release notes"
+        )
+    print(f"  found milestone {m.title}")
+    milestone_issues = repo.get_issues(
+        milestone=m, state="closed", labels=["release-note-required"]
+    )
+    # If there are no issues in the milestone, raise an error.
+    if milestone_issues.totalCount == 0:
+        raise ReleaseNoteError(f"no issues found for milestone {m.title}")
+    open_issues = [
+        issue for issue in milestone_issues if issue.as_pull_request().state == "open"
+    ]
+    # If there are open issues in the milestone, raise an error.
+    if len(open_issues) > 0:
+        raise ReleaseNoteError(
+            f"{len(open_issues)} PRs are still open, remove from milestone"
+        )
+
+    # Return only the merged PRs
+    return [issue for issue in milestone_issues if issue.as_pull_request().merged]
 
 
 def extract_release_notes(issue: Issue) -> list:

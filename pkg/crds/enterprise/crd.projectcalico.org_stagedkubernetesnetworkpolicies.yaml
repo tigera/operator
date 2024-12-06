@@ -85,6 +85,7 @@ spec:
                             type: string
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                     to:
                       description: to is a list of destinations for outgoing traffic
                         of pods selected for this rule. Items in this list are combined
@@ -114,6 +115,7 @@ spec:
                                 items:
                                   type: string
                                 type: array
+                                x-kubernetes-list-type: atomic
                             required:
                             - cidr
                             type: object
@@ -154,11 +156,13 @@ spec:
                                       items:
                                         type: string
                                       type: array
+                                      x-kubernetes-list-type: atomic
                                   required:
                                   - key
                                   - operator
                                   type: object
                                 type: array
+                                x-kubernetes-list-type: atomic
                               matchLabels:
                                 additionalProperties:
                                   type: string
@@ -205,11 +209,13 @@ spec:
                                       items:
                                         type: string
                                       type: array
+                                      x-kubernetes-list-type: atomic
                                   required:
                                   - key
                                   - operator
                                   type: object
                                 type: array
+                                x-kubernetes-list-type: atomic
                               matchLabels:
                                 additionalProperties:
                                   type: string
@@ -222,6 +228,7 @@ spec:
                             type: object
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                   type: object
                 type: array
               ingress:
@@ -267,6 +274,7 @@ spec:
                                 items:
                                   type: string
                                 type: array
+                                x-kubernetes-list-type: atomic
                             required:
                             - cidr
                             type: object
@@ -307,11 +315,13 @@ spec:
                                       items:
                                         type: string
                                       type: array
+                                      x-kubernetes-list-type: atomic
                                   required:
                                   - key
                                   - operator
                                   type: object
                                 type: array
+                                x-kubernetes-list-type: atomic
                               matchLabels:
                                 additionalProperties:
                                   type: string
@@ -358,11 +368,13 @@ spec:
                                       items:
                                         type: string
                                       type: array
+                                      x-kubernetes-list-type: atomic
                                   required:
                                   - key
                                   - operator
                                   type: object
                                 type: array
+                                x-kubernetes-list-type: atomic
                               matchLabels:
                                 additionalProperties:
                                   type: string
@@ -375,6 +387,7 @@ spec:
                             type: object
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                     ports:
                       description: ports is a list of ports which should be made accessible
                         on the pods selected for this rule. Each item in this list
@@ -413,6 +426,7 @@ spec:
                             type: string
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                   type: object
                 type: array
               podSelector:
@@ -449,11 +463,13 @@ spec:
                           items:
                             type: string
                           type: array
+                          x-kubernetes-list-type: atomic
                       required:
                       - key
                       - operator
                       type: object
                     type: array
+                    x-kubernetes-list-type: atomic
                   matchLabels:
                     additionalProperties:
                       type: string

@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -101,101 +100,4 @@ type CSINodeDriverDaemonSetSpec struct {
 	// Template describes the csi-node-driver DaemonSet pod that will be created.
 	// +optional
 	Template *CSINodeDriverDaemonSetPodTemplateSpec `json:"template,omitempty"`
-}
-
-func (c *CSINodeDriverDaemonSet) GetMetadata() *Metadata {
-	return c.Metadata
-}
-
-func (c *CSINodeDriverDaemonSet) GetMinReadySeconds() *int32 {
-	if c.Spec != nil {
-		return c.Spec.MinReadySeconds
-	}
-	return nil
-}
-
-func (c *CSINodeDriverDaemonSet) GetPodTemplateMetadata() *Metadata {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			return c.Spec.Template.Metadata
-		}
-	}
-	return nil
-}
-
-func (c *CSINodeDriverDaemonSet) GetInitContainers() []v1.Container {
-	// InitContainers aren't needed for CSI Node Driver DaemonSet resources.
-	return nil
-}
-
-func (c *CSINodeDriverDaemonSet) GetContainers() []v1.Container {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.Containers != nil {
-					cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-					for i, v := range c.Spec.Template.Spec.Containers {
-						// Only copy and return the container if it has resources set.
-						if v.Resources == nil {
-							continue
-						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
-					}
-					return cs
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (c *CSINodeDriverDaemonSet) GetAffinity() *v1.Affinity {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.Affinity
-			}
-		}
-	}
-	return nil
-}
-
-func (c *CSINodeDriverDaemonSet) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	// TopologySpreadConstraints aren't needed for Calico DaemonSet resources.
-	return nil
-}
-
-func (c *CSINodeDriverDaemonSet) GetNodeSelector() map[string]string {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.NodeSelector
-			}
-		}
-	}
-	return nil
-}
-
-func (c *CSINodeDriverDaemonSet) GetTolerations() []v1.Toleration {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				return c.Spec.Template.Spec.Tolerations
-			}
-		}
-	}
-	return nil
-}
-
-func (c *CSINodeDriverDaemonSet) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
-func (c *CSINodeDriverDaemonSet) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	return nil
-}
-
-func (c *CSINodeDriverDaemonSet) GetPriorityClassName() string {
-	return ""
 }

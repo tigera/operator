@@ -124,6 +124,10 @@ type NodeConfiguration struct {
 	// The bindMode read from the default BGPConfiguration. Used to trigger rolling updates
 	// should this value change.
 	BindMode string
+
+	FelixPrometheusMetricsEnabled bool
+
+	FelixPrometheusMetricsPort int
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -396,7 +400,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			{
 				// For enforcing admin network policies.
 				APIGroups: []string{"policy.networking.k8s.io"},
-				Resources: []string{"adminnetworkpolicies"},
+				Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
 				Verbs:     []string{"watch", "list"},
 			},
 			{
@@ -1717,6 +1721,32 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 // This service is used internally by Calico Enterprise and is separate from general
 // Prometheus metrics which are user-configurable.
 func (c *nodeComponent) nodeMetricsService() *corev1.Service {
+	ports := []corev1.ServicePort{
+		{
+			Name:       "calico-metrics-port",
+			Port:       int32(c.cfg.NodeReporterMetricsPort),
+			TargetPort: intstr.FromInt(c.cfg.NodeReporterMetricsPort),
+			Protocol:   corev1.ProtocolTCP,
+		},
+		{
+			Name:       "calico-bgp-metrics-port",
+			Port:       nodeBGPReporterPort,
+			TargetPort: intstr.FromInt(int(nodeBGPReporterPort)),
+			Protocol:   corev1.ProtocolTCP,
+		},
+	}
+
+	if c.cfg.FelixPrometheusMetricsEnabled {
+		felixMetricsPort := int32(c.cfg.FelixPrometheusMetricsPort)
+
+		ports = append(ports, corev1.ServicePort{
+			Name:       "felix-metrics-port",
+			Port:       felixMetricsPort,
+			TargetPort: intstr.FromInt(int(felixMetricsPort)),
+			Protocol:   corev1.ProtocolTCP,
+		})
+	}
+
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1731,20 +1761,7 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 			// a huge set of iptables rules for this service since there's an instance
 			// on every node.
 			ClusterIP: "None",
-			Ports: []corev1.ServicePort{
-				{
-					Name:       "calico-metrics-port",
-					Port:       int32(c.cfg.NodeReporterMetricsPort),
-					TargetPort: intstr.FromInt(c.cfg.NodeReporterMetricsPort),
-					Protocol:   corev1.ProtocolTCP,
-				},
-				{
-					Name:       "calico-bgp-metrics-port",
-					Port:       nodeBGPReporterPort,
-					TargetPort: intstr.FromInt(int(nodeBGPReporterPort)),
-					Protocol:   corev1.ProtocolTCP,
-				},
-			},
+			Ports:     ports,
 		},
 	}
 }

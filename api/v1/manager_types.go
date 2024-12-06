@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -128,93 +127,6 @@ type ManagerList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Manager `json:"items"`
-}
-
-func (c *ManagerDeployment) GetMetadata() *Metadata {
-	return nil
-}
-
-func (c *ManagerDeployment) GetMinReadySeconds() *int32 {
-	return nil
-}
-
-func (c *ManagerDeployment) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
-func (c *ManagerDeployment) GetInitContainers() []v1.Container {
-	if c != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.InitContainers != nil {
-					cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
-					for i, v := range c.Spec.Template.Spec.InitContainers {
-						// Only copy and return the init container if it has resources set.
-						if v.Resources == nil {
-							continue
-						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
-					}
-					return cs
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-func (c *ManagerDeployment) GetContainers() []v1.Container {
-	if c != nil {
-		if c.Spec != nil {
-			if c.Spec.Template != nil {
-				if c.Spec.Template.Spec != nil {
-					if c.Spec.Template.Spec.Containers != nil {
-						cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-						for i, v := range c.Spec.Template.Spec.Containers {
-							// Only copy and return the init container if it has resources set.
-							if v.Resources == nil {
-								continue
-							}
-							c := v1.Container{Name: v.Name, Resources: *v.Resources}
-							cs[i] = c
-						}
-						return cs
-					}
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (c *ManagerDeployment) GetAffinity() *v1.Affinity {
-	return nil
-}
-
-func (c *ManagerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	return nil
-}
-
-func (c *ManagerDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
-func (c *ManagerDeployment) GetTolerations() []v1.Toleration {
-	return nil
-}
-
-func (c *ManagerDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
-func (c *ManagerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	return nil
-}
-
-func (c *ManagerDeployment) GetPriorityClassName() string {
-	return ""
 }
 
 func init() {

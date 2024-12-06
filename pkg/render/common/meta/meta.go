@@ -119,6 +119,14 @@ func APIServerNamespace(v operatorv1.ProductVariant) string {
 	return "tigera-system"
 }
 
+// APIServerDeploymentName returns the deployment to use for the API server component.
+func APIServerDeploymentName(v operatorv1.ProductVariant) string {
+	if v == operatorv1.Calico {
+		return "calico-apiserver"
+	}
+	return "tigera-apiserver"
+}
+
 // GetResourceRequirements retrieves the component ResourcesRequirements from the installation. If it doesn't exist, it
 // returns an empty ResourceRequirements struct.
 func GetResourceRequirements(i *operatorv1.InstallationSpec, name operatorv1.ComponentName) corev1.ResourceRequirements {

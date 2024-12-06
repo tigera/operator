@@ -263,3 +263,18 @@ var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
 		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.TopologySpreadConstraints is invalid: spec.template.spec.topologySpreadConstraints[0].topologyKey: Required value: can not be empty"))
 	})
 })
+
+var _ = Describe("Test overrides validation with nil Spec (TyphaDeployment)", func() {
+	var overrides *opv1.TyphaDeployment
+
+	BeforeEach(func() {
+		overrides = &opv1.TyphaDeployment{
+			Spec: nil,
+		}
+	})
+
+	It("should be handled", func() {
+		err := ValidateReplicatedPodResourceOverrides(overrides, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
+		Expect(err).NotTo(HaveOccurred())
+	})
+})

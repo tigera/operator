@@ -345,7 +345,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
-				Resources: []string{"configmaps", "secrets"},
+				Resources: []string{"configmaps"},
 				Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
 			}))
 	})
@@ -548,7 +548,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
-				Resources: []string{"configmaps", "secrets"},
+				Resources: []string{"configmaps"},
 				Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
 			}))
 	})

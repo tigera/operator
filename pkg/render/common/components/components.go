@@ -16,12 +16,12 @@ package components
 
 import (
 	"fmt"
+	"reflect"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
 	batchv1 "k8s.io/api/batch/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -43,9 +43,165 @@ type replicatedPodResource struct {
 	deploymentStrategy *appsv1.DeploymentStrategy // Deployments only
 }
 
+func GetMetadata(overrides any) *operator.Metadata {
+	value := getField(overrides, "Metadata")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(*operator.Metadata)
+}
+
+func GetMinReadySeconds(overrides any) *int32 {
+	value := getField(overrides, "Spec", "MinReadySeconds")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(*int32)
+}
+
+func GetPodTemplateMetadata(overrides any) *operator.Metadata {
+	value := getField(overrides, "Spec", "Template", "Metadata")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	// SPECIAL CASE: EgressGateway uses a different type for its metadata.
+	if v, egressGatewayCase := value.Interface().(*operator.EgressGatewayMetadata); egressGatewayCase {
+		return &operator.Metadata{Labels: v.Labels, Annotations: v.Annotations}
+	}
+	return value.Interface().(*operator.Metadata)
+}
+
+func GetTerminationGracePeriodSeconds(overrides any) *int64 {
+	value := getField(overrides, "Spec", "Template", "Spec", "TerminationGracePeriodSeconds")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(*int64)
+}
+
+func GetDeploymentStrategy(overrides any) *appsv1.DeploymentStrategy {
+	value := getField(overrides, "Spec", "Strategy", "RollingUpdate")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return &appsv1.DeploymentStrategy{
+		Type:          appsv1.RollingUpdateDeploymentStrategyType,
+		RollingUpdate: value.Interface().(*appsv1.RollingUpdateDeployment),
+	}
+}
+
+func GetInitContainers(overrides any) []corev1.Container {
+	value := getField(overrides, "Spec", "Template", "Spec", "InitContainers")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return valueToContainers(value)
+}
+
+func GetContainers(overrides any) []corev1.Container {
+	value := getField(overrides, "Spec", "Template", "Spec", "Containers")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return valueToContainers(value)
+}
+
+func valueToContainers(value reflect.Value) []corev1.Container {
+	cs := make([]corev1.Container, 0, value.Len())
+	for _, v := range value.Seq2() {
+		name := v.FieldByName("Name")
+		resources := v.FieldByName("Resources")
+		if !resources.IsNil() {
+			cs = append(cs, corev1.Container{
+				Name:      name.String(),
+				Resources: *(resources.Interface().(*corev1.ResourceRequirements)),
+			})
+		}
+	}
+	return cs
+}
+
+func GetAffinity(overrides any) *corev1.Affinity {
+	value := getField(overrides, "Spec", "Template", "Spec", "Affinity")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(*corev1.Affinity)
+}
+
+func GetNodeSelector(overrides any) map[string]string {
+	value := getField(overrides, "Spec", "Template", "Spec", "NodeSelector")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(map[string]string)
+}
+
+func GetTopologySpreadConstraints(overrides any) []corev1.TopologySpreadConstraint {
+	value := getField(overrides, "Spec", "Template", "Spec", "TopologySpreadConstraints")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().([]corev1.TopologySpreadConstraint)
+}
+
+func GetTolerations(overrides any) []corev1.Toleration {
+	value := getField(overrides, "Spec", "Template", "Spec", "Tolerations")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().([]corev1.Toleration)
+}
+
+func GetPriorityClassName(overrides any) string {
+	value := getField(overrides, "Spec", "Template", "Spec", "PriorityClassName")
+	if !value.IsValid() {
+		return ""
+	}
+	if value.Kind() == reflect.String {
+		return value.String()
+	}
+	return ""
+}
+
+func getField(overrides any, fieldNames ...string) (value reflect.Value) {
+	// SPECIAL CASE: ComplianceReporterPodTemplate doesn't follow the Spec, Template, Spec, ...
+	// pattern that all our other override structures follow.  Instead it skips the top-level
+	// Spec and has Template, Spec, ...
+	if _, isComplianceReporterPodTemplate := overrides.(*operator.ComplianceReporterPodTemplate); isComplianceReporterPodTemplate {
+		if fieldNames[0] == "Spec" {
+			fieldNames = fieldNames[1:]
+		}
+	}
+	typ := reflect.TypeOf(overrides)
+	for _, fieldName := range fieldNames {
+		if typ.Kind() == reflect.Pointer {
+			typ = typ.Elem()
+		}
+		field, hasField := typ.FieldByName(fieldName)
+		if !hasField {
+			return
+		}
+		typ = field.Type
+	}
+	value = reflect.ValueOf(overrides)
+	for _, fieldName := range fieldNames {
+		if value.Kind() == reflect.Pointer {
+			if value.IsNil() {
+				return
+			}
+			value = value.Elem()
+		}
+		value = value.FieldByName(fieldName)
+	}
+	return
+}
+
 // applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
-func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides components.ReplicatedPodResourceOverrides) *replicatedPodResource {
-	if metadata := overrides.GetMetadata(); metadata != nil {
+func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any) *replicatedPodResource {
+	// If `overrides` has a Metadata field, and it's non-nil, non-clashing labels and annotations from that
+	// metadata are added into `r.labels` and `r.annotations`.
+	if metadata := GetMetadata(overrides); metadata != nil {
 		if len(metadata.Labels) > 0 {
 			r.labels = common.MapExistsOrInitialize(r.labels)
 			common.MergeMaps(metadata.Labels, r.labels)
@@ -55,10 +211,17 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 			common.MergeMaps(metadata.Annotations, r.annotations)
 		}
 	}
-	if minReadySeconds := overrides.GetMinReadySeconds(); minReadySeconds != nil {
+
+	// If `overrides` has a Spec.MinReadySeconds field. and it's non-nil, it sets
+	// `r.minReadySeconds`.
+	if minReadySeconds := GetMinReadySeconds(overrides); minReadySeconds != nil {
 		r.minReadySeconds = minReadySeconds
 	}
-	if podTemplateMetadata := overrides.GetPodTemplateMetadata(); podTemplateMetadata != nil {
+
+	// If `overrides` has a Spec.Template.Metadata field, and it's non-nil, non-clashing labels
+	// and annotations from that metadata are added into the labels and annotations of
+	// `r.podTemplateSpec`.
+	if podTemplateMetadata := GetPodTemplateMetadata(overrides); podTemplateMetadata != nil {
 		if len(podTemplateMetadata.Labels) > 0 {
 			r.podTemplateSpec.Labels = common.MapExistsOrInitialize(r.podTemplateSpec.Labels)
 			common.MergeMaps(podTemplateMetadata.Labels, r.podTemplateSpec.Labels)
@@ -68,32 +231,63 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 			common.MergeMaps(podTemplateMetadata.Annotations, r.podTemplateSpec.Annotations)
 		}
 	}
-	if tgp := overrides.GetTerminationGracePeriodSeconds(); tgp != nil {
+
+	// If `overrides` has a Spec.Template.Spec.TerminationGracePeriodSeconds field, and it's
+	// non-nil, it sets the Spec.TerminationGracePeriodSeconds field of `r.podTemplateSpec`.
+	if tgp := GetTerminationGracePeriodSeconds(overrides); tgp != nil {
 		r.podTemplateSpec.Spec.TerminationGracePeriodSeconds = tgp
 	}
-	if ds := overrides.GetDeploymentStrategy(); ds != nil {
+
+	// If `overrides` has a Spec.Strategy.RollingUpdate field, and it's non-nil, it sets
+	// `r.deploymentStrategy`.
+	if ds := GetDeploymentStrategy(overrides); ds != nil {
 		r.deploymentStrategy = ds
 	}
-	if initContainers := overrides.GetInitContainers(); initContainers != nil {
+
+	// If `overrides` has a Spec.Template.Spec.InitContainers field, and it includes containers
+	// with the same name as those in `r.podTemplateSpec.Spec.InitContainers`, and with non-nil
+	// `Resources`, those resources replace those for the corresponding container in
+	// `r.podTemplateSpec.Spec.InitContainers`.
+	if initContainers := GetInitContainers(overrides); initContainers != nil {
 		mergeContainers(r.podTemplateSpec.Spec.InitContainers, initContainers)
 	}
-	if containers := overrides.GetContainers(); containers != nil {
+
+	// If `overrides` has a Spec.Template.Spec.Containers field, and it includes containers with
+	// the same name as those in `r.podTemplateSpec.Spec.InitContainers`, and with non-nil
+	// `Resources`, those resources replace those for the corresponding container in
+	// `r.podTemplateSpec.Spec.Containers`.
+	if containers := GetContainers(overrides); containers != nil {
 		mergeContainers(r.podTemplateSpec.Spec.Containers, containers)
 	}
-	if affinity := overrides.GetAffinity(); affinity != nil {
+
+	// If `overrides` has a Spec.Template.Spec.Affinity field, and it's non-nil, it sets
+	// `r.podTemplateSpec.Spec.Affinity`.
+	if affinity := GetAffinity(overrides); affinity != nil {
 		r.podTemplateSpec.Spec.Affinity = affinity
 	}
-	if nodeSelector := overrides.GetNodeSelector(); nodeSelector != nil {
+
+	// If `overrides` has a Spec.Template.Spec.NodeSelector field, and it's a non-nil map,
+	// non-clashing entries from that map are added into `r.podTemplateSpec.Spec.NodeSelector`.
+	if nodeSelector := GetNodeSelector(overrides); nodeSelector != nil {
 		r.podTemplateSpec.Spec.NodeSelector = common.MapExistsOrInitialize(r.podTemplateSpec.Spec.NodeSelector)
 		common.MergeMaps(nodeSelector, r.podTemplateSpec.Spec.NodeSelector)
 	}
-	if constraints := overrides.GetTopologySpreadConstraints(); constraints != nil {
+
+	// If `overrides` has a Spec.Template.Spec.TopologySpreadConstraints field, and it's
+	// non-nil, it sets `r.podTemplateSpec.Spec.TopologySpreadConstraints`.
+	if constraints := GetTopologySpreadConstraints(overrides); constraints != nil {
 		r.podTemplateSpec.Spec.TopologySpreadConstraints = constraints
 	}
-	if tolerations := overrides.GetTolerations(); tolerations != nil {
+
+	// If `overrides` has a Spec.Template.Spec.Tolerations field, and it's non-nil, it sets
+	// `r.podTemplateSpec.Spec.Tolerations`.
+	if tolerations := GetTolerations(overrides); tolerations != nil {
 		r.podTemplateSpec.Spec.Tolerations = tolerations
 	}
-	if priorityClassName := overrides.GetPriorityClassName(); priorityClassName != "" {
+
+	// If `overrides` has a Spec.Template.Spec.PriorityClassName field, and it's non-empty, it
+	// sets `r.podTemplateSpec.Spec.PriorityClassName`.
+	if priorityClassName := GetPriorityClassName(overrides); priorityClassName != "" {
 		r.podTemplateSpec.Spec.PriorityClassName = priorityClassName
 	}
 
@@ -102,7 +296,7 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides com
 
 // ApplyDaemonSetOverrides applies the overrides to the given DaemonSet.
 // Note: overrides must not be nil pointer.
-func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.ReplicatedPodResourceOverrides) {
+func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides any) {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil {
 		return
@@ -127,7 +321,7 @@ func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides components.Replicat
 
 // ApplyDeploymentOverrides applies the overrides to the given Deployment.
 // Note: overrides must not be nil pointer.
-func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides components.ReplicatedPodResourceOverrides) {
+func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides any) {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil {
 		return
@@ -153,7 +347,7 @@ func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides components.Replica
 }
 
 // ApplyJobOverrides applies the overrides to the given Job.
-func ApplyJobOverrides(job *batchv1.Job, overrides components.ReplicatedPodResourceOverrides) {
+func ApplyJobOverrides(job *batchv1.Job, overrides any) {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil || job == nil {
 		return
@@ -176,7 +370,7 @@ func ApplyJobOverrides(job *batchv1.Job, overrides components.ReplicatedPodResou
 
 // ApplyStatefulSetOverrides applies the overrides to the given DaemonSet.
 // Note: overrides must not be nil pointer.
-func ApplyStatefulSetOverrides(s *appsv1.StatefulSet, overrides components.ReplicatedPodResourceOverrides) {
+func ApplyStatefulSetOverrides(s *appsv1.StatefulSet, overrides any) {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil {
 		return
@@ -200,7 +394,7 @@ func ApplyStatefulSetOverrides(s *appsv1.StatefulSet, overrides components.Repli
 }
 
 // ApplyPodTemplateOverrides applies the overrides to the given PodTemplate.
-func ApplyPodTemplateOverrides(podtemplate *corev1.PodTemplate, overrides components.ReplicatedPodResourceOverrides) {
+func ApplyPodTemplateOverrides(podtemplate *corev1.PodTemplate, overrides any) {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil || podtemplate == nil {
 		return
@@ -223,7 +417,7 @@ func ApplyPodTemplateOverrides(podtemplate *corev1.PodTemplate, overrides compon
 
 // ApplyKibanaOverrides applies the overrides to the given Kibana.
 // Note: overrides must not be nil pointer.
-func ApplyKibanaOverrides(k *kbv1.Kibana, overrides components.ReplicatedPodResourceOverrides) {
+func ApplyKibanaOverrides(k *kbv1.Kibana, overrides any) {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil {
 		return

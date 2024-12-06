@@ -106,7 +106,7 @@ func (pc *packetCaptureApiComponent) SupportedOSType() rmeta.OSType {
 
 func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSRestricted),
+		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSRestricted, pc.cfg.Installation.Azure),
 	}
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.cfg.PullSecrets...)...)...)
 

@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -86,88 +85,4 @@ type ComplianceControllerDeploymentInitContainer struct {
 	// If omitted, the compliance controller Deployment will use its default value for this init container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-}
-
-func (c *ComplianceControllerDeployment) GetMetadata() *Metadata {
-	return nil
-}
-
-func (c *ComplianceControllerDeployment) GetMinReadySeconds() *int32 {
-	return nil
-}
-
-func (c *ComplianceControllerDeployment) GetPodTemplateMetadata() *Metadata {
-	return nil
-}
-
-func (c *ComplianceControllerDeployment) GetInitContainers() []v1.Container {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.InitContainers != nil {
-					cs := make([]v1.Container, len(c.Spec.Template.Spec.InitContainers))
-					for i, v := range c.Spec.Template.Spec.InitContainers {
-						// Only copy and return the init container if it has resources set.
-						if v.Resources == nil {
-							continue
-						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
-					}
-					return cs
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (c *ComplianceControllerDeployment) GetContainers() []v1.Container {
-	if c.Spec != nil {
-		if c.Spec.Template != nil {
-			if c.Spec.Template.Spec != nil {
-				if c.Spec.Template.Spec.Containers != nil {
-					cs := make([]v1.Container, len(c.Spec.Template.Spec.Containers))
-					for i, v := range c.Spec.Template.Spec.Containers {
-						// Only copy and return the container if it has resources set.
-						if v.Resources == nil {
-							continue
-						}
-						c := v1.Container{Name: v.Name, Resources: *v.Resources}
-						cs[i] = c
-					}
-					return cs
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (c *ComplianceControllerDeployment) GetAffinity() *v1.Affinity {
-	return nil
-}
-
-func (c *ComplianceControllerDeployment) GetTopologySpreadConstraints() []v1.TopologySpreadConstraint {
-	return nil
-}
-
-func (c *ComplianceControllerDeployment) GetNodeSelector() map[string]string {
-	return nil
-}
-
-func (c *ComplianceControllerDeployment) GetTolerations() []v1.Toleration {
-	return nil
-}
-
-func (c *ComplianceControllerDeployment) GetTerminationGracePeriodSeconds() *int64 {
-	return nil
-}
-
-func (c *ComplianceControllerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy {
-	return nil
-}
-
-func (c *ComplianceControllerDeployment) GetPriorityClassName() string {
-	return ""
 }

@@ -201,7 +201,6 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceAccessAllowTigeraNetworkPolicy(),
 			networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
 		)
-
 		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
 		complianceObjs = append(complianceObjs,
 			c.complianceControllerServiceAccount(),

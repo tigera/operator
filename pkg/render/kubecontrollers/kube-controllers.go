@@ -107,7 +107,7 @@ type KubeControllersConfiguration struct {
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
 	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, KubeController)
-	enabledControllers := []string{"node"}
+	enabledControllers := []string{"node", "loadbalancer"}
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
@@ -361,6 +361,11 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
+			APIGroups: []string{""},
+			Resources: []string{"services", "services/status"},
+			Verbs:     []string{"get", "list", "update", "watch"},
+		},
+		{
 			// IPAM resources are manipulated in response to node and block updates, as well as periodic triggers.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"ipreservations"},
@@ -368,7 +373,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 		},
 		{
 			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets"},
+			Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets", "ipamconfigs"},
 			Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
 		},
 		{

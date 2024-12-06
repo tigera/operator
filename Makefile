@@ -222,10 +222,11 @@ endif
 
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
 ENVOY_GATEWAY_VERSION ?= v1.1.2
-ENVOY_GATEWAY_PREFIX ?= calico-gateway
-ENVOY_GATEWAY_NAMESPACE ?= calico-gateway-system
+ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
+ENVOY_GATEWAY_NAMESPACE ?= calico-system
+ENVOY_GATEWAY_RESOURCES = pkg/render/gateway_api_resources.yaml
 
-pkg/envoygateway/resources.yaml: hack/bin/helm-$(BUILDARCH)
+$(ENVOY_GATEWAY_RESOURCES): hack/bin/helm-$(BUILDARCH)
 	echo "---" > $@
 	echo "apiVersion: v1" >> $@
 	echo "kind: Namespace" >> $@
@@ -245,7 +246,7 @@ hack/bin/helm-$(BUILDARCH):
 	rmdir hack/bin/linux-$(BUILDARCH)
 
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES) pkg/envoygateway/resources.yaml
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
@@ -308,14 +309,14 @@ GINKGO_ARGS?= -v -trace -r
 GINKGO_FOCUS?=.*
 
 .PHONY: ut
-ut: pkg/envoygateway/resources.yaml
+ut: $(ENVOY_GATEWAY_RESOURCES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs: pkg/envoygateway/resources.yaml
+run-fvs: $(ENVOY_GATEWAY_RESOURCES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'

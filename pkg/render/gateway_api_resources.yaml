@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: calico-gateway-system
+  name: calico-system
 ---
 # Source: crds/gatewayapi-crds.yaml
 # Copyright 2024 The Kubernetes Authors.
@@ -35078,11 +35078,11 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: envoy-gateway
-  namespace: 'calico-gateway-system'
+  namespace: 'calico-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
 ---
@@ -35091,11 +35091,11 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: envoy-gateway-config
-  namespace: 'calico-gateway-system'
+  namespace: 'calico-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
 data:
@@ -35130,7 +35130,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   creationTimestamp: null
-  name: calico-gateway-gateway-helm-envoy-gateway-role
+  name: tigera-gateway-api-gateway-helm-envoy-gateway-role
 rules:
 - apiGroups:
   - ""
@@ -35248,26 +35248,26 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: calico-gateway-gateway-helm-envoy-gateway-rolebinding
+  name: tigera-gateway-api-gateway-helm-envoy-gateway-rolebinding
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: calico-gateway-gateway-helm-envoy-gateway-role
+  name: tigera-gateway-api-gateway-helm-envoy-gateway-role
 subjects:
 - kind: ServiceAccount
   name: 'envoy-gateway'
-  namespace: 'calico-gateway-system'
+  namespace: 'calico-system'
 ---
 # Source: gateway-helm/templates/infra-manager-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: calico-gateway-gateway-helm-infra-manager
-  namespace: 'calico-gateway-system'
+  name: tigera-gateway-api-gateway-helm-infra-manager
+  namespace: 'calico-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
 rules:
@@ -35307,12 +35307,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: calico-gateway-gateway-helm-leader-election-role
-  namespace: 'calico-gateway-system'
+  name: tigera-gateway-api-gateway-helm-leader-election-role
+  namespace: 'calico-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
 rules:
@@ -35352,62 +35352,62 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: calico-gateway-gateway-helm-infra-manager
-  namespace: 'calico-gateway-system'
+  name: tigera-gateway-api-gateway-helm-infra-manager
+  namespace: 'calico-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: 'calico-gateway-gateway-helm-infra-manager'
+  name: 'tigera-gateway-api-gateway-helm-infra-manager'
 subjects:
 - kind: ServiceAccount
   name: 'envoy-gateway'
-  namespace: 'calico-gateway-system'
+  namespace: 'calico-system'
 ---
 # Source: gateway-helm/templates/leader-election-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: calico-gateway-gateway-helm-leader-election-rolebinding
-  namespace: 'calico-gateway-system'
+  name: tigera-gateway-api-gateway-helm-leader-election-rolebinding
+  namespace: 'calico-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: 'calico-gateway-gateway-helm-leader-election-role'
+  name: 'tigera-gateway-api-gateway-helm-leader-election-role'
 subjects:
 - kind: ServiceAccount
   name: 'envoy-gateway'
-  namespace: 'calico-gateway-system'
+  namespace: 'calico-system'
 ---
 # Source: gateway-helm/templates/envoy-gateway-service.yaml
 apiVersion: v1
 kind: Service
 metadata:
   name: envoy-gateway
-  namespace: 'calico-gateway-system'
+  namespace: 'calico-system'
   labels:
     control-plane: envoy-gateway
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
 spec:
   selector:
     control-plane: envoy-gateway
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
   ports:
   - name: grpc
     port: 18000
@@ -35427,12 +35427,12 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: envoy-gateway
-  namespace: 'calico-gateway-system'
+  namespace: 'calico-system'
   labels:
     control-plane: envoy-gateway
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
 spec:
@@ -35441,7 +35441,7 @@ spec:
     matchLabels:
       control-plane: envoy-gateway
       app.kubernetes.io/name: gateway-helm
-      app.kubernetes.io/instance: calico-gateway
+      app.kubernetes.io/instance: tigera-gateway-api
   template:
     metadata:
       annotations:
@@ -35450,7 +35450,7 @@ spec:
       labels:
         control-plane: envoy-gateway
         app.kubernetes.io/name: gateway-helm
-        app.kubernetes.io/instance: calico-gateway
+        app.kubernetes.io/instance: tigera-gateway-api
     spec:
       containers:
       - args:
@@ -35522,12 +35522,12 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: calico-gateway-gateway-helm-certgen
-  namespace: 'calico-gateway-system'
+  name: tigera-gateway-api-gateway-helm-certgen
+  namespace: 'calico-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
   annotations:
@@ -35537,12 +35537,12 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: calico-gateway-gateway-helm-certgen
-  namespace: 'calico-gateway-system'
+  name: tigera-gateway-api-gateway-helm-certgen
+  namespace: 'calico-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
   annotations:
@@ -35561,12 +35561,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: calico-gateway-gateway-helm-certgen
-  namespace: 'calico-gateway-system'
+  name: tigera-gateway-api-gateway-helm-certgen
+  namespace: 'calico-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
   annotations:
@@ -35574,22 +35574,22 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: 'calico-gateway-gateway-helm-certgen'
+  name: 'tigera-gateway-api-gateway-helm-certgen'
 subjects:
 - kind: ServiceAccount
-  name: 'calico-gateway-gateway-helm-certgen'
-  namespace: 'calico-gateway-system'
+  name: 'tigera-gateway-api-gateway-helm-certgen'
+  namespace: 'calico-system'
 ---
 # Source: gateway-helm/templates/certgen.yaml
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: calico-gateway-gateway-helm-certgen
-  namespace: 'calico-gateway-system'
+  name: tigera-gateway-api-gateway-helm-certgen
+  namespace: 'calico-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
-    app.kubernetes.io/instance: calico-gateway
+    app.kubernetes.io/instance: tigera-gateway-api
     app.kubernetes.io/version: "v1.1.2"
     app.kubernetes.io/managed-by: Helm
   annotations:
@@ -35624,5 +35624,5 @@ spec:
         runAsGroup: 65534
         runAsNonRoot: true
         runAsUser: 65534
-      serviceAccountName: calico-gateway-gateway-helm-certgen
+      serviceAccountName: tigera-gateway-api-gateway-helm-certgen
   ttlSecondsAfterFinished: 30

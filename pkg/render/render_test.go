@@ -26,6 +26,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -216,12 +218,12 @@ var _ = Describe("Rendering tests", func() {
 		// - 4 secrets for Typha comms (2 in operator namespace and 2 in calico namespace)
 		// - 1 ConfigMap for Typha comms (1 in calico namespace)
 		// - 6 typha resources (Service, SA, Role, Binding, Deployment, PodDisruptionBudget)
-		// - 5 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, Service, Secret)
+		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, Service, Secret,RoleBinding)
 		// - 1 namespace
 		// - 2 Windows node resources (ConfigMap, DaemonSet)
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal(5 + 3 + 4 + 1 + 6 + 5 + 1 + 2))
+		Expect(componentCount(c)).To(Equal(5 + 3 + 4 + 1 + 6 + 6 + 1 + 2))
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
@@ -234,7 +236,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal((5 + 3 + 4 + 1 + 6 + 5 + 1 + 2) + 1 + 1))
+		Expect(componentCount(c)).To(Equal((5 + 3 + 4 + 1 + 6 + 6 + 1 + 2) + 1 + 1))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -248,55 +250,52 @@ var _ = Describe("Rendering tests", func() {
 		c, err := allCalicoComponents(k8sServiceEp, instance, &operatorv1.ManagementCluster{}, nil, nil, typhaNodeTLS, internalManagerKeyPair, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
-		expectedResources := []struct {
-			name    string
-			ns      string
-			group   string
-			version string
-			kind    string
-		}{
+		expectedResources := []client.Object{
 			// Namespaces first.
-			{common.CalicoNamespace, "", "", "v1", "Namespace"},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 
 			// Typha objects.
-			{render.TyphaServiceAccountName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
-			{common.TyphaDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
-			{common.TyphaDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{render.TyphaServiceName, common.CalicoNamespace, "", "v1", "Service"},
-			{common.TyphaDeploymentName, common.CalicoNamespace, "policy", "v1", "PodDisruptionBudget"},
-			{common.TyphaDeploymentName, common.CalicoNamespace, "apps", "v1", "Deployment"},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.TyphaServiceAccountName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: common.TyphaDeploymentName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: common.TyphaDeploymentName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.TyphaServiceName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: common.TyphaDeploymentName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: common.TyphaDeploymentName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 
 			// Node objects.
-			{common.NodeDaemonSetName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
-			{common.NodeDaemonSetName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
-			{common.NodeDaemonSetName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{"calico-cni-plugin", common.CalicoNamespace, "", "v1", "ServiceAccount"},
-			{"calico-cni-plugin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
-			{"calico-cni-plugin", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{"calico-node-metrics", common.CalicoNamespace, "", "v1", "Service"},
-			{"cni-config", common.CalicoNamespace, "", "v1", "ConfigMap"},
-			{common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-cni-plugin", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-cni-plugin"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-cni-plugin"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-metrics", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cni-config", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
 
 			// Kube-controllers objects.
-			{common.KubeControllersDeploymentName, common.CalicoNamespace, "", "v1", "ServiceAccount"},
-			{common.KubeControllersDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole"},
-			{common.KubeControllersDeploymentName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},
-			{common.KubeControllersDeploymentName, common.CalicoNamespace, "apps", "v1", "Deployment"},
-			{"calico-kube-controllers-metrics", common.CalicoNamespace, "", "v1", "Service"},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: common.KubeControllersDeploymentName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: common.KubeControllersDeploymentName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers-metrics", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 
 			// Windows node objects.
-			{render.WindowsNodeMetricsService, common.CalicoNamespace, "", "v1", "Service"},
-			{"cni-config-windows", common.CalicoNamespace, "", "v1", "ConfigMap"},
-			{common.WindowsDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet"},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.WindowsNodeMetricsService, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cni-config-windows", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: common.WindowsDaemonSetName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
 
 			// Certificate Management objects
-			{"tigera-ca-bundle", common.CalicoNamespace, "", "v1", "ConfigMap"},
-			{render.NodeTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-			{render.NodeTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
-			{render.ManagerInternalTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-			{render.ManagerInternalTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
-			{render.TyphaTLSSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-			{render.TyphaTLSSecretName, common.CalicoNamespace, "", "v1", "Secret"},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.NodeTLSSecretName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.NodeTLSSecretName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerInternalTLSSecretName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerInternalTLSSecretName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TyphaTLSSecretName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.TyphaTLSSecretName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+
+			// 	Tigera operator secret rolebinding
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: common.CalicoNamespace}},
 		}
 
 		var resources []client.Object
@@ -304,11 +303,7 @@ var _ = Describe("Rendering tests", func() {
 			toCreate, _ := component.Objects()
 			resources = append(resources, toCreate...)
 		}
-		Expect(len(resources)).To(Equal(len(expectedResources)))
-
-		for i, expectedRes := range expectedResources {
-			rtest.ExpectResourceTypeAndObjectMetadata(resources[i], expectedRes.name, expectedRes.ns, expectedRes.group, expectedRes.version, expectedRes.kind)
-		}
+		rtest.ExpectResources(resources, expectedResources)
 	})
 
 	It("should render calico with a apparmor profile if annotation is present in installation", func() {

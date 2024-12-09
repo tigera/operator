@@ -99,6 +99,8 @@ func (e *eck) Objects() ([]client.Object, []client.Object) {
 		e.operatorAllowTigeraPolicy(),
 	)
 
+	toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(OperatorNamespace))
+
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(OperatorNamespace, e.cfg.PullSecrets...)...)...)
 
 	toCreate = append(toCreate,

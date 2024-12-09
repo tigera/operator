@@ -112,6 +112,8 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	// recommendation cluster role
 	objs := []client.Object{
 		CreateNamespace(pr.cfg.Namespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted, pr.cfg.Installation.Azure),
+		CreateOperatorSecretsRoleBinding(pr.cfg.Namespace),
+
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),

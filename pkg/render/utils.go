@@ -17,7 +17,15 @@ package render
 import (
 	"fmt"
 
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+)
+
+const (
+	TigeraOperatorSecrets = "tigera-operator-secrets"
 )
 
 // LinseedNamespace determine the namespace in which Linseed is running.
@@ -39,4 +47,28 @@ func ManagerService(tenant *operatorv1.Tenant) string {
 		return fmt.Sprintf("https://tigera-manager.%s.svc:9443", tenant.Namespace)
 	}
 	return fmt.Sprintf("https://tigera-manager.%s.svc:9443", ManagerNamespace)
+}
+
+// CreateOperatorSecretsRoleBinding binds the tigera-operator-secrets ClusterRole to the operator's ServiceAccount
+// in the given namespace, granting permission to manipulate secrets.
+func CreateOperatorSecretsRoleBinding(namespace string) *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraOperatorSecrets,
+			Namespace: namespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     TigeraOperatorSecrets,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      common.OperatorServiceAccount(),
+				Namespace: common.OperatorNamespace(),
+			},
+		},
+	}
 }

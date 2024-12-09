@@ -216,6 +216,8 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
 		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure))
 
+		objs = append(objs, CreateOperatorSecretsRoleBinding(c.cfg.Namespace))
+
 		// For multi-tenant environments, the management cluster itself isn't shown in the UI so we only need to create these
 		// when there is no tenant.
 		objs = append(objs,

@@ -17,6 +17,7 @@ package components
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -173,6 +174,11 @@ func getField(overrides any, fieldNames ...string) (value reflect.Value) {
 			fieldNames = fieldNames[1:]
 		}
 	}
+
+	// Record that we're handling `fieldNames`.  See `overrideFieldsHandledInLastApplyCall` for
+	// why.
+	recordHandledField(fieldNames)
+
 	typ := reflect.TypeOf(overrides)
 	for _, fieldName := range fieldNames {
 		if typ.Kind() == reflect.Pointer {
@@ -199,6 +205,8 @@ func getField(overrides any, fieldNames ...string) (value reflect.Value) {
 
 // applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
 func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any) *replicatedPodResource {
+	resetHandledFields()
+
 	// If `overrides` has a Metadata field, and it's non-nil, non-clashing labels and annotations from that
 	// metadata are added into `r.labels` and `r.annotations`.
 	if metadata := GetMetadata(overrides); metadata != nil {
@@ -292,6 +300,20 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 	}
 
 	return r
+}
+
+// For UT purposes, only, this variable stores the override fields that were handled in that most
+// recent `applyReplicatedPodResourceOverrides` call.  UT code then checks that the structures we
+// use for `overrides` do not have any _other_ fields than those (except for known special cases).
+var overrideFieldsHandledInLastApplyCall []string
+
+func resetHandledFields() {
+	overrideFieldsHandledInLastApplyCall = nil
+}
+
+func recordHandledField(fieldNames []string) {
+	dottedName := strings.Join(fieldNames, ".")
+	overrideFieldsHandledInLastApplyCall = append(overrideFieldsHandledInLastApplyCall, dottedName)
 }
 
 // ApplyDaemonSetOverrides applies the overrides to the given DaemonSet.

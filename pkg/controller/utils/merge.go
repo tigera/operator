@@ -214,6 +214,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.Azure = override.Azure
 	}
 
+	switch compareFields(inst.Proxy, override.Proxy) {
+	case BOnlySet, Different:
+		inst.Proxy = override.Proxy
+	}
+
 	return inst
 }
 

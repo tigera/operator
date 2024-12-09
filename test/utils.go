@@ -20,6 +20,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/stretchr/testify/mock"
@@ -326,4 +327,29 @@ func (o *ObjectTrackerWithCalls) Delete(gvr schema.GroupVersionResource, ns, nam
 func (o *ObjectTrackerWithCalls) Watch(gvr schema.GroupVersionResource, ns string) (watch.Interface, error) {
 	o.inc(gvr, ObjectTrackerCallWatch)
 	return o.ObjectTracker.Watch(gvr, ns)
+}
+
+type ProxyTestCase struct {
+	Lowercase  bool
+	Target     string
+	PodProxies []*ProxyConfig
+}
+
+type ProxyConfig struct {
+	HTTPProxy  string
+	HTTPSProxy string
+	NoProxy    string
+}
+
+func PrettyFormatProxyTestCase(testCase ProxyTestCase) string {
+	var containerProxies []string
+	for _, containerProxy := range testCase.PodProxies {
+		if containerProxy == nil {
+			containerProxies = append(containerProxies, "nil")
+		} else {
+			containerProxies = append(containerProxies, fmt.Sprintf("{HTTPProxy: %s, HTTPSProxy: %s, NoProxy: %s}", containerProxy.HTTPProxy, containerProxy.HTTPSProxy, containerProxy.NoProxy))
+		}
+	}
+
+	return fmt.Sprintf("Lowercase: %v, Target: %s, containerProxies: [%s]", testCase.Lowercase, testCase.Target, strings.Join(containerProxies, ","))
 }

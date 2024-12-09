@@ -17,6 +17,10 @@ package authentication
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -24,8 +28,6 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/common/secret"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -34,7 +36,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/test"
+	"golang.org/x/net/http/httpproxy"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	appsv1 "k8s.io/api/apps/v1"
@@ -49,14 +55,16 @@ import (
 
 var _ = Describe("authentication controller tests", func() {
 	var (
-		cli        client.Client
-		scheme     *runtime.Scheme
-		ctx        context.Context
-		mockStatus *status.MockStatus
-		readyFlag  *utils.ReadyFlag
-		idpSecret  *corev1.Secret
-		auth       *operatorv1.Authentication
-		replicas   int32
+		cli                 client.Client
+		scheme              *runtime.Scheme
+		ctx                 context.Context
+		mockStatus          *status.MockStatus
+		readyFlag           *utils.ReadyFlag
+		idpSecret           *corev1.Secret
+		installation        *operatorv1.Installation
+		auth                *operatorv1.Authentication
+		objTrackerWithCalls test.ObjectTrackerWithCalls
+		replicas            int32
 	)
 
 	BeforeEach(func() {
@@ -67,7 +75,8 @@ var _ = Describe("authentication controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
-		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+		objTrackerWithCalls = test.NewObjectTrackerWithCalls(scheme)
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjectTracker(&objTrackerWithCalls).Build()
 
 		// Set up a mock status
 		mockStatus = &status.MockStatus{}
@@ -87,7 +96,8 @@ var _ = Describe("authentication controller tests", func() {
 		certificateManager, err := certificatemanager.Create(cli, nil, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-		Expect(cli.Create(ctx, &operatorv1.Installation{
+
+		installation = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "default",
 			},
@@ -100,7 +110,8 @@ var _ = Describe("authentication controller tests", func() {
 				Variant:              operatorv1.TigeraSecureEnterprise,
 				Registry:             "some.registry.org/",
 			},
-		})).To(BeNil())
+		}
+		Expect(cli.Create(ctx, installation)).To(BeNil())
 		Expect(cli.Create(ctx, &operatorv1.APIServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
@@ -169,7 +180,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -194,7 +205,7 @@ var _ = Describe("authentication controller tests", func() {
 
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -235,7 +246,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -295,7 +306,7 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
@@ -340,7 +351,7 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			authentication, err := utils.GetAuthentication(ctx, cli)
@@ -496,7 +507,241 @@ var _ = Describe("authentication controller tests", func() {
 			r.tierWatchReady = &utils.ReadyFlag{}
 			test.ExpectWaitForTierWatch(ctx, r, mockStatus)
 		})
+
+		Context("Proxy detection", func() {
+			cases := []test.ProxyTestCase{
+				{
+					PodProxies: []*test.ProxyConfig{{
+						HTTPProxy: "http://proxy.io",
+					}},
+				},
+				{
+					PodProxies: []*test.ProxyConfig{{
+						HTTPSProxy: "https://proxy.io",
+					}},
+				},
+				{
+					PodProxies: []*test.ProxyConfig{{
+						HTTPProxy:  "http://proxy.io",
+						HTTPSProxy: "https://proxy.io",
+					}},
+				},
+				{
+					PodProxies: []*test.ProxyConfig{{
+						HTTPProxy:  "http://proxy.io",
+						HTTPSProxy: "https://192.168.0.2:9000",
+					}},
+				},
+				{
+					PodProxies: []*test.ProxyConfig{{
+						HTTPProxy:  "http://192.168.0.1:9000",
+						HTTPSProxy: "https://192.168.0.1:9000",
+					}},
+					Lowercase: true,
+				},
+				{
+					PodProxies: []*test.ProxyConfig{
+						{
+							HTTPProxy:  "http://proxy.io:9000",
+							HTTPSProxy: "https://proxy.io:9000",
+						},
+						{
+							HTTPProxy:  "http://proxy.io:9000",
+							HTTPSProxy: "https://proxy.io:9000",
+						},
+					},
+				},
+			}
+
+			for _, testCase := range cases {
+				Describe(fmt.Sprintf("Proxy detection when %+v", test.PrettyFormatProxyTestCase(testCase)), func() {
+					// Set up the test based on the test case.
+					BeforeEach(func() {
+						mockStatus.On("ReadyToMonitor")
+						mockStatus.On("SetMetaData", mock.Anything).Return()
+						mockStatus.On("AddDeployments", mock.Anything)
+						mockStatus.On("ClearDegraded", mock.Anything)
+						mockStatus.On("IsAvailable").Return(true)
+
+						// Create the pod whichs back the deployment and have the appropriate proxy settings.
+						// idp-resolution: If we update the controller to resolve the specific IdP and use that for
+						// policy calculation, we'll need to set the IdP on the Authentication CR here.
+						for i, proxy := range testCase.PodProxies {
+							createPodWithProxy(ctx, cli, proxy, testCase.Lowercase, i)
+						}
+					})
+
+					It(fmt.Sprintf("detects proxy correctly when %+v", test.PrettyFormatProxyTestCase(testCase)), func() {
+						// First reconcile creates the dex deployment without any availability condition.
+						_, err := r.Reconcile(ctx, reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+
+						// Validate that we made no calls to get Pods at this stage.
+						podGVR := schema.GroupVersionResource{
+							Version:  "v1",
+							Resource: "pods",
+						}
+						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(BeZero())
+
+						// Set the deployment to be unavailable. We need to recreate the deployment otherwise the status update is ignored.
+						gd := appsv1.Deployment{}
+						err = cli.Get(ctx, client.ObjectKey{Name: "tigera-dex", Namespace: "tigera-dex"}, &gd)
+						Expect(err).NotTo(HaveOccurred())
+						err = cli.Delete(ctx, &gd)
+						Expect(err).NotTo(HaveOccurred())
+						gd.ResourceVersion = ""
+						gd.Status.Conditions = []appsv1.DeploymentCondition{{
+							Type:               appsv1.DeploymentAvailable,
+							Status:             corev1.ConditionFalse,
+							LastTransitionTime: metav1.Time{Time: time.Now()},
+						}}
+						err = cli.Create(ctx, &gd)
+						Expect(err).NotTo(HaveOccurred())
+
+						// Reconcile again. We should see no calls since the deployment has not transitioned to available.
+						_, err = r.Reconcile(ctx, reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(Equal(0))
+
+						// Set the deployment to available.
+						err = cli.Delete(ctx, &gd)
+						Expect(err).NotTo(HaveOccurred())
+						gd.ResourceVersion = ""
+						gd.Status.Conditions = []appsv1.DeploymentCondition{{
+							Type:               appsv1.DeploymentAvailable,
+							Status:             corev1.ConditionTrue,
+							LastTransitionTime: metav1.Time{Time: time.Now().Add(time.Minute)},
+						}}
+						err = cli.Create(ctx, &gd)
+						Expect(err).NotTo(HaveOccurred())
+
+						// Reconcile again. The proxy detection logic should kick in since the dex deployment is ready.
+						_, err = r.Reconcile(ctx, reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(Equal(1))
+
+						// Resolve the allow-tigera policy for Dex.
+						policies := v3.NetworkPolicyList{}
+						Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
+						Expect(policies.Items).To(HaveLen(2))
+						Expect(policies.Items[0].Name).To(Equal("allow-tigera.allow-tigera-dex"))
+						policy := policies.Items[0]
+
+						// Generate the expectation based on the test case, and compare the rendered rules to our expectations.
+						expectedEgressRules := getExpectedEgressDestinationRulesFromCase(testCase)
+						var renderedEgressRules []v3.EntityRule
+						for _, egressRule := range policy.Spec.Egress[2:] {
+							renderedEgressRules = append(renderedEgressRules, egressRule.Destination)
+						}
+						Expect(policy.Spec.Egress).To(HaveLen(2 + len(expectedEgressRules)))
+						Expect(renderedEgressRules).To(ContainElements(expectedEgressRules))
+
+						// Reconcile again. Verify that we do not cause any additional query for pods now that we have resolved the proxy.
+						_, err = r.Reconcile(ctx, reconcile.Request{})
+						Expect(err).ShouldNot(HaveOccurred())
+						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(Equal(1))
+					})
+				})
+			}
+		})
 	})
+
+	Context("Proxy setting", func() {
+		DescribeTable("sets the proxy", func(http, https, noProxy bool) {
+			// Setup valid auth configuration.
+			auth.Spec.OIDC = &operatorv1.AuthenticationOIDC{
+				IssuerURL:      "https://example.com",
+				UsernameClaim:  "email",
+				GroupsClaim:    "group",
+				GroupsPrefix:   "g",
+				UsernamePrefix: "u",
+			}
+			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
+			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
+
+			// Set up the proxy.
+			installationCopy := installation.DeepCopy()
+			installationCopy.Spec.Proxy = &operatorv1.Proxy{}
+			if http {
+				installationCopy.Spec.Proxy.HTTPProxy = "test-http-proxy"
+			}
+			if https {
+				installationCopy.Spec.Proxy.HTTPSProxy = "test-https-proxy"
+			}
+			if noProxy {
+				installationCopy.Spec.Proxy.NoProxy = "test-no-proxy"
+			}
+			err := cli.Update(ctx, installationCopy)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Reconcile to create the dex deployment.
+			r := ReconcileAuthentication{
+				client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: readyFlag,
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Get the deployment and validate the env vars.
+			dd := appsv1.Deployment{}
+			err = cli.Get(ctx, client.ObjectKey{Name: "tigera-dex", Namespace: "tigera-dex"}, &dd)
+			Expect(err).NotTo(HaveOccurred())
+
+			var expectedEnvVars []corev1.EnvVar
+			if http {
+				expectedEnvVars = append(expectedEnvVars,
+					corev1.EnvVar{
+						Name:  "HTTP_PROXY",
+						Value: "test-http-proxy",
+					},
+					corev1.EnvVar{
+						Name:  "http_proxy",
+						Value: "test-http-proxy",
+					},
+				)
+			}
+
+			if https {
+				expectedEnvVars = append(expectedEnvVars,
+					corev1.EnvVar{
+						Name:  "HTTPS_PROXY",
+						Value: "test-https-proxy",
+					},
+					corev1.EnvVar{
+						Name:  "https_proxy",
+						Value: "test-https-proxy",
+					},
+				)
+			}
+
+			if noProxy {
+				expectedEnvVars = append(expectedEnvVars,
+					corev1.EnvVar{
+						Name:  "NO_PROXY",
+						Value: "test-no-proxy",
+					},
+					corev1.EnvVar{
+						Name:  "no_proxy",
+						Value: "test-no-proxy",
+					},
+				)
+			}
+
+			Expect(dd.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(dd.Spec.Template.Spec.Containers[0].Env).To(ContainElements(expectedEnvVars))
+		},
+			Entry("http/https/noProxy", true, true, true),
+			Entry("http", true, false, false),
+			Entry("https", false, true, false),
+			Entry("http/https", true, true, false),
+			Entry("http/noProxy", true, false, true),
+			Entry("https/noProxy", false, true, true),
+		)
+	})
+
 	tls, err := secret.CreateTLSSecret(nil, "a", "a", corev1.TLSPrivateKeyKey, corev1.TLSCertKey, time.Hour, nil, "a")
 	Expect(err).NotTo(HaveOccurred())
 	validCert := tls.Data[corev1.TLSCertKey]
@@ -519,7 +764,7 @@ var _ = Describe("authentication controller tests", func() {
 		}
 		Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
 		Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false}
+		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		if expectReconcilePass {
 			Expect(err).ToNot(HaveOccurred())
@@ -637,4 +882,134 @@ func copyAndAddPromptTypes(auth *operatorv1.AuthenticationOIDC, promptTypes []op
 	copy := auth.DeepCopy()
 	copy.PromptTypes = promptTypes
 	return copy
+}
+
+func createPodWithProxy(ctx context.Context, c client.Client, config *test.ProxyConfig, lowercase bool, replicaNum int) {
+	pod := corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-dex" + strconv.Itoa(replicaNum),
+			Namespace: "tigera-dex",
+			Labels: map[string]string{
+				"k8s-app":                "tigera-dex",
+				"app.kubernetes.io/name": "tigera-dex",
+			},
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{
+				Name: "tigera-dex",
+				Env:  []corev1.EnvVar{},
+			}},
+		},
+	}
+
+	if config != nil {
+		// Set the env vars.
+		httpsProxyVarName := "HTTPS_PROXY"
+		httpProxyVarName := "HTTP_PROXY"
+		noProxyVarName := "NO_PROXY"
+		if lowercase {
+			httpsProxyVarName = strings.ToLower(httpsProxyVarName)
+			httpProxyVarName = strings.ToLower(httpProxyVarName)
+			noProxyVarName = strings.ToLower(noProxyVarName)
+		}
+		// Environment variables that are empty can be represented as an unset variable or a set variable with an empty string.
+		// For our tests, we'll represent them as an unset variable.
+		if config.HTTPProxy != "" {
+			pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  httpProxyVarName,
+				Value: config.HTTPProxy,
+			})
+		}
+		if config.HTTPSProxy != "" {
+			pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  httpsProxyVarName,
+				Value: config.HTTPSProxy,
+			})
+		}
+		if config.NoProxy != "" {
+			pod.Spec.Containers[0].Env = append(pod.Spec.Containers[0].Env, corev1.EnvVar{
+				Name:  noProxyVarName,
+				Value: config.NoProxy,
+			})
+		}
+	}
+
+	err := c.Create(ctx, &pod)
+	Expect(err).NotTo(HaveOccurred())
+}
+
+// getExpectedEgressDestinationRulesFromCase returns the expected rules based on the current test case. It assumes that
+// no IdP resolution is occurring, and all potential destinations are allowed.
+// idp-resolution: If the controller is updated to resolve the specific IdP destination, this function should be
+// updated to return a single egress rule based on the IdP destination and the proxy/no-proxy settings.
+func getExpectedEgressDestinationRulesFromCase(c test.ProxyTestCase) []v3.EntityRule {
+	var egressRules []v3.EntityRule
+	observedDestinations := map[string]bool{}
+
+	// Generate expected proxy rules.
+	for _, proxy := range c.PodProxies {
+		var proxyURLs []string
+
+		if proxy.HTTPProxy != "" {
+			proxyURLs = append(proxyURLs, proxy.HTTPProxy)
+		}
+
+		if proxy.HTTPSProxy != "" {
+			proxyURLs = append(proxyURLs, proxy.HTTPSProxy)
+		}
+
+		for _, proxyURLString := range proxyURLs {
+			proxyURL, err := url.ParseRequestURI(proxyURLString)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Resolve host and port
+			var host string
+			var port uint16
+			hostSplit := strings.Split(proxyURL.Host, ":")
+			switch {
+			case len(hostSplit) == 2:
+				port64, err := strconv.ParseUint(hostSplit[1], 10, 16)
+				Expect(err).NotTo(HaveOccurred())
+				host = hostSplit[0]
+				port = uint16(port64)
+			case proxyURL.Scheme == "https":
+				host = proxyURL.Host
+				port = 443
+			default:
+				host = proxyURL.Host
+				port = 80
+			}
+			hostIsIP := net.ParseIP(host) != nil
+
+			hostPortString := fmt.Sprintf("%v:%v", host, port)
+			if observedDestinations[hostPortString] {
+				continue
+			}
+
+			if hostIsIP {
+				egressRules = append(egressRules, v3.EntityRule{
+					Nets:  []string{fmt.Sprintf("%s/32", host)},
+					Ports: networkpolicy.Ports(port),
+				})
+			} else {
+				egressRules = append(egressRules, v3.EntityRule{
+					Domains: []string{host},
+					Ports:   networkpolicy.Ports(port),
+				})
+			}
+
+			observedDestinations[hostPortString] = true
+		}
+	}
+
+	// Add expected target rules.
+	egressRules = append(egressRules, v3.EntityRule{
+		Nets:  []string{"0.0.0.0/0"},
+		Ports: networkpolicy.Ports(443, 6443, 389, 636),
+	})
+	egressRules = append(egressRules, v3.EntityRule{
+		Nets:  []string{"::/0"},
+		Ports: networkpolicy.Ports(443, 6443, 389, 636),
+	})
+	return egressRules
 }

@@ -7,6 +7,7 @@ resources:
 - bases/operator.tigera.io_authentications.yaml
 - bases/operator.tigera.io_compliances.yaml
 - bases/operator.tigera.io_egressgateways.yaml
+- bases/operator.tigera.io_gatewayapis.yaml
 - bases/operator.tigera.io_imagesets.yaml
 - bases/operator.tigera.io_installations.yaml
 - bases/operator.tigera.io_intrusiondetections.yaml

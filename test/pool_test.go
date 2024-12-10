@@ -142,6 +142,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.Disabled).To(Equal(false))
 		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
+		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(crdv1.Automatic))
 
 		// Verify that a default IPv6 pool was created.
 		Expect(ipPools.Items[1].Name).To(Equal("default-ipv6-ippool"))
@@ -150,6 +151,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[1].Spec.Disabled).To(Equal(false))
 		Expect(ipPools.Items[1].Spec.BlockSize).To(Equal(122))
 		Expect(ipPools.Items[1].Spec.NodeSelector).To(Equal("all()"))
+		Expect(ipPools.Items[1].Spec.AssignmentMode).To(Equal(crdv1.Automatic))
 
 		// Expect the default pools to be marked as managed by the operator.
 		for _, p := range ipPools.Items {
@@ -190,6 +192,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
 		Expect(ipPools.Items[0].Labels).To(HaveLen(1))
+		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(crdv1.Automatic))
 	})
 
 	It("should assume ownership of legacy default IP pools", func() {
@@ -209,6 +212,7 @@ var _ = Describe("IPPool FV tests", func() {
 					crdv1.IPPoolAllowedUseWorkload,
 					crdv1.IPPoolAllowedUseTunnel,
 				},
+				AssignmentMode: crdv1.Automatic,
 			},
 		}
 		Expect(c.Create(context.Background(), &ipPool)).To(Succeed())
@@ -283,6 +287,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(v3Pools.Items[0].Spec.NodeSelector).To(Equal("all()"))
 		Expect(v3Pools.Items[0].Spec.IPIPMode).To(Equal(v3.IPIPMode(v3.IPIPModeAlways)))
 		Expect(v3Pools.Items[0].Spec.VXLANMode).To(Equal(v3.VXLANMode(v3.VXLANModeNever)))
+		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(crdv1.Automatic))
 	})
 
 	// This test verifies that the IP pool controller doesn't assume ownership of IP pools that may exist in the
@@ -311,7 +316,7 @@ var _ = Describe("IPPool FV tests", func() {
 		}
 		Expect(c.Create(context.Background(), &ipPool)).To(Succeed())
 
-		// Create an Installation referencing the IP pool by CIDR, mimicing the upgrade case. We expect
+		// Create an Installation referencing the IP pool by CIDR, mimicking the upgrade case. We expect
 		// the operator to default the IP pool, filling in any missing fields. But it won't
 		// update IP pool in the cluster since it doesn't match exactly.
 		spec := operator.InstallationSpec{

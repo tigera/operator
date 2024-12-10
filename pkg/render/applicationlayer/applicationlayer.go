@@ -57,6 +57,7 @@ const (
 	ModSecurityRulesetVolumeName     = "modsecurity-ruleset"
 	ModSecurityRulesetVolumePath     = "/etc/modsecurity-ruleset"
 	ModSecurityRulesetConfigMapName  = "modsecurity-ruleset"
+	DefaultCoreRuleset               = "coreruleset-default"
 	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/modsecurity-ruleset"
 	CalicoLogsVolumeName             = "var-log-calico"
 	CalicologsVolumePath             = "/var/log/calico"
@@ -82,8 +83,9 @@ type Config struct {
 	OsType       rmeta.OSType
 
 	// Optional config for WAF.
-	PerHostWAFEnabled    bool
-	ModSecurityConfigMap *corev1.ConfigMap
+	PerHostWAFEnabled           bool
+	ModSecurityConfigMap        *corev1.ConfigMap
+	DefaultCoreRulesetConfigMap *corev1.ConfigMap
 
 	// Optional config for L7 logs.
 	PerHostLogsEnabled     bool
@@ -170,6 +172,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
 		// this ConfigMap is a copy of the provided configuration from the operator namespace into the calico-system namespace
 		objs = append(objs, c.modSecurityConfigMap())
+		objs = append(objs, c.defaultCoreRulesetConfigMap())
 	}
 
 	// Envoy configuration
@@ -470,6 +473,17 @@ func (c *component) volumes() []corev1.Volume {
 					},
 				},
 			})
+
+			volumes = append(volumes, corev1.Volume{
+				Name: ModSecurityRulesetVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: DefaultCoreRuleset,
+						},
+					},
+				},
+			})
 		}
 	}
 
@@ -512,6 +526,19 @@ func (c *component) modSecurityConfigMap() *corev1.ConfigMap {
 		},
 		Data:       c.config.ModSecurityConfigMap.Data,
 		BinaryData: c.config.ModSecurityConfigMap.BinaryData,
+	}
+}
+
+func (c *component) defaultCoreRulesetConfigMap() *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DefaultCoreRuleset,
+			Namespace: common.CalicoNamespace,
+			Labels:    map[string]string{},
+		},
+		Data:       c.config.DefaultCoreRulesetConfigMap.Data,
+		BinaryData: c.config.DefaultCoreRulesetConfigMap.BinaryData,
 	}
 }
 

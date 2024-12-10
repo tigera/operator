@@ -225,6 +225,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		cm, err := embed.AsConfigMap(
 			applicationlayer.ModSecurityRulesetConfigMapName,
 			common.OperatorNamespace(),
+			embed.FS,
 		)
 		Expect(err).To(BeNil())
 
@@ -524,6 +525,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		cm, err := embed.AsConfigMap(
 			applicationlayer.ModSecurityRulesetConfigMapName,
 			common.OperatorNamespace(),
+			embed.FS,
 		)
 		Expect(err).To(BeNil())
 		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{

@@ -37,7 +37,7 @@ func init() {
 	}
 }
 
-func AsMap() (map[string]string, error) {
+func AsMap(fileSystem fs.FS) (map[string]string, error) {
 	res := make(map[string]string)
 	var walkFn fs.WalkDirFunc = func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -56,15 +56,15 @@ func AsMap() (map[string]string, error) {
 		return nil
 	}
 
-	if err := fs.WalkDir(FS, ".", walkFn); err != nil {
+	if err := fs.WalkDir(fileSystem, ".", walkFn); err != nil {
 		return nil, fmt.Errorf("failed to walk core ruleset files (%w)", err)
 	}
 
 	return res, nil
 }
 
-func AsConfigMap(name, namespace string) (*corev1.ConfigMap, error) {
-	data, err := AsMap()
+func AsConfigMap(name, namespace string, fileSystem fs.FS) (*corev1.ConfigMap, error) {
+	data, err := AsMap(fileSystem)
 	if err != nil {
 		return nil, err
 	}

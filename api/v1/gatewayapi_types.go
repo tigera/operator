@@ -25,6 +25,9 @@ import (
 type GatewayAPISpec struct {
 	// Allow optional customization of the gateway controller deployment.
 	GatewayControllerDeployment *GatewayControllerDeployment `json:"gatewayControllerDeployment,omitempty"`
+
+	// Allow optional customization of the gateway certgen job.
+	GatewayCertgenJob *GatewayCertgenJob `json:"gatewayCertgenJob,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -122,6 +125,78 @@ type GatewayControllerDeploymentPodSpec struct {
 
 // See GatewayControllerDeploymentPodSpec for how this struct can be used.
 type GatewayControllerDeploymentContainer struct {
+	// +kubebuilder:validation:Enum=envoy-gateway
+	Name string `json:"name"`
+
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+// Optional customization of the gateway certgen job.
+//
+// If GatewayCertgenJob.Metadata is non-nil, non-clashing labels and annotations from that metadata
+// are added into the job's top-level metadata.
+//
+// For customization of the job spec see GatewayCertgenJobSpec.
+type GatewayCertgenJob struct {
+	// +optional
+	Metadata *Metadata `json:"metadata,omitempty"`
+
+	// +optional
+	Spec *GatewayCertgenJobSpec `json:"spec,omitempty"`
+}
+
+// Optional customization of the gateway certgen job.
+//
+// For customization of the job template see GatewayCertgenJobPodTemplate.
+type GatewayCertgenJobSpec struct {
+	// +optional
+	Template *GatewayCertgenJobPodTemplate `json:"template,omitempty"`
+}
+
+// Optional customization of the gateway certgen job.
+//
+// If GatewayCertgenJob.Spec.Template.Metadata is non-nil, non-clashing labels and
+// annotations from that metadata are added into the job's pod template.
+//
+// For customization of the pod template spec see GatewayCertgenJobPodSpec.
+type GatewayCertgenJobPodTemplate struct {
+	// +optional
+	Metadata *Metadata `json:"metadata,omitempty"`
+
+	// +optional
+	Spec *GatewayCertgenJobPodSpec `json:"spec,omitempty"`
+}
+
+// Optional customization of the gateway certgen job.
+//
+// If GatewayCertgenJob.Spec.Template.Spec.Affinity is non-nil, it sets the affinity field of the
+// job's pod template.
+//
+// If GatewayCertgenJob.Spec.Template.Spec.Containers["envoy-gateway-certgen"].Resources is non-nil,
+// it overrides the ResourceRequirements of the job's "envoy-gateway-certgen" container.
+//
+// If GatewayCertgenJob.Spec.Template.Spec.NodeSelector is non-nil, it sets a node selector for
+// where job pods may be scheduled.
+//
+// If GatewayCertgenJob.Spec.Template.Spec.Tolerations is non-nil, it sets the tolerations field of
+// the job's pod template.
+type GatewayCertgenJobPodSpec struct {
+	// +optional
+	Affinity *v1.Affinity `json:"affinity"`
+
+	// +optional
+	Containers []GatewayCertgenJobContainer `json:"containers,omitempty"`
+
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// +optional
+	Tolerations []v1.Toleration `json:"tolerations"`
+}
+
+// See GatewayCertgenJobPodSpec for how this struct can be used.
+type GatewayCertgenJobContainer struct {
 	// +kubebuilder:validation:Enum=envoy-gateway
 	Name string `json:"name"`
 

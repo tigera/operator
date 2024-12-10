@@ -453,7 +453,8 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		certgenJob.Spec.Template.Spec.ImagePullSecrets,
 		secret.GetReferenceList(pr.cfg.PullSecrets)...)
 
-	// TODO: Hmm, do we need to allow other overrides here, for the certgen Job?
+	// Apply customizations from the GatewayCertgenJob field of the GatewayAPI CR.
+	rcomp.ApplyJobOverrides(certgenJob, pr.cfg.GatewayAPI.Spec.GatewayCertgenJob)
 
 	objs = append(objs, certgenJob)
 

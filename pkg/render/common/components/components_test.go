@@ -181,6 +181,7 @@ var _ = Describe("Common components render tests", func() {
 		Entry("ElasticsearchMetricsDeployment", &v1.ElasticsearchMetricsDeployment{}, false),
 		Entry("ESGatewayDeployment", &v1.ESGatewayDeployment{}, false),
 		Entry("FluentdDaemonSet", &v1.FluentdDaemonSet{}, false),
+		Entry("GatewayCertgenJob", &v1.GatewayCertgenJob{}, false),
 		Entry("GatewayControllerDeployment", &v1.GatewayControllerDeployment{}, false),
 		Entry("GuardianDeployment", &v1.GuardianDeployment{}, false),
 		Entry("IntrusionDetectionControllerDeployment", &v1.IntrusionDetectionControllerDeployment{}, false),

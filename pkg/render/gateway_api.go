@@ -399,6 +399,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		resources.leaderElectionRole,
 		resources.leaderElectionRoleBinding,
 		resources.controllerService,
+		resources.certgenServiceAccount,
 		resources.certgenRole,
 		resources.certgenRoleBinding,
 	}

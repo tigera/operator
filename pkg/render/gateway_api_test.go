@@ -17,6 +17,16 @@ package render
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	rtest "github.com/tigera/operator/pkg/render/common/test"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var _ = Describe("Gateway API rendering tests", func() {
@@ -24,5 +34,77 @@ var _ = Describe("Gateway API rendering tests", func() {
 	It("should read Gateway API resources from YAML", func() {
 		resources := GatewayAPIResources()
 		Expect(resources.namespace.Name).To(Equal("calico-system"))
+	})
+
+	It("should apply overrides from GatewayControllerDeployment", func() {
+		installation := &operatorv1.InstallationSpec{}
+		five := int32(5)
+		affinity := &corev1.Affinity{}
+		resourceRequirements := &corev1.ResourceRequirements{}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayControllerDeployment: &operatorv1.GatewayControllerDeployment{
+					Metadata: &operatorv1.Metadata{
+						Labels: map[string]string{
+							"x":     "y",
+							"white": "black",
+						},
+						Annotations: map[string]string{
+							"up":    "down",
+							"round": "flat",
+						},
+					},
+					Spec: &operatorv1.GatewayControllerDeploymentSpec{
+						MinReadySeconds: &five,
+						Template: &operatorv1.GatewayControllerDeploymentPodTemplate{
+							Metadata: &operatorv1.Metadata{
+								Labels: map[string]string{
+									"rural": "urban",
+								},
+								Annotations: map[string]string{
+									"haste": "speed",
+								},
+							},
+							Spec: &operatorv1.GatewayControllerDeploymentPodSpec{
+								Affinity: affinity,
+								Containers: []operatorv1.GatewayControllerDeploymentContainer{{
+									Name:      "envoy-gateway",
+									Resources: resourceRequirements,
+								}},
+								NodeSelector: map[string]string{
+									"fast": "slow",
+								},
+								Tolerations: []corev1.Toleration{},
+							},
+						},
+					},
+				},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+		objsToCreate, objsToDelete := gatewayComp.Objects()
+		Expect(objsToDelete).To(HaveLen(0))
+		rtest.ExpectResources(objsToCreate, []client.Object{
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "calico-system"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-config", Namespace: "calico-system"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-role"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-rolebinding"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-infra-manager", Namespace: "calico-system"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-leader-election-role", Namespace: "calico-system"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-infra-manager", Namespace: "calico-system"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-leader-election-rolebinding", Namespace: "calico-system"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "calico-system"}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "calico-system"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "calico-system"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "calico-system"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "calico-system"}},
+			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "calico-system"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.gateway-controller-api-access", Namespace: "calico-system"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.gateway-traffic", Namespace: "calico-system"}},
+		})
 	})
 })

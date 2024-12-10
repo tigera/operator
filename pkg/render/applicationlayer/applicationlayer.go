@@ -56,6 +56,8 @@ const (
 	DikastesContainerName            = "dikastes"
 	ModSecurityRulesetVolumeName     = "modsecurity-ruleset"
 	ModSecurityRulesetVolumePath     = "/etc/modsecurity-ruleset"
+	DefaultCoreRulesetVolumeName     = "coreruleset-default"
+	DefaultCoreRulesetVolumePath     = "/etc/coreruleset-default"
 	ModSecurityRulesetConfigMapName  = "modsecurity-ruleset"
 	DefaultCoreRuleset               = "coreruleset-default"
 	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/modsecurity-ruleset"
@@ -333,6 +335,11 @@ func (c *component) containers() []corev1.Container {
 						MountPath: ModSecurityRulesetVolumePath,
 						ReadOnly:  true,
 					},
+					{
+						Name:      DefaultCoreRulesetVolumeName,
+						MountPath: DefaultCoreRulesetVolumePath,
+						ReadOnly:  true,
+					},
 				}...,
 			)
 		}
@@ -475,7 +482,7 @@ func (c *component) volumes() []corev1.Volume {
 			})
 
 			volumes = append(volumes, corev1.Volume{
-				Name: ModSecurityRulesetVolumeName,
+				Name: DefaultCoreRulesetVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{

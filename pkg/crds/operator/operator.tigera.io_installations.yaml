@@ -1256,6 +1256,11 @@ spec:
                           items:
                             type: string
                           type: array
+                        assignmentMode:
+                          description: AssignmentMode determines if IP addresses from
+                            this pool should be  assigned automatically or on request
+                            only
+                          type: string
                         blockSize:
                           description: |-
                             BlockSize specifies the CIDR prefex length to use when allocating per-node IP blocks from
@@ -9608,6 +9613,11 @@ spec:
                               items:
                                 type: string
                               type: array
+                            assignmentMode:
+                              description: AssignmentMode determines if IP addresses
+                                from this pool should be  assigned automatically or
+                                on request only
+                              type: string
                             blockSize:
                               description: |-
                                 BlockSize specifies the CIDR prefex length to use when allocating per-node IP blocks from

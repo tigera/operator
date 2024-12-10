@@ -108,6 +108,7 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 		toDelete = append(toDelete, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged, d.cfg.Installation.Azure))
 	} else {
 		toCreate = append(toCreate, render.CreateNamespace(DeepPacketInspectionNamespace, d.cfg.Installation.KubernetesProvider, render.PSSPrivileged, d.cfg.Installation.Azure))
+		toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(DeepPacketInspectionNamespace))
 	}
 
 	// This secret is deprecated in this namespace and should be removed in upgrade scenarios

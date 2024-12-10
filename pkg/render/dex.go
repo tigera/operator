@@ -117,6 +117,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
 		c.allowTigeraNetworkPolicy(c.cfg.Installation.Variant),
 		networkpolicy.AllowTigeraDefaultDeny(DexNamespace),
+		CreateOperatorSecretsRoleBinding(DexNamespace),
 		c.serviceAccount(),
 		c.deployment(),
 		c.service(),

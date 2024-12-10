@@ -54,6 +54,7 @@ func (c *namespaceComponent) SupportedOSType() rmeta.OSType {
 func (c *namespaceComponent) Objects() ([]client.Object, []client.Object) {
 	ns := []client.Object{
 		CreateNamespace(common.CalicoNamespace, c.cfg.Installation.KubernetesProvider, PSSPrivileged, c.cfg.Installation.Azure),
+		CreateOperatorSecretsRoleBinding(common.CalicoNamespace),
 	}
 
 	// If we're terminating, we don't want to delete the namespace right away.

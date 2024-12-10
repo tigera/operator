@@ -28,6 +28,7 @@ type GatewayAPISpec struct {
 }
 
 //+kubebuilder:object:root=true
+//+kubebuilder:resource:scope=Cluster
 
 type GatewayAPI struct {
 	metav1.TypeMeta   `json:",inline"`

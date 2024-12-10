@@ -11,7 +11,7 @@ spec:
     listKind: GatewayAPIList
     plural: gatewayapis
     singular: gatewayapi
-  scope: Namespaced
+  scope: Cluster
   versions:
   - name: v1
     schema:

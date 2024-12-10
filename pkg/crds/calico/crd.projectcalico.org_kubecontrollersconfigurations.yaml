@@ -106,13 +106,6 @@ spec:
                           with the Calico datastore. [Default: 5m]'
                         type: string
                     type: object
-                  loadBalancer:
-                    description: LoadBalancer enables and configures the LoadBalancer
-                      controller. Enabled by default, set to nil to disable.
-                    properties:
-                      assignIPs:
-                        type: string
-                    type: object
                 type: object
               debugProfilePort:
                 description: DebugProfilePort configures the port to serve memory
@@ -233,13 +226,6 @@ spec:
                             description: 'ReconcilerPeriod is the period to perform
                               reconciliation with the Calico datastore. [Default:
                               5m]'
-                            type: string
-                        type: object
-                      loadBalancer:
-                        description: LoadBalancer enables and configures the LoadBalancer
-                          controller. Enabled by default, set to nil to disable.
-                        properties:
-                          assignIPs:
                             type: string
                         type: object
                     type: object

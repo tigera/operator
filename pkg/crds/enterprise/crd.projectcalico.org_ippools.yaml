@@ -37,6 +37,13 @@ spec:
                 items:
                   type: string
                 type: array
+              assignmentMode:
+                description: Determines the mode how IP addresses should be assigned
+                  from this pool
+                enum:
+                - Automatic
+                - Manual
+                type: string
               awsSubnetID:
                 description: 'AWSSubnetID if specified Calico will attempt to ensure
                   that IPs chosen from this IP pool are routed to the corresponding

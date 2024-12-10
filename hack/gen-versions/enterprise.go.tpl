@@ -357,6 +357,19 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+
+	ComponentGatewayAPIEnvoyGateway = Component{
+		Version:  "v1.1.2",
+		Image:    "envoyproxy/gateway",
+		Registry: "docker.io/",
+	}
+
+	ComponentGatewayAPIEnvoyRatelimit = Component{
+		Version:  "26f28d78",
+		Image:    "envoyproxy/ratelimit",
+		Registry: "docker.io/",
+	}
+
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
@@ -404,5 +417,7 @@ var (
 		ComponentTigeraFlexVolume,
 		ComponentTigeraCSI,
 		ComponentTigeraCSINodeDriverRegistrar,
+		ComponentGatewayAPIEnvoyGateway,
+		ComponentGatewayAPIEnvoyRatelimit,
 	}
 )

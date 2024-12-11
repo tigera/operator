@@ -399,6 +399,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		resources.certgenServiceAccount,
 		resources.certgenRole,
 		resources.certgenRoleBinding,
+		pr.envoyProxyConfig(),
 	}
 
 	// Deep-copy all of those, so as not to inadvertently modify the cache inside
@@ -459,4 +460,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)
 
 	return objs, nil
+}
+
+func (pr *gatewayAPIImplementationComponent) envoyProxyConfig() *corev1.ConfigMap {
 }

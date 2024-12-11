@@ -107,11 +107,6 @@ func setupClusterSGs(ec2Cli *ec2.EC2, vpcId string) error {
 		return fmt.Errorf("failed to get controlplane AWS SecurityGroup: %v", err)
 	}
 
-	err = setupSG(ec2Cli, controlPlaneSg)
-	if err != nil {
-		return fmt.Errorf("failed to update controlplane AWS SecurityGroup: %v", err)
-	}
-
 	// Get node SG with role filter
 	nodeSg, err := getSecurityGroup(ec2Cli, vpcId, "tag:sigs.k8s.io/cluster-api-provider-aws/role", "node")
 	// Fall back to using filter tag:Name with *-worker-sg if not found
@@ -122,7 +117,12 @@ func setupClusterSGs(ec2Cli *ec2.EC2, vpcId string) error {
 		return fmt.Errorf("failed to get node AWS SecurityGroup: %v", err)
 	}
 
-	err = setupSG(ec2Cli, nodeSg)
+	err = setupSG(ec2Cli, controlPlaneSg, []*string{controlPlaneSg.GroupId, nodeSg.GroupId})
+	if err != nil {
+		return fmt.Errorf("failed to update controlplane AWS SecurityGroup: %v", err)
+	}
+
+	err = setupSG(ec2Cli, nodeSg, []*string{controlPlaneSg.GroupId, nodeSg.GroupId})
 	if err != nil {
 		return fmt.Errorf("failed to update node AWS SecurityGroup: %v", err)
 	}
@@ -137,7 +137,7 @@ func setupHostedClusterSGs(ec2Cli *ec2.EC2, vpcId string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get AWS SecurityGroups: %v", err)
 	}
-	err = setupSG(ec2Cli, defaultSg)
+	err = setupSG(ec2Cli, defaultSg, []*string{defaultSg.GroupId})
 	if err != nil {
 		return fmt.Errorf("failed to update default AWS SecurityGroup: %v", err)
 	}
@@ -252,25 +252,29 @@ func ingressSrcMatchesIpPermission(s ingressSrc, ipp *ec2.IpPermission) bool {
 	return false
 }
 
-func setupSG(ec2Cli *ec2.EC2, sg *ec2.SecurityGroup) error {
-	src := []ingressSrc{
-		{
-			// BGP
-			srcSGId:  aws.StringValue(sg.GroupId),
-			protocol: "tcp",
-			port:     aws.Int64(179),
-		},
-		{
-			// IP-in-IP
-			srcSGId:  aws.StringValue(sg.GroupId),
-			protocol: "4",
-		},
-		{
-			// Typha
-			srcSGId:  aws.StringValue(sg.GroupId),
-			protocol: "tcp",
-			port:     aws.Int64(5473),
-		},
+// setupSG adds rules to SG that allow incoming from srcSGIDs for BGP, IPIP, Typha comms
+func setupSG(ec2Cli *ec2.EC2, sg *ec2.SecurityGroup, srcSGIDs []*string) error {
+	src := []ingressSrc{}
+	for _, srcSGID := range srcSGIDs {
+		src = append(src, []ingressSrc{
+			{
+				// BGP
+				srcSGId:  aws.StringValue(srcSGID),
+				protocol: "tcp",
+				port:     aws.Int64(179),
+			},
+			{
+				// IP-in-IP
+				srcSGId:  aws.StringValue(srcSGID),
+				protocol: "4",
+			},
+			{
+				// Typha
+				srcSGId:  aws.StringValue(srcSGID),
+				protocol: "tcp",
+				port:     aws.Int64(5473),
+			},
+		}...)
 	}
 
 	err := allowIngressToSG(ec2Cli, sg, src)

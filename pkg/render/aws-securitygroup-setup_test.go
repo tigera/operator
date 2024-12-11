@@ -30,8 +30,9 @@ var _ = Describe("AWS SecurityGroup Setup rendering tests", func() {
 
 	BeforeEach(func() {
 		cfg = &AWSSGSetupConfiguration{
-			PullSecrets:  []corev1.LocalObjectReference{},
-			Installation: &operatorv1.InstallationSpec{},
+			PullSecrets:     []corev1.LocalObjectReference{},
+			Installation:    &operatorv1.InstallationSpec{},
+			HostedOpenShift: false,
 		}
 	})
 
@@ -90,5 +91,53 @@ var _ = Describe("AWS SecurityGroup Setup rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
+		expectedEnv := []corev1.EnvVar{
+			{
+				Name:  "OPENSHIFT",
+				Value: "true",
+			},
+			{
+				Name:  "REQUIRE_AWS",
+				Value: "true",
+			},
+			{
+				Name:  "KUBELET_KUBECONFIG",
+				Value: "/etc/kubernetes/kubeconfig",
+			},
+		}
+		Expect(job.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))
+	})
+
+	It("should render Setup Job env correctly when in an HCP hosted cluster", func() {
+		cfg.HostedOpenShift = true
+		component, err := AWSSecurityGroupSetup(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, _ := component.Objects()
+
+		job, ok := rtest.GetResource(toCreate, "aws-security-group-setup-1", "tigera-operator", "batch", "v1", "Job").(*batchv1.Job)
+		Expect(ok).To(BeTrue())
+
+		Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
+
+		expectedEnv := []corev1.EnvVar{
+			{
+				Name:  "OPENSHIFT",
+				Value: "true",
+			},
+			{
+				Name:  "REQUIRE_AWS",
+				Value: "true",
+			},
+			{
+				Name:  "KUBELET_KUBECONFIG",
+				Value: "/etc/kubernetes/kubeconfig",
+			},
+			{
+				Name:  "HOSTED_OPENSHIFT",
+				Value: "true",
+			},
+		}
+		Expect(job.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedEnv))
 	})
 })

@@ -315,6 +315,12 @@ var (
 		Registry: "docker.io/",
 	}
 
+	ComponentGatewayAPIEnvoyProxy = Component{
+		Version:  "distroless-v1.31.0",
+		Image:    "envoyproxy/envoy",
+		Registry: "",
+	}
+
 	ComponentGatewayAPIEnvoyRatelimit = Component{
 		Version:  "26f28d78",
 		Image:    "envoyproxy/ratelimit",
@@ -369,6 +375,7 @@ var (
 		ComponentTigeraCSI,
 		ComponentTigeraCSINodeDriverRegistrar,
 		ComponentGatewayAPIEnvoyGateway,
+		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,
 	}
 )

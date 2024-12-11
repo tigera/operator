@@ -20,7 +20,7 @@ import (
 	"strings"
 	"sync"
 
-	_ "github.com/envoyproxy/gateway/api"
+	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -32,6 +32,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 )
@@ -349,6 +350,7 @@ type GatewayAPIImplementationConfig struct {
 type gatewayAPIImplementationComponent struct {
 	cfg                 *GatewayAPIImplementationConfig
 	envoyGatewayImage   string
+	envoyProxyImage     string
 	envoyRatelimitImage string
 }
 
@@ -365,6 +367,10 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 
 	var err error
 	pr.envoyGatewayImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyGateway, reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+	pr.envoyProxyImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyProxy, reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
@@ -463,5 +469,27 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	return objs, nil
 }
 
-func (pr *gatewayAPIImplementationComponent) envoyProxyConfig() *corev1.ConfigMap {
+func (pr *gatewayAPIImplementationComponent) envoyProxyConfig() *envoyapi.EnvoyProxy {
+	return &envoyapi.EnvoyProxy{
+		TypeMeta: metav1.TypeMeta{Kind: "EnvoyProxy", APIVersion: "gateway.envoyproxy.io/v1alpha1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "envoy-proxy-config",
+			Namespace: "tigera-gateway-system",
+		},
+		Spec: envoyapi.EnvoyProxySpec{
+			Provider: &envoyapi.EnvoyProxyProvider{
+				Type: envoyapi.ProviderTypeKubernetes,
+				Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
+					EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
+						Pod: &envoyapi.KubernetesPodSpec{
+							ImagePullSecrets: secret.GetReferenceList(pr.cfg.PullSecrets),
+						},
+						Container: &envoyapi.KubernetesContainerSpec{
+							Image: &pr.envoyProxyImage,
+						},
+					},
+				},
+			},
+		},
+	}
 }

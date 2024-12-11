@@ -54,7 +54,8 @@ type gatewayAPIResources struct {
 	k8sCRDs                   []*apiextenv1.CustomResourceDefinition
 	envoyCRDs                 []*apiextenv1.CustomResourceDefinition
 	controllerServiceAccount  *corev1.ServiceAccount
-	envoyGatewayConfig        *corev1.ConfigMap
+	envoyGatewayConfigMap     *corev1.ConfigMap
+	envoyGatewayConfig        *envoyapi.EnvoyGateway
 	clusterRole               *rbacv1.ClusterRole
 	clusterRoleBinding        *rbacv1.ClusterRoleBinding
 	role                      *rbacv1.Role
@@ -138,10 +139,14 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 					if obj.Name != EnvoyGatewayConfigName {
 						panic(fmt.Sprintf("unhandled ConfigMap name %v from gateway API YAML", obj.Name))
 					}
-					if resources.envoyGatewayConfig != nil {
+					if resources.envoyGatewayConfigMap != nil {
 						panic("already read envoy-gateway-config ConfigMap from gateway API YAML")
 					}
-					resources.envoyGatewayConfig = obj
+					resources.envoyGatewayConfigMap = obj
+					resources.envoyGatewayConfig = &envoyapi.EnvoyGateway{}
+					if err := yaml.Unmarshal([]byte(obj.Data[EnvoyGatewayConfigKey]), resources.envoyGatewayConfig); err != nil {
+						panic("can't unmarshal EnvoyGateway from envoy-gateway-config ConfigMap from gateway API YAML")
+					}
 				case "rbac.authorization.k8s.io/v1/ClusterRole":
 					if resources.clusterRole != nil {
 						panic("already read a ClusterRole from gateway API YAML")
@@ -309,17 +314,11 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 			if resources.certgenJob.Spec.Template.Spec.Containers[0].Image != defaultGatewayImage {
 				panic("unexpected image in certgen job from gateway API YAML")
 			}
-			if !strings.Contains(
-				resources.envoyGatewayConfig.Data[EnvoyGatewayConfigKey],
-				"image: "+defaultGatewayImage,
-			) {
-				panic("missing gateway image in envoy-gateway-config from gateway API YAML")
+			if *resources.envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container.Image != defaultRatelimitImage {
+				panic("wrong ratelimit image in envoy-gateway-config from gateway API YAML")
 			}
-			if !strings.Contains(
-				resources.envoyGatewayConfig.Data[EnvoyGatewayConfigKey],
-				"image: "+defaultRatelimitImage,
-			) {
-				panic("missing ratelimit image in envoy-gateway-config from gateway API YAML")
+			if *resources.envoyGatewayConfig.Provider.Kubernetes.ShutdownManager.Image != defaultGatewayImage {
+				panic("wrong gateway image in envoy-gateway-config from gateway API YAML")
 			}
 		}
 		return resources
@@ -416,18 +415,27 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	}
 
 	// Substitute possibly modified image names into the envoy-gateway-config.
-	envoyGatewayConfig := resources.envoyGatewayConfig.DeepCopyObject().(*corev1.ConfigMap)
-	data := envoyGatewayConfig.Data[EnvoyGatewayConfigKey]
-	defaultRatelimitImage, _ := components.GetReference(components.ComponentGatewayAPIEnvoyRatelimit, "", "", "", nil)
-	data = strings.ReplaceAll(data, defaultRatelimitImage, pr.envoyRatelimitImage)
-	defaultGatewayImage, _ := components.GetReference(components.ComponentGatewayAPIEnvoyGateway, "", "", "", nil)
-	data = strings.ReplaceAll(data, defaultGatewayImage, pr.envoyGatewayImage)
-	envoyGatewayConfig.Data[EnvoyGatewayConfigKey] = data
+	envoyGatewayConfig := resources.envoyGatewayConfig.DeepCopyObject().(*envoyapi.EnvoyGateway)
+	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container.Image = &pr.envoyRatelimitImage
+	envoyGatewayConfig.Provider.Kubernetes.ShutdownManager.Image = &pr.envoyGatewayImage
 
-	// TODO: I guess we might need to add in pull secrets here, which is more hacky when dealing
-	// only with the text representation.
+	// Add pull secrets into the envoy-gateway-config, insofar as the API allows this.  (In
+	// other words, currently only for the ratelimit image.  So effectively the gateway image
+	// has to be pullable without any pull secrets.)
+	if envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod == nil {
+		envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod = &envoyapi.KubernetesPodSpec{}
+	}
+	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
 
-	objs = append(objs, envoyGatewayConfig)
+	// Rebuild the ConfigMap with those changes.
+	envoyGatewayConfigMap := resources.envoyGatewayConfigMap.DeepCopyObject().(*corev1.ConfigMap)
+	if bytes, err := yaml.Marshal(*envoyGatewayConfig); err == nil {
+		envoyGatewayConfigMap.Data[EnvoyGatewayConfigKey] = string(bytes)
+	} else {
+		panic(fmt.Sprintf("couldn't marshal EnvoyGateway to YAML: %v", err))
+	}
+
+	objs = append(objs, envoyGatewayConfigMap)
 
 	// Deep copy the controller deployment,
 	controllerDeployment := resources.controllerDeployment.DeepCopyObject().(*appsv1.Deployment)

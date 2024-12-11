@@ -478,7 +478,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 }
 
 func (pr *gatewayAPIImplementationComponent) envoyProxyConfig() *envoyapi.EnvoyProxy {
-	return &envoyapi.EnvoyProxy{
+	envoyProxy := &envoyapi.EnvoyProxy{
 		TypeMeta: metav1.TypeMeta{Kind: "EnvoyProxy", APIVersion: "gateway.envoyproxy.io/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "envoy-proxy-config",
@@ -500,4 +500,8 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig() *envoyapi.EnvoyP
 			},
 		},
 	}
+
+	rcomp.ApplyEnvoyProxyOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayDeployment)
+
+	return envoyProxy
 }

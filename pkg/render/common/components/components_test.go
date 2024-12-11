@@ -183,6 +183,7 @@ var _ = Describe("Common components render tests", func() {
 		Entry("FluentdDaemonSet", &v1.FluentdDaemonSet{}, false),
 		Entry("GatewayCertgenJob", &v1.GatewayCertgenJob{}, false),
 		Entry("GatewayControllerDeployment", &v1.GatewayControllerDeployment{}, false),
+		Entry("GatewayDeployment", &v1.GatewayDeployment{}, false),
 		Entry("GuardianDeployment", &v1.GuardianDeployment{}, false),
 		Entry("IntrusionDetectionControllerDeployment", &v1.IntrusionDetectionControllerDeployment{}, false),
 		Entry("Kibana", &v1.Kibana{}, false),

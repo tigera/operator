@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 
+	_ "github.com/envoyproxy/gateway/api"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"

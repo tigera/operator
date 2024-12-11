@@ -1011,9 +1011,11 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	name, _ := c.resourceNameBasedOnVariant("tigera-apiserver", "calico-apiserver")
 	hostNetwork := c.hostNetwork()
 	dnsPolicy := corev1.DNSClusterFirst
+	deploymentStrategyType := appsv1.RollingUpdateDeploymentStrategyType
 	if hostNetwork {
 		// Adjust DNS policy so we can access in-cluster services.
 		dnsPolicy = corev1.DNSClusterFirstWithHostNet
+		deploymentStrategyType = appsv1.RecreateDeploymentStrategyType
 	}
 
 	var initContainers []corev1.Container
@@ -1048,7 +1050,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.cfg.Installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
+				Type: deploymentStrategyType,
 			},
 			Selector: c.deploymentSelector(),
 			Template: corev1.PodTemplateSpec{
@@ -1068,8 +1070,10 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
-					Containers:         containers,
-					Volumes:            c.apiServerVolumes(),
+					Containers: []corev1.Container{
+						c.apiServerContainer(),
+					},
+					Volumes: c.apiServerVolumes(),
 				},
 			},
 		},

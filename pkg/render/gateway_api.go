@@ -21,19 +21,16 @@ import (
 	"sync"
 
 	"github.com/go-logr/logr"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 )
@@ -459,70 +456,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	objs = append(objs, certgenJob)
 
-	// Network policy to allow the gateway controller to access the Kubernetes API server.
-	objs = append(objs, pr.allowGatewayControllerToKubeAPI(resources.namespace.Name))
-
-	// Network policy for traffic through deployed gateways.  Our GatewayAPI support provisions
-	// gateway deployments in the calico-system namespace, which an application-specific
-	// customer team would not normally have any access to.  Therefore we have to program
-	// network policy to allow traffic through gateways ourselves.
-	objs = append(objs, pr.allowGatewayTraffic(resources.namespace.Name))
-
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)
 
 	return objs, nil
-}
-
-func (pr *gatewayAPIImplementationComponent) allowGatewayControllerToKubeAPI(namespace string) *v3.NetworkPolicy {
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      networkpolicy.TigeraComponentPolicyPrefix + "gateway-controller-api-access",
-			Namespace: namespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(GatewayControllerLabel),
-			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
-			Egress: []v3.Rule{
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
-				},
-			},
-		},
-	}
-}
-
-func (pr *gatewayAPIImplementationComponent) allowGatewayTraffic(namespace string) *v3.NetworkPolicy {
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      networkpolicy.TigeraComponentPolicyPrefix + "gateway-traffic",
-			Namespace: namespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order: &networkpolicy.HighPrecedenceOrder,
-			Tier:  networkpolicy.TigeraComponentTierName,
-			Selector: strings.Join(
-				[]string{
-					// These are the labels that the Envoy gateway controller
-					// puts on a gateway pod.
-					"app.kubernetes.io/component == 'proxy'",
-					"app.kubernetes.io/managed-by == 'envoy-gateway'",
-					"app.kubernetes.io/name == 'envoy'",
-				},
-				" && ",
-			),
-			Types: []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{{
-				Action: v3.Allow,
-			}},
-			Egress: []v3.Rule{{
-				Action: v3.Allow,
-			}},
-		},
-	}
 }

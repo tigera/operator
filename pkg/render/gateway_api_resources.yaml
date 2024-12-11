@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: calico-system
+  name: tigera-gateway-system
 ---
 # Source: crds/gatewayapi-crds.yaml
 # Copyright 2024 The Kubernetes Authors.
@@ -35078,7 +35078,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: envoy-gateway
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
@@ -35091,7 +35091,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: envoy-gateway-config
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
@@ -35256,14 +35256,14 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: 'envoy-gateway'
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
 ---
 # Source: gateway-helm/templates/infra-manager-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
@@ -35308,7 +35308,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-role
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
@@ -35353,7 +35353,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
@@ -35367,14 +35367,14 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: 'envoy-gateway'
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
 ---
 # Source: gateway-helm/templates/leader-election-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-rolebinding
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
@@ -35388,14 +35388,14 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: 'envoy-gateway'
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
 ---
 # Source: gateway-helm/templates/envoy-gateway-service.yaml
 apiVersion: v1
 kind: Service
 metadata:
   name: envoy-gateway
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     control-plane: envoy-gateway
     helm.sh/chart: gateway-helm-v1.1.2
@@ -35427,7 +35427,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: envoy-gateway
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     control-plane: envoy-gateway
     helm.sh/chart: gateway-helm-v1.1.2
@@ -35523,7 +35523,7 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: tigera-gateway-api-gateway-helm-certgen
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
@@ -35538,7 +35538,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: tigera-gateway-api-gateway-helm-certgen
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
@@ -35562,7 +35562,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: tigera-gateway-api-gateway-helm-certgen
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm
@@ -35578,14 +35578,14 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: 'tigera-gateway-api-gateway-helm-certgen'
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
 ---
 # Source: gateway-helm/templates/certgen.yaml
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: tigera-gateway-api-gateway-helm-certgen
-  namespace: 'calico-system'
+  namespace: 'tigera-gateway-system'
   labels:
     helm.sh/chart: gateway-helm-v1.1.2
     app.kubernetes.io/name: gateway-helm

@@ -202,6 +202,12 @@ type InstallationSpec struct {
 	// Azure is used to configure azure provider specific options.
 	// +optional
 	Azure *Azure `json:"azure,omitempty"`
+
+	// Proxy is used to configure the HTTP(S) proxy settings that will be applied to Tigera containers that connect
+	// to destinations outside the cluster. It is expected that NO_PROXY is configured such that destinations within
+	// the cluster (including the API server) are exempt from proxying.
+	// +optional
+	Proxy *Proxy `json:"proxy,omitempty"`
 }
 
 type Azure struct {
@@ -1055,4 +1061,69 @@ type WindowsNodeSpec struct {
 	// VXLANAdapter is the Network Adapter used for VXLAN, leave blank for primary NIC
 	// +optional
 	VXLANAdapter string `json:"vxlanAdapter,omitempty"`
+}
+
+type Proxy struct {
+	// HTTPProxy defines the value of the HTTP_PROXY environment variable that will be set on Tigera containers that connect to
+	// destinations outside the cluster.
+	// +optional
+	HTTPProxy string `json:"httpProxy,omitempty"`
+
+	// HTTPSProxy defines the value of the HTTPS_PROXY environment variable that will be set on Tigera containers that connect to
+	// destinations outside the cluster.
+	// +optional
+	HTTPSProxy string `json:"httpsProxy,omitempty"`
+
+	// NoProxy defines the value of the NO_PROXY environment variable that will be set on Tigera containers that connect to
+	// destinations outside the cluster. This value must be set such that destinations within the scope of the cluster, including
+	// the Kubernetes API server, are exempt from being proxied.
+	// +optional
+	NoProxy string `json:"noProxy,omitempty"`
+}
+
+func (p *Proxy) EnvVars() (envVars []v1.EnvVar) {
+	if p == nil {
+		return
+	}
+
+	if p.HTTPProxy != "" {
+		envVars = append(envVars, []v1.EnvVar{
+			{
+				Name:  "HTTP_PROXY",
+				Value: p.HTTPProxy,
+			},
+			{
+				Name:  "http_proxy",
+				Value: p.HTTPProxy,
+			},
+		}...)
+	}
+
+	if p.HTTPSProxy != "" {
+		envVars = append(envVars, []v1.EnvVar{
+			{
+				Name:  "HTTPS_PROXY",
+				Value: p.HTTPSProxy,
+			},
+			{
+				Name:  "https_proxy",
+				Value: p.HTTPSProxy,
+			},
+		}...)
+	}
+
+	if p.NoProxy != "" {
+		envVars = append(envVars, []v1.EnvVar{
+			{
+				Name:  "NO_PROXY",
+				Value: p.NoProxy,
+			},
+			{
+				Name:  "no_proxy",
+				Value: p.NoProxy,
+			},
+		}...)
+	}
+
+	return envVars
 }

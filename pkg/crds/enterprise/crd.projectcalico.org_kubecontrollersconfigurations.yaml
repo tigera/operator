@@ -45,6 +45,13 @@ spec:
                           [Default: 5m]'
                         type: string
                     type: object
+                  loadBalancer:
+                    description: LoadBalancer enables and configures the LoadBalancer
+                      controller. Enabled by default, set to nil to disable.
+                    properties:
+                      assignIPs:
+                        type: string
+                    type: object
                   namespace:
                     description: Namespace enables and configures the namespace controller.
                       Enabled by default, set to nil to disable.
@@ -161,6 +168,13 @@ spec:
                           reconcilerPeriod:
                             description: 'ReconcilerPeriod is the period to perform
                               reconciliation. [Default: 5m]'
+                            type: string
+                        type: object
+                      loadBalancer:
+                        description: LoadBalancer enables and configures the LoadBalancer
+                          controller. Enabled by default, set to nil to disable.
+                        properties:
+                          assignIPs:
                             type: string
                         type: object
                       namespace:

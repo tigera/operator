@@ -477,8 +477,6 @@ func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
 }
 
 func (r *ReconcileApplicationLayer) getCorazaRuleSet(ctx context.Context) (*corev1.ConfigMap, error) {
-	ruleset := new(corev1.ConfigMap)
-
 	ruleset, err := getOSWAPCoreRuleSet(ctx)
 	if err != nil {
 		return nil, err

@@ -1256,6 +1256,11 @@ spec:
                           items:
                             type: string
                           type: array
+                        assignmentMode:
+                          description: AssignmentMode determines if IP addresses from
+                            this pool should be  assigned automatically or on request
+                            only
+                          type: string
                         blockSize:
                           description: |-
                             BlockSize specifies the CIDR prefex length to use when allocating per-node IP blocks from
@@ -6635,6 +6640,29 @@ spec:
                 description: NonPrivileged configures Calico to be run in non-privileged
                   containers as non-root users where possible.
                 type: string
+              proxy:
+                description: |-
+                  Proxy is used to configure the HTTP(S) proxy settings that will be applied to Tigera containers that connect
+                  to destinations outside the cluster. It is expected that NO_PROXY is configured such that destinations within
+                  the cluster (including the API server) are exempt from proxying.
+                properties:
+                  httpProxy:
+                    description: |-
+                      HTTPProxy defines the value of the HTTP_PROXY environment variable that will be set on Tigera containers that connect to
+                      destinations outside the cluster.
+                    type: string
+                  httpsProxy:
+                    description: |-
+                      HTTPSProxy defines the value of the HTTPS_PROXY environment variable that will be set on Tigera containers that connect to
+                      destinations outside the cluster.
+                    type: string
+                  noProxy:
+                    description: |-
+                      NoProxy defines the value of the NO_PROXY environment variable that will be set on Tigera containers that connect to
+                      destinations outside the cluster. This value must be set such that destinations within the scope of the cluster, including
+                      the Kubernetes API server, are exempt from being proxied.
+                    type: string
+                type: object
               registry:
                 description: |-
                   Registry is the default Docker registry used for component Docker images.
@@ -9608,6 +9636,11 @@ spec:
                               items:
                                 type: string
                               type: array
+                            assignmentMode:
+                              description: AssignmentMode determines if IP addresses
+                                from this pool should be  assigned automatically or
+                                on request only
+                              type: string
                             blockSize:
                               description: |-
                                 BlockSize specifies the CIDR prefex length to use when allocating per-node IP blocks from
@@ -15054,6 +15087,29 @@ spec:
                     description: NonPrivileged configures Calico to be run in non-privileged
                       containers as non-root users where possible.
                     type: string
+                  proxy:
+                    description: |-
+                      Proxy is used to configure the HTTP(S) proxy settings that will be applied to Tigera containers that connect
+                      to destinations outside the cluster. It is expected that NO_PROXY is configured such that destinations within
+                      the cluster (including the API server) are exempt from proxying.
+                    properties:
+                      httpProxy:
+                        description: |-
+                          HTTPProxy defines the value of the HTTP_PROXY environment variable that will be set on Tigera containers that connect to
+                          destinations outside the cluster.
+                        type: string
+                      httpsProxy:
+                        description: |-
+                          HTTPSProxy defines the value of the HTTPS_PROXY environment variable that will be set on Tigera containers that connect to
+                          destinations outside the cluster.
+                        type: string
+                      noProxy:
+                        description: |-
+                          NoProxy defines the value of the NO_PROXY environment variable that will be set on Tigera containers that connect to
+                          destinations outside the cluster. This value must be set such that destinations within the scope of the cluster, including
+                          the Kubernetes API server, are exempt from being proxied.
+                        type: string
+                    type: object
                   registry:
                     description: |-
                       Registry is the default Docker registry used for component Docker images.

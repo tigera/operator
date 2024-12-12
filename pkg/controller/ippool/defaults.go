@@ -235,6 +235,10 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 				}
 			}
 		}
+
+		if pool.AssignmentMode == "" {
+			pool.AssignmentMode = crdv1.Automatic
+		}
 	}
 	return nil
 }

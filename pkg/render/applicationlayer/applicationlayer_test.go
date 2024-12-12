@@ -17,6 +17,7 @@ package applicationlayer_test
 import (
 	"path/filepath"
 
+	coreruleset "github.com/corazawaf/coraza-coreruleset/v4"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -225,6 +226,14 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		cm, err := embed.AsConfigMap(
 			applicationlayer.ModSecurityRulesetConfigMapName,
 			common.OperatorNamespace(),
+			embed.FS,
+		)
+		Expect(err).To(BeNil())
+
+		defaultCoreRulesetCM, err := embed.AsConfigMap(
+			applicationlayer.DefaultCoreRuleset,
+			common.OperatorNamespace(),
+			coreruleset.FS,
 		)
 		Expect(err).To(BeNil())
 
@@ -266,6 +275,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		cfg.PerHostWAFEnabled = true
 		cfg.ModSecurityConfigMap = cm
+		cfg.DefaultCoreRulesetConfigMap = defaultCoreRulesetCM
 
 		component := applicationlayer.ApplicationLayer(cfg)
 
@@ -517,6 +527,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}{
 			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: applicationlayer.ModSecurityRulesetConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: applicationlayer.DefaultCoreRuleset, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
@@ -524,14 +535,22 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		cm, err := embed.AsConfigMap(
 			applicationlayer.ModSecurityRulesetConfigMapName,
 			common.OperatorNamespace(),
+			embed.FS,
+		)
+		Expect(err).To(BeNil())
+		defaultCoreRulesetCM, err := embed.AsConfigMap(
+			applicationlayer.DefaultCoreRuleset,
+			common.OperatorNamespace(),
+			coreruleset.FS,
 		)
 		Expect(err).To(BeNil())
 		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
-			PullSecrets:          nil,
-			Installation:         installation,
-			OsType:               rmeta.OSTypeLinux,
-			PerHostWAFEnabled:    true,
-			ModSecurityConfigMap: cm,
+			PullSecrets:                 nil,
+			Installation:                installation,
+			OsType:                      rmeta.OSTypeLinux,
+			PerHostWAFEnabled:           true,
+			ModSecurityConfigMap:        cm,
+			DefaultCoreRulesetConfigMap: defaultCoreRulesetCM,
 		})
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -552,7 +571,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		// Ensure each volume rendered correctly.
 		dsVols := ds.Spec.Template.Spec.Volumes
 		hp := corev1.HostPathDirectoryOrCreate
-		expectedVolumes := []corev1.Volume{
+		correctVolumesOrder := []corev1.Volume{
 			{
 				Name: applicationlayer.FelixSync,
 				VolumeSource: corev1.VolumeSource{
@@ -601,12 +620,35 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 					},
 				},
 			},
+			{
+				Name: applicationlayer.DefaultCoreRuleset,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: applicationlayer.DefaultCoreRuleset},
+					},
+				},
+			},
 		}
 
-		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(len(expectedVolumes)))
-		for i, expected := range expectedVolumes {
+		var modsecVolIndex, defaultCoreRulesecVolIndex int
+
+		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(len(correctVolumesOrder)))
+		for i, expected := range correctVolumesOrder {
+			if dsVols[i].VolumeSource.ConfigMap.LocalObjectReference.Name == applicationlayer.ModSecurityRulesetConfigMapName {
+				modsecVolIndex = i
+			}
+
+			if dsVols[i].VolumeSource.ConfigMap.LocalObjectReference.Name == applicationlayer.DefaultCoreRuleset {
+				defaultCoreRulesecVolIndex = i
+			}
 			Expect(dsVols[i]).To(Equal(expected))
 		}
+
+		// order of the volume mounts matter here
+		// coreruleset-default is mounted as a sub directory in the
+		// modsecurity volume so, modsecurity needs to be mounted before
+		// coreruleset-default
+		Expect(modsecVolIndex).Should(BeNumerically("<", defaultCoreRulesecVolIndex))
 
 		// Ensure that tolerations rendered correctly.
 		dsTolerations := ds.Spec.Template.Spec.Tolerations
@@ -670,6 +712,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			{Name: applicationlayer.FelixSync, MountPath: "/var/run/felix"},
 			{Name: applicationlayer.CalicoLogsVolumeName, MountPath: applicationlayer.CalicologsVolumePath},
 			{Name: applicationlayer.ModSecurityRulesetConfigMapName, MountPath: applicationlayer.ModSecurityRulesetVolumePath, ReadOnly: true},
+			{Name: applicationlayer.DefaultCoreRuleset, MountPath: applicationlayer.DefaultCoreRulesetVolumePath, ReadOnly: true},
 		}
 		Expect(len(dikastesVolMounts)).To(Equal(len(expectedDikastesVolMounts)))
 		for _, expected := range expectedDikastesVolMounts {

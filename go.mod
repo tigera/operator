@@ -14,7 +14,7 @@ require (
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.27.7
-	github.com/openshift/api v0.0.0-20200923080607-2a18526802e3
+	github.com/openshift/api v0.0.0-20210623185703-9958693a7597
 	github.com/openshift/library-go v0.0.0-20200924151131-575c4875cdbe
 	github.com/pkg/errors v0.9.1
 	github.com/projectcalico/api v0.0.0-20220722155641-439a754a988b
@@ -32,6 +32,7 @@ require (
 	k8s.io/apiserver v0.28.9
 	k8s.io/client-go v0.28.9
 	k8s.io/kube-aggregator v0.28.9
+	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2 // indirect
 	sigs.k8s.io/controller-runtime v0.15.3
 	sigs.k8s.io/kind v0.17.0 // Do not remove, not used by code but used by build
 	sigs.k8s.io/yaml v1.3.0
@@ -110,7 +111,6 @@ require (
 	k8s.io/klog v1.0.0 // indirect
 	k8s.io/klog/v2 v2.100.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20230717233707-2695361300d9 // indirect
-	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )

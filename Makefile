@@ -220,8 +220,33 @@ else
   GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)
 endif
 
+ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
+ENVOY_GATEWAY_VERSION ?= v1.1.2
+ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
+ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway-system
+ENVOY_GATEWAY_RESOURCES = pkg/render/gateway_api_resources.yaml
+
+$(ENVOY_GATEWAY_RESOURCES): hack/bin/helm-$(BUILDARCH)
+	echo "---" > $@
+	echo "apiVersion: v1" >> $@
+	echo "kind: Namespace" >> $@
+	echo "metadata:" >> $@
+	echo "  name: $(ENVOY_GATEWAY_NAMESPACE)" >> $@
+	hack/bin/helm-$(BUILDARCH) template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
+		--version $(ENVOY_GATEWAY_VERSION) \
+		-n $(ENVOY_GATEWAY_NAMESPACE) \
+		--include-crds \
+	>> $@
+
+hack/bin/helm-$(BUILDARCH):
+	mkdir -p hack/bin
+	curl -sSf -L --retry 5 -o hack/bin/helm3.tar.gz https://get.helm.sh/helm-v3.11.3-linux-$(BUILDARCH).tar.gz
+	tar -zxvf hack/bin/helm3.tar.gz -C hack/bin linux-$(BUILDARCH)/helm
+	mv hack/bin/linux-$(BUILDARCH)/helm hack/bin/helm-$(BUILDARCH)
+	rmdir hack/bin/linux-$(BUILDARCH)
+
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES)
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
@@ -284,14 +309,14 @@ GINKGO_ARGS?= -v -trace -r
 GINKGO_FOCUS?=.*
 
 .PHONY: ut
-ut:
+ut: $(ENVOY_GATEWAY_RESOURCES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs:
+run-fvs: $(ENVOY_GATEWAY_RESOURCES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'

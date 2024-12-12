@@ -246,7 +246,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			PullSecrets:  pullSecrets,
 		})
 
-		gatewayComp.ResolveImages(nil)
+		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyGatewayImage).To(Equal("myregistry.io/envoyproxy/gateway:v1.1.2"))
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyRatelimitImage).To(Equal("myregistry.io/envoyproxy/ratelimit:26f28d78"))
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/envoyproxy/envoy:distroless-v1.31.0"))

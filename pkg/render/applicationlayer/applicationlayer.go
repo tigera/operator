@@ -57,7 +57,7 @@ const (
 	ModSecurityRulesetVolumeName     = "modsecurity-ruleset"
 	ModSecurityRulesetVolumePath     = "/etc/modsecurity-ruleset"
 	DefaultCoreRulesetVolumeName     = "coreruleset-default"
-	DefaultCoreRulesetVolumePath     = "/etc/coreruleset-default"
+	DefaultCoreRulesetVolumePath     = "/etc/modsecurity-ruleset/coreruleset-default"
 	ModSecurityRulesetConfigMapName  = "modsecurity-ruleset"
 	DefaultCoreRuleset               = "coreruleset-default"
 	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/modsecurity-ruleset"

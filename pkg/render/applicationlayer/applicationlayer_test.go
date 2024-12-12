@@ -571,7 +571,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		// Ensure each volume rendered correctly.
 		dsVols := ds.Spec.Template.Spec.Volumes
 		hp := corev1.HostPathDirectoryOrCreate
-		expectedVolumes := []corev1.Volume{
+		correctVolumesOrder := []corev1.Volume{
 			{
 				Name: applicationlayer.FelixSync,
 				VolumeSource: corev1.VolumeSource{
@@ -630,10 +630,25 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			},
 		}
 
-		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(len(expectedVolumes)))
-		for i, expected := range expectedVolumes {
+		var modsecVolIndex, defaultCoreRulesecVolIndex int
+
+		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(len(correctVolumesOrder)))
+		for i, expected := range correctVolumesOrder {
+			if dsVols[i].VolumeSource.ConfigMap.LocalObjectReference.Name == applicationlayer.ModSecurityRulesetConfigMapName {
+				modsecVolIndex = i
+			}
+
+			if dsVols[i].VolumeSource.ConfigMap.LocalObjectReference.Name == applicationlayer.DefaultCoreRuleset {
+				defaultCoreRulesecVolIndex = i
+			}
 			Expect(dsVols[i]).To(Equal(expected))
 		}
+
+		// order of the volume mounts matter here
+		// coreruleset-default is mounted as a sub directory in the
+		// modsecurity volume so, modsecurity needs to be mounted before
+		// coreruleset-default
+		Expect(modsecVolIndex).Should(BeNumerically("<", defaultCoreRulesecVolIndex))
 
 		// Ensure that tolerations rendered correctly.
 		dsTolerations := ds.Spec.Template.Spec.Tolerations

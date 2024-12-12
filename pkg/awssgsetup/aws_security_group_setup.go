@@ -16,6 +16,7 @@ package awssgsetup
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,6 +35,15 @@ import (
 var log = logf.Log.WithName("AWS_SG_Setup")
 var TRACE = 7
 var DEBUG = 5
+
+type errorSecurityGroupNotFound struct {
+	FilterKey   string
+	FilterValue string
+}
+
+func (e errorSecurityGroupNotFound) Error() string {
+	return fmt.Sprintf("No security groups found matching filter %s = %s", e.FilterKey, e.FilterValue)
+}
 
 // setupAWSSecurityGroups updates the master and worker security groups used in an
 // OpenShift AWS setup. It sets a time that should be checked before attempting
@@ -86,56 +96,35 @@ func SetupAWSSecurityGroups(ctx context.Context, client client.Client, hosted bo
 
 func setupClusterSGs(ec2Cli *ec2.EC2, vpcId string) error {
 	// Get SG ids in VPC
-	// Get one with filter tag:Name with *-master-sg
-	// Get one with filter tag:Name with *-worker-sg
-	masterSg, err := getSGGroup(ec2Cli, vpcId, "*-master-sg")
-	if err != nil {
-		return fmt.Errorf("failed to get AWS SecurityGroups: %v", err)
+	// Get controlplane SG with role filter
+	controlPlaneSg, err := getSecurityGroup(ec2Cli, vpcId, "tag:sigs.k8s.io/cluster-api-provider-aws/role", "controlplane")
+	// Fall back to using filter tag:Name with *-master-sg if not found
+	var notFound errorSecurityGroupNotFound
+	if err != nil && errors.As(err, &notFound) {
+		controlPlaneSg, err = getSecurityGroup(ec2Cli, vpcId, "tag:Name", "*-master-sg")
 	}
-	workerSg, err := getSGGroup(ec2Cli, vpcId, "*-worker-sg")
 	if err != nil {
-		return fmt.Errorf("failed to get AWS SecurityGroups: %v", err)
-	}
-
-	// # Add rules to master and worker SG that allow incoming from master and worker for BGP, IPIP, Typha comms
-	src := []ingressSrc{
-		{
-			srcSGId:  aws.StringValue(masterSg.GroupId),
-			protocol: "tcp",
-			port:     aws.Int64(179),
-		},
-		{
-			srcSGId:  aws.StringValue(masterSg.GroupId),
-			protocol: "4",
-		},
-		{
-			srcSGId:  aws.StringValue(masterSg.GroupId),
-			protocol: "tcp",
-			port:     aws.Int64(5473),
-		},
-		{
-			srcSGId:  aws.StringValue(workerSg.GroupId),
-			protocol: "tcp",
-			port:     aws.Int64(179),
-		},
-		{
-			srcSGId:  aws.StringValue(workerSg.GroupId),
-			protocol: "4",
-		},
-		{
-			srcSGId:  aws.StringValue(workerSg.GroupId),
-			protocol: "tcp",
-			port:     aws.Int64(5473),
-		},
-	}
-	err = allowIngressToSG(ec2Cli, masterSg, src)
-	if err != nil {
-		return fmt.Errorf("failed to update master AWS SecurityGroup: %v", err)
+		return fmt.Errorf("failed to get controlplane AWS SecurityGroup: %v", err)
 	}
 
-	err = allowIngressToSG(ec2Cli, workerSg, src)
+	// Get node SG with role filter
+	nodeSg, err := getSecurityGroup(ec2Cli, vpcId, "tag:sigs.k8s.io/cluster-api-provider-aws/role", "node")
+	// Fall back to using filter tag:Name with *-worker-sg if not found
+	if err != nil && errors.As(err, &notFound) {
+		nodeSg, err = getSecurityGroup(ec2Cli, vpcId, "tag:Name", "*-worker-sg")
+	}
 	if err != nil {
-		return fmt.Errorf("failed to update worker AWS SecurityGroup: %v", err)
+		return fmt.Errorf("failed to get node AWS SecurityGroup: %v", err)
+	}
+
+	err = setupSG(ec2Cli, controlPlaneSg, []*string{controlPlaneSg.GroupId, nodeSg.GroupId})
+	if err != nil {
+		return fmt.Errorf("failed to update controlplane AWS SecurityGroup: %v", err)
+	}
+
+	err = setupSG(ec2Cli, nodeSg, []*string{controlPlaneSg.GroupId, nodeSg.GroupId})
+	if err != nil {
+		return fmt.Errorf("failed to update node AWS SecurityGroup: %v", err)
 	}
 
 	return nil
@@ -144,27 +133,11 @@ func setupClusterSGs(ec2Cli *ec2.EC2, vpcId string) error {
 func setupHostedClusterSGs(ec2Cli *ec2.EC2, vpcId string) error {
 	// On an OpenShift HCP hosted (guest) cluster, there are no master and worker
 	// security groups, there is only one sg named '*-default-sg'
-	defaultSg, err := getSGGroup(ec2Cli, vpcId, "*-default-sg")
+	defaultSg, err := getSecurityGroup(ec2Cli, vpcId, "tag:Name", "*-default-sg")
 	if err != nil {
 		return fmt.Errorf("failed to get AWS SecurityGroups: %v", err)
 	}
-	src := []ingressSrc{
-		{
-			srcSGId:  aws.StringValue(defaultSg.GroupId),
-			protocol: "tcp",
-			port:     aws.Int64(179),
-		},
-		{
-			srcSGId:  aws.StringValue(defaultSg.GroupId),
-			protocol: "4",
-		},
-		{
-			srcSGId:  aws.StringValue(defaultSg.GroupId),
-			protocol: "tcp",
-			port:     aws.Int64(5473),
-		},
-	}
-	err = allowIngressToSG(ec2Cli, defaultSg, src)
+	err = setupSG(ec2Cli, defaultSg, []*string{defaultSg.GroupId})
 	if err != nil {
 		return fmt.Errorf("failed to update default AWS SecurityGroup: %v", err)
 	}
@@ -214,18 +187,18 @@ func getVPCid(meta *ec2metadata.EC2Metadata) (string, error) {
 	return vpcId, nil
 }
 
-// getSGGroup returns the first SG that is in the specified VPC and matches the nameFilter.
+// getSecurityGroup returns the first SG that is in the specified VPC and matches the nameFilter.
 // nameFilter matches tag:Name.
-func getSGGroup(cli *ec2.EC2, vpcId string, nameFilter string) (*ec2.SecurityGroup, error) {
+func getSecurityGroup(cli *ec2.EC2, vpcId string, filterKey string, filterValue string) (*ec2.SecurityGroup, error) {
 	in := &ec2.DescribeSecurityGroupsInput{}
 	in.SetFilters([]*ec2.Filter{
-		&ec2.Filter{
+		{
 			Name:   aws.String("vpc-id"),
 			Values: []*string{aws.String(vpcId)},
 		},
-		&ec2.Filter{
-			Name:   aws.String("tag:Name"),
-			Values: []*string{aws.String(nameFilter)},
+		{
+			Name:   aws.String(filterKey),
+			Values: []*string{aws.String(filterValue)},
 		},
 	})
 	out, err := cli.DescribeSecurityGroups(in)
@@ -234,12 +207,12 @@ func getSGGroup(cli *ec2.EC2, vpcId string, nameFilter string) (*ec2.SecurityGro
 	}
 
 	if len(out.SecurityGroups) == 0 {
-		log.Info("No security groups found", "vpc-id", vpcId, "tag:Name", nameFilter, "SecurityGroupOutput", out)
-		return nil, fmt.Errorf("No security groups found matching name %s", nameFilter)
+		log.Info("No security groups found", "vpc-id", vpcId, filterKey, filterValue, "SecurityGroupOutput", out)
+		return nil, errorSecurityGroupNotFound{FilterKey: filterKey, FilterValue: filterValue}
 	}
 
 	if len(out.SecurityGroups) > 1 {
-		log.Info("Multiple security groups matching filter, using the first", "tag:Name", nameFilter, "SecurityGroupOutput", out)
+		log.Info("Multiple security groups matching filter, using the first", filterKey, "=", filterValue, "SecurityGroupOutput", out)
 	}
 
 	log.V(TRACE).Info("DescribeSecurityGroups", "SecurityGroupOutput", out)
@@ -277,6 +250,38 @@ func ingressSrcMatchesIpPermission(s ingressSrc, ipp *ec2.IpPermission) bool {
 		}
 	}
 	return false
+}
+
+// setupSG adds rules to SG that allow incoming from srcSGIDs for BGP, IPIP, Typha comms
+func setupSG(ec2Cli *ec2.EC2, sg *ec2.SecurityGroup, srcSGIDs []*string) error {
+	src := []ingressSrc{}
+	for _, srcSGID := range srcSGIDs {
+		src = append(src, []ingressSrc{
+			{
+				// BGP
+				srcSGId:  aws.StringValue(srcSGID),
+				protocol: "tcp",
+				port:     aws.Int64(179),
+			},
+			{
+				// IP-in-IP
+				srcSGId:  aws.StringValue(srcSGID),
+				protocol: "4",
+			},
+			{
+				// Typha
+				srcSGId:  aws.StringValue(srcSGID),
+				protocol: "tcp",
+				port:     aws.Int64(5473),
+			},
+		}...)
+	}
+
+	err := allowIngressToSG(ec2Cli, sg, src)
+	if err != nil {
+		return fmt.Errorf("failed to update AWS SecurityGroup Name: %v, ID: %v, error: %v", sg.GroupName, sg.GroupId, err)
+	}
+	return nil
 }
 
 // allowIngressToSG adds rules to the toSG Security Group for each element of sources.

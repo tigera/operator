@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -485,10 +486,14 @@ func (r *ReconcileApplicationLayer) getCorazaRuleSet(ctx context.Context) (*core
 }
 
 func getOSWAPCoreRuleSet(ctx context.Context) (*corev1.ConfigMap, error) {
+	owaspCRS, err := fs.Sub(coreruleset.FS, "@owasp_crs")
+	if err != nil {
+		return nil, err
+	}
 	ruleset, err := embed.AsConfigMap(
 		applicationlayer.DefaultCoreRuleset,
 		common.OperatorNamespace(),
-		coreruleset.FS,
+		owaspCRS,
 	)
 	if err != nil {
 		return nil, err

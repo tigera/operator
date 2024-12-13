@@ -48,10 +48,6 @@ func AsMap(fileSystem fs.FS) (map[string]string, error) {
 			return err
 		}
 
-		if d.Name()[0] == '@' {
-			return err
-		}
-
 		if b, err := fs.ReadFile(fileSystem, path); err != nil {
 			return err
 		} else {

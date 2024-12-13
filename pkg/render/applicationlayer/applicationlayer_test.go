@@ -634,11 +634,11 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(len(correctVolumesOrder)))
 		for i, expected := range correctVolumesOrder {
-			if dsVols[i].VolumeSource.ConfigMap.LocalObjectReference.Name == applicationlayer.ModSecurityRulesetConfigMapName {
+			if dsVols[i].Name == applicationlayer.ModSecurityRulesetConfigMapName {
 				modsecVolIndex = i
 			}
 
-			if dsVols[i].VolumeSource.ConfigMap.LocalObjectReference.Name == applicationlayer.DefaultCoreRuleset {
+			if dsVols[i].Name == applicationlayer.DefaultCoreRuleset {
 				defaultCoreRulesecVolIndex = i
 			}
 			Expect(dsVols[i]).To(Equal(expected))

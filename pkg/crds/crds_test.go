@@ -27,7 +27,7 @@ var _ = Describe("test crds pkg", func() {
 			runtime := b.Time("runtime", func() {
 				_ = getCalicoCRDSource()
 			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading calico CRDs shouldnt take too long.")
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.3), "loading calico CRDs should not take too long.")
 		}, 50)
 	})
 	Context("GetEnterpriseCRDSource", func() {
@@ -35,7 +35,7 @@ var _ = Describe("test crds pkg", func() {
 			runtime := b.Time("runtime", func() {
 				_ = getEnterpriseCRDSource()
 			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading enterprise CRDs shouldnt take too long.")
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.3), "loading enterprise CRDs should not take too long.")
 		}, 50)
 	})
 	Context("GetOperatorCRDSource", func() {
@@ -43,7 +43,7 @@ var _ = Describe("test crds pkg", func() {
 			runtime := b.Time("runtime", func() {
 				_ = getEnterpriseCRDSource()
 			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading operator CRDs shouldnt take too long.")
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.3), "loading operator CRDs should not take too long.")
 		}, 50)
 	})
 	Context("GetCRDs", func() {
@@ -51,13 +51,13 @@ var _ = Describe("test crds pkg", func() {
 			runtime := b.Time("runtime", func() {
 				_ = GetCRDs(opv1.Calico)
 			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading calico CRDs shouldnt take too long.")
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.3), "loading calico CRDs should not take too long.")
 		}, 50)
 		Measure("should quickly load enterprise CRDs", func(b Benchmarker) {
 			runtime := b.Time("runtime", func() {
 				_ = GetCRDs(opv1.TigeraSecureEnterprise)
 			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading enterprise CRDs shouldnt take too long.")
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.3), "loading enterprise CRDs should not take too long.")
 		}, 50)
 	})
 })

@@ -221,9 +221,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				esContainer := resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
 				Expect(*esContainer.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 				Expect(*esContainer.SecurityContext.Privileged).To(BeFalse())
-				Expect(*esContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(1000))
+				Expect(*esContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 				Expect(*esContainer.SecurityContext.RunAsNonRoot).To(BeTrue())
-				Expect(*esContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(1000))
+				Expect(*esContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 				Expect(esContainer.SecurityContext.Capabilities).To(Equal(
 					&corev1.Capabilities{
 						Drop: []corev1.Capability{"ALL"},

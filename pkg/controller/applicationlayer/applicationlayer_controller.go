@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -45,6 +46,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	coreruleset "github.com/corazawaf/coraza-coreruleset/v4"
 )
 
 const ResourceName = "applicationlayer"
@@ -124,6 +127,14 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		)
 	}
 
+	err = utils.AddConfigMapWatch(c, applicationlayer.DefaultCoreRuleset, common.OperatorNamespace(), &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf(
+			"applicationlayer-controller failed to watch ConfigMap %s: %v",
+			applicationlayer.DefaultCoreRuleset, err,
+		)
+	}
+
 	// Watch mutatingwebhookconfiguration responsible for sidecar injetion
 	err = c.WatchObject(&admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}},
 		&handler.EnqueueRequestForObject{})
@@ -135,6 +146,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	maps := []string{
 		applicationlayer.EnvoyConfigMapName,
 		applicationlayer.ModSecurityRulesetConfigMapName,
+		applicationlayer.DefaultCoreRuleset,
 	}
 	for _, configMapName := range maps {
 		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
@@ -254,8 +266,13 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	var passthroughModSecurityRuleSet bool
-	var modSecurityRuleSet *corev1.ConfigMap
+	var modSecurityRuleSet, corazaRuleset *corev1.ConfigMap
 	if r.isWAFEnabled(&instance.Spec) || r.isSidecarInjectionEnabled(&instance.Spec) {
+		if corazaRuleset, err = r.getCorazaRuleSet(ctx); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall Core rule set", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
 		if modSecurityRuleSet, passthroughModSecurityRuleSet, err = r.getModSecurityRuleSet(ctx); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall ModSecurity rule set", err, reqLogger)
 			return reconcile.Result{}, err
@@ -268,19 +285,20 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 
 	lcSpec := instance.Spec.LogCollection
 	config := &applicationlayer.Config{
-		PullSecrets:             pullSecrets,
-		Installation:            installation,
-		OsType:                  rmeta.OSTypeLinux,
-		PerHostWAFEnabled:       r.isWAFEnabled(&instance.Spec),
-		PerHostLogsEnabled:      r.isLogsCollectionEnabled(&instance.Spec),
-		PerHostALPEnabled:       r.isALPEnabled(&instance.Spec),
-		SidecarInjectionEnabled: r.isSidecarInjectionEnabled(&instance.Spec),
-		LogRequestsPerInterval:  lcSpec.LogRequestsPerInterval,
-		LogIntervalSeconds:      lcSpec.LogIntervalSeconds,
-		ModSecurityConfigMap:    modSecurityRuleSet,
-		UseRemoteAddressXFF:     instance.Spec.EnvoySettings.UseRemoteAddress,
-		NumTrustedHopsXFF:       instance.Spec.EnvoySettings.XFFNumTrustedHops,
-		ApplicationLayer:        instance,
+		PullSecrets:                 pullSecrets,
+		Installation:                installation,
+		OsType:                      rmeta.OSTypeLinux,
+		PerHostWAFEnabled:           r.isWAFEnabled(&instance.Spec),
+		PerHostLogsEnabled:          r.isLogsCollectionEnabled(&instance.Spec),
+		PerHostALPEnabled:           r.isALPEnabled(&instance.Spec),
+		SidecarInjectionEnabled:     r.isSidecarInjectionEnabled(&instance.Spec),
+		LogRequestsPerInterval:      lcSpec.LogRequestsPerInterval,
+		LogIntervalSeconds:          lcSpec.LogIntervalSeconds,
+		ModSecurityConfigMap:        modSecurityRuleSet,
+		DefaultCoreRulesetConfigMap: corazaRuleset,
+		UseRemoteAddressXFF:         instance.Spec.EnvoySettings.UseRemoteAddress,
+		NumTrustedHopsXFF:           instance.Spec.EnvoySettings.XFFNumTrustedHops,
+		ApplicationLayer:            instance,
 	}
 	component := applicationlayer.ApplicationLayer(config)
 
@@ -450,6 +468,32 @@ func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
 	ruleset, err := embed.AsConfigMap(
 		applicationlayer.ModSecurityRulesetConfigMapName,
 		common.OperatorNamespace(),
+		embed.FS,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return ruleset, nil
+}
+
+func (r *ReconcileApplicationLayer) getCorazaRuleSet(ctx context.Context) (*corev1.ConfigMap, error) {
+	ruleset, err := getOSWAPCoreRuleSet(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ruleset, nil
+}
+
+func getOSWAPCoreRuleSet(ctx context.Context) (*corev1.ConfigMap, error) {
+	owaspCRS, err := fs.Sub(coreruleset.FS, "@owasp_crs")
+	if err != nil {
+		return nil, err
+	}
+	ruleset, err := embed.AsConfigMap(
+		applicationlayer.DefaultCoreRuleset,
+		common.OperatorNamespace(),
+		owaspCRS,
 	)
 	if err != nil {
 		return nil, err

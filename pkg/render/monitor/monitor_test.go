@@ -861,6 +861,7 @@ var _ = Describe("monitor rendering tests", func() {
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-external-prometheus", Namespace: "external-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: "external-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)

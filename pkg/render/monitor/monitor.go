@@ -232,6 +232,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 
 	if mc.cfg.Monitor.ExternalPrometheus != nil {
 		toCreate = append(toCreate, mc.externalConfigMap())
+		toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(mc.cfg.Monitor.ExternalPrometheus.Namespace))
 		if mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor != nil {
 			externalServiceMonitor, needsRBAC := mc.externalServiceMonitor()
 			toCreate = append(toCreate, externalServiceMonitor)

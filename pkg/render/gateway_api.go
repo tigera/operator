@@ -391,9 +391,22 @@ func (pr *gatewayAPIImplementationComponent) Ready() bool {
 func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []client.Object) {
 	resources := GatewayAPIResources()
 
-	// List all the non-CRD resources, read from YAML, that we can apply without any tweaking.
+	// First create the namespace.  We take the name from the read resources, but otherwise
+	// follow our own pattern for namespace creation.
 	objs := []client.Object{
-		resources.namespace,
+		CreateNamespace(
+			resources.namespace.Name,
+			pr.cfg.Installation.KubernetesProvider,
+			PSSBaseline,
+			pr.cfg.Installation.Azure,
+		),
+	}
+
+	// Add pull secrets (inferred from the Installation resource).
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)
+
+	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
+	objs = append(objs,
 		resources.controllerServiceAccount,
 		resources.clusterRole,
 		resources.clusterRoleBinding,
@@ -406,7 +419,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		resources.certgenRole,
 		resources.certgenRoleBinding,
 		pr.envoyProxyConfig(),
-	}
+	)
 
 	// Deep-copy all of those, so as not to inadvertently modify the cache inside
 	// `GatewayAPIResourcesGetter`.
@@ -419,9 +432,8 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container.Image = &pr.envoyRatelimitImage
 	envoyGatewayConfig.Provider.Kubernetes.ShutdownManager.Image = &pr.envoyGatewayImage
 
-	// Add pull secrets into the envoy-gateway-config, insofar as the API allows this.  (In
-	// other words, currently only for the ratelimit image.  So effectively the gateway image
-	// has to be pullable without any pull secrets.)
+	// Add pull secrets into the envoy-gateway-config.  (Note that these are at the pod level
+	// and so cover both the "ShutdownManager" and "RateLimit" images.)
 	if envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod == nil {
 		envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod = &envoyapi.KubernetesPodSpec{}
 	}
@@ -471,8 +483,6 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	rcomp.ApplyJobOverrides(certgenJob, pr.cfg.GatewayAPI.Spec.GatewayCertgenJob)
 
 	objs = append(objs, certgenJob)
-
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)
 
 	return objs, nil
 }

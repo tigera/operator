@@ -19,6 +19,7 @@ import (
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+	envoy "github.com/envoyproxy/gateway/api/v1alpha1"
 	configv1 "github.com/openshift/api/config/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
 	tigera "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -27,6 +28,7 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	aggregator "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme"
+	gateway "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // AddToSchemes may be used to add all resources defined in the project to a Scheme
@@ -49,4 +51,6 @@ func init() {
 	AddToSchemes = append(AddToSchemes, policyv1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, policyv1beta1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, crdv1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, gateway.Install)
+	AddToSchemes = append(AddToSchemes, envoy.AddToScheme)
 }

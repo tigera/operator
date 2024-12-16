@@ -186,6 +186,8 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		render.CreateNamespace(common.TigeraPrometheusNamespace, mc.cfg.Installation.KubernetesProvider, render.PSSBaseline, mc.cfg.Installation.Azure),
 	}
 
+	toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(common.TigeraPrometheusNamespace))
+
 	// Create role and role bindings first.
 	// Operator needs the create/update roles for Alertmanager configuration secret for example.
 
@@ -230,6 +232,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 
 	if mc.cfg.Monitor.ExternalPrometheus != nil {
 		toCreate = append(toCreate, mc.externalConfigMap())
+		toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(mc.cfg.Monitor.ExternalPrometheus.Namespace))
 		if mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor != nil {
 			externalServiceMonitor, needsRBAC := mc.externalServiceMonitor()
 			toCreate = append(toCreate, externalServiceMonitor)

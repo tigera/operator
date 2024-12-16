@@ -182,6 +182,9 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	// Clear the degraded bit if we've reached this far.
+	r.status.ClearDegraded()
+
 	// Update the status of the GatewayAPI instance and StatusManager.
 	return reconcile.Result{}, nil
 }

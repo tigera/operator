@@ -125,6 +125,9 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	}
 	r.status.OnCRFound()
 
+	// SetMetaData in the TigeraStatus such as observedGenerations.
+	defer r.status.SetMetaData(&gatewayAPI.ObjectMeta)
+
 	// Get the Installation, for private registry and pull secret config.
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
@@ -176,9 +179,6 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI CRDs", err, log)
 		return reconcile.Result{}, err
 	}
-
-	// SetMetaData in the TigeraStatus such as observedGenerations.
-	defer r.status.SetMetaData(&gatewayAPI.ObjectMeta)
 
 	// Update the status of the GatewayAPI instance and StatusManager.
 	return reconcile.Result{}, nil

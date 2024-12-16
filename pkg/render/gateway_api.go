@@ -34,6 +34,7 @@ import (
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 )
 
@@ -426,7 +427,8 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	// Add EnvoyProxy config that will apply our image configuration, pull secrets and overrides
 	// to gateway deployments.
-	objs = append(objs, pr.envoyProxyConfig())
+	proxyConfig := pr.envoyProxyConfig()
+	objs = append(objs, proxyConfig)
 
 	// Substitute possibly modified image names into the envoy-gateway-config.
 	envoyGatewayConfig := resources.envoyGatewayConfig.DeepCopyObject().(*envoyapi.EnvoyGateway)
@@ -485,6 +487,10 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	objs = append(objs, certgenJob)
 
+	// Provision a GatewayClass that references the EnvoyProxy config and the controllerName
+	// that the gateway controller expects.
+	objs = append(objs, pr.gatewayClass(envoyGatewayConfig.Gateway.ControllerName, proxyConfig))
+
 	return objs, nil
 }
 
@@ -515,4 +521,23 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig() *envoyapi.EnvoyP
 	rcomp.ApplyEnvoyProxyOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayDeployment)
 
 	return envoyProxy
+}
+
+func (pr *gatewayAPIImplementationComponent) gatewayClass(controllerName string, proxyConfig *envoyapi.EnvoyProxy) *gapi.GatewayClass {
+	return &gapi.GatewayClass{
+		TypeMeta: metav1.TypeMeta{Kind: "GatewayClass", APIVersion: "gateway.networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-gateway-class",
+			Namespace: "tigera-gateway",
+		},
+		Spec: gapi.GatewayClassSpec{
+			ControllerName: gapi.GatewayController(controllerName),
+			ParametersRef: &gapi.ParametersReference{
+				Group:     gapi.Group(proxyConfig.GroupVersionKind().Group),
+				Kind:      gapi.Kind(proxyConfig.Kind),
+				Name:      proxyConfig.Name,
+				Namespace: (*gapi.Namespace)(&proxyConfig.Namespace),
+			},
+		},
+	}
 }

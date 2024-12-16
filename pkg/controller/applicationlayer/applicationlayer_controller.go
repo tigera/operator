@@ -266,10 +266,10 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	var passthroughModSecurityRuleSet bool
-	var modSecurityRuleSet, corazaRuleset *corev1.ConfigMap
+	var modSecurityRuleSet, owaspCoreRuleSet *corev1.ConfigMap
 	if r.isWAFEnabled(&instance.Spec) || r.isSidecarInjectionEnabled(&instance.Spec) {
-		if corazaRuleset, err = r.getCorazaRuleSet(ctx); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall Core rule set", err, reqLogger)
+		if owaspCoreRuleSet, err = getOWASPCoreRuleSet(ctx); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall OWASP core rule set", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -295,7 +295,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		LogRequestsPerInterval:      lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:          lcSpec.LogIntervalSeconds,
 		ModSecurityConfigMap:        modSecurityRuleSet,
-		DefaultCoreRulesetConfigMap: corazaRuleset,
+		DefaultCoreRulesetConfigMap: owaspCoreRuleSet,
 		UseRemoteAddressXFF:         instance.Spec.EnvoySettings.UseRemoteAddress,
 		NumTrustedHopsXFF:           instance.Spec.EnvoySettings.XFFNumTrustedHops,
 		ApplicationLayer:            instance,
@@ -477,15 +477,7 @@ func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
 	return ruleset, nil
 }
 
-func (r *ReconcileApplicationLayer) getCorazaRuleSet(ctx context.Context) (*corev1.ConfigMap, error) {
-	ruleset, err := getOSWAPCoreRuleSet(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return ruleset, nil
-}
-
-func getOSWAPCoreRuleSet(ctx context.Context) (*corev1.ConfigMap, error) {
+func getOWASPCoreRuleSet(ctx context.Context) (*corev1.ConfigMap, error) {
 	owaspCRS, err := fs.Sub(coreruleset.FS, "@owasp_crs")
 	if err != nil {
 		return nil, err

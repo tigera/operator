@@ -155,7 +155,9 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// the customer uses a second (or more) implementation of the Gateway API in addition to the
 	// one that we are providing here.
 	crdComponent := render.NewPassthrough(render.GatewayAPICRDs(log)...)
-	err = utils.NewComponentHandler(log, r.client, r.scheme, nil).CreateOrUpdateOrDelete(ctx, crdComponent, nil)
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	handler.SetCreateOnly()
+	err = handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI CRDs", err, log)
 		return reconcile.Result{}, err

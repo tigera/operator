@@ -109,6 +109,22 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling GatewayAPI")
 
+	// Get the GatewayAPI CR.
+	gatewayAPI := &operatorv1.GatewayAPI{}
+	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, gatewayAPI)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Request object not found, could have been deleted after reconcile request.
+			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
+			reqLogger.Info("GatewayAPI object not found")
+			r.status.OnCRNotFound()
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for GatewayAPI CR", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	r.status.OnCRFound()
+
 	// Get the Installation, for private registry and pull secret config.
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
@@ -130,22 +146,6 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-
-	// Get the GatewayAPI CR.
-	gatewayAPI := &operatorv1.GatewayAPI{}
-	err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, gatewayAPI)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			reqLogger.Info("GatewayAPI object not found")
-			r.status.OnCRNotFound()
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for GatewayAPI CR", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	r.status.OnCRFound()
 
 	// Render CRDs.  For these we specify nil for the owning CR - i.e. no ownership - so that
 	// the CRDs are left in place even if the GatewayAPI CR is removed again.  This is in case

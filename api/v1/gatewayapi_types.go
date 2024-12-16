@@ -56,7 +56,7 @@ func init() {
 	SchemeBuilder.Register(&GatewayAPI{}, &GatewayAPIList{})
 }
 
-// Optional customization of the gateway controller deployment.
+// GatewayControllerDeployment allows customization of the gateway controller deployment.
 //
 // If GatewayControllerDeployment.Metadata is non-nil, non-clashing labels and annotations from that
 // metadata are added into the deployment's top-level metadata.
@@ -70,7 +70,7 @@ type GatewayControllerDeployment struct {
 	Spec *GatewayControllerDeploymentSpec `json:"spec,omitempty"`
 }
 
-// Optional customization of the gateway controller deployment.
+// GatewayControllerDeploymentSpec allows customization of the gateway controller deployment spec.
 //
 // If GatewayControllerDeployment.Spec.MinReadySeconds is non-nil, it sets the minReadySeconds field
 // for the deployment.
@@ -86,7 +86,8 @@ type GatewayControllerDeploymentSpec struct {
 	Template *GatewayControllerDeploymentPodTemplate `json:"template,omitempty"`
 }
 
-// Optional customization of the gateway controller deployment.
+// GatewayControllerDeploymentPodTemplate allows customization of the gateway controller deployment
+// pod template.
 //
 // If GatewayControllerDeployment.Spec.Template.Metadata is non-nil, non-clashing labels and
 // annotations from that metadata are added into the deployment's pod template.
@@ -100,19 +101,19 @@ type GatewayControllerDeploymentPodTemplate struct {
 	Spec *GatewayControllerDeploymentPodSpec `json:"spec,omitempty"`
 }
 
-// Optional customization of the gateway controller deployment.
+// GatewayControllerDeploymentPodSpec allows customization of the gateway controller deployment pod
+// spec.
 //
 // If GatewayControllerDeployment.Spec.Template.Spec.Affinity is non-nil, it sets the affinity field
 // of the deployment's pod template.
-//
-// If GatewayControllerDeployment.Spec.Template.Spec.Containers["envoy-gateway"].Resources is
-// non-nil, it overrides the ResourceRequirements of the controller's "envoy-gateway" container.
 //
 // If GatewayControllerDeployment.Spec.Template.Spec.NodeSelector is non-nil, it sets a node
 // selector for where controller pods may be scheduled.
 //
 // If GatewayControllerDeployment.Spec.Template.Spec.Tolerations is non-nil, it sets the tolerations
 // field of the deployment's pod template.
+//
+// For customization of container resources see GatewayControllerDeploymentContainer.
 type GatewayControllerDeploymentPodSpec struct {
 	// +optional
 	Affinity *v1.Affinity `json:"affinity"`
@@ -127,7 +128,11 @@ type GatewayControllerDeploymentPodSpec struct {
 	Tolerations []v1.Toleration `json:"tolerations"`
 }
 
-// See GatewayControllerDeploymentPodSpec for how this struct can be used.
+// GatewayControllerDeploymentContainer allows customization of the gateway controller's resource
+// requirements.
+//
+// If GatewayControllerDeployment.Spec.Template.Spec.Containers["envoy-gateway"].Resources is
+// non-nil, it overrides the ResourceRequirements of the controller's "envoy-gateway" container.
 type GatewayControllerDeploymentContainer struct {
 	// +kubebuilder:validation:Enum=envoy-gateway
 	Name string `json:"name"`
@@ -136,7 +141,7 @@ type GatewayControllerDeploymentContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// Optional customization of the gateway certgen job.
+// GatewayCertgenJob allows customization of the gateway certgen job.
 //
 // If GatewayCertgenJob.Metadata is non-nil, non-clashing labels and annotations from that metadata
 // are added into the job's top-level metadata.
@@ -150,7 +155,7 @@ type GatewayCertgenJob struct {
 	Spec *GatewayCertgenJobSpec `json:"spec,omitempty"`
 }
 
-// Optional customization of the gateway certgen job.
+// GatewayCertgenJobSpec allows customization of the gateway certgen job spec.
 //
 // For customization of the job template see GatewayCertgenJobPodTemplate.
 type GatewayCertgenJobSpec struct {
@@ -158,7 +163,7 @@ type GatewayCertgenJobSpec struct {
 	Template *GatewayCertgenJobPodTemplate `json:"template,omitempty"`
 }
 
-// Optional customization of the gateway certgen job.
+// GatewayCertgenJobPodTemplate allows customization of the gateway certgen job's pod template.
 //
 // If GatewayCertgenJob.Spec.Template.Metadata is non-nil, non-clashing labels and
 // annotations from that metadata are added into the job's pod template.
@@ -172,19 +177,18 @@ type GatewayCertgenJobPodTemplate struct {
 	Spec *GatewayCertgenJobPodSpec `json:"spec,omitempty"`
 }
 
-// Optional customization of the gateway certgen job.
+// GatewayCertgenJobPodSpec allows customization of the gateway certgen job's pod spec.
 //
 // If GatewayCertgenJob.Spec.Template.Spec.Affinity is non-nil, it sets the affinity field of the
 // job's pod template.
-//
-// If GatewayCertgenJob.Spec.Template.Spec.Containers["envoy-gateway-certgen"].Resources is non-nil,
-// it overrides the ResourceRequirements of the job's "envoy-gateway-certgen" container.
 //
 // If GatewayCertgenJob.Spec.Template.Spec.NodeSelector is non-nil, it sets a node selector for
 // where job pods may be scheduled.
 //
 // If GatewayCertgenJob.Spec.Template.Spec.Tolerations is non-nil, it sets the tolerations field of
 // the job's pod template.
+//
+// For customization of job container resources see GatewayCertgenJobContainer.
 type GatewayCertgenJobPodSpec struct {
 	// +optional
 	Affinity *v1.Affinity `json:"affinity"`
@@ -199,7 +203,11 @@ type GatewayCertgenJobPodSpec struct {
 	Tolerations []v1.Toleration `json:"tolerations"`
 }
 
-// See GatewayCertgenJobPodSpec for how this struct can be used.
+// GatewayCertgenJobContainer allows customization of the gateway certgen job's resource
+// requirements.
+//
+// If GatewayCertgenJob.Spec.Template.Spec.Containers["envoy-gateway-certgen"].Resources is non-nil,
+// it overrides the ResourceRequirements of the job's "envoy-gateway-certgen" container.
 type GatewayCertgenJobContainer struct {
 	// +kubebuilder:validation:Enum=envoy-gateway-certgen
 	Name string `json:"name"`
@@ -208,17 +216,19 @@ type GatewayCertgenJobContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// Optional customization of gateway deployments.
+// GatewayDeployment allows customization of gateway deployments.
 //
-// For customization of the deployment spec see GatewayDeploymentSpec.
+// For detail see GatewayDeploymentSpec.
 type GatewayDeployment struct {
 	// +optional
 	Spec *GatewayDeploymentSpec `json:"spec,omitempty"`
 }
 
-// Optional customization of gateway deployments.
+// GatewayDeploymentSpec allows customization of the spec of gateway deployments.
 //
 // For customization of the pod template see GatewayDeploymentPodTemplate.
+//
+// For customization of the deployment strategy see GatewayDeploymentStrategy.
 type GatewayDeploymentSpec struct {
 	// +optional
 	Template *GatewayDeploymentPodTemplate `json:"template,omitempty"`
@@ -229,10 +239,10 @@ type GatewayDeploymentSpec struct {
 	Strategy *GatewayDeploymentStrategy `json:"strategy,omitempty" patchStrategy:"retainKeys" protobuf:"bytes,4,opt,name=strategy"`
 }
 
-// Optional customization of gateway deployments.
+// GatewayDeploymentPodTemplate allows customization of the pod template of gateway deployments.
 //
 // If GatewayDeployment.Spec.Template.Metadata is non-nil, non-clashing labels and annotations from
-// that metadata are added into the deployment's pod template.
+// that metadata are added into each deployment's pod template.
 //
 // For customization of the pod template spec see GatewayDeploymentPodSpec.
 type GatewayDeploymentPodTemplate struct {
@@ -243,19 +253,21 @@ type GatewayDeploymentPodTemplate struct {
 	Spec *GatewayDeploymentPodSpec `json:"spec,omitempty"`
 }
 
-// Optional customization of gateway deployments.
+// GatewayDeploymentPodSpec allows customization of the pod spec of gateway deployments.
 //
-// If GatewayDeployment.Spec.Template.Spec.Affinity is non-nil, it sets the affinity field of the
+// If GatewayDeployment.Spec.Template.Spec.Affinity is non-nil, it sets the affinity field of each
 // deployment's pod template.
-//
-// If GatewayDeployment.Spec.Template.Spec.Containers["envoy"].Resources is non-nil, it
-// overrides the ResourceRequirements of the "envoy" container.
 //
 // If GatewayDeployment.Spec.Template.Spec.NodeSelector is non-nil, it sets a node selector for
 // where gateway pods may be scheduled.
 //
 // If GatewayDeployment.Spec.Template.Spec.Tolerations is non-nil, it sets the tolerations field of
-// the deployment's pod template.
+// each deployment's pod template.
+//
+// If GatewayDeployment.Spec.Template.Spec.TopologySpreadConstraints is non-nil, it sets the
+// topology spread constraints of each deployment's pod template.
+//
+// For customization of container resources see GatewayControllerDeploymentContainer.
 type GatewayDeploymentPodSpec struct {
 	// +optional
 	Affinity *v1.Affinity `json:"affinity"`
@@ -276,7 +288,11 @@ type GatewayDeploymentPodSpec struct {
 	Tolerations []v1.Toleration `json:"tolerations"`
 }
 
-// See GatewayDeploymentPodSpec for how this struct can be used.
+// GatewayDeploymentContainer allows customization of the resource requirements of gateway
+// deployments.
+//
+// If GatewayDeployment.Spec.Template.Spec.Containers["envoy"].Resources is non-nil, it overrides
+// the ResourceRequirements of the "envoy" container in each gateway deployment.
 type GatewayDeploymentContainer struct {
 	// +kubebuilder:validation:Enum=envoy
 	Name string `json:"name"`
@@ -285,12 +301,14 @@ type GatewayDeploymentContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
-// GatewayDeploymentStrategy describes how to replace existing pods with new ones.  Only RollingUpdate is supported
-// at this time so the Type field is not exposed.
+// GatewayDeploymentStrategy allows customization of the deployment strategy for gateway
+// deployments.
+//
+// If GatewayDeployment.Spec.Strategy is non-nil, gateway deployments are set to use a rolling
+// update strategy, with the parameters specified in GatewayDeployment.Spec.Strategy.
+//
+// Only RollingUpdate is supported at this time so the Type field is not exposed.
 type GatewayDeploymentStrategy struct {
-	// Rolling update config params. Present only if DeploymentStrategyType =
-	// RollingUpdate.
-	// to be.
 	// +optional
 	RollingUpdate *appsv1.RollingUpdateDeployment `json:"rollingUpdate,omitempty" protobuf:"bytes,2,opt,name=rollingUpdate"`
 }

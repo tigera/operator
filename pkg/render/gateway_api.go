@@ -482,7 +482,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig() *envoyapi.EnvoyP
 		TypeMeta: metav1.TypeMeta{Kind: "EnvoyProxy", APIVersion: "gateway.envoyproxy.io/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "envoy-proxy-config",
-			Namespace: "tigera-gateway-system",
+			Namespace: "tigera-gateway",
 		},
 		Spec: envoyapi.EnvoyProxySpec{
 			Provider: &envoyapi.EnvoyProxyProvider{

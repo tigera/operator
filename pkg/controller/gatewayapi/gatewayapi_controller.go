@@ -37,8 +37,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-const ResourceName string = "gatewayapi"
-
 var log = logf.Log.WithName("controller_gatewayapi")
 
 // Add creates a new GatewayAPI Controller and adds it to the Manager. The Manager will set fields on the Controller

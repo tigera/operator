@@ -72,11 +72,11 @@ type componentHandler struct {
 	createOnly bool
 }
 
-func (c componentHandler) SetCreateOnly() {
+func (c *componentHandler) SetCreateOnly() {
 	c.createOnly = true
 }
 
-func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
+func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
 	om, ok := obj.(metav1.ObjectMetaAccessor)
 	if !ok {
 		return fmt.Errorf("object is not ObjectMetaAccessor")
@@ -269,7 +269,7 @@ func resetMetadataForCreate(obj client.Object) {
 	obj.SetCreationTimestamp(metav1.Time{})
 }
 
-func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
+func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))

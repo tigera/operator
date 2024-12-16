@@ -64,12 +64,12 @@ spec:
                     type: object
                   spec:
                     description: |-
-                      Optional customization of the gateway certgen job.
+                      GatewayCertgenJobSpec allows customization of the gateway certgen job spec.
                       For customization of the job template see GatewayCertgenJobPodTemplate.
                     properties:
                       template:
                         description: |-
-                          Optional customization of the gateway certgen job.
+                          GatewayCertgenJobPodTemplate allows customization of the gateway certgen job's pod template.
                           If GatewayCertgenJob.Spec.Template.Metadata is non-nil, non-clashing labels and
                           annotations from that metadata are added into the job's pod template.
                           For customization of the pod template spec see GatewayCertgenJobPodSpec.
@@ -97,15 +97,14 @@ spec:
                             type: object
                           spec:
                             description: |-
-                              Optional customization of the gateway certgen job.
+                              GatewayCertgenJobPodSpec allows customization of the gateway certgen job's pod spec.
                               If GatewayCertgenJob.Spec.Template.Spec.Affinity is non-nil, it sets the affinity field of the
                               job's pod template.
-                              If GatewayCertgenJob.Spec.Template.Spec.Containers["envoy-gateway-certgen"].Resources is non-nil,
-                              it overrides the ResourceRequirements of the job's "envoy-gateway-certgen" container.
                               If GatewayCertgenJob.Spec.Template.Spec.NodeSelector is non-nil, it sets a node selector for
                               where job pods may be scheduled.
                               If GatewayCertgenJob.Spec.Template.Spec.Tolerations is non-nil, it sets the tolerations field of
                               the job's pod template.
+                              For customization of job container resources see GatewayCertgenJobContainer.
                             properties:
                               affinity:
                                 description: Affinity is a group of affinity scheduling
@@ -1056,8 +1055,11 @@ spec:
                                 type: object
                               containers:
                                 items:
-                                  description: See GatewayCertgenJobPodSpec for how
-                                    this struct can be used.
+                                  description: |-
+                                    GatewayCertgenJobContainer allows customization of the gateway certgen job's resource
+                                    requirements.
+                                    If GatewayCertgenJob.Spec.Template.Spec.Containers["envoy-gateway-certgen"].Resources is non-nil,
+                                    it overrides the ResourceRequirements of the job's "envoy-gateway-certgen" container.
                                   properties:
                                     name:
                                       enum:
@@ -1193,7 +1195,7 @@ spec:
                     type: object
                   spec:
                     description: |-
-                      Optional customization of the gateway controller deployment.
+                      GatewayControllerDeploymentSpec allows customization of the gateway controller deployment spec.
                       If GatewayControllerDeployment.Spec.MinReadySeconds is non-nil, it sets the minReadySeconds field
                       for the deployment.
                       For customization of the pod template see GatewayControllerDeploymentPodTemplate.
@@ -1205,7 +1207,8 @@ spec:
                         type: integer
                       template:
                         description: |-
-                          Optional customization of the gateway controller deployment.
+                          GatewayControllerDeploymentPodTemplate allows customization of the gateway controller deployment
+                          pod template.
                           If GatewayControllerDeployment.Spec.Template.Metadata is non-nil, non-clashing labels and
                           annotations from that metadata are added into the deployment's pod template.
                           For customization of the pod template spec see GatewayControllerDeploymentPodSpec.
@@ -1233,15 +1236,15 @@ spec:
                             type: object
                           spec:
                             description: |-
-                              Optional customization of the gateway controller deployment.
+                              GatewayControllerDeploymentPodSpec allows customization of the gateway controller deployment pod
+                              spec.
                               If GatewayControllerDeployment.Spec.Template.Spec.Affinity is non-nil, it sets the affinity field
                               of the deployment's pod template.
-                              If GatewayControllerDeployment.Spec.Template.Spec.Containers["envoy-gateway"].Resources is
-                              non-nil, it overrides the ResourceRequirements of the controller's "envoy-gateway" container.
                               If GatewayControllerDeployment.Spec.Template.Spec.NodeSelector is non-nil, it sets a node
                               selector for where controller pods may be scheduled.
                               If GatewayControllerDeployment.Spec.Template.Spec.Tolerations is non-nil, it sets the tolerations
                               field of the deployment's pod template.
+                              For customization of container resources see GatewayControllerDeploymentContainer.
                             properties:
                               affinity:
                                 description: Affinity is a group of affinity scheduling
@@ -2192,8 +2195,11 @@ spec:
                                 type: object
                               containers:
                                 items:
-                                  description: See GatewayControllerDeploymentPodSpec
-                                    for how this struct can be used.
+                                  description: |-
+                                    GatewayControllerDeploymentContainer allows customization of the gateway controller's resource
+                                    requirements.
+                                    If GatewayControllerDeployment.Spec.Template.Spec.Containers["envoy-gateway"].Resources is
+                                    non-nil, it overrides the ResourceRequirements of the controller's "envoy-gateway" container.
                                   properties:
                                     name:
                                       enum:
@@ -2307,18 +2313,17 @@ spec:
                 properties:
                   spec:
                     description: |-
-                      Optional customization of gateway deployments.
+                      GatewayDeploymentSpec allows customization of the spec of gateway deployments.
                       For customization of the pod template see GatewayDeploymentPodTemplate.
+                      For customization of the deployment strategy see GatewayDeploymentStrategy.
                     properties:
                       strategy:
                         description: The deployment strategy to use to replace existing
                           pods with new ones.
                         properties:
                           rollingUpdate:
-                            description: |-
-                              Rolling update config params. Present only if DeploymentStrategyType =
-                              RollingUpdate.
-                              to be.
+                            description: Spec to control the desired behavior of rolling
+                              update.
                             properties:
                               maxSurge:
                                 anyOf:
@@ -2357,9 +2362,9 @@ spec:
                         type: object
                       template:
                         description: |-
-                          Optional customization of gateway deployments.
+                          GatewayDeploymentPodTemplate allows customization of the pod template of gateway deployments.
                           If GatewayDeployment.Spec.Template.Metadata is non-nil, non-clashing labels and annotations from
-                          that metadata are added into the deployment's pod template.
+                          that metadata are added into each deployment's pod template.
                           For customization of the pod template spec see GatewayDeploymentPodSpec.
                         properties:
                           metadata:
@@ -2385,15 +2390,16 @@ spec:
                             type: object
                           spec:
                             description: |-
-                              Optional customization of gateway deployments.
-                              If GatewayDeployment.Spec.Template.Spec.Affinity is non-nil, it sets the affinity field of the
+                              GatewayDeploymentPodSpec allows customization of the pod spec of gateway deployments.
+                              If GatewayDeployment.Spec.Template.Spec.Affinity is non-nil, it sets the affinity field of each
                               deployment's pod template.
-                              If GatewayDeployment.Spec.Template.Spec.Containers["envoy"].Resources is non-nil, it
-                              overrides the ResourceRequirements of the "envoy" container.
                               If GatewayDeployment.Spec.Template.Spec.NodeSelector is non-nil, it sets a node selector for
                               where gateway pods may be scheduled.
                               If GatewayDeployment.Spec.Template.Spec.Tolerations is non-nil, it sets the tolerations field of
-                              the deployment's pod template.
+                              each deployment's pod template.
+                              If GatewayDeployment.Spec.Template.Spec.TopologySpreadConstraints is non-nil, it sets the
+                              topology spread constraints of each deployment's pod template.
+                              For customization of container resources see GatewayControllerDeploymentContainer.
                             properties:
                               affinity:
                                 description: Affinity is a group of affinity scheduling
@@ -3344,8 +3350,11 @@ spec:
                                 type: object
                               containers:
                                 items:
-                                  description: See GatewayDeploymentPodSpec for how
-                                    this struct can be used.
+                                  description: |-
+                                    GatewayDeploymentContainer allows customization of the resource requirements of gateway
+                                    deployments.
+                                    If GatewayDeployment.Spec.Template.Spec.Containers["envoy"].Resources is non-nil, it overrides
+                                    the ResourceRequirements of the "envoy" container in each gateway deployment.
                                   properties:
                                     name:
                                       enum:

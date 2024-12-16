@@ -406,7 +406,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)
 
 	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
-	objs = append(objs,
+	for _, resource := range []client.Object{
 		resources.controllerServiceAccount,
 		resources.clusterRole,
 		resources.clusterRoleBinding,
@@ -418,14 +418,15 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		resources.certgenServiceAccount,
 		resources.certgenRole,
 		resources.certgenRoleBinding,
-		pr.envoyProxyConfig(),
-	)
-
-	// Deep-copy all of those, so as not to inadvertently modify the cache inside
-	// `GatewayAPIResourcesGetter`.
-	for i := range objs {
-		objs[i] = objs[i].DeepCopyObject().(client.Object)
+	} {
+		// But deep-copy each one so as not to inadvertently modify the cache inside
+		// `GatewayAPIResourcesGetter`.
+		objs = append(objs, resource.DeepCopyObject().(client.Object))
 	}
+
+	// Add EnvoyProxy config that will apply our image configuration, pull secrets and overrides
+	// to gateway deployments.
+	objs = append(objs, pr.envoyProxyConfig())
 
 	// Substitute possibly modified image names into the envoy-gateway-config.
 	envoyGatewayConfig := resources.envoyGatewayConfig.DeepCopyObject().(*envoyapi.EnvoyGateway)

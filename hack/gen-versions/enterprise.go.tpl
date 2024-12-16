@@ -357,25 +357,27 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-
+{{ with index .Components "gateway-api-envoy-gateway" }}
 	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:  "v1.1.2",
-		Image:    "envoyproxy/gateway",
-		Registry: "docker.io/",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
-
+{{- end }}
+{{ with index .Components "gateway-api-envoy-proxy" }}
 	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:  "distroless-v1.31.0",
-		Image:    "envoyproxy/envoy",
-		Registry: "",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
-
+{{- end }}
+{{ with index .Components "gateway-api-envoy-ratelimit" }}
 	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:  "26f28d78",
-		Image:    "envoyproxy/ratelimit",
-		Registry: "docker.io/",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
-
+{{- end }}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{

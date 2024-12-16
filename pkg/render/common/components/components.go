@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -516,5 +517,54 @@ func ClusterRoleBinding(name, clusterRole, sa string, namespaces []string) *rbac
 			Name:     clusterRole,
 		},
 		Subjects: subjects,
+	}
+}
+
+// ApplyEnvoyProxyOverrides applies the overrides to the given EnvoyProxy.
+// Note: overrides must not be nil pointer.
+func ApplyEnvoyProxyOverrides(ep *envoyapi.EnvoyProxy, overrides any) {
+	// Catch if caller passes in an explicit nil.
+	if overrides == nil {
+		return
+	}
+
+	// Initialize a pod template spec for the override logic to work on.
+	r := &replicatedPodResource{
+		podTemplateSpec: &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{
+					Name: "envoy",
+				}},
+			},
+		},
+	}
+
+	// Apply the overrides.
+	applyReplicatedPodResourceOverrides(r, overrides)
+
+	// Merge overridden fields into the EnvoyProxy.
+	if r.deploymentStrategy != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Strategy = r.deploymentStrategy
+	}
+	if r.podTemplateSpec.Annotations != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Annotations = r.podTemplateSpec.Annotations
+	}
+	if r.podTemplateSpec.Labels != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels = r.podTemplateSpec.Labels
+	}
+	if r.podTemplateSpec.Spec.Affinity != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Affinity = r.podTemplateSpec.Spec.Affinity
+	}
+	if r.podTemplateSpec.Spec.Tolerations != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Tolerations = r.podTemplateSpec.Spec.Tolerations
+	}
+	if r.podTemplateSpec.Spec.NodeSelector != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.NodeSelector = r.podTemplateSpec.Spec.NodeSelector
+	}
+	if r.podTemplateSpec.Spec.TopologySpreadConstraints != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.TopologySpreadConstraints = r.podTemplateSpec.Spec.TopologySpreadConstraints
+	}
+	if !reflect.DeepEqual(r.podTemplateSpec.Spec.Containers[0].Resources, corev1.ResourceRequirements{}) {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Resources = &r.podTemplateSpec.Spec.Containers[0].Resources
 	}
 }

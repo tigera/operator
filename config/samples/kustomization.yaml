@@ -7,6 +7,7 @@ resources:
 - operator_v1_authentication.yaml
 - operator_v1_compliance.yaml
 - operator_v1_egressgateway.yaml
+- operator_v1_gatewayapi.yaml
 - operator_v1_imageset.yaml
 - operator_v1_installation.yaml
 - operator_v1_intrusiondetection.yaml

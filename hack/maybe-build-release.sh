@@ -6,7 +6,7 @@ if ! tag=$(git describe --exact-match --tags HEAD); then
 	exit 0
 fi
 
-if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+if [[ ! "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(\.[0-9])?$ ]]; then
 	echo "tag ${tag} does not match the format vX.Y.Z"
 	exit 1
 fi	

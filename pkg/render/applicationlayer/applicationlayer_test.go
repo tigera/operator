@@ -700,7 +700,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		expectedDikastesArgs := []string{
 			"--per-host-waf-enabled",
 			"--waf-log-file", filepath.Join(applicationlayer.CalicologsVolumePath, "waf", "waf.log"),
-			"--waf-ruleset-file", filepath.Join(applicationlayer.ModSecurityRulesetVolumePath, "tigera.conf"),
+			"--waf-ruleset-file", filepath.Join(applicationlayer.WAFRulesetVolumePath, "tigera.conf"),
 		}
 		for _, element := range expectedDikastesArgs {
 			Expect(dikastesArgs).To(ContainElement(element))
@@ -711,7 +711,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			{Name: applicationlayer.DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
 			{Name: applicationlayer.FelixSync, MountPath: "/var/run/felix"},
 			{Name: applicationlayer.CalicoLogsVolumeName, MountPath: applicationlayer.CalicologsVolumePath},
-			{Name: applicationlayer.ModSecurityRulesetConfigMapName, MountPath: applicationlayer.ModSecurityRulesetVolumePath, ReadOnly: true},
+			{Name: applicationlayer.ModSecurityRulesetConfigMapName, MountPath: applicationlayer.WAFRulesetVolumePath, ReadOnly: true},
 			{Name: applicationlayer.DefaultCoreRuleset, MountPath: applicationlayer.DefaultCoreRulesetVolumePath, ReadOnly: true},
 		}
 		Expect(len(dikastesVolMounts)).To(Equal(len(expectedDikastesVolMounts)))

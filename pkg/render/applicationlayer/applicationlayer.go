@@ -55,9 +55,9 @@ const (
 	DikastesSyncVolumeName           = "dikastes-sync"
 	DikastesContainerName            = "dikastes"
 	ModSecurityRulesetVolumeName     = "modsecurity-ruleset"
-	ModSecurityRulesetVolumePath     = "/etc/modsecurity-ruleset"
+	WAFRulesetVolumePath             = "/etc/waf"
 	DefaultCoreRulesetVolumeName     = "coreruleset-default"
-	DefaultCoreRulesetVolumePath     = "/etc/modsecurity-ruleset/coreruleset-default"
+	DefaultCoreRulesetVolumePath     = "/etc/waf/coreruleset-default"
 	ModSecurityRulesetConfigMapName  = "modsecurity-ruleset"
 	DefaultCoreRuleset               = "coreruleset-default"
 	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/modsecurity-ruleset"
@@ -318,7 +318,7 @@ func (c *component) containers() []corev1.Container {
 			commandArgs = append(
 				commandArgs,
 				"--waf-log-file", filepath.Join(CalicologsVolumePath, "waf", "waf.log"),
-				"--waf-ruleset-file", filepath.Join(ModSecurityRulesetVolumePath, "tigera.conf"),
+				"--waf-ruleset-file", filepath.Join(WAFRulesetVolumePath, "tigera.conf"),
 			)
 			if c.config.PerHostWAFEnabled {
 				commandArgs = append(commandArgs, "--per-host-waf-enabled")
@@ -332,7 +332,7 @@ func (c *component) containers() []corev1.Container {
 					},
 					{
 						Name:      ModSecurityRulesetVolumeName,
-						MountPath: ModSecurityRulesetVolumePath,
+						MountPath: WAFRulesetVolumePath,
 						ReadOnly:  true,
 					},
 					{

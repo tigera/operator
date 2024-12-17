@@ -457,14 +457,14 @@ func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (
 		return nil, false, err
 	}
 
-	ruleset, err := getDefaultCoreRuleset(ctx)
+	ruleset, err := getCoreRulesetConfig(ctx)
 	if err != nil {
 		return nil, false, err
 	}
 	return ruleset, true, nil
 }
 
-func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
+func getCoreRulesetConfig(ctx context.Context) (*corev1.ConfigMap, error) {
 	ruleset, err := embed.AsConfigMap(
 		applicationlayer.ModSecurityRulesetConfigMapName,
 		common.OperatorNamespace(),
@@ -473,6 +473,18 @@ func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	corazaConf, err := fs.ReadFile(coreruleset.FS, "@coraza.conf-recommended")
+	if err != nil {
+		return nil, err
+	}
+	ruleset.Data["coraza.conf"] = string(corazaConf)
+
+	crsSetup, err := fs.ReadFile(coreruleset.FS, "@crs-setup.conf.example")
+	if err != nil {
+		return nil, err
+	}
+	ruleset.Data["crs-setup.conf"] = string(crsSetup)
 
 	return ruleset, nil
 }

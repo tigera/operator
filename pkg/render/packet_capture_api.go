@@ -108,6 +108,8 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 	objs := []client.Object{
 		CreateNamespace(PacketCaptureNamespace, pc.cfg.Installation.KubernetesProvider, PSSRestricted, pc.cfg.Installation.Azure),
 	}
+
+	objs = append(objs, CreateOperatorSecretsRoleBinding(PacketCaptureNamespace))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(PacketCaptureNamespace, pc.cfg.PullSecrets...)...)...)
 
 	objs = append(objs,

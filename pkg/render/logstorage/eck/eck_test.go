@@ -29,6 +29,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/render"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -50,6 +51,7 @@ var _ = Describe("ECK rendering tests", func() {
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator", Namespace: eck.OperatorNamespace}},
 			&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: eck.OperatorName, Namespace: eck.OperatorNamespace}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: eck.OperatorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
 
 		BeforeEach(func() {
@@ -232,6 +234,7 @@ var _ = Describe("ECK rendering tests", func() {
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "elastic-operator", Namespace: eck.OperatorNamespace}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: eck.EnterpriseTrial, Namespace: eck.OperatorNamespace}},
 				&appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: eck.OperatorName, Namespace: eck.OperatorNamespace}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: eck.OperatorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			}
 
 			cfg.ApplyTrial = true

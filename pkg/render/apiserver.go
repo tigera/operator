@@ -1193,6 +1193,24 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
 
+	// set Log_LEVEL for apiserver container
+	if c.cfg.APIServer.APIServerDeployment != nil && c.cfg.APIServer.APIServerDeployment.Spec != nil &&
+		c.cfg.APIServer.APIServerDeployment.Spec.Template != nil &&
+		c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec != nil &&
+		c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec.Containers != nil {
+		containers := c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec.Containers
+		for _, con := range containers {
+			if strings.Contains(con.Name, "apiserver") {
+				if logLevel := con.LogLevel; logLevel != nil {
+					env = append(env, corev1.EnvVar{Name: "LOG_LEVEL", Value: *logLevel})
+				}
+			}
+		}
+	} else {
+		// set default LOG_LEVEL to info when not set by the user
+		env = append(env, corev1.EnvVar{Name: "LOG_LEVEL", Value: "info"})
+	}
+
 	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
@@ -1263,8 +1281,6 @@ func (c *apiServerComponent) startUpArgs() []string {
 // queryServerContainer creates the query server container.
 func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	env := []corev1.EnvVar{
-		// Set queryserver logging to "info"
-		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", QueryServerPort)},
 		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
@@ -1282,6 +1298,24 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 	if c.cfg.KeyValidatorConfig != nil {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
+	}
+
+	// set Log_LEVEL for queryserver container
+	if c.cfg.APIServer.APIServerDeployment != nil && c.cfg.APIServer.APIServerDeployment.Spec != nil &&
+		c.cfg.APIServer.APIServerDeployment.Spec.Template != nil &&
+		c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec != nil &&
+		c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec.Containers != nil {
+		containers := c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec.Containers
+		for _, con := range containers {
+			if strings.Contains(con.Name, "queryserver") {
+				if logLevel := con.LogLevel; logLevel != nil {
+					env = append(env, corev1.EnvVar{Name: "LOGLEVEL", Value: *logLevel})
+				}
+			}
+		}
+	} else {
+		// set default LOG_LEVEL to info when not set by the user
+		env = append(env, corev1.EnvVar{Name: "LOGLEVEL", Value: "info"})
 	}
 
 	volumeMounts := []corev1.VolumeMount{

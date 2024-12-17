@@ -185,7 +185,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Verify env
 		expectedEnv := []corev1.EnvVar{
 			{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-			{Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer"},
+			{Name: "ENABLED_CONTROLLERS", Value: "node"},
 			{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: "default"},
 			{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: "false"},
 		}
@@ -247,7 +247,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
-			Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
+			Name: "ENABLED_CONTROLLERS", Value: "node,service,federatedservices,usage,loadbalancer",
 		}))
 
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
@@ -388,7 +388,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name:  "ENABLED_CONTROLLERS",
-			Value: "node,loadbalancer,service,federatedservices,usage",
+			Value: "node,service,federatedservices,usage,loadbalancer",
 		}))
 
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))

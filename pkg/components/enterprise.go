@@ -138,7 +138,7 @@ var (
 	}
 
 	ComponentGuardian = Component{
-		Version:  "v3.20.0-2.0",
+		Version:  "v3.20.0-2.3",
 		Image:    "tigera/guardian",
 		Registry: "",
 	}

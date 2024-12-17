@@ -124,6 +124,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
 		c.allowTigeraNetworkPolicy(c.cfg.Installation.Variant),
 		networkpolicy.AllowTigeraDefaultDeny(DexNamespace),
+		CreateOperatorSecretsRoleBinding(DexNamespace),
 		c.serviceAccount(),
 		c.deployment(),
 		c.service(),
@@ -273,7 +274,7 @@ func (c *dexComponent) deployment() client.Object {
 							LivenessProbe:   c.probe(),
 							SecurityContext: securitycontext.NewNonRootContext(),
 
-							Command: []string{"/dex", "serve", "/etc/dex/baseCfg/config.yaml"},
+							Command: []string{"/usr/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"},
 
 							Ports: []corev1.ContainerPort{
 								{

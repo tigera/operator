@@ -40,7 +40,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -232,6 +231,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate = append(toCreate, es.elasticsearchInternalAllowTigeraPolicy())
 	toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(ElasticsearchNamespace))
 
+	toCreate = append(toCreate, CreateOperatorSecretsRoleBinding(ElasticsearchNamespace))
+
 	if len(es.cfg.PullSecrets) > 0 {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
 	}
@@ -370,9 +371,6 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	sc := securitycontext.NewNonRootContext()
-	// Set the user and group to be the default elasticsearch ID
-	sc.RunAsUser = ptr.Int64ToPtr(1000)
-	sc.RunAsGroup = ptr.Int64ToPtr(1000)
 
 	esContainer := corev1.Container{
 		Name: "elasticsearch",
@@ -1181,6 +1179,7 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged, m.cfg.Installation.Azure),
 		m.elasticsearchExternalService(),
 		m.linseedExternalService(),
+		CreateOperatorSecretsRoleBinding(ElasticsearchNamespace),
 	)
 
 	for _, r := range roles {

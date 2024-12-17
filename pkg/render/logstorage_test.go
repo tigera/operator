@@ -171,6 +171,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
 					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: render.ElasticsearchNamespace}},
 				}
 
 				component := render.LogStorage(cfg)
@@ -221,9 +222,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				esContainer := resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
 				Expect(*esContainer.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
 				Expect(*esContainer.SecurityContext.Privileged).To(BeFalse())
-				Expect(*esContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(1000))
+				Expect(*esContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 				Expect(*esContainer.SecurityContext.RunAsNonRoot).To(BeTrue())
-				Expect(*esContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(1000))
+				Expect(*esContainer.SecurityContext.RunAsUser).To(BeEquivalentTo(10001))
 				Expect(esContainer.SecurityContext.Capabilities).To(Equal(
 					&corev1.Capabilities{
 						Drop: []corev1.Capability{"ALL"},
@@ -269,6 +270,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
 					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.ElasticsearchNamespace}},
 				}
 
 				expectedDeleteResources := []resourceTestObj{
@@ -325,6 +327,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
 					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.ElasticsearchNamespace}},
 				}
 
 				cfg.UnusedTLSSecret = &corev1.Secret{
@@ -410,6 +413,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: render.ElasticsearchNamespace}},
 					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.ElasticsearchNamespace}},
 				}
 
 				cfg.Provider = operatorv1.ProviderNone
@@ -581,6 +585,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed"}},
 					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.ElasticsearchNamespace}},
 				}
 
 				component := render.NewManagedClusterLogStorage(cfg)

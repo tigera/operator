@@ -268,7 +268,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	var passthroughModSecurityRuleSet bool
 	var modSecurityRuleSet, owaspCoreRuleSet *corev1.ConfigMap
 	if r.isWAFEnabled(&instance.Spec) || r.isSidecarInjectionEnabled(&instance.Spec) {
-		if owaspCoreRuleSet, err = getOWASPCoreRuleSet(ctx); err != nil {
+		if owaspCoreRuleSet, err = getOWASPCoreRuleSet(); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall OWASP core rule set", err, reqLogger)
 			return reconcile.Result{}, err
 		}
@@ -457,14 +457,14 @@ func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (
 		return nil, false, err
 	}
 
-	ruleset, err := getCoreRulesetConfig(ctx)
+	ruleset, err := getCoreRulesetConfig()
 	if err != nil {
 		return nil, false, err
 	}
 	return ruleset, true, nil
 }
 
-func getCoreRulesetConfig(ctx context.Context) (*corev1.ConfigMap, error) {
+func getCoreRulesetConfig() (*corev1.ConfigMap, error) {
 	ruleset, err := embed.AsConfigMap(
 		applicationlayer.WAFConfigConfigMapName,
 		common.OperatorNamespace(),
@@ -489,7 +489,7 @@ func getCoreRulesetConfig(ctx context.Context) (*corev1.ConfigMap, error) {
 	return ruleset, nil
 }
 
-func getOWASPCoreRuleSet(ctx context.Context) (*corev1.ConfigMap, error) {
+func getOWASPCoreRuleSet() (*corev1.ConfigMap, error) {
 	owaspCRS, err := fs.Sub(coreruleset.FS, "@owasp_crs")
 	if err != nil {
 		return nil, err

@@ -1891,6 +1891,9 @@ type fakeComponentHandler struct {
 	objectsToDelete []client.Object
 }
 
+func (f *fakeComponentHandler) SetCreateOnly() {
+}
+
 func (f *fakeComponentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, _ status.StatusManager) error {
 	c, d := component.Objects()
 	f.objectsToCreate = append(f.objectsToCreate, c...)

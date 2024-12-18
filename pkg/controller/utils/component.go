@@ -47,6 +47,10 @@ import (
 
 type ComponentHandler interface {
 	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
+
+	// Set this component handler to "create only" operation - i.e. it only creates resources if
+	// they do not already exist, and never tries to correct existing resources.
+	SetCreateOnly()
 }
 
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
@@ -61,13 +65,18 @@ func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.
 }
 
 type componentHandler struct {
-	client client.Client
-	scheme *runtime.Scheme
-	cr     metav1.Object
-	log    logr.Logger
+	client     client.Client
+	scheme     *runtime.Scheme
+	cr         metav1.Object
+	log        logr.Logger
+	createOnly bool
 }
 
-func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
+func (c *componentHandler) SetCreateOnly() {
+	c.createOnly = true
+}
+
+func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
 	om, ok := obj.(metav1.ObjectMetaAccessor)
 	if !ok {
 		return fmt.Errorf("object is not ObjectMetaAccessor")
@@ -136,6 +145,12 @@ func (c componentHandler) createOrUpdateObject(ctx context.Context, obj client.O
 			logCtx.WithValues("key", key).Error(err, "Failed to create object.")
 			return err
 		}
+		return nil
+	}
+
+	if c.createOnly {
+		// This component handler only creates resources if they do not already exist.
+		logCtx.Info("Create-only operation, ignoring existing object")
 		return nil
 	}
 
@@ -254,7 +269,7 @@ func resetMetadataForCreate(obj client.Object) {
 	obj.SetCreationTimestamp(metav1.Time{})
 }
 
-func (c componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
+func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -760,8 +775,12 @@ func setStandardSelectorAndLabels(obj client.Object) {
 	if podTemplate.ObjectMeta.Labels == nil {
 		podTemplate.ObjectMeta.Labels = make(map[string]string)
 	}
-	podTemplate.ObjectMeta.Labels["k8s-app"] = name
-	podTemplate.ObjectMeta.Labels["app.kubernetes.io/name"] = name
+	if podTemplate.ObjectMeta.Labels["k8s-app"] == "" {
+		podTemplate.ObjectMeta.Labels["k8s-app"] = name
+	}
+	if podTemplate.ObjectMeta.Labels["app.kubernetes.io/name"] == "" {
+		podTemplate.ObjectMeta.Labels["app.kubernetes.io/name"] = name
+	}
 }
 
 // ReadyFlag is used to synchronize access to a boolean flag

@@ -21,43 +21,65 @@ import (
 	opv1 "github.com/tigera/operator/api/v1"
 )
 
+// Prime each of these with a BeforeEach with the measured action so that the data needed is cached
+
 var _ = Describe("test crds pkg", func() {
 	Context("GetCalicoCRDSource", func() {
+		BeforeEach(func() {
+			_ = getCalicoCRDSource()
+		})
 		Measure("should quickly load calico source CRDs", func(b Benchmarker) {
 			runtime := b.Time("runtime", func() {
 				_ = getCalicoCRDSource()
 			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.3), "loading calico CRDs should not take too long.")
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading calico CRDs should not take too long.")
 		}, 50)
 	})
 	Context("GetEnterpriseCRDSource", func() {
+		BeforeEach(func() {
+			_ = getEnterpriseCRDSource()
+		})
 		Measure("should quickly load enterprise source CRDs", func(b Benchmarker) {
 			runtime := b.Time("runtime", func() {
 				_ = getEnterpriseCRDSource()
 			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.3), "loading enterprise CRDs should not take too long.")
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading enterprise CRDs should not take too long.")
 		}, 50)
 	})
 	Context("GetOperatorCRDSource", func() {
+		BeforeEach(func() {
+			_ = getOperatorCRDSource(opv1.Calico)
+			_ = getOperatorCRDSource(opv1.TigeraSecureEnterprise)
+		})
 		Measure("should quickly load operator source CRDs", func(b Benchmarker) {
 			runtime := b.Time("runtime", func() {
-				_ = getEnterpriseCRDSource()
+				_ = getOperatorCRDSource(opv1.Calico)
 			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.3), "loading operator CRDs should not take too long.")
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading Calico operator CRDs shouldnt take too long.")
+		}, 50)
+		Measure("should quickly load Enterprise operator source CRDs", func(b Benchmarker) {
+			runtime := b.Time("runtime", func() {
+				_ = getOperatorCRDSource(opv1.TigeraSecureEnterprise)
+			})
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading Enterprise operator CRDs shouldnt take too long.")
 		}, 50)
 	})
 	Context("GetCRDs", func() {
+		BeforeEach(func() {
+			_ = GetCRDs(opv1.Calico)
+			_ = GetCRDs(opv1.TigeraSecureEnterprise)
+		})
 		Measure("should quickly load calico CRDs", func(b Benchmarker) {
 			runtime := b.Time("runtime", func() {
 				_ = GetCRDs(opv1.Calico)
 			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.3), "loading calico CRDs should not take too long.")
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading calico CRDs should not take too long.")
 		}, 50)
 		Measure("should quickly load enterprise CRDs", func(b Benchmarker) {
 			runtime := b.Time("runtime", func() {
 				_ = GetCRDs(opv1.TigeraSecureEnterprise)
 			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.3), "loading enterprise CRDs should not take too long.")
+			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading enterprise CRDs should not take too long.")
 		}, 50)
 	})
 })

@@ -42,27 +42,27 @@ import (
 )
 
 const (
-	APLName                          = "application-layer"
-	RoleName                         = "application-layer"
-	ApplicationLayerDaemonsetName    = "l7-log-collector"
-	L7CollectorContainerName         = "l7-collector"
-	L7CollectorSocksVolumeName       = "l7-collector-socks"
-	ProxyContainerName               = "envoy-proxy"
-	EnvoyLogsVolumeName              = "envoy-logs"
-	EnvoyConfigMapName               = "envoy-config"
-	EnvoyConfigMapKey                = "envoy-config.yaml"
-	FelixSync                        = "felix-sync"
-	DikastesSyncVolumeName           = "dikastes-sync"
-	DikastesContainerName            = "dikastes"
-	ModSecurityRulesetVolumeName     = "modsecurity-ruleset"
-	WAFRulesetVolumePath             = "/etc/waf"
-	DefaultCoreRulesetVolumeName     = "coreruleset-default"
-	DefaultCoreRulesetVolumePath     = "/etc/waf/coreruleset-default"
-	ModSecurityRulesetConfigMapName  = "modsecurity-ruleset"
-	DefaultCoreRuleset               = "coreruleset-default"
-	ModSecurityRulesetHashAnnotation = "hash.operator.tigera.io/modsecurity-ruleset"
-	CalicoLogsVolumeName             = "var-log-calico"
-	CalicologsVolumePath             = "/var/log/calico"
+	APLName                       = "application-layer"
+	RoleName                      = "application-layer"
+	ApplicationLayerDaemonsetName = "l7-log-collector"
+	L7CollectorContainerName      = "l7-collector"
+	L7CollectorSocksVolumeName    = "l7-collector-socks"
+	ProxyContainerName            = "envoy-proxy"
+	EnvoyLogsVolumeName           = "envoy-logs"
+	EnvoyConfigMapName            = "envoy-config"
+	EnvoyConfigMapKey             = "envoy-config.yaml"
+	FelixSync                     = "felix-sync"
+	DikastesSyncVolumeName        = "dikastes-sync"
+	DikastesContainerName         = "dikastes"
+	WAFConfigVolumeName           = "tigera-waf-config"
+	WAFConfigVolumePath           = "/etc/waf"
+	DefaultCoreRulesetVolumeName  = "coreruleset-default"
+	DefaultCoreRulesetVolumePath  = "/etc/waf/coreruleset"
+	WAFConfigConfigMapName        = "tigera-waf-config"
+	DefaultCoreRuleset            = "coreruleset-default"
+	WAFConfigHashAnnotation       = "hash.operator.tigera.io/tigera-waf-config"
+	CalicoLogsVolumeName          = "var-log-calico"
+	CalicologsVolumePath          = "/var/log/calico"
 )
 
 func ApplicationLayer(
@@ -217,7 +217,7 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 	}
 
 	if c.config.ModSecurityConfigMap != nil {
-		annots[ModSecurityRulesetHashAnnotation] = rmeta.AnnotationHash(c.config.ModSecurityConfigMap.Data)
+		annots[WAFConfigHashAnnotation] = rmeta.AnnotationHash(c.config.ModSecurityConfigMap.Data)
 	}
 
 	podTemplate := corev1.PodTemplateSpec{
@@ -318,7 +318,8 @@ func (c *component) containers() []corev1.Container {
 			commandArgs = append(
 				commandArgs,
 				"--waf-log-file", filepath.Join(CalicologsVolumePath, "waf", "waf.log"),
-				"--waf-ruleset-file", filepath.Join(WAFRulesetVolumePath, "tigera.conf"),
+				"--waf-ruleset-root-dir", WAFConfigVolumePath,
+				"--waf-ruleset-file", "tigera.conf",
 			)
 			if c.config.PerHostWAFEnabled {
 				commandArgs = append(commandArgs, "--per-host-waf-enabled")
@@ -331,8 +332,8 @@ func (c *component) containers() []corev1.Container {
 						MountPath: CalicologsVolumePath,
 					},
 					{
-						Name:      ModSecurityRulesetVolumeName,
-						MountPath: WAFRulesetVolumePath,
+						Name:      WAFConfigVolumeName,
+						MountPath: WAFConfigVolumePath,
 						ReadOnly:  true,
 					},
 					{
@@ -471,11 +472,11 @@ func (c *component) volumes() []corev1.Volume {
 
 			// WAF modsecurity ruleset volume
 			volumes = append(volumes, corev1.Volume{
-				Name: ModSecurityRulesetVolumeName,
+				Name: WAFConfigVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: ModSecurityRulesetConfigMapName,
+							Name: WAFConfigConfigMapName,
 						},
 					},
 				},
@@ -527,7 +528,7 @@ func (c *component) modSecurityConfigMap() *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ModSecurityRulesetConfigMapName,
+			Name:      WAFConfigConfigMapName,
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{},
 		},

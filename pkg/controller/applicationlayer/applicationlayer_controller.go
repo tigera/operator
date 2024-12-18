@@ -119,11 +119,11 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	}
 
 	// Watch for configmap changes in tigera-operator namespace; the cm contains ruleset for ModSecurity library:
-	err = utils.AddConfigMapWatch(c, applicationlayer.ModSecurityRulesetConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{})
+	err = utils.AddConfigMapWatch(c, applicationlayer.WAFConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf(
 			"applicationlayer-controller failed to watch ConfigMap %s: %v",
-			applicationlayer.ModSecurityRulesetConfigMapName, err,
+			applicationlayer.WAFConfigConfigMapName, err,
 		)
 	}
 
@@ -145,7 +145,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	// Watch configmaps created for envoy and dikastes in calico-system namespace:
 	maps := []string{
 		applicationlayer.EnvoyConfigMapName,
-		applicationlayer.ModSecurityRulesetConfigMapName,
+		applicationlayer.WAFConfigConfigMapName,
 		applicationlayer.DefaultCoreRuleset,
 	}
 	for _, configMapName := range maps {
@@ -448,7 +448,7 @@ func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (
 		ctx,
 		types.NamespacedName{
 			Namespace: common.OperatorNamespace(),
-			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
+			Name:      applicationlayer.WAFConfigConfigMapName,
 		},
 		ruleset,
 	); err == nil {
@@ -466,7 +466,7 @@ func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (
 
 func getCoreRulesetConfig(ctx context.Context) (*corev1.ConfigMap, error) {
 	ruleset, err := embed.AsConfigMap(
-		applicationlayer.ModSecurityRulesetConfigMapName,
+		applicationlayer.WAFConfigConfigMapName,
 		common.OperatorNamespace(),
 		embed.FS,
 	)

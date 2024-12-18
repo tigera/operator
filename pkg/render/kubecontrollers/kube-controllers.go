@@ -107,7 +107,7 @@ type KubeControllersConfiguration struct {
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
 	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, KubeController)
-	enabledControllers := []string{"node", "loadbalancer"}
+	enabledControllers := []string{"node"}
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
@@ -132,7 +132,7 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 				Verbs:     []string{"create", "update", "delete", "watch", "list", "get"},
 			},
 		)
-		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
+		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage", "loadbalancer")
 	}
 
 	return &kubeControllersComponent{

@@ -164,6 +164,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(objsToDelete).To(HaveLen(0))
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-config", Namespace: "tigera-gateway"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-role"}},
@@ -257,6 +258,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(objsToDelete).To(HaveLen(0))
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-config", Namespace: "tigera-gateway"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-role"}},

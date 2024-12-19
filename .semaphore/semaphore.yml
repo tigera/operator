@@ -16,9 +16,9 @@ agent:
     os_image: ubuntu2004
 global_job_config:
   secrets:
-  - name: docker-hub
-  # Mount the github SSH secret for pulling private repositories.
-  - name: private-repo
+    - name: docker-hub
+    # Mount the github SSH secret for pulling private repositories.
+    - name: private-repo
   prologue:
     commands:
       - echo $DOCKERHUB_PASSWORD | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
@@ -38,12 +38,12 @@ global_job_config:
       # Note that the 'cache restore' commands require that the "Build" block has been run. The "Build" block is what populates
       # the cache, therefore every block that requires the use of these cached items must make the "Build" block one of
       # it's dependencies.
-      - 'cache restore go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore go-mod-cache-amd64-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore bin-amd64-${SEMAPHORE_GIT_SHA}'
+      - "cache restore go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-mod-cache-amd64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore bin-amd64-${SEMAPHORE_GIT_SHA}"
 
 blocks:
-  - name: 'Pre-commit verification'
+  - name: "Pre-commit verification"
     dependencies: []
     run:
       when: "pull_request =~ '.*'"
@@ -56,8 +56,16 @@ blocks:
             # reset so it looks like we haven't committed yet
             - git reset --soft $(git merge-base $SEMAPHORE_GIT_BRANCH HEAD)
             - make pre-commit
-  - name: 'Build amd64'
-    dependencies: ["Pre-commit verification"]
+  # Clear the cache before starting the build
+  # This is to ensure we clean up cache from previous runs.
+  - name: Clear Entire Cache
+    task:
+      jobs:
+        - name: Clear Entire Cache
+          commands:
+            - "cache clear"
+  - name: "Build amd64"
+    dependencies: ["Pre-commit verification", "Clear Entire Cache"]
     task:
       jobs:
         - name: Build amd64
@@ -67,11 +75,11 @@ blocks:
             - make build
             - make dirty-check
             # Store in cache for other builds in this run
-            - 'cache store bin-amd64-${SEMAPHORE_GIT_SHA} build/_output/bin'
-            - 'cache store go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
-            - 'cache store go-mod-cache-amd64-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache'
-  - name: 'Build / Cache multi-arch binaries'
-    dependencies: [ "Build amd64" ]
+            - "cache store bin-amd64-${SEMAPHORE_GIT_SHA} build/_output/bin"
+            - "cache store go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA} .go-pkg-cache"
+            - "cache store go-mod-cache-amd64-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache"
+  - name: "Build / Cache multi-arch binaries"
+    dependencies: ["Build amd64"]
     task:
       prologue:
         commands:
@@ -84,29 +92,29 @@ blocks:
           commands:
             - make build ARCH=arm64
             # Store in cache for other builds in this run
-            - 'cache store bin-arm64-${SEMAPHORE_GIT_SHA} build/_output/bin'
-            - 'cache store go-pkg-cache-arm64-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
-            - 'cache store go-mod-cache-arm64-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache'
+            - "cache store bin-arm64-${SEMAPHORE_GIT_SHA} build/_output/bin"
+            - "cache store go-pkg-cache-arm64-${SEMAPHORE_GIT_SHA} .go-pkg-cache"
+            - "cache store go-mod-cache-arm64-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache"
         - name: Build ppc64le
           execution_time_limit:
             minutes: 45
           commands:
             - make build ARCH=ppc64le
             # Store in cache for other builds in this run
-            - 'cache store bin-ppc64le-${SEMAPHORE_GIT_SHA} build/_output/bin'
-            - 'cache store go-pkg-cache-ppc64le-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
-            - 'cache store go-mod-cache-ppc64le-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache'
+            - "cache store bin-ppc64le-${SEMAPHORE_GIT_SHA} build/_output/bin"
+            - "cache store go-pkg-cache-ppc64le-${SEMAPHORE_GIT_SHA} .go-pkg-cache"
+            - "cache store go-mod-cache-ppc64le-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache"
         - name: Build s390x
           execution_time_limit:
             minutes: 90
           commands:
             - make build ARCH=s390x
             # Store in cache for other builds in this run
-            - 'cache store bin-s390x-${SEMAPHORE_GIT_SHA} build/_output/bin'
-            - 'cache store go-pkg-cache-s390x-${SEMAPHORE_GIT_SHA} .go-pkg-cache'
-            - 'cache store go-mod-cache-s390x-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache'
-  - name: 'Static / File Generation Checks'
-    dependencies: [ "Build amd64" ]
+            - "cache store bin-s390x-${SEMAPHORE_GIT_SHA} build/_output/bin"
+            - "cache store go-pkg-cache-s390x-${SEMAPHORE_GIT_SHA} .go-pkg-cache"
+            - "cache store go-mod-cache-s390x-${SEMAPHORE_GIT_SHA} ${HOME}/go/pkg/mod/cache"
+  - name: "Static / File Generation Checks"
+    dependencies: ["Build amd64"]
     task:
       jobs:
         - name: Static / File Generation Checks, Vet
@@ -118,8 +126,8 @@ blocks:
             - make vet
             - make static-checks
 
-  - name: 'UT'
-    dependencies: [ "Build amd64" ]
+  - name: "UT"
+    dependencies: ["Build amd64"]
     task:
       jobs:
         - name: Run UTs
@@ -129,11 +137,11 @@ blocks:
             - make ut
             - make dirty-check
       epilogue:
-          commands:
-            - '[[ -d ./report/ut ]] && test-results publish ./report/ut'
+        commands:
+          - "[[ -d ./report/ut ]] && test-results publish ./report/ut"
 
-  - name: 'FV'
-    dependencies: [ "Build amd64" ]
+  - name: "FV"
+    dependencies: ["Build amd64"]
     task:
       agent:
         machine:
@@ -147,8 +155,8 @@ blocks:
             - make fv
             - make dirty-check
       epilogue:
-          commands:
-            - '[[ -d ./report/fv ]] && test-results publish ./report/fv'
+        commands:
+          - "[[ -d ./report/fv ]] && test-results publish ./report/fv"
 
 after_pipeline:
   task:

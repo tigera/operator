@@ -403,12 +403,14 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		),
 	}
 
+	// Create role binding to allow creating secrets in our namespace.
+	objs = append(objs, CreateOperatorSecretsRoleBinding(resources.namespace.Name))
+
 	// Add pull secrets (inferred from the Installation resource).
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)
 
 	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
 	for _, resource := range []client.Object{
-		CreateOperatorSecretsRoleBinding(resources.namespace.Name),
 		resources.controllerServiceAccount,
 		resources.clusterRole,
 		resources.clusterRoleBinding,

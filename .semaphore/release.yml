@@ -1,9 +1,15 @@
 version: v1.0
+
 name: Operator CD
+
+execution_time_limit:
+  hours: 4
+
 agent:
   machine:
     type: f1-standard-2
     os_image: ubuntu2004
+
 global_job_config:
   secrets:
     - name: docker-hub
@@ -27,21 +33,23 @@ global_job_config:
       - sudo systemctl start docker
       - checkout
       # Restore all the build specific caches
-      - 'cache restore bin-amd64-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore go-mod-cache-amd64-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore bin-arm64-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore go-pkg-cache-arm64-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore go-mod-cache-arm64-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore bin-ppc64le-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore go-pkg-cache-ppc64le-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore go-mod-cache-ppc64le-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore bin-s390x-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore go-pkg-cache-s390x-${SEMAPHORE_GIT_SHA}'
-      - 'cache restore go-mod-cache-s390x-${SEMAPHORE_GIT_SHA}'
+      - "cache restore bin-amd64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-mod-cache-amd64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore bin-arm64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-pkg-cache-arm64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-mod-cache-arm64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore bin-ppc64le-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-pkg-cache-ppc64le-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-mod-cache-ppc64le-${SEMAPHORE_GIT_SHA}"
+      - "cache restore bin-s390x-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-pkg-cache-s390x-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-mod-cache-s390x-${SEMAPHORE_GIT_SHA}"
 
 blocks:
-  - name: Push Images / Maybe Release
+  - name: Release
+    run:
+      when: "tag =~ '^v'"
     task:
       secrets:
         - name: quay-robot-semaphore_v2
@@ -51,9 +59,9 @@ blocks:
           - docker login -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io;
           - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
       jobs:
-        - name: Build
+        - name: Publish Release
           commands:
-            - make cd
+            - make release-tag RELEASE_TAG=${SEMAPHORE_GIT_RELEASE_TAG}
           env_vars:
             - name: CONFIRM
               value: "true"

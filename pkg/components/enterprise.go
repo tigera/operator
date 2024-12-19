@@ -18,7 +18,7 @@
 package components
 
 var (
-	EnterpriseRelease string = "v3.18.5"
+	EnterpriseRelease string = "v3.18.6"
 
 	ComponentAPIServer = component{
 		Version:  "v3.18.5",
@@ -63,12 +63,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = component{
-		Version:  "7.17.22",
+		Version:  "7.17.25",
 		Registry: "",
 	}
 
 	ComponentEckKibana = component{
-		Version:  "7.17.22",
+		Version:  "7.17.25",
 		Registry: "",
 	}
 

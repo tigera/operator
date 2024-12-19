@@ -15,28 +15,32 @@
 package embed
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestEmbed(t *testing.T) {
+func TestGetOWASPCoreRuleSet(t *testing.T) {
+	cm, err := GetOWASPCoreRuleSet()
+	require.NoError(t, err)
 	for _, fileName := range []string{
-		// bare FS embed as sub. coreruleset prefix stripped
-		"tigera.conf",
+		"REQUEST-901-INITIALIZATION.conf",
 	} {
-		_, err := FS.Open(fileName)
-		require.NoError(t, err)
+		_, ok := cm.Data[fileName]
+		require.True(t, ok, fmt.Sprintf("file %s not found", fileName))
 	}
 }
 
-func TestEmbedAsMap(t *testing.T) {
-	fileMap, err := AsMap(FS)
+func TestGetTigeraCoreRulesetConfig(t *testing.T) {
+	cm, err := GetTigeraCoreRulesetConfig()
 	require.NoError(t, err)
 	for _, fileName := range []string{
 		"tigera.conf",
+		"coraza.conf",
+		"crs-setup.conf",
 	} {
-		_, ok := fileMap[fileName]
-		require.True(t, ok)
+		_, ok := cm.Data[fileName]
+		require.True(t, ok, fmt.Sprintf("file %s not found", fileName))
 	}
 }

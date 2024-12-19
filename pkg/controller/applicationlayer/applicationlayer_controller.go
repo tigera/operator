@@ -18,7 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -46,8 +45,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	coreruleset "github.com/corazawaf/coraza-coreruleset/v4"
 )
 
 const ResourceName = "applicationlayer"
@@ -268,7 +265,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	var passthroughModSecurityRuleSet bool
 	var modSecurityRuleSet, owaspCoreRuleSet *corev1.ConfigMap
 	if r.isWAFEnabled(&instance.Spec) || r.isSidecarInjectionEnabled(&instance.Spec) {
-		if owaspCoreRuleSet, err = getOWASPCoreRuleSet(); err != nil {
+		if owaspCoreRuleSet, err = embed.GetOWASPCoreRuleSet(); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall OWASP core rule set", err, reqLogger)
 			return reconcile.Result{}, err
 		}
@@ -457,53 +454,11 @@ func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (
 		return nil, false, err
 	}
 
-	ruleset, err := getCoreRulesetConfig()
+	ruleset, err := embed.GetTigeraCoreRulesetConfig()
 	if err != nil {
 		return nil, false, err
 	}
 	return ruleset, true, nil
-}
-
-func getCoreRulesetConfig() (*corev1.ConfigMap, error) {
-	ruleset, err := embed.AsConfigMap(
-		applicationlayer.WAFConfigConfigMapName,
-		common.OperatorNamespace(),
-		embed.FS,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	corazaConf, err := fs.ReadFile(coreruleset.FS, "@coraza.conf-recommended")
-	if err != nil {
-		return nil, err
-	}
-	ruleset.Data["coraza.conf"] = string(corazaConf)
-
-	crsSetup, err := fs.ReadFile(coreruleset.FS, "@crs-setup.conf.example")
-	if err != nil {
-		return nil, err
-	}
-	ruleset.Data["crs-setup.conf"] = string(crsSetup)
-
-	return ruleset, nil
-}
-
-func getOWASPCoreRuleSet() (*corev1.ConfigMap, error) {
-	owaspCRS, err := fs.Sub(coreruleset.FS, "@owasp_crs")
-	if err != nil {
-		return nil, err
-	}
-	ruleset, err := embed.AsConfigMap(
-		applicationlayer.DefaultCoreRuleset,
-		common.OperatorNamespace(),
-		owaspCRS,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return ruleset, nil
 }
 
 func validateModSecurityRuleSet(cm *corev1.ConfigMap) error {

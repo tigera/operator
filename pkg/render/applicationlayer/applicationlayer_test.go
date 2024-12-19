@@ -17,7 +17,6 @@ package applicationlayer_test
 import (
 	"path/filepath"
 
-	coreruleset "github.com/corazawaf/coraza-coreruleset/v4"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -223,18 +222,10 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 	It("should render with l7 collector configuration with resource requests and limits", func() {
 
 		// Should render the correct resources.
-		cm, err := embed.AsConfigMap(
-			applicationlayer.WAFConfigConfigMapName,
-			common.OperatorNamespace(),
-			embed.FS,
-		)
+		cm, err := embed.GetTigeraCoreRulesetConfig()
 		Expect(err).To(BeNil())
 
-		defaultCoreRulesetCM, err := embed.AsConfigMap(
-			applicationlayer.DefaultCoreRuleset,
-			common.OperatorNamespace(),
-			coreruleset.FS,
-		)
+		defaultCoreRulesetCM, err := embed.GetTigeraCoreRulesetConfig()
 		Expect(err).To(BeNil())
 
 		l7LogCollectorResources := corev1.ResourceRequirements{
@@ -532,17 +523,9 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 		// Should render the correct resources.
-		cm, err := embed.AsConfigMap(
-			applicationlayer.WAFConfigConfigMapName,
-			common.OperatorNamespace(),
-			embed.FS,
-		)
+		cm, err := embed.GetTigeraCoreRulesetConfig()
 		Expect(err).To(BeNil())
-		defaultCoreRulesetCM, err := embed.AsConfigMap(
-			applicationlayer.DefaultCoreRuleset,
-			common.OperatorNamespace(),
-			coreruleset.FS,
-		)
+		defaultCoreRulesetCM, err := embed.GetOWASPCoreRuleSet()
 		Expect(err).To(BeNil())
 		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
 			PullSecrets:                 nil,

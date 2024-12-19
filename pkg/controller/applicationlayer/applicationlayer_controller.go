@@ -29,7 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
-	"github.com/tigera/operator/pkg/render/applicationlayer/embed"
+	"github.com/tigera/operator/pkg/render/applicationlayer/ruleset"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	admregv1 "k8s.io/api/admissionregistration/v1"
@@ -266,7 +266,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	var passthroughWAFRulesetConfig bool
 	var wafRulesetConfig, defaultCoreRuleSet *corev1.ConfigMap
 	if r.isWAFEnabled(&instance.Spec) || r.isSidecarInjectionEnabled(&instance.Spec) {
-		if defaultCoreRuleSet, err = embed.GetOWASPCoreRuleSet(); err != nil {
+		if defaultCoreRuleSet, err = ruleset.GetOWASPCoreRuleSet(); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall OWASP core ruleset", err, reqLogger)
 			return reconcile.Result{}, err
 		}
@@ -275,7 +275,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall ruleset config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		if err = embed.ValidateWAFRulesetConfig(wafRulesetConfig); err != nil {
+		if err = ruleset.ValidateWAFRulesetConfig(wafRulesetConfig); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating Web Application Firewall ruleset config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
@@ -439,7 +439,7 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 // The ConfigMap is meant to contain the configuration for the Coraza library.
 // If the ConfigMap does not exist a ConfigMap with the Tigera ruleset config will be returned.
 func (r *ReconcileApplicationLayer) getWAFRulesetConfig(ctx context.Context) (*corev1.ConfigMap, bool, error) {
-	ruleset := new(corev1.ConfigMap)
+	cm := new(corev1.ConfigMap)
 
 	if err := r.client.Get(
 		ctx,
@@ -447,18 +447,18 @@ func (r *ReconcileApplicationLayer) getWAFRulesetConfig(ctx context.Context) (*c
 			Namespace: common.OperatorNamespace(),
 			Name:      applicationlayer.WAFRulesetConfigMapName,
 		},
-		ruleset,
+		cm,
 	); err == nil {
-		return ruleset, false, nil
+		return cm, false, nil
 	} else if !apierrors.IsNotFound(err) {
 		return nil, false, err
 	}
 
-	ruleset, err := embed.GetWAFRulesetConfig()
+	cm, err := ruleset.GetWAFRulesetConfig()
 	if err != nil {
 		return nil, false, err
 	}
-	return ruleset, true, nil
+	return cm, true, nil
 }
 
 // getApplicationLayer returns the default ApplicationLayer instance.

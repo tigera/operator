@@ -29,7 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
-	"github.com/tigera/operator/pkg/render/applicationlayer/embed"
+	"github.com/tigera/operator/pkg/render/applicationlayer/ruleset"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/test"
@@ -222,10 +222,10 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 	It("should render with l7 collector configuration with resource requests and limits", func() {
 
 		// Should render the correct resources.
-		cm, err := embed.GetWAFRulesetConfig()
+		cm, err := ruleset.GetWAFRulesetConfig()
 		Expect(err).To(BeNil())
 
-		defaultCoreRulesetCM, err := embed.GetWAFRulesetConfig()
+		defaultCoreRulesetCM, err := ruleset.GetWAFRulesetConfig()
 		Expect(err).To(BeNil())
 
 		l7LogCollectorResources := corev1.ResourceRequirements{
@@ -523,9 +523,9 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 		// Should render the correct resources.
-		cm, err := embed.GetWAFRulesetConfig()
+		cm, err := ruleset.GetWAFRulesetConfig()
 		Expect(err).To(BeNil())
-		defaultCoreRulesetCM, err := embed.GetOWASPCoreRuleSet()
+		defaultCoreRulesetCM, err := ruleset.GetOWASPCoreRuleSet()
 		Expect(err).To(BeNil())
 		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
 			PullSecrets:                 nil,

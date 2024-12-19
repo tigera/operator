@@ -29,7 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
-	"github.com/tigera/operator/pkg/render/applicationlayer/embed"
+	"github.com/tigera/operator/pkg/render/applicationlayer/ruleset"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
 	admregv1 "k8s.io/api/admissionregistration/v1"
@@ -115,12 +115,12 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		return fmt.Errorf("applicationlayer-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	// Watch for configmap changes in tigera-operator namespace; the cm contains ruleset for ModSecurity library:
-	err = utils.AddConfigMapWatch(c, applicationlayer.ModSecurityRulesetConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{})
+	// Watch for configmap changes in tigera-operator namespace; the cm contains config for Coraza library:
+	err = utils.AddConfigMapWatch(c, applicationlayer.WAFRulesetConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf(
 			"applicationlayer-controller failed to watch ConfigMap %s: %v",
-			applicationlayer.ModSecurityRulesetConfigMapName, err,
+			applicationlayer.WAFRulesetConfigMapName, err,
 		)
 	}
 
@@ -134,7 +134,8 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	// Watch configmaps created for envoy and dikastes in calico-system namespace:
 	maps := []string{
 		applicationlayer.EnvoyConfigMapName,
-		applicationlayer.ModSecurityRulesetConfigMapName,
+		applicationlayer.WAFRulesetConfigMapName,
+		applicationlayer.DefaultCoreRuleset,
 	}
 	for _, configMapName := range maps {
 		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
@@ -253,34 +254,40 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	var passthroughModSecurityRuleSet bool
-	var modSecurityRuleSet *corev1.ConfigMap
+	var passthroughWAFRulesetConfig bool
+	var wafRulesetConfig, defaultCoreRuleSet *corev1.ConfigMap
 	if r.isWAFEnabled(&instance.Spec) || r.isSidecarInjectionEnabled(&instance.Spec) {
-		if modSecurityRuleSet, passthroughModSecurityRuleSet, err = r.getModSecurityRuleSet(ctx); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall ModSecurity rule set", err, reqLogger)
+		if defaultCoreRuleSet, err = ruleset.GetOWASPCoreRuleSet(); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall OWASP core ruleset", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		if err = validateModSecurityRuleSet(modSecurityRuleSet); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating Web Application Firewall rule set", err, reqLogger)
+
+		if wafRulesetConfig, passthroughWAFRulesetConfig, err = r.getWAFRulesetConfig(ctx); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Web Application Firewall ruleset config", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if err = ruleset.ValidateWAFRulesetConfig(wafRulesetConfig); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating Web Application Firewall ruleset config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
 
 	lcSpec := instance.Spec.LogCollection
 	config := &applicationlayer.Config{
-		PullSecrets:             pullSecrets,
-		Installation:            installation,
-		OsType:                  rmeta.OSTypeLinux,
-		PerHostWAFEnabled:       r.isWAFEnabled(&instance.Spec),
-		PerHostLogsEnabled:      r.isLogsCollectionEnabled(&instance.Spec),
-		PerHostALPEnabled:       r.isALPEnabled(&instance.Spec),
-		SidecarInjectionEnabled: r.isSidecarInjectionEnabled(&instance.Spec),
-		LogRequestsPerInterval:  lcSpec.LogRequestsPerInterval,
-		LogIntervalSeconds:      lcSpec.LogIntervalSeconds,
-		ModSecurityConfigMap:    modSecurityRuleSet,
-		UseRemoteAddressXFF:     instance.Spec.EnvoySettings.UseRemoteAddress,
-		NumTrustedHopsXFF:       instance.Spec.EnvoySettings.XFFNumTrustedHops,
-		ApplicationLayer:        instance,
+		PullSecrets:                 pullSecrets,
+		Installation:                installation,
+		OsType:                      rmeta.OSTypeLinux,
+		PerHostWAFEnabled:           r.isWAFEnabled(&instance.Spec),
+		PerHostLogsEnabled:          r.isLogsCollectionEnabled(&instance.Spec),
+		PerHostALPEnabled:           r.isALPEnabled(&instance.Spec),
+		SidecarInjectionEnabled:     r.isSidecarInjectionEnabled(&instance.Spec),
+		LogRequestsPerInterval:      lcSpec.LogRequestsPerInterval,
+		LogIntervalSeconds:          lcSpec.LogIntervalSeconds,
+		WAFRulesetConfigMap:         wafRulesetConfig,
+		DefaultCoreRulesetConfigMap: defaultCoreRuleSet,
+		UseRemoteAddressXFF:         instance.Spec.EnvoySettings.UseRemoteAddress,
+		NumTrustedHopsXFF:           instance.Spec.EnvoySettings.XFFNumTrustedHops,
+		ApplicationLayer:            instance,
 	}
 	component := applicationlayer.ApplicationLayer(config)
 
@@ -291,8 +298,8 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	if passthroughModSecurityRuleSet {
-		err = ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(modSecurityRuleSet), r.status)
+	if passthroughWAFRulesetConfig {
+		err = ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(wafRulesetConfig), r.status)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
@@ -419,57 +426,30 @@ func validateApplicationLayer(al *operatorv1.ApplicationLayer) error {
 	return nil
 }
 
-// getModSecurityRuleSet returns 'owasp-ruleset-config' ConfigMap from calico-operator namespace.
-// The ConfigMap is meant to contain rule set files for ModSecurity library.
-// If the ConfigMap does not exist a ConfigMap with OWASP provided Core Rule Set will be returned.
-// The rule set was cloned from https://github.com/coreruleset/coreruleset/
-func (r *ReconcileApplicationLayer) getModSecurityRuleSet(ctx context.Context) (*corev1.ConfigMap, bool, error) {
-	ruleset := new(corev1.ConfigMap)
+// getWAFRulesetConfig returns 'tigera-coreruleset-config' ConfigMap from calico-operator namespace.
+// The ConfigMap is meant to contain the configuration for the Coraza library.
+// If the ConfigMap does not exist a ConfigMap with the Tigera ruleset config will be returned.
+func (r *ReconcileApplicationLayer) getWAFRulesetConfig(ctx context.Context) (*corev1.ConfigMap, bool, error) {
+	cm := new(corev1.ConfigMap)
 
 	if err := r.client.Get(
 		ctx,
 		types.NamespacedName{
 			Namespace: common.OperatorNamespace(),
-			Name:      applicationlayer.ModSecurityRulesetConfigMapName,
+			Name:      applicationlayer.WAFRulesetConfigMapName,
 		},
-		ruleset,
+		cm,
 	); err == nil {
-		return ruleset, false, nil
+		return cm, false, nil
 	} else if !apierrors.IsNotFound(err) {
 		return nil, false, err
 	}
 
-	ruleset, err := getDefaultCoreRuleset(ctx)
+	cm, err := ruleset.GetWAFRulesetConfig()
 	if err != nil {
 		return nil, false, err
 	}
-	return ruleset, true, nil
-}
-
-func getDefaultCoreRuleset(ctx context.Context) (*corev1.ConfigMap, error) {
-	ruleset, err := embed.AsConfigMap(
-		applicationlayer.ModSecurityRulesetConfigMapName,
-		common.OperatorNamespace(),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return ruleset, nil
-}
-
-func validateModSecurityRuleSet(cm *corev1.ConfigMap) error {
-	requiredFiles := []string{
-		"tigera.conf",
-	}
-
-	for _, f := range requiredFiles {
-		if _, ok := cm.Data[f]; !ok {
-			return fmt.Errorf("file must be present with ruleset files: %s", f)
-		}
-	}
-
-	return nil
+	return cm, true, nil
 }
 
 // getApplicationLayer returns the default ApplicationLayer instance.

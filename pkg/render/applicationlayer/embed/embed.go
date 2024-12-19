@@ -48,7 +48,7 @@ func GetOWASPCoreRuleSet() (*corev1.ConfigMap, error) {
 	), nil
 }
 
-func GetTigeraCoreRulesetConfig() (*corev1.ConfigMap, error) {
+func GetWAFRulesetConfig() (*corev1.ConfigMap, error) {
 	corazaConf, err := fs.ReadFile(coreruleset.FS, "@coraza.conf-recommended")
 	if err != nil {
 		return nil, err
@@ -65,7 +65,23 @@ func GetTigeraCoreRulesetConfig() (*corev1.ConfigMap, error) {
 		"crs-setup.conf": string(crsSetup),
 	}
 
-	return asConfigMap(applicationlayer.WAFConfigConfigMapName, common.OperatorNamespace(), data), nil
+	return asConfigMap(applicationlayer.WAFRulesetConfigMapName, common.OperatorNamespace(), data), nil
+}
+
+func ValidateWAFRulesetConfig(cm *corev1.ConfigMap) error {
+	requiredFiles := []string{
+		"tigera.conf",
+		"coraza.conf",
+		"crs-setup.conf",
+	}
+
+	for _, f := range requiredFiles {
+		if _, ok := cm.Data[f]; !ok {
+			return fmt.Errorf("file must be present with ruleset files: %s", f)
+		}
+	}
+
+	return nil
 }
 
 func asConfigMap(name, namespace string, data map[string]string) *corev1.ConfigMap {

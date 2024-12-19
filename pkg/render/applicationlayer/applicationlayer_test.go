@@ -222,10 +222,10 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 	It("should render with l7 collector configuration with resource requests and limits", func() {
 
 		// Should render the correct resources.
-		cm, err := embed.GetTigeraCoreRulesetConfig()
+		cm, err := embed.GetWAFRulesetConfig()
 		Expect(err).To(BeNil())
 
-		defaultCoreRulesetCM, err := embed.GetTigeraCoreRulesetConfig()
+		defaultCoreRulesetCM, err := embed.GetWAFRulesetConfig()
 		Expect(err).To(BeNil())
 
 		l7LogCollectorResources := corev1.ResourceRequirements{
@@ -265,7 +265,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 
 		cfg.PerHostWAFEnabled = true
-		cfg.ModSecurityConfigMap = cm
+		cfg.WAFRulesetConfigMap = cm
 		cfg.DefaultCoreRulesetConfigMap = defaultCoreRulesetCM
 
 		component := applicationlayer.ApplicationLayer(cfg)
@@ -517,13 +517,13 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			kind    string
 		}{
 			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: applicationlayer.WAFConfigConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: applicationlayer.WAFRulesetConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.DefaultCoreRuleset, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 		// Should render the correct resources.
-		cm, err := embed.GetTigeraCoreRulesetConfig()
+		cm, err := embed.GetWAFRulesetConfig()
 		Expect(err).To(BeNil())
 		defaultCoreRulesetCM, err := embed.GetOWASPCoreRuleSet()
 		Expect(err).To(BeNil())
@@ -532,7 +532,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			Installation:                installation,
 			OsType:                      rmeta.OSTypeLinux,
 			PerHostWAFEnabled:           true,
-			ModSecurityConfigMap:        cm,
+			WAFRulesetConfigMap:         cm,
 			DefaultCoreRulesetConfigMap: defaultCoreRulesetCM,
 		})
 		resources, _ := component.Objects()
@@ -596,10 +596,10 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 				},
 			},
 			{
-				Name: applicationlayer.WAFConfigConfigMapName,
+				Name: applicationlayer.WAFRulesetConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: applicationlayer.WAFConfigConfigMapName},
+						LocalObjectReference: corev1.LocalObjectReference{Name: applicationlayer.WAFRulesetConfigMapName},
 					},
 				},
 			},
@@ -613,12 +613,12 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			},
 		}
 
-		var modsecVolIndex, defaultCoreRulesecVolIndex int
+		var wafRulesetVolIndex, defaultCoreRulesecVolIndex int
 
 		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(len(correctVolumesOrder)))
 		for i, expected := range correctVolumesOrder {
-			if dsVols[i].Name == applicationlayer.WAFConfigConfigMapName {
-				modsecVolIndex = i
+			if dsVols[i].Name == applicationlayer.WAFRulesetConfigMapName {
+				wafRulesetVolIndex = i
 			}
 
 			if dsVols[i].Name == applicationlayer.DefaultCoreRuleset {
@@ -629,9 +629,9 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 
 		// order of the volume mounts matter here
 		// coreruleset-default is mounted as a sub directory in the
-		// modsecurity volume so, modsecurity needs to be mounted before
+		// wafRuleset volume so, wafRuleset needs to be mounted before
 		// coreruleset-default
-		Expect(modsecVolIndex).Should(BeNumerically("<", defaultCoreRulesecVolIndex))
+		Expect(wafRulesetVolIndex).Should(BeNumerically("<", defaultCoreRulesecVolIndex))
 
 		// Ensure that tolerations rendered correctly.
 		dsTolerations := ds.Spec.Template.Spec.Tolerations
@@ -695,7 +695,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			{Name: applicationlayer.DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
 			{Name: applicationlayer.FelixSync, MountPath: "/var/run/felix"},
 			{Name: applicationlayer.CalicoLogsVolumeName, MountPath: applicationlayer.CalicologsVolumePath},
-			{Name: applicationlayer.WAFConfigConfigMapName, MountPath: applicationlayer.WAFConfigVolumePath, ReadOnly: true},
+			{Name: applicationlayer.WAFRulesetConfigMapName, MountPath: applicationlayer.WAFConfigVolumePath, ReadOnly: true},
 			{Name: applicationlayer.DefaultCoreRuleset, MountPath: applicationlayer.DefaultCoreRulesetVolumePath, ReadOnly: true},
 		}
 		Expect(len(dikastesVolMounts)).To(Equal(len(expectedDikastesVolMounts)))

@@ -58,7 +58,7 @@ const (
 	WAFConfigVolumePath           = "/etc/waf"
 	DefaultCoreRulesetVolumeName  = "coreruleset-default"
 	DefaultCoreRulesetVolumePath  = "/etc/waf/coreruleset"
-	WAFConfigConfigMapName        = "tigera-waf-config"
+	WAFRulesetConfigMapName       = "tigera-waf-config"
 	DefaultCoreRuleset            = "coreruleset-default"
 	WAFConfigHashAnnotation       = "hash.operator.tigera.io/tigera-waf-config"
 	CalicoLogsVolumeName          = "var-log-calico"
@@ -86,7 +86,7 @@ type Config struct {
 
 	// Optional config for WAF.
 	PerHostWAFEnabled           bool
-	ModSecurityConfigMap        *corev1.ConfigMap
+	WAFRulesetConfigMap         *corev1.ConfigMap
 	DefaultCoreRulesetConfigMap *corev1.ConfigMap
 
 	// Optional config for L7 logs.
@@ -173,7 +173,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// If Web Application Firewall or Sidecar Injection is enabled, we need WAF ruleset ConfigMap present.
 	if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
 		// this ConfigMap is a copy of the provided configuration from the operator namespace into the calico-system namespace
-		objs = append(objs, c.modSecurityConfigMap())
+		objs = append(objs, c.wafRulesetConfigMap())
 		objs = append(objs, c.defaultCoreRulesetConfigMap())
 	}
 
@@ -216,8 +216,8 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 		annots[EnvoyConfigMapName] = rmeta.AnnotationHash(c.config.envoyConfigMap)
 	}
 
-	if c.config.ModSecurityConfigMap != nil {
-		annots[WAFConfigHashAnnotation] = rmeta.AnnotationHash(c.config.ModSecurityConfigMap.Data)
+	if c.config.WAFRulesetConfigMap != nil {
+		annots[WAFConfigHashAnnotation] = rmeta.AnnotationHash(c.config.WAFRulesetConfigMap.Data)
 	}
 
 	podTemplate := corev1.PodTemplateSpec{
@@ -457,7 +457,7 @@ func (c *component) volumes() []corev1.Volume {
 			},
 		})
 
-		// Needed for ModSecurity library - contains rule set.
+		// Needed for Coraza library - contains rule set.
 		if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
 			// WAF logs need HostPath volume - logs to be consumed by fluentd.
 			volumes = append(volumes, corev1.Volume{
@@ -470,18 +470,19 @@ func (c *component) volumes() []corev1.Volume {
 				},
 			})
 
-			// WAF modsecurity ruleset volume
+			// WAF ruleset volume
 			volumes = append(volumes, corev1.Volume{
 				Name: WAFConfigVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
 						LocalObjectReference: corev1.LocalObjectReference{
-							Name: WAFConfigConfigMapName,
+							Name: WAFRulesetConfigMapName,
 						},
 					},
 				},
 			})
 
+			// Default coreruleset volume
 			volumes = append(volumes, corev1.Volume{
 				Name: DefaultCoreRulesetVolumeName,
 				VolumeSource: corev1.VolumeSource{
@@ -524,16 +525,16 @@ func (c *component) collectorVolMounts() []corev1.VolumeMount {
 	}
 }
 
-func (c *component) modSecurityConfigMap() *corev1.ConfigMap {
+func (c *component) wafRulesetConfigMap() *corev1.ConfigMap {
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      WAFConfigConfigMapName,
+			Name:      WAFRulesetConfigMapName,
 			Namespace: common.CalicoNamespace,
 			Labels:    map[string]string{},
 		},
-		Data:       c.config.ModSecurityConfigMap.Data,
-		BinaryData: c.config.ModSecurityConfigMap.BinaryData,
+		Data:       c.config.WAFRulesetConfigMap.Data,
+		BinaryData: c.config.WAFRulesetConfigMap.BinaryData,
 	}
 }
 

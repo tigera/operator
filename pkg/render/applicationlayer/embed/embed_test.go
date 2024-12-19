@@ -32,8 +32,8 @@ func TestGetOWASPCoreRuleSet(t *testing.T) {
 	}
 }
 
-func TestGetTigeraCoreRulesetConfig(t *testing.T) {
-	cm, err := GetTigeraCoreRulesetConfig()
+func TestGetWAFRulesetConfig(t *testing.T) {
+	cm, err := GetWAFRulesetConfig()
 	require.NoError(t, err)
 	for _, fileName := range []string{
 		"tigera.conf",

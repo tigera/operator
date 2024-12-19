@@ -408,6 +408,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
 	for _, resource := range []client.Object{
+		CreateOperatorSecretsRoleBinding(resources.namespace.Name),
 		resources.controllerServiceAccount,
 		resources.clusterRole,
 		resources.clusterRoleBinding,

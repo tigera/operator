@@ -312,7 +312,6 @@ func (c *component) containers() []corev1.Container {
 		if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
 			commandArgs = append(
 				commandArgs,
-				"--waf-log-file", filepath.Join(CalicologsVolumePath, "waf", "waf.log"),
 				"--waf-ruleset-file", filepath.Join(ModSecurityRulesetVolumePath, "tigera.conf"),
 			)
 			if c.config.PerHostWAFEnabled {

@@ -1,5 +1,5 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/enterprise.go.tpl
-title: v3.18.5
+title: v3.18.6
 components:
   libcalico-go:
     version: v3.18.5
@@ -46,12 +46,12 @@ components:
     image: tigera/dex
     version: v3.18.5
   eck-kibana:
-    version: 7.17.22
+    version: 7.17.25
   kibana:
     image: tigera/kibana
     version: v3.18.5
   eck-elasticsearch:
-    version: 7.17.22
+    version: 7.17.25
   elasticsearch:
     image: tigera/elasticsearch
     version: v3.18.5

@@ -124,15 +124,6 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		)
 	}
 
-	// TODO: Is this necessary? We don't want the user to change it in the operator namespace, only generate it in the calico-system namespace
-	err = utils.AddConfigMapWatch(c, applicationlayer.DefaultCoreRuleset, common.OperatorNamespace(), &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf(
-			"applicationlayer-controller failed to watch ConfigMap %s: %v",
-			applicationlayer.DefaultCoreRuleset, err,
-		)
-	}
-
 	// Watch mutatingwebhookconfiguration responsible for sidecar injetion
 	err = c.WatchObject(&admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}},
 		&handler.EnqueueRequestForObject{})

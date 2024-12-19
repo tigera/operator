@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -1127,6 +1128,26 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", kubecontrollers.KubeControllerPrometheusTLSSecret)))
 	})
 
+	It("should add egress policy with Enterprise variant and K8SServiceEndpoint defined", func() {
+		cfg.K8sServiceEp.Host = "k8shost"
+		cfg.K8sServiceEp.Port = "1234"
+		objects, _ := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg).Objects()
+		Expect(objects).To(HaveLen(1))
+		policy, ok := objects[0].(*v3.NetworkPolicy)
+		Expect(ok).To(BeTrue())
+		Expect(policy).ToNot(BeNil())
+		Expect(policy.Spec).ToNot(BeNil())
+		Expect(policy.Spec.Egress).ToNot(BeNil())
+		Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports:   networkpolicy.Ports(1234),
+				Domains: []string{"k8shost"},
+			},
+		}))
+	})
+
 	Context("multi-tenant rendering", func() {
 		//var installation *operatorv1.InstallationSpec
 		var tenant *operatorv1.Tenant
@@ -1328,6 +1349,5 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("es-calico-kube-controllers"))
 			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(overwrites))
 		})
-
 	})
 })

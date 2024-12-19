@@ -501,14 +501,19 @@ endif
 ###############################################################################
 # Release
 ###############################################################################
-VERSION_REGEX := ^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(\+[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$$
+VERSION_REGEX := ^v[0-9]+\.[0-9]+\.[0-9]+$$
 release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(eval VALID_TAG := $(shell echo $(RELEASE_TAG) | grep -Eq "$(VERSION_REGEX)" && echo true))
 	$(if $(VALID_TAG),,$(error $(RELEASE_TAG) is not a valid version. Please use a version in the format vX.Y.Z))
+
+# Skip releasing if the image already exists.
+	@if !$(MAKE) VERSION=$(RELEASE_TAG) release-check-image-exists; then \
+		echo "Images for $(RELEASE_TAG) already exists"; \
+		exit 0; \
+	fi
+
 	$(MAKE) release release-publish-images VERSION=$(RELEASE_TAG)
-# Only create a github release if the tag is vX.Y.Z
-	$(eval GITHUB_RELEASE := $(shell echo $(RELEASE_TAG) | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$$' && echo true))
-	$(if $(GITHUB_RELEASE), $(MAKE) release-github VERSION=$(RELEASE_TAG))
+	$(MAKE) release-github VERSION=$(RELEASE_TAG)
 
 
 release-notes: var-require-all-VERSION-GITHUB_TOKEN clean

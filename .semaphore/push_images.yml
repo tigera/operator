@@ -53,4 +53,17 @@ blocks:
       jobs:
         - name: Build
           commands:
-            - make cd CONFIRM=true;
+            - make cd
+          env_vars:
+            - name: CONFIRM
+              value: "true"
+
+promotions:
+  - name: Clean Up
+    pipeline_file: clean_up.yml
+    # Auto promote to clean up since this likely wasn't promoted from the CI pipeline (since we only promote to the
+    # clean up pipeline if we're not running on master or a release branch).
+    # We only auto promote if the cd has passed, because if it's failed we'll likely just want to run CD again, but if
+    # we've cleared the cache it will take a long time.
+    auto_promote:
+      when: "result = 'passed'"

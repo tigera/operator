@@ -56,17 +56,8 @@ blocks:
             # reset so it looks like we haven't committed yet
             - git reset --soft $(git merge-base $SEMAPHORE_GIT_BRANCH HEAD)
             - make pre-commit
-  # Clear the cache before starting the build
-  # This is to ensure we clean up cache from previous runs.
-  - name: Clear Entire Cache
-    dependencies: []
-    task:
-      jobs:
-        - name: Clear Entire Cache
-          commands:
-            - "cache clear"
   - name: 'Build amd64'
-    dependencies: ["Pre-commit verification", "Clear Entire Cache"]
+    dependencies: ["Pre-commit verification"]
     task:
       jobs:
         - name: Build amd64
@@ -171,6 +162,10 @@ promotions:
     pipeline_file: push_images.yml
     auto_promote:
       when: "branch =~ 'master|release-.*'"
+  - name: Release
+    pipeline_file: release.yml
+    auto_promote:
+      when: "tag =~ '^v'"
   - name: Clean Up
     pipeline_file: clean_up.yml
     # Don't auto promote if this is master or a release branch so the cache is available for the Push Images pipeline.

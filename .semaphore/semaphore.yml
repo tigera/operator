@@ -56,8 +56,17 @@ blocks:
             # reset so it looks like we haven't committed yet
             - git reset --soft $(git merge-base $SEMAPHORE_GIT_BRANCH HEAD)
             - make pre-commit
+  # Clear the cache before starting the build
+  # This is to ensure we clean up cache from previous runs.
+  - name: Clear Entire Cache
+    dependencies: []
+    task:
+      jobs:
+        - name: Clear Entire Cache
+          commands:
+            - "cache clear"
   - name: 'Build amd64'
-    dependencies: ["Pre-commit verification"]
+    dependencies: ["Pre-commit verification", "Clear Entire Cache"]
     task:
       jobs:
         - name: Build amd64

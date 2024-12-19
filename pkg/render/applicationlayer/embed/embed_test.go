@@ -31,7 +31,7 @@ func TestEmbed(t *testing.T) {
 }
 
 func TestEmbedAsMap(t *testing.T) {
-	fileMap, err := AsMap()
+	fileMap, err := AsMap(FS)
 	require.NoError(t, err)
 	for _, fileName := range []string{
 		"tigera.conf",

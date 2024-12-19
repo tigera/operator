@@ -15,29 +15,87 @@
 package embed
 
 import (
-	"embed"
+	_ "embed"
 	"fmt"
 	"io/fs"
 
+	coreruleset "github.com/corazawaf/coraza-coreruleset"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/render/applicationlayer"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
-	FS fs.FS
-	//go:embed coreruleset
-	crsFS embed.FS
+	//go:embed coreruleset/tigera.conf
+	tigeraConf string
 )
 
-func init() {
-	var err error
-	FS, err = fs.Sub(crsFS, "coreruleset")
+func GetOWASPCoreRuleSet() (*corev1.ConfigMap, error) {
+	owaspCRS, err := fs.Sub(coreruleset.FS, "@owasp_crs")
 	if err != nil {
-		panic(err)
+		return nil, err
+	}
+	crsMap, err := asMap(owaspCRS)
+	if err != nil {
+		return nil, err
+	}
+
+	return asConfigMap(
+		applicationlayer.DefaultCoreRuleset,
+		common.OperatorNamespace(),
+		crsMap,
+	), nil
+}
+
+func GetWAFRulesetConfig() (*corev1.ConfigMap, error) {
+	corazaConf, err := fs.ReadFile(coreruleset.FS, "@coraza.conf-recommended")
+	if err != nil {
+		return nil, err
+	}
+
+	crsSetup, err := fs.ReadFile(coreruleset.FS, "@crs-setup.conf.example")
+	if err != nil {
+		return nil, err
+	}
+
+	data := map[string]string{
+		"tigera.conf":    tigeraConf,
+		"coraza.conf":    string(corazaConf),
+		"crs-setup.conf": string(crsSetup),
+	}
+
+	return asConfigMap(applicationlayer.WAFRulesetConfigMapName, common.OperatorNamespace(), data), nil
+}
+
+func ValidateWAFRulesetConfig(cm *corev1.ConfigMap) error {
+	requiredFiles := []string{
+		"tigera.conf",
+		"coraza.conf",
+		"crs-setup.conf",
+	}
+
+	for _, f := range requiredFiles {
+		if _, ok := cm.Data[f]; !ok {
+			return fmt.Errorf("file must be present with ruleset files: %s", f)
+		}
+	}
+
+	return nil
+}
+
+func asConfigMap(name, namespace string, data map[string]string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: data,
 	}
 }
 
-func AsMap() (map[string]string, error) {
+func asMap(fileSystem fs.FS) (map[string]string, error) {
 	res := make(map[string]string)
 	var walkFn fs.WalkDirFunc = func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -48,7 +106,7 @@ func AsMap() (map[string]string, error) {
 			return err
 		}
 
-		if b, err := fs.ReadFile(FS, path); err != nil {
+		if b, err := fs.ReadFile(fileSystem, path); err != nil {
 			return err
 		} else {
 			res[d.Name()] = string(b)
@@ -56,25 +114,9 @@ func AsMap() (map[string]string, error) {
 		return nil
 	}
 
-	if err := fs.WalkDir(FS, ".", walkFn); err != nil {
+	if err := fs.WalkDir(fileSystem, ".", walkFn); err != nil {
 		return nil, fmt.Errorf("failed to walk core ruleset files (%w)", err)
 	}
 
 	return res, nil
-}
-
-func AsConfigMap(name, namespace string) (*corev1.ConfigMap, error) {
-	data, err := AsMap()
-	if err != nil {
-		return nil, err
-	}
-
-	return &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: namespace,
-		},
-		Data: data,
-	}, nil
 }

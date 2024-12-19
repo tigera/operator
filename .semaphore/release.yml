@@ -1,9 +1,15 @@
 version: v1.0
+
 name: Operator CD
+
+execution_time_limit:
+  hours: 4
+
 agent:
   machine:
     type: f1-standard-2
     os_image: ubuntu2004
+
 global_job_config:
   secrets:
     - name: docker-hub

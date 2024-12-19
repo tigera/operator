@@ -29,7 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
-	"github.com/tigera/operator/pkg/render/applicationlayer/embed"
+	"github.com/tigera/operator/pkg/render/applicationlayer/ruleset"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/test"
@@ -222,10 +222,10 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 	It("should render with l7 collector configuration with resource requests and limits", func() {
 
 		// Should render the correct resources.
-		cm, err := embed.AsConfigMap(
-			applicationlayer.ModSecurityRulesetConfigMapName,
-			common.OperatorNamespace(),
-		)
+		cm, err := ruleset.GetWAFRulesetConfig()
+		Expect(err).To(BeNil())
+
+		defaultCoreRulesetCM, err := ruleset.GetWAFRulesetConfig()
 		Expect(err).To(BeNil())
 
 		l7LogCollectorResources := corev1.ResourceRequirements{
@@ -265,7 +265,8 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		}
 
 		cfg.PerHostWAFEnabled = true
-		cfg.ModSecurityConfigMap = cm
+		cfg.WAFRulesetConfigMap = cm
+		cfg.DefaultCoreRulesetConfigMap = defaultCoreRulesetCM
 
 		component := applicationlayer.ApplicationLayer(cfg)
 
@@ -516,22 +517,23 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			kind    string
 		}{
 			{name: applicationlayer.APLName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: applicationlayer.ModSecurityRulesetConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: applicationlayer.WAFRulesetConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
+			{name: applicationlayer.DefaultCoreRuleset, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.EnvoyConfigMapName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 		// Should render the correct resources.
-		cm, err := embed.AsConfigMap(
-			applicationlayer.ModSecurityRulesetConfigMapName,
-			common.OperatorNamespace(),
-		)
+		cm, err := ruleset.GetWAFRulesetConfig()
+		Expect(err).To(BeNil())
+		defaultCoreRulesetCM, err := ruleset.GetOWASPCoreRuleSet()
 		Expect(err).To(BeNil())
 		component := applicationlayer.ApplicationLayer(&applicationlayer.Config{
-			PullSecrets:          nil,
-			Installation:         installation,
-			OsType:               rmeta.OSTypeLinux,
-			PerHostWAFEnabled:    true,
-			ModSecurityConfigMap: cm,
+			PullSecrets:                 nil,
+			Installation:                installation,
+			OsType:                      rmeta.OSTypeLinux,
+			PerHostWAFEnabled:           true,
+			WAFRulesetConfigMap:         cm,
+			DefaultCoreRulesetConfigMap: defaultCoreRulesetCM,
 		})
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -552,7 +554,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		// Ensure each volume rendered correctly.
 		dsVols := ds.Spec.Template.Spec.Volumes
 		hp := corev1.HostPathDirectoryOrCreate
-		expectedVolumes := []corev1.Volume{
+		correctVolumesOrder := []corev1.Volume{
 			{
 				Name: applicationlayer.FelixSync,
 				VolumeSource: corev1.VolumeSource{
@@ -594,19 +596,42 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 				},
 			},
 			{
-				Name: applicationlayer.ModSecurityRulesetConfigMapName,
+				Name: applicationlayer.WAFRulesetConfigMapName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: applicationlayer.ModSecurityRulesetConfigMapName},
+						LocalObjectReference: corev1.LocalObjectReference{Name: applicationlayer.WAFRulesetConfigMapName},
+					},
+				},
+			},
+			{
+				Name: applicationlayer.DefaultCoreRuleset,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: applicationlayer.DefaultCoreRuleset},
 					},
 				},
 			},
 		}
 
-		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(len(expectedVolumes)))
-		for i, expected := range expectedVolumes {
+		var wafRulesetVolIndex, defaultCoreRulesecVolIndex int
+
+		Expect(len(ds.Spec.Template.Spec.Volumes)).To(Equal(len(correctVolumesOrder)))
+		for i, expected := range correctVolumesOrder {
+			if dsVols[i].Name == applicationlayer.WAFRulesetConfigMapName {
+				wafRulesetVolIndex = i
+			}
+
+			if dsVols[i].Name == applicationlayer.DefaultCoreRuleset {
+				defaultCoreRulesecVolIndex = i
+			}
 			Expect(dsVols[i]).To(Equal(expected))
 		}
+
+		// order of the volume mounts matter here
+		// coreruleset-default is mounted as a sub directory in the
+		// wafRuleset volume so, wafRuleset needs to be mounted before
+		// coreruleset-default
+		Expect(wafRulesetVolIndex).Should(BeNumerically("<", defaultCoreRulesecVolIndex))
 
 		// Ensure that tolerations rendered correctly.
 		dsTolerations := ds.Spec.Template.Spec.Tolerations
@@ -658,7 +683,8 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		expectedDikastesArgs := []string{
 			"--per-host-waf-enabled",
 			"--waf-log-file", filepath.Join(applicationlayer.CalicologsVolumePath, "waf", "waf.log"),
-			"--waf-ruleset-file", filepath.Join(applicationlayer.ModSecurityRulesetVolumePath, "tigera.conf"),
+			"--waf-ruleset-root-dir", applicationlayer.WAFConfigVolumePath,
+			"--waf-ruleset-file", "tigera.conf",
 		}
 		for _, element := range expectedDikastesArgs {
 			Expect(dikastesArgs).To(ContainElement(element))
@@ -669,7 +695,8 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			{Name: applicationlayer.DikastesSyncVolumeName, MountPath: "/var/run/dikastes"},
 			{Name: applicationlayer.FelixSync, MountPath: "/var/run/felix"},
 			{Name: applicationlayer.CalicoLogsVolumeName, MountPath: applicationlayer.CalicologsVolumePath},
-			{Name: applicationlayer.ModSecurityRulesetConfigMapName, MountPath: applicationlayer.ModSecurityRulesetVolumePath, ReadOnly: true},
+			{Name: applicationlayer.WAFRulesetConfigMapName, MountPath: applicationlayer.WAFConfigVolumePath, ReadOnly: true},
+			{Name: applicationlayer.DefaultCoreRuleset, MountPath: applicationlayer.DefaultCoreRulesetVolumePath, ReadOnly: true},
 		}
 		Expect(len(dikastesVolMounts)).To(Equal(len(expectedDikastesVolMounts)))
 		for _, expected := range expectedDikastesVolMounts {

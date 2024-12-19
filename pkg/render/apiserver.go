@@ -1003,8 +1003,10 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
-					Containers:         containers,
-					Volumes:            c.apiServerVolumes(),
+					Containers: []corev1.Container{
+						c.apiServerContainer(),
+					},
+					Volumes: c.apiServerVolumes(),
 				},
 			},
 		},

@@ -430,6 +430,13 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
 		},
 		{
+			// The Federated Services Controller needs access to the remote kubeconfig secret
+			// in order to create a remote syncer.
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"watch", "list", "get"},
+		},
+		{
 			// Needed to validate the license
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"licensekeys"},

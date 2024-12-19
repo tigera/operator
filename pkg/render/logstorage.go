@@ -1016,7 +1016,7 @@ func (es *elasticsearchComponent) elasticsearchRolesAndBindings() ([]*rbacv1.Rol
 			{
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
-				Verbs:     []string{"create", "delete", "deletecollection", "get", "list", "update", "watch"},
+				Verbs:     []string{"create", "delete", "deletecollection", "update"},
 			},
 		},
 	}
@@ -1030,7 +1030,7 @@ func (es *elasticsearchComponent) elasticsearchRolesAndBindings() ([]*rbacv1.Rol
 			{
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
-				Verbs:     []string{"create", "delete", "deletecollection", "get", "list", "update", "watch"},
+				Verbs:     []string{"create", "delete", "deletecollection", "update"},
 			},
 		},
 	}
@@ -1366,7 +1366,7 @@ func (m managedClusterLogStorage) kubeControllersRolesAndBindings() ([]*rbacv1.R
 			{
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
-				Verbs:     []string{"create", "delete", "deletecollection", "get", "list", "update", "watch"},
+				Verbs:     []string{"create", "delete", "deletecollection", "update"},
 			},
 		},
 	}

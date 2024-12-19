@@ -41,7 +41,9 @@ global_job_config:
       - "cache restore go-mod-cache-s390x-${SEMAPHORE_GIT_SHA}"
 
 blocks:
-  - name: Push Images / Maybe Release
+  - name: Release
+    run:
+      when: "tag =~ '^v'"
     task:
       secrets:
         - name: quay-robot-semaphore_v2
@@ -51,9 +53,19 @@ blocks:
           - docker login -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io;
           - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
       jobs:
-        - name: Build
+        - name: Publish Release
           commands:
-            - make cd
+            - make release-tag RELEASE_TAG=${SEMAPHORE_GIT_RELEASE_TAG}
           env_vars:
             - name: CONFIRM
               value: "true"
+
+promotions:
+  - name: Clean Up
+    pipeline_file: clean_up.yml
+    # Auto promote to clean up since this likely wasn't promoted from the CI pipeline (since we only promote to the
+    # clean up pipeline if we're not running on master or a release branch).
+    # We only auto promote if the cd has passed, because if it's failed we'll likely just want to run CD again, but if
+    # we've cleared the cache it will take a long time.
+    auto_promote:
+      when: "result = 'passed'"

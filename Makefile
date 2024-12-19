@@ -501,9 +501,14 @@ endif
 ###############################################################################
 # Release
 ###############################################################################
-## Determines if we are on a tag and if so builds a release.
-maybe-build-release:
-	./hack/maybe-build-release.sh
+VERSION_REGEX := ^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?(\+[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*)?$$
+release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
+	$(eval VALID_TAG := $(shell echo $(RELEASE_TAG) | grep -Eq "$(VERSION_REGEX)" && echo true))
+	$(if $(VALID_TAG),,$(error $(RELEASE_TAG) is not a valid version. Please use a version in the format vX.Y.Z))
+	$(MAKE) release release-publish-images VERSION=$(RELEASE_TAG)
+# Only create a release if the tag is vX.Y.Z
+	$(if $(VALID_TAG), $(MAKE) release-github VERSION=$(RELEASE_TAG))
+
 
 release-notes: var-require-all-VERSION-GITHUB_TOKEN clean
 	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .

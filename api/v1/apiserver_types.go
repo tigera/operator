@@ -150,6 +150,10 @@ type APIServerDeploymentPodSpec struct {
 	// WARNING: Please note that this field will override the default API server Deployment tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+
+	// PriorityClassName allows to specify a PriorityClass resource to be used.
+	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
 }
 
 // APIServerDeploymentPodTemplateSpec is the API server Deployment's PodTemplateSpec

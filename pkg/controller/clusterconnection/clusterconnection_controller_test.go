@@ -299,20 +299,16 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Expect(policies.Items[1].Name).To(Equal("allow-tigera.guardian-access"))
 			})
 
-			It("should degrade and wait when tier is ready, but license is not sufficient", func() {
+			It("should omit allow-tigera policy when tier is ready, but license is not sufficient", func() {
 				licenseKey.Status.Features = []string{common.TiersFeature}
 				Expect(c.Update(ctx, licenseKey)).NotTo(HaveOccurred())
 
-				mockStatus = &status.MockStatus{}
-				mockStatus.On("Run").Return()
-				mockStatus.On("OnCRFound").Return()
-				mockStatus.On("SetDegraded", operatorv1.ResourceReadError, "Feature is not active - License does not support feature: egress-access-control", mock.Anything, mock.Anything).Return()
-				mockStatus.On("SetMetaData", mock.Anything).Return()
-
-				r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready)
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
-				mockStatus.AssertExpectations(GinkgoT())
+
+				policies := v3.NetworkPolicyList{}
+				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
+				Expect(policies.Items).To(HaveLen(0))
 			})
 
 			It("should degrade and wait when tier and license are ready, but tier watch is not ready", func() {

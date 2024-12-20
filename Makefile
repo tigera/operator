@@ -512,7 +512,8 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 		exit 0; \
 	fi
 
-	$(MAKE) release release-publish-images VERSION=$(RELEASE_TAG)
+	$(MAKE) release VERSION=$(RELEASE_TAG)
+	$(MAKE) release-publish-images VERSION=$(RELEASE_TAG)
 	$(MAKE) release-github VERSION=$(RELEASE_TAG)
 
 

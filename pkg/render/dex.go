@@ -138,10 +138,9 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	// TODO the RequiredSecrets in the dex condig to not pass back secrets of this type.
 	if !c.cfg.DeleteDex {
 		objs = append(objs, secret.ToRuntimeObjects(c.cfg.DexConfig.RequiredSecrets(common.OperatorNamespace())...)...)
+		objs = append(objs, secret.ToRuntimeObjects(c.cfg.DexConfig.RequiredSecrets(DexNamespace)...)...)
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.cfg.PullSecrets...)...)...)
 	}
-
-	objs = append(objs, secret.ToRuntimeObjects(c.cfg.DexConfig.RequiredSecrets(DexNamespace)...)...)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.cfg.PullSecrets...)...)...)
 
 	if c.cfg.Installation.CertificateManagement != nil {
 		objs = append(objs, certificatemanagement.CSRClusterRoleBinding(DexObjectName, DexNamespace))

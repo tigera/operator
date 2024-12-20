@@ -43,7 +43,7 @@ var _ = Describe("provider discovery", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "master1",
 				Labels: map[string]string{
-					"node-role.kubernetes.io/master":    "",
+					"node-role.kubernetes.io/control-plane":    "",
 					"com.docker.ucp.orchestrator.swarm": "true",
 				},
 			},

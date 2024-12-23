@@ -430,6 +430,13 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
 		},
 		{
+			// The Federated Services Controller needs access to the remote kubeconfig secret
+			// in order to create a remote syncer.
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"watch", "list", "get"},
+		},
+		{
 			// Needed to validate the license
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"licensekeys"},
@@ -813,6 +820,14 @@ func kubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.Net
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(uint16(cfg.MetricsPort)),
 			},
+		})
+	}
+
+	if r, err := cfg.K8sServiceEp.DestinationEntityRule(); r != nil && err == nil {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: *r,
 		})
 	}
 

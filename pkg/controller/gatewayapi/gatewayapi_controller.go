@@ -178,7 +178,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	}
 	err = utils.NewComponentHandler(log, r.client, r.scheme, gatewayAPI).CreateOrUpdateOrDelete(ctx, nonCRDComponent, r.status)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI CRDs", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI resources", err, log)
 		return reconcile.Result{}, err
 	}
 

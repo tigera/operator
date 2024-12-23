@@ -86,6 +86,11 @@ type APIServerDeploymentContainer struct {
 	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+
+	// +kubebuilder:validation:Enum=Fatal;Error;Warn;Info;Debug;Trace
+	// +kubebuilder:default=Info
+	// +optional
+	LogLevel *string `json:"logLevel,omitempty"`
 }
 
 // APIServerDeploymentInitContainer is an API server Deployment init container.

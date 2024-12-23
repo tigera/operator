@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -254,7 +255,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(1))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(20))
+		Expect(clusterRole.Rules).To(HaveLen(21))
 
 		ms := rtest.GetResource(resources, kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless")
@@ -341,12 +342,18 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(19))
+		Expect(clusterRole.Rules).To(HaveLen(20))
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
 				Resources: []string{"configmaps"},
 				Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
+			}))
+		Expect(clusterRole.Rules).To(ContainElement(
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"watch", "list", "get"},
 			}))
 	})
 
@@ -544,12 +551,18 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(19))
+		Expect(clusterRole.Rules).To(HaveLen(20))
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
 				Resources: []string{"configmaps"},
 				Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
+			}))
+		Expect(clusterRole.Rules).To(ContainElement(
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"watch", "list", "get"},
 			}))
 	})
 
@@ -1115,6 +1128,26 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", kubecontrollers.KubeControllerPrometheusTLSSecret)))
 	})
 
+	It("should add egress policy with Enterprise variant and K8SServiceEndpoint defined", func() {
+		cfg.K8sServiceEp.Host = "k8shost"
+		cfg.K8sServiceEp.Port = "1234"
+		objects, _ := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg).Objects()
+		Expect(objects).To(HaveLen(1))
+		policy, ok := objects[0].(*v3.NetworkPolicy)
+		Expect(ok).To(BeTrue())
+		Expect(policy).ToNot(BeNil())
+		Expect(policy.Spec).ToNot(BeNil())
+		Expect(policy.Spec.Egress).ToNot(BeNil())
+		Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports:   networkpolicy.Ports(1234),
+				Domains: []string{"k8shost"},
+			},
+		}))
+	})
+
 	Context("multi-tenant rendering", func() {
 		//var installation *operatorv1.InstallationSpec
 		var tenant *operatorv1.Tenant
@@ -1316,6 +1349,5 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("es-calico-kube-controllers"))
 			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(overwrites))
 		})
-
 	})
 })

@@ -15,8 +15,6 @@
 package applicationlayer_test
 
 import (
-	"path/filepath"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -682,7 +680,6 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		dikastesArgs := dikastesContainer.Command
 		expectedDikastesArgs := []string{
 			"--per-host-waf-enabled",
-			"--waf-log-file", filepath.Join(applicationlayer.CalicologsVolumePath, "waf", "waf.log"),
 			"--waf-ruleset-root-dir", applicationlayer.WAFConfigVolumePath,
 			"--waf-ruleset-file", "tigera.conf",
 		}

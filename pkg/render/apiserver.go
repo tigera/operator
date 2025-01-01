@@ -128,6 +128,7 @@ type APIServerConfiguration struct {
 	TrustedBundle               certificatemanagement.TrustedBundle
 	MultiTenant                 bool
 	KeyValidatorConfig          authentication.KeyValidatorConfig
+	KubernetesVersion           *common.VersionInfo
 }
 
 type apiServerComponent struct {
@@ -637,7 +638,23 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 	}
-
+	if c.cfg.KubernetesVersion == nil || !(c.cfg.KubernetesVersion != nil && c.cfg.KubernetesVersion.Major < 2 && c.cfg.KubernetesVersion.Minor < 30) {
+		// If the kubernetes version is higher than 1.30, we add extra RBAC permissions to allow establishing watches.
+		// https://v1-30.docs.kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/
+		rules = append(rules, rbacv1.PolicyRule{
+			// Kubernetes validating admission policy resources.
+			APIGroups: []string{"admissionregistration.k8s.io"},
+			Resources: []string{
+				"validatingadmissionpolicies",
+				"validatingadmissionpolicybindings",
+			},
+			Verbs: []string{
+				"get",
+				"list",
+				"watch",
+			},
+		})
+	}
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1225,7 +1242,11 @@ func (c *apiServerComponent) startUpArgs() []string {
 			args = append(args, fmt.Sprintf("--tunnelSecretName=%s", c.cfg.ManagementCluster.Spec.TLS.SecretName))
 		}
 	}
-
+	if c.cfg.KubernetesVersion != nil && c.cfg.KubernetesVersion.Major < 2 && c.cfg.KubernetesVersion.Minor < 30 {
+		// Disable this API as it is not available by default. If we don't, the server fails to start, due to trying to
+		// establish watches for unavailable APIs.
+		args = append(args, "--enable-validating-admission-policy=false")
+	}
 	return args
 }
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -303,6 +303,10 @@ func (h *NetworkPolicyHelper) ComplianceBenchmarkerSourceEntityRule() v3.EntityR
 
 func (h *NetworkPolicyHelper) ComplianceControllerSourceEntityRule() v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-controller")
+}
+
+func (h *NetworkPolicyHelper) CCSAPISourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "tigera-ccs-api")
 }
 
 func (h *NetworkPolicyHelper) ComplianceSnapshotterSourceEntityRule() v3.EntityRule {

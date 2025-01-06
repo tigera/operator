@@ -42,6 +42,8 @@ require (
 	sigs.k8s.io/yaml v1.4.0
 )
 
+require k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0 // indirect
+
 require (
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/alessio/shellescape v1.4.2 // indirect
@@ -49,7 +51,6 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/corazawaf/coraza-coreruleset/v4 v4.7.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/elastic/go-sysinfo v1.13.1 // indirect
 	github.com/elastic/go-ucfg v0.8.8 // indirect
@@ -116,16 +117,14 @@ require (
 	howett.net/plist v1.0.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20240521193020-835d969ad83a // indirect
-	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0 // indirect
-	sigs.k8s.io/gateway-api v1.1.0 // indirect
+	sigs.k8s.io/gateway-api v1.1.0
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 )
 
-require (
-	github.com/corazawaf/coraza-coreruleset v0.0.0-20240226094324-415b1017abdc // indirect
-	github.com/magefile/mage v1.14.0 // indirect
-)
+require github.com/corazawaf/coraza-coreruleset v0.0.0-20240226094324-415b1017abdc
+
+require github.com/magefile/mage v1.14.0 // indirect
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM

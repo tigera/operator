@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -169,6 +169,13 @@ func AddToManager(mgr ctrl.Manager, options options.AddOptions) error {
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr, options); err != nil {
 		return fmt.Errorf("failed to create controller %s: %v", "GatewayAPI", err)
+	}
+	if err := (&CCSReconciler{
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("controllers").WithName("CCS"),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, options); err != nil {
+		return fmt.Errorf("failed to create controller %s: %v", "CCS", err)
 	}
 	// +kubebuilder:scaffold:builder
 	return nil

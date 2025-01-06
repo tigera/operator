@@ -194,7 +194,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
 
 		Expect(*d.Spec.Replicas).To(BeEquivalentTo(2))
-		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
+		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RollingUpdateDeploymentStrategyType))
 		Expect(len(d.Spec.Selector.MatchLabels)).To(Equal(1))
 		Expect(d.Spec.Selector.MatchLabels).To(HaveKeyWithValue("apiserver", "true"))
 
@@ -644,6 +644,15 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		deployment := deploymentResource.(*appsv1.Deployment)
 		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
+	})
+
+	It("should set RecreateDeploymentStrategyType if host networked", func() {
+		cfg.ForceHostNetwork = true
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
 	})
 
 	It("should add egress policy with Enterprise variant and K8SServiceEndpoint defined", func() {
@@ -1656,7 +1665,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(d.Labels).To(HaveKeyWithValue("apiserver", "true"))
 
 		Expect(*d.Spec.Replicas).To(BeEquivalentTo(2))
-		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
+		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RollingUpdateDeploymentStrategyType))
 		Expect(len(d.Spec.Selector.MatchLabels)).To(Equal(1))
 		Expect(d.Spec.Selector.MatchLabels).To(HaveKeyWithValue("apiserver", "true"))
 
@@ -1826,6 +1835,15 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 
+	It("should set RecreateDeploymentStrategyType if host networked", func() {
+		cfg.ForceHostNetwork = true
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
+	})
+
 	It("should not set KUBERNETES_SERVICE_... variables if Docker EE using proxy.local", func() {
 		cfg.K8SServiceEndpoint.Host = "proxy.local"
 		cfg.K8SServiceEndpoint.Port = "1234"
@@ -1957,6 +1975,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 				Value:    "bar",
 			}
 
+			priorityclassname := "priority"
+
 			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
 				Metadata: &operatorv1.Metadata{
 					Labels:      map[string]string{"top-level": "label1"},
@@ -1985,8 +2005,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 							NodeSelector: map[string]string{
 								"custom-node-selector": "value",
 							},
-							Affinity:    affinity,
-							Tolerations: []corev1.Toleration{toleration},
+							Affinity:          affinity,
+							Tolerations:       []corev1.Toleration{toleration},
+							PriorityClassName: priorityclassname,
 						},
 					},
 				},
@@ -2046,6 +2067,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+			Expect(d.Spec.Template.Spec.PriorityClassName).To(Equal(priorityclassname))
 		})
 
 		It("should override a ControlPlaneNodeSelector when specified", func() {

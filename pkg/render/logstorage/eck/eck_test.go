@@ -28,6 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
@@ -146,17 +147,17 @@ var _ = Describe("ECK rendering tests", func() {
 				},
 				{
 					APIGroups: []string{""},
-					Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps", "serviceaccounts"},
+					Resources: []string{"endpoints"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"pods", "events", "persistentvolumeclaims", "secrets", "services", "configmaps"},
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 				},
 				{
 					APIGroups: []string{"apps"},
 					Resources: []string{"deployments", "statefulsets", "daemonsets"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-				},
-				{
-					APIGroups: []string{"batch"},
-					Resources: []string{"cronjobs"},
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 				},
 				{
@@ -166,58 +167,68 @@ var _ = Describe("ECK rendering tests", func() {
 				},
 				{
 					APIGroups: []string{"elasticsearch.k8s.elastic.co"},
-					Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers", "enterpriselicenses", "enterpriselicenses/status"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 				},
 				{
 					APIGroups: []string{"autoscaling.k8s.elastic.co"},
 					Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 				},
 				{
 					APIGroups: []string{"kibana.k8s.elastic.co"},
 					Resources: []string{"kibanas", "kibanas/status", "kibanas/finalizers"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 				},
 				{
 					APIGroups: []string{"apm.k8s.elastic.co"},
 					Resources: []string{"apmservers", "apmservers/status", "apmservers/finalizers"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 				},
 				{
 					APIGroups: []string{"enterprisesearch.k8s.elastic.co"},
 					Resources: []string{"enterprisesearches", "enterprisesearches/status", "enterprisesearches/finalizers"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 				},
 				{
 					APIGroups: []string{"beat.k8s.elastic.co"},
 					Resources: []string{"beats", "beats/status", "beats/finalizers"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 				},
 				{
 					APIGroups: []string{"agent.k8s.elastic.co"},
 					Resources: []string{"agents", "agents/status", "agents/finalizers"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 				},
 				{
 					APIGroups: []string{"maps.k8s.elastic.co"},
 					Resources: []string{"elasticmapsservers", "elasticmapsservers/status", "elasticmapsservers/finalizers"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 				},
 				{
 					APIGroups: []string{"stackconfigpolicy.k8s.elastic.co"},
 					Resources: []string{"stackconfigpolicies", "stackconfigpolicies/status", "stackconfigpolicies/finalizers"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+				},
+				{
+					APIGroups: []string{"logstash.k8s.elastic.co"},
+					Resources: []string{"logstashes", "logstashes/status", "logstashes/finalizers"},
+					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+				},
+				{
+					APIGroups: []string{"storage.k8s.io"},
+					Resources: []string{"storageclasses"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"admissionregistration.k8s.io"},
+					Resources: []string{"validatingwebhookconfigurations"},
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 				},
 				{
-					APIGroups: []string{"associations.k8s.elastic.co"},
-					Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-				},
-				{
-					APIGroups: []string{"autoscaling.k8s.elastic.co"},
-					Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
-					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+					APIGroups: []string{""},
+					Resources: []string{"nodes"},
+					Verbs:     []string{"get", "list", "watch"},
 				},
 			}))
 		})

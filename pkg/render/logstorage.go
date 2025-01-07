@@ -452,78 +452,47 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
-	annotations := es.cfg.TrustedBundle.HashAnnotations()
-	annotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret)
-	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
-
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		sc := securitycontext.NewRootContext(false)
-		// keystore init container converts jdk jks to bcfks and chown the new file to
-		// elasticsearch user and group for the main container to consume.
-		sc.Capabilities.Add = []corev1.Capability{"CHOWN"}
-
-		initKeystore := corev1.Container{
-			Name:            keystoreInitContainerName,
-			Image:           es.esImage,
-			ImagePullPolicy: ImagePullPolicy(),
-			Env: []corev1.EnvVar{
-				{
-					Name: ElasticsearchKeystoreEnvName,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
-							Key:                  ElasticsearchKeystoreEnvName,
-						},
-					},
-				},
-				{
-					Name:  "ES_JAVA_OPTS",
-					Value: "--module-path /usr/share/bc-fips/",
-				},
+	initFSContainer := corev1.Container{
+		Name:            "elastic-internal-init-filesystem",
+		Image:           es.esImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    resource.MustParse("100m"),
+				"memory": resource.MustParse("50Mi"),
 			},
-			// This is a script made by Tigera in our docker image to initialize the JVM keystore and the ES keystore
-			// using the password from env var KEYSTORE_PASSWORD.
-			Command:         []string{"/bin/sh"},
-			Args:            []string{"-c", "/usr/bin/initialize_keystore.sh"},
-			SecurityContext: sc,
-		}
-		initContainers = append(initContainers, initKeystore)
-		annotations[ElasticsearchKeystoreHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.KeyStoreSecret)
+			Requests: corev1.ResourceList{
+				"cpu":    resource.MustParse("100m"),
+				"memory": resource.MustParse("50Mi"),
+			},
+		},
+		// Without a root context, it is not able to ln and chown.
+		SecurityContext: securitycontext.NewRootContext(true),
+	}
+
+	suspendContainer := corev1.Container{
+		Name:            "elastic-internal-suspend",
+		Image:           es.esImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		// Without a root context, it is not able to start.
+		SecurityContext: securitycontext.NewRootContext(true),
 	}
 
 	var volumes []corev1.Volume
-
 	var autoMountToken bool
-	if es.cfg.Installation.CertificateManagement != nil {
+	if es.cfg.Installation.CertificateManagement == nil {
+		initContainers = append(initContainers, initFSContainer, suspendContainer)
+	} else {
 		// If certificate management is used, we need to override a mounting options for this init container.
-		initFSName := "elastic-internal-init-filesystem"
-		initFSContainer := corev1.Container{
-			Name:            initFSName,
-			Image:           es.esImage,
-			ImagePullPolicy: ImagePullPolicy(),
-			Command:         []string{"bash", "-c", "mkdir /mnt/elastic-internal/transport-certificates/ && touch /mnt/elastic-internal/transport-certificates/$HOSTNAME.tls.key && /mnt/elastic-internal/scripts/prepare-fs.sh"},
-			Resources: corev1.ResourceRequirements{
-				Limits: corev1.ResourceList{
-					"cpu":    resource.MustParse("100m"),
-					"memory": resource.MustParse("50Mi"),
-				},
-				Requests: corev1.ResourceList{
-					"cpu":    resource.MustParse("100m"),
-					"memory": resource.MustParse("50Mi"),
-				},
-			},
-			// Without a root context, it is not able to ln and chown.
-			SecurityContext: securitycontext.NewRootContext(true),
-			VolumeMounts: []corev1.VolumeMount{
-				// Create transport mount, such that ECK will not auto-fill this with a secret volume.
-				{
-					Name:      CSRVolumeNameTransport,
-					MountPath: "/csr",
-					ReadOnly:  false,
-				},
+		initFSContainer.Command = []string{"bash", "-c", "mkdir /mnt/elastic-internal/transport-certificates/ && touch /mnt/elastic-internal/transport-certificates/$HOSTNAME.tls.key && /mnt/elastic-internal/scripts/prepare-fs.sh"}
+		initFSContainer.VolumeMounts = []corev1.VolumeMount{
+			// Create transport mount, such that ECK will not auto-fill this with a secret volume.
+			{
+				Name:      CSRVolumeNameTransport,
+				MountPath: "/csr",
+				ReadOnly:  false,
 			},
 		}
-
 		csrInitContainerHTTP := es.cfg.ElasticsearchKeyPair.InitContainer(ElasticsearchNamespace)
 		csrInitContainerHTTP.Name = "key-cert-elastic"
 		csrInitContainerHTTP.VolumeMounts[0].Name = CSRVolumeNameHTTP
@@ -546,6 +515,7 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		initContainers = append(
 			initContainers,
 			initFSContainer,
+			suspendContainer,
 			csrInitContainerHTTP,
 			csrInitContainerTransport)
 
@@ -591,6 +561,10 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if es.cfg.Installation.KubernetesProvider.IsGKE() {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
+
+	annotations := es.cfg.TrustedBundle.HashAnnotations()
+	annotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret)
+	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
 
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{

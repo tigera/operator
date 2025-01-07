@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -858,7 +859,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(escfg.Spec.NodeSets).To(HaveLen(1))
 					// The Image is not populated for the container so no need to get and check it
 					Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
-					Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(1))
+					Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(3))
 					initset := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-os-settings")
 					Expect(initset).ToNot(BeNil())
 					Expect(initset.Image).To(Equal(
@@ -942,7 +943,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(escfg.Spec.NodeSets).To(HaveLen(1))
 					// The Image is not populated for the container so no need to get and check it
 					Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
-					Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(1))
+					Expect(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers).To(HaveLen(3))
 					initset := test.GetContainer(escfg.Spec.NodeSets[0].PodTemplate.Spec.InitContainers, "elastic-internal-init-os-settings")
 					Expect(initset).ToNot(BeNil())
 					Expect(initset.Image).To(Equal(

@@ -166,3 +166,9 @@ components:
     image: envoyproxy/ratelimit
     version: "26f28d78"
     registry: docker.io/
+  ccs-api:
+    image: tigera/ccs-api
+    version: master
+  ccs-controller:
+    image: tigera/ccs-controller
+    version: master

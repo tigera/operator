@@ -24,4 +24,5 @@ resources:
 - operator_v1_tigerastatus.yaml
 - operator_v1_tlspassthroughroute.yaml
 - operator_v1_tlsterminatedroute.yaml
+- operator.tigera.io_v1_complianceconfigurationsecurity.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

@@ -25,6 +25,7 @@ resources:
 - bases/operator.tigera.io_tlspassthroughroutes.yaml
 - bases/operator.tigera.io_tlsterminatedroutes.yaml
 
+- bases/operator.tigera.io.tigera.io_complianceconfigurationsecurities.yaml
 #+kubebuilder:scaffold:crdkustomizeresource
 
 patches:
@@ -35,6 +36,7 @@ patches:
 # [CERTMANAGER] To enable cert-manager, uncomment all the sections with [CERTMANAGER] prefix.
 # patches here are for enabling the CA injection for each CRD
 #- path: patches/cainjection_in_foos.yaml
+#- path: patches/cainjection_in_complianceconfigurationsecurities.yaml
 #+kubebuilder:scaffold:crdkustomizecainjectionpatch
 
 # [WEBHOOK] To enable webhook, uncomment the following section

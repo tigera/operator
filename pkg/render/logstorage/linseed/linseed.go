@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -618,6 +618,12 @@ func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      networkpolicyHelper.ComplianceReporterSourceEntityRule(),
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkpolicyHelper.CCSAPISourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{

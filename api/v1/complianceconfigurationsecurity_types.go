@@ -20,7 +20,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ComplianceConfigurationSecuritySpec defines the desired state of CCS.
+// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
+// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
+
+// ComplianceConfigurationSecuritySpec defines the desired state of ComplianceConfigurationSecurity
 type ComplianceConfigurationSecuritySpec struct {
 	// This controls the deployment of the CCS controller.
 	CCSControllerDeployment *CCSControllerDeployment `json:"ccsControllerDeployment,omitempty"`
@@ -29,7 +32,7 @@ type ComplianceConfigurationSecuritySpec struct {
 	CCSAPIDeployment *CCSAPIDeployment `json:"ccsAPIDeployment,omitempty"`
 }
 
-// ComplianceConfigurationSecurityStatus defines the observed state of CCS.
+// ComplianceConfigurationSecurityStatus defines the observed state of ComplianceConfigurationSecurity
 type ComplianceConfigurationSecurityStatus struct {
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`
@@ -42,12 +45,12 @@ type ComplianceConfigurationSecurityStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster
 
-// ComplianceConfigurationSecurity installs the components required for CCS reports.
+// ComplianceConfigurationSecurity is the Schema for the complianceconfigurationsecurities API
 type ComplianceConfigurationSecurity struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
+
 	// Specification of the desired state for CCS.
 	Spec ComplianceConfigurationSecuritySpec `json:"spec,omitempty"`
 	// Most recently observed state for CCS.

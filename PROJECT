@@ -188,7 +188,6 @@ resources:
   version: v1
 - api:
     crdVersion: v1
-    namespaced: true
   controller: true
   domain: tigera.io
   group: operator.tigera.io

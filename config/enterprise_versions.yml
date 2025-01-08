@@ -135,7 +135,7 @@ components:
     image: tigera/eck-operator
     version: release-calient-v3.21-1
   eck-elasticsearch-operator:
-    version: 2.6.1
+    version: 2.16.0
   l7-collector:
     image: tigera/l7-collector
     version: release-calient-v3.21-1

@@ -641,6 +641,10 @@ define copy_crds
     $(eval dir := $(1))
 	@cp .crds/$(dir)/libcalico-go/config/crd/* pkg/crds/$(dir)/ && echo "Copied $(dir) CRDs"
 endef
+define copy_eck_crds
+    $(eval dir := $(1))
+	@cp .crds/$(dir)/charts/tigera-operator/crds/eck/* pkg/crds/$(dir)/ && echo "Copied $(dir) ECK CRDs"
+endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
 .PHONY: update-calico-crds update-enterprise-crds
@@ -672,6 +676,7 @@ read-libcalico-enterprise-version:
 
 update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_crds,"enterprise")
+	$(call copy_eck_crds,"enterprise")
 
 prepare-for-enterprise-crds:
 	$(call prep_local_crds,"enterprise")

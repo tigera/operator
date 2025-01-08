@@ -10,22 +10,29 @@ global_job_config:
     - name: oss-release-secrets
     # Mount the github SSH secret for pulling private repositories.
     - name: private-repo
+    - name: secret-manager-gcloud-credentials
   prologue:
     commands:
-      - echo $DOCKERHUB_PASSWORD | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
       # Correct permissions since they are too open by default:
       - chmod 0600 ~/.keys/*
       # Add the key to the ssh agent:
       - ssh-add ~/.keys/*
-      # Free up some space
-      - sudo rm -rf ~/.kiex ~/.phpbrew ~/.rbenv ~/.nvm ~/.kerl
-      # Semaphore mounts a copy-on-write FS as /var/lib/docker in order to provide a pre-loaded cache of
-      # some images. However, the cache is not useful to us and the copy-on-write FS is a big problem given
-      # how much we churn docker containers during testing.  Disable it.
-      - sudo systemctl stop docker
-      - sudo umount /var/lib/docker && sudo killall qemu-nbd || true
-      - sudo systemctl start docker
+
+      # Clone our secret tool from Github and install it
+      - git config --global url."ssh://git@github.com/".insteadOf "https://github.com/"
+      - export GOPRIVATE="github.com/tigera/*,github.com/danudey/*"
+      - git clone -b add-secret-tool-properly git@github.com:danudey/go-tools.git go-tools
+      - cd go-tools && go install -v ./cmd/secret-tool
+
+      # Add default GOBIN to our path
+      - export PATH=$HOME/go/bin:$PATH
+
+      # Log into docker hub (we log into quay.io later for some reason)
+      - secret-tool fetch-secret DOCKERHUB_PASSWORD | docker login --username $(secret-tool fetch-secret DOCKERHUB_USERNAME) --password-stdin
+
+      # Checkout our code
       - checkout
+
       # Restore all the build specific caches
       - 'cache restore bin-amd64-${SEMAPHORE_GIT_SHA}'
       - 'cache restore go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA}'
@@ -48,7 +55,8 @@ blocks:
         - name: operator-redhat-connect
       prologue:
         commands:
-          - docker login -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io;
+          # Sign in to quay.io using fetched secrets
+          - secret-tool fetch-secret QUAY_TOKEN | docker login --username $(secret-tool fetch-secret QUAY_USERNAME) --password-stdin quay.io
           - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
       jobs:
         - name: Build

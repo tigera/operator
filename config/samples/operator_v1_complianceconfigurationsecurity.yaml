@@ -1,0 +1,5 @@
+apiVersion: operator.tigera.io/v1
+kind: ComplianceConfigurationSecurity
+metadata:
+  name: tigera-secure
+  namespace: tigera-compliance

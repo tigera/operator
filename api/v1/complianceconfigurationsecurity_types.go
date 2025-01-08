@@ -45,6 +45,7 @@ type ComplianceConfigurationSecurityStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
 
 // ComplianceConfigurationSecurity is the Schema for the complianceconfigurationsecurities API
 type ComplianceConfigurationSecurity struct {

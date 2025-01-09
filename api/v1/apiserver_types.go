@@ -25,6 +25,16 @@ import (
 
 // APIServerSpec defines the desired state of Tigera API server.
 type APIServerSpec struct {
+	// +kubebuilder:validation:Enum=Fatal;Error;Warn;Info;Debug;Trace
+	// +kubebuilder:default=Info
+	// +optional
+	ApiServerLogLevel *string `json:"apiServerLogLevel,omitempty"`
+
+	// +kubebuilder:validation:Enum=Fatal;Error;Warn;Info;Debug;Trace
+	// +kubebuilder:default=Info
+	// +optional
+	QueryServerLogLevel *string `json:"queryServerLogLevel,omitempty"`
+
 	// APIServerDeployment configures the calico-apiserver (or tigera-apiserver in Enterprise) Deployment. If
 	// used in conjunction with ControlPlaneNodeSelector or ControlPlaneTolerations, then these overrides
 	// take precedence.
@@ -86,11 +96,6 @@ type APIServerDeploymentContainer struct {
 	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-
-	// +kubebuilder:validation:Enum=Fatal;Error;Warn;Info;Debug;Trace
-	// +kubebuilder:default=Info
-	// +optional
-	LogLevel *string `json:"logLevel,omitempty"`
 }
 
 // APIServerDeploymentInitContainer is an API server Deployment init container.

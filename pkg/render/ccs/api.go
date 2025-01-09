@@ -169,7 +169,7 @@ func (c *component) apiDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				{
 					Name:            APIResourceName,
-					Image:           c.apiImage,
+					Image:           "gcr.io/unique-caldron-775/suresh/ccs-api:dd-1", //c.apiImage,
 					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
 					Ports:           []corev1.ContainerPort{{ContainerPort: 5557}},

@@ -41,9 +41,10 @@ const (
 	ScannerControlsConfigConfigMapName = "tigera-ccs-default-config-inputs"
 	ScannerControlsConfigConfigMapKey  = "default-config-inputs.json"
 	HostScannerConfigKey               = "host-scanner.yaml"
-	HostScannerConfigMountPath         = "/etc/ccs"
-	ScannerControlsConfigMountPath     = "/etc/ccs"
+	HostScannerConfigMountPath         = "/etc/scanner"
+	ScannerControlsConfigMountPath     = "/etc/controls"
 	HostScannerYamlPath                = HostScannerConfigMountPath + "/" + HostScannerConfigKey
+	ScannerControlsConfigPath          = ScannerControlsConfigMountPath + "/" + ScannerControlsConfigConfigMapKey
 )
 
 func (c *component) controllerServiceAccount() *corev1.ServiceAccount {
@@ -224,16 +225,12 @@ func (c *component) controllerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 }
 
 func (c *component) controllerDeployment() *appsv1.Deployment {
-	var certPath string
-	if c.cfg.APIKeyPair != nil {
-		certPath = c.cfg.APIKeyPair.VolumeMountCertificateFilePath()
-	}
-
 	envVars := []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "debug"},
-		{Name: "CCS_API_CA", Value: certPath},
+		{Name: "LOG_LEVEL", Value: "trace"},
+		{Name: "CCS_API_CA", Value: c.cfg.APIKeyPair.VolumeMountCertificateFilePath()},
 		{Name: "CCS_API_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
 		{Name: "CCS_HOST_SCANNER_YAML_PATH", Value: HostScannerYamlPath},
+		{Name: "CCS_CONTROLS_CONFIG_PATH", Value: ScannerControlsConfigPath},
 	}
 
 	if c.cfg.Tenant != nil && c.cfg.Tenant.MultiTenant() {
@@ -253,7 +250,7 @@ func (c *component) controllerDeployment() *appsv1.Deployment {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ControllerResourceName,
 			Namespace:   c.cfg.Namespace,
-			Labels:      map[string]string{"k8s-app": APIResourceName},
+			Labels:      map[string]string{"k8s-app": ControllerResourceName},
 			Annotations: annots,
 		},
 		Spec: corev1.PodSpec{
@@ -263,7 +260,7 @@ func (c *component) controllerDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				{
 					Name:            ControllerResourceName,
-					Image:           "gcr.io/unique-caldron-775/suresh/ccs-controller:operator-v9", // TODO c.controllerImage,
+					Image:           "gcr.io/unique-caldron-775/suresh/ccs-controller:dd-1", // TODO c.controllerImage,
 					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
 					SecurityContext: securitycontext.NewNonRootContext(),

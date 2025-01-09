@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -73,11 +73,9 @@ type EgressGatewaySpec struct {
 	ExternalNetworks []string `json:"externalNetworks,omitempty"`
 
 	// LogSeverity defines the logging level of the Egress Gateway.
-	// Default: Info
-	// +kubebuilder:validation:Enum=Trace;Debug;Info;Warn;Error;Fatal
 	// +optional
 	// +kubebuilder:default:=Info
-	LogSeverity *LogLevel `json:"logSeverity,omitempty"`
+	LogSeverity *LogSeverity `json:"logSeverity,omitempty"`
 
 	// Template describes the EGW Deployment pod that will be created.
 	// +optional

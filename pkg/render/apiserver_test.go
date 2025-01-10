@@ -1316,6 +1316,11 @@ var (
 		},
 		{
 			APIGroups: []string{""},
+			Resources: []string{"serviceaccounts"},
+			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups: []string{""},
 			Resources: []string{"services/proxy"},
 			ResourceNames: []string{
 				"https:tigera-api:8080", "calico-node-prometheus:9090",
@@ -1456,6 +1461,11 @@ var (
 		{
 			APIGroups: []string{""},
 			Resources: []string{"pods"},
+			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"serviceaccounts"},
 			Verbs:     []string{"list"},
 		},
 		{

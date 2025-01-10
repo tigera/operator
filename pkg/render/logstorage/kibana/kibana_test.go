@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,6 +32,7 @@ import (
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -132,11 +133,15 @@ var _ = Describe("Kibana rendering tests", func() {
 					Drop: []corev1.Capability{"ALL"},
 				},
 			))
+			Expect(kibanaCR.Spec.PodTemplate.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
+				Name:      "kibana-plugins",
+				MountPath: "/mnt/dummy-location/",
+			}))
+
 			Expect(kibanaCR.Spec.PodTemplate.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
 				&corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				}))
-
 			resultKB := rtest.GetResource(createResources, kibana.CRName, kibana.Namespace,
 				"kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.lifespan"]).To(Equal("8h"))

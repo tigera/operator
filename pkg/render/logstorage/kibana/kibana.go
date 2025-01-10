@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -241,7 +241,15 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	var initContainers []corev1.Container
 	var volumes []corev1.Volume
 	var automountToken bool
-	var volumeMounts []corev1.VolumeMount
+	volumeMounts := []corev1.VolumeMount{
+		{
+			// We need to override this mount and change the mountPath. Otherwise, ECK will mount an emptyDir in the
+			// original location (/usr/share/kibana/plugins), which would remove our custom theme resulting in
+			// crash-looping pods, because our custom config is unexpected.
+			Name:      "kibana-plugins",
+			MountPath: "/mnt/dummy-location/",
+		},
+	}
 	if k.cfg.Installation.CertificateManagement != nil {
 		config["elasticsearch.ssl.certificateAuthorities"] = []string{"/mnt/elastic-internal/http-certs/ca.crt"}
 		automountToken = true

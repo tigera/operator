@@ -11,6 +11,13 @@ define yq_cmd
 endef
 YQ_V4 = $(call yq_cmd,4)
 
+define get-secret
+$(shell echo "[secret] Fetching secret $1" > /dev/stderr; secret-tool fetch-secret $1)
+endef
+
+# These secrets should be lazily-loaded when accessed
+GITHUB_TOKEN = $(call get-secret,GITHUB_TOKEN)
+
 GIT_CMD   = git
 CURL_CMD  = curl -fL
 
@@ -517,9 +524,9 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release-github VERSION=$(RELEASE_TAG)
 
 
-release-notes: var-require-all-VERSION-GITHUB_TOKEN clean
+release-notes: var-require-all-VERSION clean
 	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .
-	@docker run --rm -v $(CURDIR):/workdir -e	GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) tigera/release-notes
+	@docker run --rm -v $(CURDIR):/workdir -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) tigera/release-notes
 
 ## Tags and builds a release from start to finish.
 release: release-prereqs

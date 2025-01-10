@@ -1,4 +1,4 @@
-// Copyright (c) 2022, 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 - 2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,6 +29,13 @@ type Metadata struct {
 	// already exist in the object's annotations.
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+type LogOptions struct {
+	// +kubebuilder:validation:Enum=Fatal;Error;Warn;Info;Debug;Trace
+	// +kubebuilder:default=Info
+	// +optional
+	LogLevel *LogLevel `json:"logLevel,omitempty"`
 }
 
 type LogLevel string

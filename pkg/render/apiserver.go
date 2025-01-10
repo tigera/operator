@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,6 @@ import (
 	"net/url"
 	"strings"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/api/pkg/lib/numorstring"
 	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +30,8 @@ import (
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -1194,18 +1194,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
 
 	// set Log_LEVEL for apiserver container
-	if c.cfg.APIServer.APIServerDeployment != nil && c.cfg.APIServer.APIServerDeployment.Spec != nil &&
-		c.cfg.APIServer.APIServerDeployment.Spec.Template != nil &&
-		c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec != nil &&
-		c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec.Containers != nil {
-		containers := c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec.Containers
-		for _, con := range containers {
-			if strings.Contains(con.Name, "apiserver") {
-				if logLevel := con.LogLevel; logLevel != nil {
-					env = append(env, corev1.EnvVar{Name: "LOG_LEVEL", Value: strings.ToLower(*logLevel)})
-				}
-			}
-		}
+
+	if logOptions := c.cfg.APIServer.APIServerLogOptions; logOptions != nil &&
+		logOptions.LogLevel != nil {
+		env = append(env, corev1.EnvVar{Name: "LOG_LEVEL", Value: strings.ToLower(string(*logOptions.LogLevel))})
 	} else {
 		// set default LOG_LEVEL to info when not set by the user
 		env = append(env, corev1.EnvVar{Name: "LOG_LEVEL", Value: "info"})
@@ -1301,18 +1293,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	}
 
 	// set Log_LEVEL for queryserver container
-	if c.cfg.APIServer.APIServerDeployment != nil && c.cfg.APIServer.APIServerDeployment.Spec != nil &&
-		c.cfg.APIServer.APIServerDeployment.Spec.Template != nil &&
-		c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec != nil &&
-		c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec.Containers != nil {
-		containers := c.cfg.APIServer.APIServerDeployment.Spec.Template.Spec.Containers
-		for _, con := range containers {
-			if strings.Contains(con.Name, "queryserver") {
-				if logLevel := con.LogLevel; logLevel != nil {
-					env = append(env, corev1.EnvVar{Name: "LOGLEVEL", Value: strings.ToLower(*logLevel)})
-				}
-			}
-		}
+	if logOptions := c.cfg.APIServer.QueryServerLogOptions; logOptions != nil &&
+		logOptions.LogLevel != nil {
+		env = append(env, corev1.EnvVar{Name: "LOGLEVEL", Value: strings.ToLower(string(*logOptions.LogLevel))})
 	} else {
 		// set default LOGLEVEL to info when not set by the user
 		env = append(env, corev1.EnvVar{Name: "LOGLEVEL", Value: "info"})

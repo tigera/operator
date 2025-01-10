@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -97,7 +97,7 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = component{
-		Version:  "2.6.1",
+		Version:  "2.16.0",
 		Registry: "",
 	}
 

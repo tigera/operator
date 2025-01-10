@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -580,78 +580,47 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
-	annotations := es.cfg.TrustedBundle.HashAnnotations()
-	annotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret)
-	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
-
-	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
-		sc := securitycontext.NewRootContext(false)
-		// keystore init container converts jdk jks to bcfks and chown the new file to
-		// elasticsearch user and group for the main container to consume.
-		sc.Capabilities.Add = []corev1.Capability{"CHOWN"}
-
-		initKeystore := corev1.Container{
-			Name:            keystoreInitContainerName,
-			Image:           es.esImage,
-			ImagePullPolicy: ImagePullPolicy(),
-			Env: []corev1.EnvVar{
-				{
-					Name: ElasticsearchKeystoreEnvName,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: ElasticsearchKeystoreSecret},
-							Key:                  ElasticsearchKeystoreEnvName,
-						},
-					},
-				},
-				{
-					Name:  "ES_JAVA_OPTS",
-					Value: "--module-path /usr/share/bc-fips/",
-				},
+	initFSContainer := corev1.Container{
+		Name:            "elastic-internal-init-filesystem",
+		Image:           es.esImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    resource.MustParse("100m"),
+				"memory": resource.MustParse("50Mi"),
 			},
-			// This is a script made by Tigera in our docker image to initialize the JVM keystore and the ES keystore
-			// using the password from env var KEYSTORE_PASSWORD.
-			Command:         []string{"/bin/sh"},
-			Args:            []string{"-c", "/usr/bin/initialize_keystore.sh"},
-			SecurityContext: sc,
-		}
-		initContainers = append(initContainers, initKeystore)
-		annotations[ElasticsearchKeystoreHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.KeyStoreSecret)
+			Requests: corev1.ResourceList{
+				"cpu":    resource.MustParse("100m"),
+				"memory": resource.MustParse("50Mi"),
+			},
+		},
+		// Without a root context, it is not able to ln and chown.
+		SecurityContext: securitycontext.NewRootContext(true),
+	}
+
+	suspendContainer := corev1.Container{
+		Name:            "elastic-internal-suspend",
+		Image:           es.esImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		// Without a root context, it is not able to start.
+		SecurityContext: securitycontext.NewRootContext(true),
 	}
 
 	var volumes []corev1.Volume
-
 	var autoMountToken bool
-	if es.cfg.Installation.CertificateManagement != nil {
+	if es.cfg.Installation.CertificateManagement == nil {
+		initContainers = append(initContainers, initFSContainer, suspendContainer)
+	} else {
 		// If certificate management is used, we need to override a mounting options for this init container.
-		initFSName := "elastic-internal-init-filesystem"
-		initFSContainer := corev1.Container{
-			Name:            initFSName,
-			Image:           es.esImage,
-			ImagePullPolicy: ImagePullPolicy(),
-			Command:         []string{"bash", "-c", "mkdir /mnt/elastic-internal/transport-certificates/ && touch /mnt/elastic-internal/transport-certificates/$HOSTNAME.tls.key && /mnt/elastic-internal/scripts/prepare-fs.sh"},
-			Resources: corev1.ResourceRequirements{
-				Limits: corev1.ResourceList{
-					"cpu":    resource.MustParse("100m"),
-					"memory": resource.MustParse("50Mi"),
-				},
-				Requests: corev1.ResourceList{
-					"cpu":    resource.MustParse("100m"),
-					"memory": resource.MustParse("50Mi"),
-				},
-			},
-			// Without a root context, it is not able to ln and chown.
-			SecurityContext: securitycontext.NewRootContext(true),
-			VolumeMounts: []corev1.VolumeMount{
-				// Create transport mount, such that ECK will not auto-fill this with a secret volume.
-				{
-					Name:      csrVolumeNameTransport,
-					MountPath: "/csr",
-					ReadOnly:  false,
-				},
+		initFSContainer.Command = []string{"bash", "-c", "mkdir /mnt/elastic-internal/transport-certificates/ && touch /mnt/elastic-internal/transport-certificates/$HOSTNAME.tls.key && /mnt/elastic-internal/scripts/prepare-fs.sh"}
+		initFSContainer.VolumeMounts = []corev1.VolumeMount{
+			// Create transport mount, such that ECK will not auto-fill this with a secret volume.
+			{
+				Name:      csrVolumeNameTransport,
+				MountPath: "/csr",
+				ReadOnly:  false,
 			},
 		}
-
 		csrInitContainerHTTP := es.cfg.ElasticsearchKeyPair.InitContainer(ElasticsearchNamespace)
 		csrInitContainerHTTP.Name = "key-cert-elastic"
 		csrInitContainerHTTP.VolumeMounts[0].Name = csrVolumeNameHTTP
@@ -674,6 +643,7 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		initContainers = append(
 			initContainers,
 			initFSContainer,
+			suspendContainer,
 			csrInitContainerHTTP,
 			csrInitContainerTransport)
 
@@ -714,6 +684,10 @@ func (es elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if es.cfg.LogStorage.Spec.DataNodeSelector != nil {
 		nodeSels = es.cfg.LogStorage.Spec.DataNodeSelector
 	}
+
+	annotations := es.cfg.TrustedBundle.HashAnnotations()
+	annotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret)
+	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
 
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -989,17 +963,17 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 		},
 		{
 			APIGroups: []string{""},
-			Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps", "serviceaccounts"},
+			Resources: []string{"endpoints"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods", "events", "persistentvolumeclaims", "secrets", "services", "configmaps"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
 			APIGroups: []string{"apps"},
 			Resources: []string{"deployments", "statefulsets", "daemonsets"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"batch"},
-			Resources: []string{"cronjobs"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
@@ -1009,58 +983,68 @@ func (es elasticsearchComponent) eckOperatorClusterRole() *rbacv1.ClusterRole {
 		},
 		{
 			APIGroups: []string{"elasticsearch.k8s.elastic.co"},
-			Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers", "enterpriselicenses", "enterpriselicenses/status"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 		},
 		{
 			APIGroups: []string{"autoscaling.k8s.elastic.co"},
 			Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 		},
 		{
 			APIGroups: []string{"kibana.k8s.elastic.co"},
 			Resources: []string{"kibanas", "kibanas/status", "kibanas/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 		},
 		{
 			APIGroups: []string{"apm.k8s.elastic.co"},
 			Resources: []string{"apmservers", "apmservers/status", "apmservers/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 		},
 		{
 			APIGroups: []string{"enterprisesearch.k8s.elastic.co"},
 			Resources: []string{"enterprisesearches", "enterprisesearches/status", "enterprisesearches/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 		},
 		{
 			APIGroups: []string{"beat.k8s.elastic.co"},
 			Resources: []string{"beats", "beats/status", "beats/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 		},
 		{
 			APIGroups: []string{"agent.k8s.elastic.co"},
 			Resources: []string{"agents", "agents/status", "agents/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 		},
 		{
 			APIGroups: []string{"maps.k8s.elastic.co"},
 			Resources: []string{"elasticmapsservers", "elasticmapsservers/status", "elasticmapsservers/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 		},
 		{
 			APIGroups: []string{"stackconfigpolicy.k8s.elastic.co"},
 			Resources: []string{"stackconfigpolicies", "stackconfigpolicies/status", "stackconfigpolicies/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+		},
+		{
+			APIGroups: []string{"logstash.k8s.elastic.co"},
+			Resources: []string{"logstashes", "logstashes/status", "logstashes/finalizers"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+		},
+		{
+			APIGroups: []string{"storage.k8s.io"},
+			Resources: []string{"storageclasses"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"admissionregistration.k8s.io"},
+			Resources: []string{"validatingwebhookconfigurations"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
 		{
-			APIGroups: []string{"associations.k8s.elastic.co"},
-			Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"autoscaling.k8s.elastic.co"},
-			Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			APIGroups: []string{""},
+			Resources: []string{"nodes"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 	}
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024, 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025, 2023 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,9 @@ import (
 	"path"
 	"strings"
 
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/validation"
@@ -30,9 +33,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-	appsv1 "k8s.io/api/apps/v1"
-
-	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 // validateCustomResource validates that the given custom resource is correct. This
@@ -409,6 +409,9 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		if instance.Spec.WindowsNodes != nil {
 			return fmt.Errorf("Installation spec.WindowsNodes is not valid and should not be provided when Calico for Windows is disabled")
 		}
+	}
+	if operatorv1.IsFIPSModeEnabled(instance.Spec.FIPSMode) && instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+		return fmt.Errorf("Installation spec.FIPSMode=%v combined with spec.Variant=%s is not supported", *instance.Spec.FIPSMode, instance.Spec.Variant)
 	}
 
 	return nil

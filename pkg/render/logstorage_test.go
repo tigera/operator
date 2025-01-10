@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -290,7 +290,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				// Verify that an initContainer is added
 				initContainers := resultES.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-				Expect(initContainers).To(HaveLen(1))
+				Expect(initContainers).To(HaveLen(3))
 				Expect(initContainers[0].Name).To(Equal("elastic-internal-init-os-settings"))
 				Expect(*initContainers[0].SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 				Expect(*initContainers[0].SecurityContext.Privileged).To(BeTrue())
@@ -306,6 +306,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					&corev1.SeccompProfile{
 						Type: corev1.SeccompProfileTypeRuntimeDefault,
 					}))
+				Expect(initContainers[1].Name).To(Equal("elastic-internal-init-filesystem"))
+				Expect(initContainers[2].Name).To(Equal("elastic-internal-suspend"))
 
 				// Verify that the default container limits/requests are set.
 				Expect(resultES.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
@@ -414,17 +416,17 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 					{
 						APIGroups: []string{""},
-						Resources: []string{"pods", "endpoints", "events", "persistentvolumeclaims", "secrets", "services", "configmaps", "serviceaccounts"},
+						Resources: []string{"endpoints"},
+						Verbs:     []string{"get", "list", "watch"},
+					},
+					{
+						APIGroups: []string{""},
+						Resources: []string{"pods", "events", "persistentvolumeclaims", "secrets", "services", "configmaps"},
 						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 					},
 					{
 						APIGroups: []string{"apps"},
 						Resources: []string{"deployments", "statefulsets", "daemonsets"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"batch"},
-						Resources: []string{"cronjobs"},
 						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 					},
 					{
@@ -434,58 +436,68 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 					{
 						APIGroups: []string{"elasticsearch.k8s.elastic.co"},
-						Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers", "enterpriselicenses", "enterpriselicenses/status"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+						Resources: []string{"elasticsearches", "elasticsearches/status", "elasticsearches/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 					},
 					{
 						APIGroups: []string{"autoscaling.k8s.elastic.co"},
 						Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 					},
 					{
 						APIGroups: []string{"kibana.k8s.elastic.co"},
 						Resources: []string{"kibanas", "kibanas/status", "kibanas/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 					},
 					{
 						APIGroups: []string{"apm.k8s.elastic.co"},
 						Resources: []string{"apmservers", "apmservers/status", "apmservers/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 					},
 					{
 						APIGroups: []string{"enterprisesearch.k8s.elastic.co"},
 						Resources: []string{"enterprisesearches", "enterprisesearches/status", "enterprisesearches/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 					},
 					{
 						APIGroups: []string{"beat.k8s.elastic.co"},
 						Resources: []string{"beats", "beats/status", "beats/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 					},
 					{
 						APIGroups: []string{"agent.k8s.elastic.co"},
 						Resources: []string{"agents", "agents/status", "agents/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 					},
 					{
 						APIGroups: []string{"maps.k8s.elastic.co"},
 						Resources: []string{"elasticmapsservers", "elasticmapsservers/status", "elasticmapsservers/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 					},
 					{
 						APIGroups: []string{"stackconfigpolicy.k8s.elastic.co"},
 						Resources: []string{"stackconfigpolicies", "stackconfigpolicies/status", "stackconfigpolicies/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+					},
+					{
+						APIGroups: []string{"logstash.k8s.elastic.co"},
+						Resources: []string{"logstashes", "logstashes/status", "logstashes/finalizers"},
+						Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+					},
+					{
+						APIGroups: []string{"storage.k8s.io"},
+						Resources: []string{"storageclasses"},
+						Verbs:     []string{"get", "list", "watch"},
+					},
+					{
+						APIGroups: []string{"admissionregistration.k8s.io"},
+						Resources: []string{"validatingwebhookconfigurations"},
 						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 					},
 					{
-						APIGroups: []string{"associations.k8s.elastic.co"},
-						Resources: []string{"apmserverelasticsearchassociations", "apmserverelasticsearchassociations/status"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-					},
-					{
-						APIGroups: []string{"autoscaling.k8s.elastic.co"},
-						Resources: []string{"elasticsearchautoscalers", "elasticsearchautoscalers/status", "elasticsearchautoscalers/finalizers"},
-						Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+						APIGroups: []string{""},
+						Resources: []string{"nodes"},
+						Verbs:     []string{"get", "list", "watch"},
 					},
 					{
 						APIGroups:     []string{"policy"},
@@ -633,7 +645,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
 
 				initContainers := resultES.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-				Expect(initContainers).To(HaveLen(4))
+				Expect(initContainers).To(HaveLen(5))
 				compareInitContainer := func(ic corev1.Container, expectedName string, expectedVolumes []corev1.VolumeMount, privileged bool) {
 					Expect(ic.Name).To(Equal(expectedName))
 					Expect(ic.VolumeMounts).To(HaveLen(len(expectedVolumes)))
@@ -647,10 +659,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				compareInitContainer(initContainers[1], "elastic-internal-init-filesystem", []corev1.VolumeMount{
 					{Name: "elastic-internal-transport-certificates", MountPath: "/csr"},
 				}, true)
-				compareInitContainer(initContainers[2], "key-cert-elastic", []corev1.VolumeMount{
+				compareInitContainer(initContainers[2], "elastic-internal-suspend", nil, true)
+				compareInitContainer(initContainers[3], "key-cert-elastic", []corev1.VolumeMount{
 					{Name: "elastic-internal-http-certificates", MountPath: certificatemanagement.CSRCMountPath},
 				}, false)
-				compareInitContainer(initContainers[3], "key-cert-elastic-transport", []corev1.VolumeMount{
+				compareInitContainer(initContainers[4], "key-cert-elastic-transport", []corev1.VolumeMount{
 					{Name: "elastic-internal-transport-certificates", MountPath: certificatemanagement.CSRCMountPath},
 				}, false)
 			})
@@ -876,130 +889,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					}
 				})
 			})
-		})
-
-		It("should not render kibana when configured not to do so", func() {
-			cfg.KibanaEnabled = false
-			fipsEnabled := operatorv1.FIPSModeEnabled
-			cfg.Installation.FIPSMode = &fipsEnabled
-			cfg.LogStorage.Spec.Nodes.ResourceRequirements = &corev1.ResourceRequirements{
-				Limits: corev1.ResourceList{
-					"cpu":    resource.MustParse("1"),
-					"memory": resource.MustParse("150Mi"),
-				},
-				Requests: corev1.ResourceList{
-					"cpu":     resource.MustParse("1"),
-					"memory":  resource.MustParse("150Mi"),
-					"storage": resource.MustParse("10Gi"),
-				},
-			}
-
-			cfg.ApplyTrial = true
-			cfg.KeyStoreSecret = render.CreateElasticsearchKeystoreSecret()
-			cfg.KeyStoreSecret.Data[render.ElasticsearchKeystoreEnvName] = []byte("12345")
-			expectedCreateResources := []resourceTestObj{
-				{render.ECKOperatorNamespace, "", &corev1.Namespace{}, nil},
-				{render.ECKOperatorPolicyName, render.ECKOperatorNamespace, &v3.NetworkPolicy{}, nil},
-				{"tigera-pull-secret", render.ECKOperatorNamespace, &corev1.Secret{}, nil},
-				{"elastic-operator", render.ECKOperatorNamespace, &corev1.ServiceAccount{}, nil},
-				{"elastic-operator", "", &rbacv1.ClusterRole{}, nil},
-				{"elastic-operator", "", &rbacv1.ClusterRoleBinding{}, nil},
-				{render.ECKEnterpriseTrial, render.ECKOperatorNamespace, &corev1.Secret{}, nil},
-				{render.ECKOperatorName, render.ECKOperatorNamespace, &appsv1.StatefulSet{}, nil},
-				{render.ElasticsearchNamespace, "", &corev1.Namespace{}, nil},
-				{render.ElasticsearchPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-				{render.ElasticsearchInternalPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-				{networkpolicy.TigeraComponentDefaultDenyPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-				{"tigera-pull-secret", render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{"tigera-elasticsearch", render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
-				{relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), &corev1.ConfigMap{}, nil},
-				{render.ElasticsearchName, render.ElasticsearchNamespace, &esv1.Elasticsearch{}, nil},
-				{"tigera-elasticsearch", "", &rbacv1.ClusterRole{}, nil},
-				{"tigera-elasticsearch", "", &rbacv1.ClusterRoleBinding{}, nil},
-				{render.ECKOperatorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
-				{"tigera-elasticsearch", "", &policyv1beta1.PodSecurityPolicy{}, nil},
-				{render.ElasticsearchKeystoreSecret, common.OperatorNamespace(), &corev1.Secret{}, nil},
-				{render.ElasticsearchKeystoreSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{render.EsManagerRole, render.ElasticsearchNamespace, &rbacv1.Role{}, nil},
-				{render.EsManagerRoleBinding, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
-			}
-
-			component := render.LogStorage(cfg)
-			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
-			createResources, deleteResources := component.Objects()
-
-			compareResources(createResources, expectedCreateResources)
-			compareResources(deleteResources, []resourceTestObj{
-				{render.KibanaName, render.KibanaNamespace, &kbv1.Kibana{}, nil},
-				{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
-				{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
-				{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
-				{render.EsCuratorPolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-				{render.EsCuratorServiceAccount, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
-				{render.ElasticsearchCuratorUserSecret, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
-				{render.ESCuratorName, "", &policyv1beta1.PodSecurityPolicy{}, nil},
-			})
-
-			es := getElasticsearch(createResources)
-			Expect(es.Spec.NodeSets[0].PodTemplate.Spec.Containers).To(HaveLen(1))
-			esContainer := es.Spec.NodeSets[0].PodTemplate.Spec.Containers[0]
-			Expect(esContainer.Env).Should(ContainElement(corev1.EnvVar{
-				Name: "ES_JAVA_OPTS",
-				ValueFrom: &corev1.EnvVarSource{
-					SecretKeyRef: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{Name: render.ElasticsearchKeystoreSecret},
-						Key:                  "ES_JAVA_OPTS",
-					},
-				},
-			}))
-			initContainers := es.Spec.NodeSets[0].PodTemplate.Spec.InitContainers
-
-			resource := rtest.GetResource(createResources, render.ElasticsearchKeystoreSecret, common.OperatorNamespace(), "", "v1", "Secret")
-			Expect(resource).ShouldNot(BeNil())
-			keystoreSecret, ok := resource.(*corev1.Secret)
-			Expect(ok).To(BeTrue())
-			Expect(keystoreSecret.Data["ES_JAVA_OPTS"]).Should(Equal([]byte("-Xms75M -Xmx75M --module-path /usr/share/bc-fips/ -Djavax.net.ssl.trustStore=/usr/share/elasticsearch/config/cacerts.bcfks -Djavax.net.ssl.trustStoreType=BCFKS -Djavax.net.ssl.trustStorePassword=12345 -Dorg.bouncycastle.fips.approved_only=true")))
-			Expect(es.Spec.Image).To(ContainSubstring("-fips"))
-			Expect(es.Spec.NodeSets[0].PodTemplate.Spec.Containers[0].Env).To(ConsistOf(
-				corev1.EnvVar{
-					Name: render.ElasticsearchKeystoreEnvName,
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: render.ElasticsearchKeystoreSecret},
-							Key:                  render.ElasticsearchKeystoreEnvName,
-						},
-					},
-				},
-				corev1.EnvVar{
-					Name: "ES_JAVA_OPTS",
-					ValueFrom: &corev1.EnvVarSource{
-						SecretKeyRef: &corev1.SecretKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{Name: render.ElasticsearchKeystoreSecret},
-							Key:                  "ES_JAVA_OPTS",
-						},
-					},
-				},
-			))
-			Expect(initContainers).To(HaveLen(2))
-			Expect(initContainers[1].Name).To(Equal("elastic-internal-init-keystore"))
-			Expect(initContainers[1].Image).To(ContainSubstring("-fips"))
-			Expect(initContainers[1].Command).To(Equal([]string{"/bin/sh"}))
-			Expect(initContainers[1].Args).To(Equal([]string{"-c", "/usr/bin/initialize_keystore.sh"}))
-			Expect(*initContainers[1].SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
-			Expect(*initContainers[1].SecurityContext.Privileged).To(BeFalse())
-			Expect(*initContainers[1].SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
-			Expect(*initContainers[1].SecurityContext.RunAsNonRoot).To(BeFalse())
-			Expect(*initContainers[1].SecurityContext.RunAsUser).To(BeEquivalentTo(0))
-			Expect(initContainers[1].SecurityContext.Capabilities).To(Equal(
-				&corev1.Capabilities{
-					Drop: []corev1.Capability{"ALL"},
-					Add:  []corev1.Capability{"CHOWN"},
-				},
-			))
-			Expect(initContainers[1].SecurityContext.SeccompProfile).To(Equal(
-				&corev1.SeccompProfile{
-					Type: corev1.SeccompProfileTypeRuntimeDefault,
-				}))
 		})
 	})
 

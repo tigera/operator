@@ -1448,26 +1448,32 @@ spec:
                         type: object
                     type: object
                 type: object
-              apiServerLogLevel:
-                default: Info
-                enum:
-                - Fatal
-                - Error
-                - Warn
-                - Info
-                - Debug
-                - Trace
-                type: string
-              queryServerLogLevel:
-                default: Info
-                enum:
-                - Fatal
-                - Error
-                - Warn
-                - Info
-                - Debug
-                - Trace
-                type: string
+              apiServerLogging:
+                properties:
+                  logLevel:
+                    default: Info
+                    enum:
+                    - Fatal
+                    - Error
+                    - Warn
+                    - Info
+                    - Debug
+                    - Trace
+                    type: string
+                type: object
+              queryServerLogging:
+                properties:
+                  logLevel:
+                    default: Info
+                    enum:
+                    - Fatal
+                    - Error
+                    - Warn
+                    - Info
+                    - Debug
+                    - Trace
+                    type: string
+                type: object
             type: object
           status:
             description: Most recently observed status for the Tigera API server.

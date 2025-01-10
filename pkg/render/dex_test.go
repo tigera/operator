@@ -15,7 +15,6 @@
 package render_test
 
 import (
-	"encoding/json"
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
@@ -527,9 +526,14 @@ var _ = Describe("dex rendering tests", func() {
 
 					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
 					expectedPolicy := getExpectedPolicy(scenario)
-					policyJ, _ := json.Marshal(policy)
-					expectedPolicyJ, _ := json.Marshal(expectedPolicy)
-					Expect(string(policyJ)).To(Equal(string(expectedPolicyJ)))
+					Expect(policy.Spec.Selector).To(Equal(policy.Spec.Selector))
+					Expect(policy.Spec.Tier).To(Equal(policy.Spec.Tier))
+					Expect(policy.Spec.Order).To(Equal(policy.Spec.Order))
+					Expect(policy.Spec.Types).To(Equal(policy.Spec.Types))
+
+					// The order of insertion of rules is not guaranteed by the render implementation.
+					Expect(policy.Spec.Ingress).To(ContainElements(expectedPolicy.Spec.Ingress))
+					Expect(policy.Spec.Egress).To(ContainElements(expectedPolicy.Spec.Egress))
 				},
 				// Dex only renders in the presence of an Authentication CR, therefore does not have a config option for managed clusters.
 				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),

@@ -113,6 +113,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		c.apiClusterRoleBinding(),
 		c.apiDeployment(),
 		c.apiService(),
+		c.apiPublicCertConfigMap(),
+		c.apiTLSTerminatedRoute(),
 		// TODO: the policy is broad but works.
 		c.apiAllowTigeraNetworkPolicy(),
 	)

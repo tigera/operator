@@ -24,6 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	calicov3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -38,6 +40,9 @@ const (
 
 	APIAccessPolicyName        = networkpolicy.TigeraComponentPolicyPrefix + "ccs-api-access"
 	ControllerAccessPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "ccs-controller-access"
+
+	APITLSTerminatedRoute      = "tigera-ccs-api-tls-route"
+	APIPublicCertConfigMapName = "tigera-ccs-api-public-cert"
 )
 
 func (c *component) apiServiceAccount() *corev1.ServiceAccount {
@@ -257,6 +262,45 @@ func (c *component) apiAllowTigeraNetworkPolicy() *calicov3.NetworkPolicy {
 					Action: calicov3.Allow,
 				},
 			},
+		},
+	}
+}
+
+// tlsTerminatedRoute creates the TLSTerminatedRoute object needed to route request from the UI, through voltron, and to
+// the Bast API.
+func (c *component) apiTLSTerminatedRoute() *operatorv1.TLSTerminatedRoute {
+	return &operatorv1.TLSTerminatedRoute{
+		TypeMeta: metav1.TypeMeta{Kind: "TLSTerminatedRoute", APIVersion: "operator.tigera.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      APITLSTerminatedRoute,
+			Namespace: render.ManagerNamespace,
+		},
+		Spec: operatorv1.TLSTerminatedRouteSpec{
+			Target: operatorv1.TargetTypeUI,
+			PathMatch: &operatorv1.PathMatch{
+				Path:        "/ccs/",
+				PathRegexp:  ptr.ToPtr("^/ccs/?"),
+				PathReplace: ptr.ToPtr("/"),
+			},
+			Destination: fmt.Sprintf("https://%s.%s.svc:%s", APIResourceName, c.cfg.Namespace, "443"),
+			CABundle: &corev1.ConfigMapKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: APIPublicCertConfigMapName,
+				},
+				Key: corev1.TLSCertKey,
+			},
+		},
+	}
+}
+
+// publicCertConfigMap creates a config map that has the public CA for the API (without the private one), and can be used
+// and copied by our components.
+func (c *component) apiPublicCertConfigMap() *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: APIPublicCertConfigMapName, Namespace: c.cfg.Namespace},
+		Data: map[string]string{
+			corev1.TLSCertKey: string(c.cfg.APIKeyPair.GetCertificatePEM()),
 		},
 	}
 }

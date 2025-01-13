@@ -1448,18 +1448,10 @@ spec:
                         type: object
                     type: object
                 type: object
-              apiServerLogLevel:
+              logSeverity:
                 default: Info
-                enum:
-                - Fatal
-                - Error
-                - Warn
-                - Info
-                - Debug
-                - Trace
-                type: string
-              queryServerLogLevel:
-                default: Info
+                description: LogSeverity configures log level for APIServer and QueryServer
+                  containers.
                 enum:
                 - Fatal
                 - Error

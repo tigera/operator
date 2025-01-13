@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 /*
 
 
@@ -25,15 +25,10 @@ import (
 
 // APIServerSpec defines the desired state of Tigera API server.
 type APIServerSpec struct {
-	// +kubebuilder:validation:Enum=Fatal;Error;Warn;Info;Debug;Trace
-	// +kubebuilder:default=Info
+	// LogSeverity defines log level for APIServer and QueryServer containers.
 	// +optional
-	ApiServerLogLevel *string `json:"apiServerLogLevel,omitempty"`
-
-	// +kubebuilder:validation:Enum=Fatal;Error;Warn;Info;Debug;Trace
 	// +kubebuilder:default=Info
-	// +optional
-	QueryServerLogLevel *string `json:"queryServerLogLevel,omitempty"`
+	LogSeverity *LogSeverity `json:"logSeverity,omitempty"`
 
 	// APIServerDeployment configures the calico-apiserver (or tigera-apiserver in Enterprise) Deployment. If
 	// used in conjunction with ControlPlaneNodeSelector or ControlPlaneTolerations, then these overrides

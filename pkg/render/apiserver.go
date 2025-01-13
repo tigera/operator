@@ -1195,8 +1195,8 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	// set Log_LEVEL for apiserver container
 
-	if logLevel := c.cfg.APIServer.ApiServerLogLevel; logLevel != nil {
-		env = append(env, corev1.EnvVar{Name: "LOG_LEVEL", Value: strings.ToLower(*logLevel)})
+	if logLevel := c.cfg.APIServer.LogSeverity; logLevel != nil {
+		env = append(env, corev1.EnvVar{Name: "LOG_LEVEL", Value: strings.ToLower(string(*logLevel))})
 	} else {
 		// set default LOG_LEVEL to info when not set by the user
 		env = append(env, corev1.EnvVar{Name: "LOG_LEVEL", Value: "info"})
@@ -1292,8 +1292,8 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	}
 
 	// set Log_LEVEL for queryserver container
-	if logLevel := c.cfg.APIServer.QueryServerLogLevel; logLevel != nil {
-		env = append(env, corev1.EnvVar{Name: "LOGLEVEL", Value: strings.ToLower(*logLevel)})
+	if logLevel := c.cfg.APIServer.LogSeverity; logLevel != nil {
+		env = append(env, corev1.EnvVar{Name: "LOGLEVEL", Value: strings.ToLower(string(*logLevel))})
 	} else {
 		// set default LOGLEVEL to info when not set by the user
 		env = append(env, corev1.EnvVar{Name: "LOGLEVEL", Value: "info"})

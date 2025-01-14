@@ -33,6 +33,12 @@ func main() {
 			versionFlag,
 			exceptCalicoFlag,
 			exceptEnterpriseFlag,
+			publishFlag,
+			archFlag,
+			gitRemoteFlag,
+			registryFlag,
+			imageFlag,
+			devTagSuffixFlag,
 			debugFlag,
 		},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {

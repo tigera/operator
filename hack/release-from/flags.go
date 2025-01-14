@@ -18,7 +18,9 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 
+	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
 )
 
@@ -28,7 +30,7 @@ var debugFlag = &cli.BoolFlag{
 	Sources: cli.EnvVars("DEBUG"),
 }
 
-var remoteFlag = &cli.StringFlag{
+var gitRemoteFlag = &cli.StringFlag{
 	Name:    "remote",
 	Usage:   "The git remote to push the release to",
 	Value:   "origin",
@@ -41,16 +43,24 @@ var baseOperatorFlag = &cli.StringFlag{
 	Usage: "The version of the operator to base this new version from. " +
 		"It is expected in the format vX.Y.Z for releases and " +
 		"for hashrelease, either vX.Y.Z-n-g<git-hash>-<hashrelease-name> (legacy) or " +
-		"vX.Y.Z-n-g<git-hash>-<product-hashrelease-version> (new) where product-hashrelease-version is in the format vA.B.C-u-g<product-git-hash>",
+		"vX.Y.Z-<dev-tag-suffix>-n-g<git-hash>-<product-hashrelease-version> (new) " +
+		"where product-hashrelease-version is in the format vA.B.C-<product-dev-tag-suffix>-u-g<product-git-hash>.",
 	Sources:  cli.EnvVars("OPERATOR_BASE_VERSION"),
 	Required: true,
 	Action: func(ctx context.Context, c *cli.Command, value string) error {
-		if !regexp.MustCompile(baseVersionFormat).MatchString(value) {
-			return fmt.Errorf("base-version must be in the format vX.Y.Z or vX.Y.Z-n-g<git-hash>-<hashrelease-name> or " +
-				"vX.Y.Z-n-g<git-hash>-<product-hashrelease-version>")
+		if !regexp.MustCompile(fmt.Sprintf(baseVersionFormat, c.String(devTagSuffixFlag.Name))).MatchString(value) {
+			return fmt.Errorf("base-version must be in the format vX.Y.Z or vX.Y.Z-<dev-tag-suffix>-n-g<git-hash>-<hashrelease-name> or " +
+				"vX.Y.Z-<dev-tag-suffix>-n-g<git-hash>-<product-hashrelease-version>")
 		}
 		return nil
 	},
+}
+
+var devTagSuffixFlag = &cli.StringFlag{
+	Name:    "dev-tag-suffix",
+	Usage:   "The suffix used to denote development tags",
+	Sources: cli.EnvVars("DEV_TAG_SUFFIX"),
+	Value:   "0-dev",
 }
 
 var versionFlag = &cli.StringFlag{
@@ -61,9 +71,15 @@ var versionFlag = &cli.StringFlag{
 		if value == c.String("base-version") {
 			return fmt.Errorf("version cannot be the same as base-version")
 		}
-		if !regexp.MustCompile(baseVersionFormat).MatchString(value) {
-			return fmt.Errorf("base-version must be in the format vX.Y.Z or vX.Y.Z-n-g<git-hash>-<hashrelease-name> or " +
-				"vX.Y.Z-n-g<git-hash>-<product-hashrelease-version>")
+		if regexp.MustCompile(releaseFormat).MatchString(value) {
+			logrus.Warn("You are releasing a new operator version.")
+			return nil
+		}
+		if !regexp.MustCompile(fmt.Sprintf(hashreleaseFormat, c.String(devTagSuffixFlag.Name))).MatchString(value) {
+			if c.Bool(publishFlag.Name) && c.String(registryFlag.Name) == quayRegistry && c.String(imageFlag.Name) == defaultImageName {
+				return fmt.Errorf("cannot use the default registry and image for publishing operator version %q. "+
+					"Either update registry and/or image flag OR specify version in the format ", value)
+			}
 		}
 		return nil
 	},
@@ -75,6 +91,7 @@ var exceptCalicoFlag = &cli.StringSliceFlag{
 		"This should use the format based on the config/calico_versions.yaml file. " +
 		"e.g. --except-calico calico/cni:vX.Y.Z --except-calico csi-node-driver-registrar:vA.B.C-n-g<git-hash>",
 	Sources: cli.EnvVars("OS_IMAGES_VERSIONS"),
+	Action:  validateOverrides,
 }
 
 var exceptEnterpriseFlag = &cli.StringSliceFlag{
@@ -88,8 +105,18 @@ var exceptEnterpriseFlag = &cli.StringSliceFlag{
 		if len(values) == 0 && len(c.StringSlice("except-calico")) == 0 {
 			return fmt.Errorf("at least one of --except-calico or --except-enterprise must be set")
 		}
-		return nil
+		return validateOverrides(ctx, c, values)
 	},
+}
+
+func validateOverrides(ctx context.Context, c *cli.Command, values []string) error {
+	for _, value := range values {
+		parts := strings.Split(value, ":")
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid override %q, must be in the format <image>:<version>", value)
+		}
+	}
+	return nil
 }
 
 var (
@@ -110,6 +137,22 @@ var (
 		},
 	}
 )
+
+var registryFlag = &cli.StringFlag{
+	Name: "registry",
+	Usage: "The registry to push the new operator to. " +
+		"This is only used when creating a new operator for hashreleases.",
+	Sources: cli.EnvVars("REGISTRY"),
+	Value:   quayRegistry,
+}
+
+var imageFlag = &cli.StringFlag{
+	Name: "image",
+	Usage: "The image name to use for the new operator. " +
+		"This is only used when creating a new operator for hashreleases.",
+	Sources: cli.EnvVars("IMAGE_NAME"),
+	Value:   defaultImageName,
+}
 
 var publishFlag = &cli.BoolFlag{
 	Name:    "publish",

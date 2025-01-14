@@ -29,16 +29,16 @@ const (
 	dockerHub    = "docker.io"
 	quayRegistry = "quay.io"
 
-	imageName = "tigera/operator"
+	defaultImageName = "tigera/operator"
 
-	baseDownloadURL = "https://raw.githubusercontent.com/tigera/operator"
+	sourceGitHubURL = `https://github.com/tigera/operator/raw/%s/%s`
 
 	calicoConfig     = "config/calico_versions.yml"
 	enterpriseConfig = "config/enterprise_versions.yml"
 
 	releaseFormat     = `^v\d+\.\d+\.\d+$`
-	hashreleaseFormat = `^v\d+\.\d+\.\d+-\d+-g[a-f0-9]{12}-[a-z0-9-]+$`
-	baseVersionFormat = `^v\d+\.\d+\.\d+(-\d+-g[a-f0-9]{12}-[a-z0-9-]+)?$`
+	hashreleaseFormat = `^v\d+\.\d+\.\d+-%s-\d+-g[a-f0-9]{12}-[a-z0-9-]+$`
+	baseVersionFormat = `^v\d+\.\d+\.\d+(-%s-\d+-g[a-f0-9]{12}-[a-z0-9-]+)?$`
 )
 
 func contains(haystack []string, needle string) bool {

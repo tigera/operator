@@ -39,6 +39,8 @@ type productConfig struct {
 	Components map[string]component `yaml:"components"`
 }
 
+// releaseFrom is the main action for the command.
+// It builds (and publishes) a new operator based on the base version specified.
 func releaseFrom(ctx context.Context, c *cli.Command) error {
 	// get root directory of operator git repo
 	repoRootDir, err := runCommand("git", []string{"rev-parse", "--show-toplevel"}, nil)
@@ -54,32 +56,31 @@ func releaseFrom(ctx context.Context, c *cli.Command) error {
 	// Apply new version overrides
 	calicoOverrides := c.StringSlice(exceptCalicoFlag.Name)
 	if len(calicoOverrides) > 0 {
-		if err := updateConfig(repoRootDir, calicoConfig, calicoOverrides); err != nil {
+		if err := modifyComponentConfig(repoRootDir, calicoConfig, calicoOverrides); err != nil {
 			return fmt.Errorf("Error overriding calico config: %s", err)
 		}
 	}
 	enterpriseOverrides := c.StringSlice(exceptEnterpriseFlag.Name)
 	if len(enterpriseOverrides) > 0 {
-		if err := updateConfig(repoRootDir, enterpriseConfig, enterpriseOverrides); err != nil {
+		if err := modifyComponentConfig(repoRootDir, enterpriseConfig, enterpriseOverrides); err != nil {
 			return fmt.Errorf("Error overriding calico config: %s", err)
 		}
 	}
 
-	// Either build a new release or a new hashrelease operator
+	// Build either a new release or a new hashrelease operator
 	version := c.String(versionFlag.Name)
-	release, err := isRelease(version)
+	isReleaseVersion, err := isReleaseVersionFormat(version)
 	if err != nil {
 		return fmt.Errorf("Error determining if version is a release: %s", err)
-	} else if release {
-		return newOperator(repoRootDir, version, c.String(remoteFlag.Name))
+	} else if isReleaseVersion {
+		return newOperator(repoRootDir, version, c.String(remoteFlag.Name), c.Bool(publishFlag.Name))
 	}
 
-	return newHashreleaseOperator(repoRootDir, version, c.StringSlice(archFlag.Name))
+	return newHashreleaseOperator(repoRootDir, version, c.StringSlice(archFlag.Name), c.Bool(publishFlag.Name))
 }
 
-// isRelease checks if the version is a release version.
-// A release version is in the format vX.Y.Z.
-func isRelease(version string) (bool, error) {
+// isReleaseVersionFormat checks if the version in the format vX.Y.Z.
+func isReleaseVersionFormat(version string) (bool, error) {
 	releaseRegex, err := regexp.Compile(releaseFormat)
 	if err != nil {
 		return false, fmt.Errorf("Error compiling release regex: %s", err)
@@ -88,8 +89,7 @@ func isRelease(version string) (bool, error) {
 }
 
 // newOperator creates a new operator release.
-func newOperator(dir, version, remote string) error {
-	// TODO: Commit, tag and push changes
+func newOperator(dir, version, remote string, publish bool) error {
 	if _, err := runCommandInDir(dir, "git", []string{"add", "config/"}, nil); err != nil {
 		return fmt.Errorf("Error adding changes in git: %s", err)
 	}
@@ -99,6 +99,10 @@ func newOperator(dir, version, remote string) error {
 	if _, err := runCommandInDir(dir, "git", []string{"tag", version}, nil); err != nil {
 		return fmt.Errorf("Error tagging release in git: %s", err)
 	}
+	if !publish {
+		logrus.Info("skip pushing tag to git for publishing release")
+		return nil
+	}
 	if _, err := runCommandInDir(dir, "git", []string{"push", remote, version}, nil); err != nil {
 		return fmt.Errorf("Error pushing tag in git: %s", err)
 	}
@@ -106,14 +110,15 @@ func newOperator(dir, version, remote string) error {
 }
 
 // newHashreleaseOperator creates a new operator for a hashrelease.
-func newHashreleaseOperator(dir, version string, archs []string) error {
+// if publish is true, it will also publish the operator to registry.
+func newHashreleaseOperator(dir, version string, arches []string, publish bool) error {
 	env := os.Environ()
-	env = append(env, fmt.Sprintf("ARCHES=%s", strings.Join(archs, " ")))
+	env = append(env, fmt.Sprintf("ARCHES=%s", strings.Join(arches, " ")))
 	env = append(env, fmt.Sprintf("GIT_VERSION=%s", version))
 	if _, err := runCommandInDir(dir, "make", []string{"image-all"}, env); err != nil {
 		return err
 	}
-	for _, arch := range archs {
+	for _, arch := range arches {
 		tag := fmt.Sprintf("%s/%s:%s-%s", quayRegistry, imageName, version, arch)
 		if _, err := runCommand("docker", []string{
 			"tag",
@@ -134,10 +139,14 @@ func newHashreleaseOperator(dir, version string, archs []string) error {
 		return err
 	}
 	logrus.WithField("tag", initTag).Debug("Built init image")
-	return publishHashreleaseOperator(version, archs)
+	if !publish {
+		logrus.Info("skip publishing images to registry")
+		return nil
+	}
+	return publishHashreleaseOperator(version, arches)
 }
 
-// publishHashreleaseOperator publishes the hashrelease operator to quay.
+// publishHashreleaseOperator publishes the hashrelease operator to registry.
 func publishHashreleaseOperator(version string, archs []string) error {
 	multiArchTags := []string{}
 	for _, arch := range archs {
@@ -169,10 +178,10 @@ func publishHashreleaseOperator(version string, archs []string) error {
 	return nil
 }
 
-// updateConfig updates the version of image(s) in a config file
-func updateConfig(repoRootDir, configFile string, updates []string) error {
+// modifyComponentConfig updates the version of image(s) specified in the selected config file
+func modifyComponentConfig(repoRootDir, configFile string, imgVerUpdates []string) error {
 	components := make(map[string]string)
-	for _, override := range updates {
+	for _, override := range imgVerUpdates {
 		parts := strings.Split(override, ":")
 		if len(parts) != 2 {
 			return fmt.Errorf("Invalid override: %s", override)
@@ -203,24 +212,25 @@ func updateConfig(repoRootDir, configFile string, updates []string) error {
 	return nil
 }
 
-// retrieveBaseVersionConfig gets the config based to use
+// retrieveBaseVersionConfig gets the config to use as a base for the new operator
+// from the version specified as the base operator
 func retrieveBaseVersionConfig(baseVersion, repoRootDir string) error {
-	url, err := generateBaseConfigDownloadURL(baseVersion)
+	baseOperatorURL, err := generateBaseConfigDownloadURL(baseVersion)
 	if err != nil {
 		return fmt.Errorf("Error getting download URL: %s", err)
 	}
 
 	for _, file := range []string{calicoConfig, enterpriseConfig} {
 		// open file locally
-		localFile := fmt.Sprintf("%s/%s", repoRootDir, file)
-		out, err := os.OpenFile(localFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+		localFilePath := fmt.Sprintf("%s/%s", repoRootDir, file)
+		configFile, err := os.OpenFile(localFilePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {
 			return fmt.Errorf("Error opening local file %s: %s", file, err)
 		}
-		defer out.Close()
+		defer configFile.Close()
 
 		// download file from base version
-		resp, err := http.Get(fmt.Sprintf("%s/%s", url, file))
+		resp, err := http.Get(fmt.Sprintf("%s/%s", baseOperatorURL, file))
 		if err != nil {
 			return fmt.Errorf("Error downloading %s: %s", file, err)
 		}
@@ -230,13 +240,13 @@ func retrieveBaseVersionConfig(baseVersion, repoRootDir string) error {
 		}
 
 		// overwrite local file with downloaded file
-		if _, err = io.Copy(out, resp.Body); err != nil {
-			return fmt.Errorf("Error overwriting local file %s: %s", localFile, err)
+		if _, err = io.Copy(configFile, resp.Body); err != nil {
+			return fmt.Errorf("Error overwriting local file %s: %s", localFilePath, err)
 		}
 		logrus.WithFields(logrus.Fields{
 			"file":         file,
-			"localPath":    localFile,
-			"downloadPath": url,
+			"localPath":    localFilePath,
+			"downloadPath": baseOperatorURL,
 		}).Debug("Overwrote local file with downloaded file")
 	}
 	return nil
@@ -244,14 +254,14 @@ func retrieveBaseVersionConfig(baseVersion, repoRootDir string) error {
 
 // generateBaseConfigDownloadURL returns the url to download base configs from
 func generateBaseConfigDownloadURL(baseVersion string) (string, error) {
-	release, err := isRelease(baseVersion)
+	isReleaseVersion, err := isReleaseVersionFormat(baseVersion)
 	if err != nil {
 		return "", fmt.Errorf("Error determining if version is a release: %s", err)
 	}
-	if release {
+	if isReleaseVersion {
 		return fmt.Sprintf("%s/refs/tags/%s", baseDownloadURL, baseVersion), nil
 	}
-	gitHashRegex, err := regexp.Compile(`^g([a-f0-9]{12})`)
+	gitHashRegex, err := regexp.Compile(`g([a-f0-9]{12})`)
 	if err != nil {
 		return "", fmt.Errorf("Error compiling git hash regex: %s", err)
 	}

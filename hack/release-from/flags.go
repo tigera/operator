@@ -110,3 +110,10 @@ var (
 		},
 	}
 )
+
+var publishFlag = &cli.BoolFlag{
+	Name:    "publish",
+	Usage:   "Publish the new operator",
+	Sources: cli.EnvVars("PUBLISH"),
+	Value:   false,
+}

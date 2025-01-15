@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -143,7 +143,7 @@ func (e *eck) operatorClusterRole() *rbacv1.ClusterRole {
 			APIGroups:     []string{"coordination.k8s.io"},
 			Resources:     []string{"leases"},
 			ResourceNames: []string{"elastic-operator-leader"},
-			Verbs:         []string{"get", "watch", "update"},
+			Verbs:         []string{"get", "list", "watch", "update"},
 		},
 		{
 			APIGroups: []string{""},

@@ -1,4 +1,4 @@
-// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -145,7 +145,7 @@ var _ = Describe("ECK rendering tests", func() {
 					APIGroups:     []string{"coordination.k8s.io"},
 					Resources:     []string{"leases"},
 					ResourceNames: []string{"elastic-operator-leader"},
-					Verbs:         []string{"get", "list", "watch", "update"},
+					Verbs:         []string{"get", "watch", "update"},
 				},
 				{
 					APIGroups: []string{""},

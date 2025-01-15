@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -236,7 +236,6 @@ type Logging struct {
 
 type CNILogging struct {
 	// Default: Info
-	// +kubebuilder:validation:Enum=Error;Warning;Debug;Info
 	// +optional
 	LogSeverity *LogLevel `json:"logSeverity,omitempty"`
 

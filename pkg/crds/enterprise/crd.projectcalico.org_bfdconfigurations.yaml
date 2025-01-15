@@ -2,8 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: (devel)
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.16.5
   name: bfdconfigurations.crd.projectcalico.org
 spec:
   group: crd.projectcalico.org
@@ -12,6 +11,7 @@ spec:
     listKind: BFDConfigurationList
     plural: bfdconfigurations
     singular: bfdconfiguration
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1
@@ -20,14 +20,19 @@ spec:
         description: BFDConfiguration contains the configuration for BFD sessions.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -47,10 +52,10 @@ spec:
                         of milliseconds greater than 0.
                       type: string
                     matchPattern:
-                      description: MatchPattern is a pattern to match one or more
-                        interfaces. Supports exact interface names, match on interface
-                        prefixes (e.g., “eth*”), or “*” to select all interfaces on
-                        the selected node(s).
+                      description: |-
+                        MatchPattern is a pattern to match one or more interfaces.
+                        Supports exact interface names, match on interface prefixes (e.g., “eth*”),
+                        or “*” to select all interfaces on the selected node(s).
                       type: string
                     minimumRecvInterval:
                       default: 10ms
@@ -70,6 +75,8 @@ spec:
                         pass without receiving a BFD packet before the peer is considered
                         down.
                       type: integer
+                  required:
+                  - matchPattern
                   type: object
                 type: array
               nodeSelector:
@@ -78,9 +85,3 @@ spec:
         type: object
     served: true
     storage: true
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

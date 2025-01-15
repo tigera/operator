@@ -2,8 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: (devel)
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.16.5
   name: egressgatewaypolicies.crd.projectcalico.org
 spec:
   group: crd.projectcalico.org
@@ -12,6 +11,7 @@ spec:
     listKind: EgressGatewayPolicyList
     plural: egressgatewaypolicies
     singular: egressgatewaypolicy
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1
@@ -19,14 +19,19 @@ spec:
       openAPIV3Schema:
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -45,41 +50,39 @@ spec:
                       description: The description of the EgressGatewayPolicy rule.
                       type: string
                     destination:
-                      description: The destination network that can be reached via
-                        egress gateway. If no destination is set, the default route,
-                        0.0.0.0/0, is used instead.
+                      description: |-
+                        The destination network that can be reached via egress gateway.
+                        If no destination is set, the default route, 0.0.0.0/0, is used instead.
                       properties:
                         cidr:
                           description: The destination network CIDR.
                           type: string
                       type: object
                     gateway:
-                      description: Gateway specifies the egress gateway that should
-                        be used for the specified destination. If no gateway is set
-                        then the destination is routed normally rather than via an
-                        egress gateway.
+                      description: |-
+                        Gateway specifies the egress gateway that should be used for the specified destination.
+                        If no gateway is set then the destination is routed normally rather than via an egress gateway.
                       properties:
                         maxNextHops:
-                          description: MaxNextHops specifies the maximum number of
-                            egress gateway replicas from the selected deployment that
-                            a pod should depend on.
+                          description: |-
+                            MaxNextHops specifies the maximum number of egress gateway replicas from the selected
+                            deployment that a pod should depend on.
                           type: integer
                         namespaceSelector:
                           description: NamespaceSelector selects one or more namespaces
                             containing an egress gateway deployment.
                           type: string
                         selector:
-                          description: Selector is an expression used to pick out
-                            the egress gateway that the destination can be reached
-                            via.
+                          description: |-
+                            Selector is an expression used to pick out the egress gateway that the destination can
+                            be reached via.
                           type: string
                       type: object
                     gatewayPreference:
                       default: None
-                      description: GatewayPreference specifies which egress gateways
-                        to use. If set to PreferNodeLocal, egress gateways in the
-                        same node as the client will be used if available. Otherwise
-                        all the active egress gateways will be used.
+                      description: |-
+                        GatewayPreference specifies which egress gateways to use. If set to PreferNodeLocal, egress gateways in the same node as
+                        the client will be used if available. Otherwise all the active egress gateways will be used.
                       enum:
                       - None
                       - PreferNodeLocal
@@ -90,9 +93,3 @@ spec:
         type: object
     served: true
     storage: true
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

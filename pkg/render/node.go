@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1665,7 +1665,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		*c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds > 0 {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "FELIX_ENDPOINTSTATUSPATHPREFIX",
-			Value: c.varRunCalicoVolume().VolumeSource.HostPath.Path,
+			Value: "/var/run/calico",
 		})
 	}
 

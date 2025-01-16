@@ -2,8 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: (devel)
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.16.5
   name: policyrecommendationscopes.crd.projectcalico.org
 spec:
   group: crd.projectcalico.org
@@ -12,6 +11,7 @@ spec:
     listKind: PolicyRecommendationScopeList
     plural: policyrecommendationscopes
     singular: policyrecommendationscope
+  preserveUnknownFields: false
   scope: Cluster
   versions:
   - name: v1
@@ -19,67 +19,79 @@ spec:
       openAPIV3Schema:
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
           spec:
             properties:
               initialLookback:
-                description: 'How far back to look in flow logs when first creating
-                  a recommended policy. [Default: 24h]'
+                description: |-
+                  How far back to look in flow logs when first creating a recommended policy.
+                  [Default: 24h]
                 type: string
               interval:
-                description: 'How frequently to run the recommendation engine to create
-                  and refine recommended policies. [Default: 150s]'
+                description: |-
+                  How frequently to run the recommendation engine to create and refine recommended policies.
+                  [Default: 150s]
                 type: string
               maxRules:
-                description: 'The maximum number of rules that are permitted in the
-                  ingress or egress set. For egress rules, any egress domain rules
-                  will be simplified by contracting all domains into a single egress
-                  domain NetworkSet. If the number of rules exceeds this limit, the
-                  recommendation engine will treat this as an error condition. [Default:
-                  20]'
+                description: |-
+                  The maximum number of rules that are permitted in the ingress or egress set. For egress rules,
+                  any egress domain rules will be simplified by contracting all domains into a single egress
+                  domain NetworkSet. If the number of rules exceeds this limit, the recommendation engine will
+                  treat this as an error condition.
+                  [Default: 20]
                 type: integer
               namespaceSpec:
                 description: The namespace spec contains the namespace relative recommendation
                   vars.
                 properties:
                   intraNamespacePassThroughTraffic:
-                    description: 'Pass intra-namespace traffic. [Default: false]'
+                    description: |-
+                      Pass intra-namespace traffic.
+                      [Default: false]
                     type: boolean
                   recStatus:
                     description: Recommendation status. One of Enabled, Disabled.
                     type: string
                   selector:
-                    description: The namespace selector is an expression used to pick
-                      out the namespaces that the policy recommendation engine should
-                      create policies for. The syntax is the same as the NetworkPolicy.projectcalico.org
-                      resource selectors.
+                    description: |-
+                      The namespace selector is an expression used to pick out the namespaces that the policy
+                      recommendation engine should create policies for. The syntax is the same as the
+                      NetworkPolicy.projectcalico.org resource selectors.
                     type: string
                   tierName:
-                    description: 'The name of the policy recommendation tier for namespace-isolated
-                      policies. [Default: "namespace-isolation"]'
+                    description: |-
+                      The name of the policy recommendation tier for namespace-isolated policies.
+                      [Default: "namespace-isolation"]
                     type: string
                 required:
                 - selector
                 type: object
               policiesLearningCutOff:
-                description: 'The number of staged policies that are actively learning
-                  at any one time, after which the policy recommendation engine will
-                  stop adding new recommendations. [Default: 20]'
+                description: |-
+                  The number of staged policies that are actively learning at any one time, after which the
+                  policy recommendation engine will stop adding new recommendations.
+                  [Default: 20]
                 type: integer
               stabilizationPeriod:
-                description: 'StabilizationPeriod is the amount of time a recommended
-                  policy should remain unchanged to be deemed stable and ready to
-                  be enforced. [Default: 10m]'
+                description: |-
+                  StabilizationPeriod is the amount of time a recommended policy should remain unchanged to be
+                  deemed stable and ready to be enforced.
+                  [Default: 10m]
                 type: string
             type: object
           status:
@@ -107,9 +119,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

@@ -2,7 +2,7 @@
 title: v3.20.0-2.2
 components:
   libcalico-go:
-    version: v3.20.0-2.2
+    version: release-calient-v3.20
   cnx-manager:
     image: tigera/cnx-manager
     version: v3.20.0-2.2

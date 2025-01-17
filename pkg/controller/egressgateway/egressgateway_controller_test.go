@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package egressgateway
 import (
 	"context"
 	"fmt"
-
 	"time"
 
 	"github.com/go-logr/logr"
@@ -164,7 +163,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 			By("applying the Egress Gateway CR with just the required fields to the fake cluster")
 			var replicas int32 = 2
-			logSeverity := operatorv1.LogLevelInfo
+			logSeverity := operatorv1.LogSeverityInfo
 			egw := &operatorv1.EgressGateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
 				Spec: operatorv1.EgressGatewaySpec{
@@ -248,7 +247,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 			By("update egw with log level")
 			Expect(c.Get(ctx, types.NamespacedName{Name: "calico-red", Namespace: "calico-egress"}, egw)).NotTo(HaveOccurred())
-			logSeverity = operatorv1.LogLevelDebug
+			logSeverity = operatorv1.LogSeverityDebug
 			egw.Spec.LogSeverity = &logSeverity
 			Expect(c.Update(ctx, egw)).NotTo(HaveOccurred())
 			_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -414,7 +413,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
 			r.provider = operatorv1.ProviderOpenShift
-			logSeverity := operatorv1.LogLevelInfo
+			logSeverity := operatorv1.LogSeverityInfo
 			egw_red := &operatorv1.EgressGateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
 				Spec: operatorv1.EgressGatewaySpec{
@@ -781,7 +780,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
 				Spec: operatorv1.EgressGatewaySpec{
 					Replicas:    ptr.ToPtr(int32(2)),
-					LogSeverity: ptr.ToPtr(operatorv1.LogLevelInfo),
+					LogSeverity: ptr.ToPtr(operatorv1.LogSeverityInfo),
 					IPPools: []operatorv1.EgressGatewayIPPool{
 						{Name: "ippool-1"},
 					},

@@ -1068,16 +1068,6 @@ spec:
                                   description: APIServerDeploymentContainer is an
                                     API server Deployment container.
                                   properties:
-                                    logLevel:
-                                      default: Info
-                                      enum:
-                                      - Fatal
-                                      - Error
-                                      - Warn
-                                      - Info
-                                      - Debug
-                                      - Trace
-                                      type: string
                                     name:
                                       description: |-
                                         Name is an enum which identifies the API server Deployment container by name.
@@ -1460,6 +1450,38 @@ spec:
                                 type: array
                             type: object
                         type: object
+                    type: object
+                type: object
+              logging:
+                properties:
+                  apiServer:
+                    properties:
+                      logSeverity:
+                        default: Info
+                        description: LogSeverity defines log level for APIServer container.
+                        enum:
+                        - Fatal
+                        - Error
+                        - Warn
+                        - Info
+                        - Debug
+                        - Trace
+                        type: string
+                    type: object
+                  queryServer:
+                    properties:
+                      logSeverity:
+                        default: Info
+                        description: LogSeverity defines log level for QueryServer
+                          container.
+                        enum:
+                        - Fatal
+                        - Error
+                        - Warn
+                        - Info
+                        - Debug
+                        - Trace
+                        type: string
                     type: object
                 type: object
             type: object

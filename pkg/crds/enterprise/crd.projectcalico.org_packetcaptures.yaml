@@ -2,8 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: (devel)
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.16.5
   name: packetcaptures.crd.projectcalico.org
 spec:
   group: crd.projectcalico.org
@@ -20,14 +19,19 @@ spec:
       openAPIV3Schema:
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -35,23 +39,25 @@ spec:
             description: PacketCaptureSpec contains the values of the packet capture.
             properties:
               endTime:
-                description: Defines the end time at which this PacketCapture will
-                  stop capturing packets. If omitted the capture will continue indefinitely.
+                description: |-
+                  Defines the end time at which this PacketCapture will stop capturing packets.
+                  If omitted the capture will continue indefinitely.
                   If the value is changed to the past, capture will stop immediately.
                 format: date-time
                 type: string
               filters:
-                description: The ordered set of filters applied to traffic captured
-                  from an interface.  Each rule contains a set of packet match criteria.
+                description: |-
+                  The ordered set of filters applied to traffic captured from an interface.  Each rule contains a set of
+                  packet match criteria.
                 items:
                   description: A PacketCaptureRule encapsulates a set of match criteria
                     for traffic captured from an interface.
                   properties:
                     ports:
-                      description: Ports is an optional field that defines a filter
-                        for all traffic that has a source or destination port that
-                        matches one of these ranges/values. This value is a list of
-                        integers or strings that represent ranges of ports.
+                      description: |-
+                        Ports is an optional field that defines a filter for all traffic that has a
+                        source or destination port that matches one of these ranges/values. This value is a
+                        list of integers or strings that represent ranges of ports.
                       items:
                         anyOf:
                         - type: integer
@@ -63,10 +69,12 @@ spec:
                       anyOf:
                       - type: integer
                       - type: string
-                      description: "Protocol is an optional field that defines a filter
-                        for all traffic for a specific IP protocol. \n Must be one
-                        of these string values: \"TCP\", \"UDP\", \"ICMP\", \"ICMPv6\",
-                        \"SCTP\", \"UDPLite\" or an integer in the range 1-255."
+                      description: |-
+                        Protocol is an optional field that defines a filter for all traffic for
+                        a specific IP protocol.
+
+                        Must be one of these string values: "TCP", "UDP", "ICMP", "ICMPv6", "SCTP", "UDPLite"
+                        or an integer in the range 1-255.
                       pattern: ^.*
                       x-kubernetes-int-or-string: true
                   type: object
@@ -74,54 +82,53 @@ spec:
               selector:
                 default: all()
                 description: "The selector is an expression used to pick out the endpoints
-                  that the policy should be applied to.  The selector will only match
-                  endpoints in the same namespace as the PacketCapture resource. \n
-                  Selector expressions follow this syntax: \n \tlabel == \"string_literal\"
-                  \ ->  comparison, e.g. my_label == \"foo bar\" \tlabel != \"string_literal\"
-                  \  ->  not equal; also matches if label is not present \tlabel in
-                  { \"a\", \"b\", \"c\", ... }  ->  true if the value of label X is
-                  one of \"a\", \"b\", \"c\" \tlabel not in { \"a\", \"b\", \"c\",
-                  ... }  ->  true if the value of label X is not one of \"a\", \"b\",
-                  \"c\" \thas(label_name)  -> True if that label is present \t! expr
-                  -> negation of expr \texpr && expr  -> Short-circuit and \texpr
-                  || expr  -> Short-circuit or \t( expr ) -> parens for grouping \tall()
-                  -> matches all endpoints. \tan empty selector will default to all
-                  \n Label names are allowed to contain alphanumerics, -, _ and /.
-                  String literals are more permissive but they do not support escape
-                  characters. \n Examples (with made-up labels): \n \ttype == \"webserver\"
-                  && deployment == \"prod\" \ttype in {\"frontend\", \"backend\"}
-                  \tdeployment != \"dev\" \t! has(label_name)"
+                  that the policy should\nbe applied to.  The selector will only match
+                  endpoints in the same namespace as the\nPacketCapture resource.\n\nSelector
+                  expressions follow this syntax:\n\n\tlabel == \"string_literal\"
+                  \ ->  comparison, e.g. my_label == \"foo bar\"\n\tlabel != \"string_literal\"
+                  \  ->  not equal; also matches if label is not present\n\tlabel
+                  in { \"a\", \"b\", \"c\", ... }  ->  true if the value of label
+                  X is one of \"a\", \"b\", \"c\"\n\tlabel not in { \"a\", \"b\",
+                  \"c\", ... }  ->  true if the value of label X is not one of \"a\",
+                  \"b\", \"c\"\n\thas(label_name)  -> True if that label is present\n\t!
+                  expr -> negation of expr\n\texpr && expr  -> Short-circuit and\n\texpr
+                  || expr  -> Short-circuit or\n\t( expr ) -> parens for grouping\n\tall()
+                  -> matches all endpoints.\n\tan empty selector will default to all\n\nLabel
+                  names are allowed to contain alphanumerics, -, _ and /. String literals
+                  are more permissive\nbut they do not support escape characters.\n\nExamples
+                  (with made-up labels):\n\n\ttype == \"webserver\" && deployment
+                  == \"prod\"\n\ttype in {\"frontend\", \"backend\"}\n\tdeployment
+                  != \"dev\"\n\t! has(label_name)"
                 type: string
               startTime:
-                description: Defines the start time from which this PacketCapture
-                  will capture packets. If omitted or the value is in the past, the
-                  capture will start immediately. If the value is changed to a future
-                  time, capture will stop immediately and restart at that time
+                description: |-
+                  Defines the start time from which this PacketCapture will capture packets.
+                  If omitted or the value is in the past, the capture will start immediately.
+                  If the value is changed to a future time, capture will stop immediately and restart at that time
                 format: date-time
                 type: string
             type: object
           status:
-            description: PacketCaptureStatus describes the files that have been captured,
-              for a given PacketCapture, on each node that generates packet capture
-              files
+            description: |-
+              PacketCaptureStatus describes the files that have been captured, for a given PacketCapture, on each node
+              that generates packet capture files
             properties:
               files:
                 items:
-                  description: PacketCaptureFile describes files generated by a PacketCapture.
-                    It describes the location of the packet capture files that is
-                    identified via a node, its directory and the file names generated.
+                  description: |-
+                    PacketCaptureFile describes files generated by a PacketCapture. It describes the location of the packet capture files
+                    that is identified via a node, its directory and the file names generated.
                   properties:
                     directory:
                       description: Directory represents the path inside the calico-node
                         container for the the generated files
                       type: string
                     fileNames:
-                      description: 'FileNames represents the name of the generated
-                        file for a PacketCapture ordered alphanumerically. The active
-                        packet capture file will be identified using the following
-                        schema: "{workload endpoint name}_{host network interface}.pcap"
-                        . Rotated capture files name will contain an index matching
-                        the rotation timestamp.'
+                      description: |-
+                        FileNames represents the name of the generated file for a PacketCapture ordered alphanumerically.
+                        The active packet capture file will be identified using the following schema:
+                        "{workload endpoint name}_{host network interface}.pcap" .
+                        Rotated capture files name will contain an index matching the rotation timestamp.
                       items:
                         type: string
                       type: array
@@ -145,9 +152,3 @@ spec:
         type: object
     served: true
     storage: true
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

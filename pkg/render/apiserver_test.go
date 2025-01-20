@@ -19,6 +19,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -364,6 +365,46 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Entry("default cluster domain", dns.DefaultClusterDomain),
 		Entry("custom cluster domain", "custom-domain.internal"),
 	)
+
+	It("should render log seveirty when provided", func() {
+		errorLog := operatorv1.LogSeverityError
+		debugLog := operatorv1.LogSeverityDebug
+		cfg.APIServer.Logging = &operatorv1.APIServerPodLogging{
+			APIServerLogging: &operatorv1.APIServerLogging{
+				LogSeverity: &errorLog,
+			},
+			QueryServerLogging: &operatorv1.QueryServerLogging{
+				LogSeverity: &debugLog,
+			},
+		}
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		deploy, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+
+		containers := deploy.Spec.Template.Spec.Containers
+		for _, container := range containers {
+			envs := container.Env
+			if strings.Contains(container.Name, "apiserver") {
+				for _, env := range envs {
+					if env.Name == "LOG_LEVEL" {
+						Expect(env.Value).To(Equal("error"))
+					}
+				}
+			} else if strings.Contains(container.Name, "queryserver") {
+				for _, env := range envs {
+					if env.Name == "LOGLEVEL" {
+						Expect(env.Value).To(Equal("debug"))
+					}
+				}
+			}
+		}
+		Expect(deploy.Spec.Template.Spec.Containers).NotTo(BeNil())
+		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-apiserver", "tigera-system")))
+
+	})
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift

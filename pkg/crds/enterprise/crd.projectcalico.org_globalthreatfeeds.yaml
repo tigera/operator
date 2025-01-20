@@ -2,8 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: (devel)
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.16.5
   name: globalthreatfeeds.crd.projectcalico.org
 spec:
   group: crd.projectcalico.org
@@ -20,14 +19,19 @@ spec:
       openAPIV3Schema:
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -117,15 +121,12 @@ spec:
                                       type: string
                                     name:
                                       default: ""
-                                      description: 'Name of the referent. This field
-                                        is effectively required, but due to backwards
-                                        compatibility is allowed to be empty. Instances
-                                        of this type with an empty value here are
-                                        almost certainly wrong. TODO: Add other useful
-                                        fields. apiVersion, kind, uid? More info:
-                                        https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                        TODO: Drop `kubebuilder:default` when controller-gen
-                                        doesn''t need it https://github.com/kubernetes-sigs/kubebuilder/issues/3896.'
+                                      description: |-
+                                        Name of the referent.
+                                        This field is effectively required, but due to backwards compatibility is
+                                        allowed to be empty. Instances of this type with an empty value here are
+                                        almost certainly wrong.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                                       type: string
                                     optional:
                                       description: Specify whether the ConfigMap or
@@ -134,6 +135,7 @@ spec:
                                   required:
                                   - key
                                   type: object
+                                  x-kubernetes-map-type: atomic
                                 secretKeyRef:
                                   description: Selects a key of a secret in the pod's
                                     namespace
@@ -144,15 +146,12 @@ spec:
                                       type: string
                                     name:
                                       default: ""
-                                      description: 'Name of the referent. This field
-                                        is effectively required, but due to backwards
-                                        compatibility is allowed to be empty. Instances
-                                        of this type with an empty value here are
-                                        almost certainly wrong. TODO: Add other useful
-                                        fields. apiVersion, kind, uid? More info:
-                                        https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
-                                        TODO: Drop `kubebuilder:default` when controller-gen
-                                        doesn''t need it https://github.com/kubernetes-sigs/kubebuilder/issues/3896.'
+                                      description: |-
+                                        Name of the referent.
+                                        This field is effectively required, but due to backwards compatibility is
+                                        allowed to be empty. Instances of this type with an empty value here are
+                                        almost certainly wrong.
+                                        More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                                       type: string
                                     optional:
                                       description: Specify whether the Secret or its
@@ -161,6 +160,7 @@ spec:
                                   required:
                                   - key
                                   type: object
+                                  x-kubernetes-map-type: atomic
                               type: object
                           required:
                           - name
@@ -203,9 +203,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

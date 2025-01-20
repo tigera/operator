@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -446,7 +446,7 @@ func (builder *voltronRouteConfigBuilder) mountSecretReference(name, key string)
 		builder.mountedSecrets[name] = struct{}{}
 	}
 
-	return fmt.Sprintf("%s/%s/%s", configMapFolder, name, key), nil
+	return fmt.Sprintf("%s/%s/%s", secretsFolder, name, key), nil
 }
 
 // VoltronRouteConfig contains everything needed to configure the voltron pod / container with routes via a mounted file.

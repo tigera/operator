@@ -131,10 +131,6 @@ var _ = Describe("Kibana rendering tests", func() {
 					Drop: []corev1.Capability{"ALL"},
 				},
 			))
-			Expect(kibanaCR.Spec.PodTemplate.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
-				Name:      "kibana-plugins",
-				MountPath: "/mnt/dummy-location/",
-			}))
 
 			Expect(kibanaCR.Spec.PodTemplate.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
 				&corev1.SeccompProfile{

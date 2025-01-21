@@ -147,6 +147,14 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "calico/goldmane"}}
+	ComponentCalicoGoldmane = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+
 	ComponentOperatorInit = Component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -171,5 +179,6 @@ var (
 		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,
 		ComponentCalicoCSIRegistrarFIPS,
+		ComponentCalicoGoldmane,
 	}
 )

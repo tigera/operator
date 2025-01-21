@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -129,6 +129,13 @@ var (
 		Image:    "calico/node-driver-registrar",
 		Registry: "",
 	}
+
+	ComponentCalicoGoldmane = Component{
+		Version:  "master",
+		Image:    "calico/goldmane",
+		Registry: "",
+	}
+
 	ComponentOperatorInit = Component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -153,5 +160,6 @@ var (
 		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,
 		ComponentCalicoCSIRegistrarFIPS,
+		ComponentCalicoGoldmane,
 	}
 )

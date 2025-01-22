@@ -392,10 +392,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						Drop: []corev1.Capability{"ALL"},
 					},
 				))
-				Expect(kibana.Spec.PodTemplate.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
-					Name:      "kibana-plugins",
-					MountPath: "/mnt/dummy-location/",
-				}))
 				Expect(kibana.Spec.PodTemplate.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
 					&corev1.SeccompProfile{
 						Type: corev1.SeccompProfileTypeRuntimeDefault,

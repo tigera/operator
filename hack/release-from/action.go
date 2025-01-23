@@ -33,25 +33,25 @@ func releaseFrom(ctx context.Context, c *cli.Command) error {
 	// get root directory of operator git repo
 	repoRootDir, err := runCommand("git", []string{"rev-parse", "--show-toplevel"}, nil)
 	if err != nil {
-		return fmt.Errorf("Error getting git root directory: %s", err)
+		return fmt.Errorf("error getting git root directory: %s", err)
 	}
 
 	// fetch config from the base version of the operator
 	if err := retrieveBaseVersionConfig(c.String(baseOperatorFlag.Name), repoRootDir); err != nil {
-		return fmt.Errorf("Error getting base version config: %s", err)
+		return fmt.Errorf("error getting base version config: %s", err)
 	}
 
 	// Apply new version overrides
 	calicoOverrides := c.StringSlice(exceptCalicoFlag.Name)
 	if len(calicoOverrides) > 0 {
 		if err := modifyComponentConfig(repoRootDir, calicoConfig, calicoOverrides); err != nil {
-			return fmt.Errorf("Error overriding calico config: %s", err)
+			return fmt.Errorf("error overriding calico config: %s", err)
 		}
 	}
 	enterpriseOverrides := c.StringSlice(exceptEnterpriseFlag.Name)
 	if len(enterpriseOverrides) > 0 {
 		if err := modifyComponentConfig(repoRootDir, enterpriseConfig, enterpriseOverrides); err != nil {
-			return fmt.Errorf("Error overriding calico config: %s", err)
+			return fmt.Errorf("error overriding calico config: %s", err)
 		}
 	}
 
@@ -59,7 +59,7 @@ func releaseFrom(ctx context.Context, c *cli.Command) error {
 	version := c.String(versionFlag.Name)
 	isReleaseVersion, err := isReleaseVersionFormat(version)
 	if err != nil {
-		return fmt.Errorf("Error determining if version is a release: %s", err)
+		return fmt.Errorf("error determining if version is a release: %s", err)
 	} else if isReleaseVersion {
 		return newOperator(repoRootDir, version, c.String(gitRemoteFlag.Name), c.Bool(publishFlag.Name))
 	}
@@ -71,7 +71,7 @@ func releaseFrom(ctx context.Context, c *cli.Command) error {
 func isReleaseVersionFormat(version string) (bool, error) {
 	releaseRegex, err := regexp.Compile(releaseFormat)
 	if err != nil {
-		return false, fmt.Errorf("Error compiling release regex: %s", err)
+		return false, fmt.Errorf("error compiling release regex: %s", err)
 	}
 	return releaseRegex.MatchString(version), nil
 }
@@ -81,20 +81,20 @@ func isReleaseVersionFormat(version string) (bool, error) {
 // Otherwise, it will only commit the changes to the git repo locally.
 func newOperator(dir, version, remote string, publish bool) error {
 	if _, err := runCommandInDir(dir, "git", []string{"add", "config/"}, nil); err != nil {
-		return fmt.Errorf("Error adding changes in git: %s", err)
+		return fmt.Errorf("error adding changes in git: %s", err)
 	}
 	if _, err := runCommandInDir(dir, "git", []string{"commit", "-m", fmt.Sprintf("Release %s", version)}, nil); err != nil {
-		return fmt.Errorf("Error committing changes in git: %s", err)
+		return fmt.Errorf("error committing changes in git: %s", err)
 	}
 	if _, err := runCommandInDir(dir, "git", []string{"tag", version}, nil); err != nil {
-		return fmt.Errorf("Error tagging release in git: %s", err)
+		return fmt.Errorf("error tagging release in git: %s", err)
 	}
 	if !publish {
 		logrus.Info("skip pushing tag to git for publishing release")
 		return nil
 	}
 	if _, err := runCommandInDir(dir, "git", []string{"push", remote, version}, nil); err != nil {
-		return fmt.Errorf("Error pushing tag in git: %s", err)
+		return fmt.Errorf("error pushing tag in git: %s", err)
 	}
 	logrus.Warn("Ensure that the changes are merged into the main branch as well.")
 	logrus.Info("Follow the release progress in CI.")
@@ -105,7 +105,7 @@ func newOperator(dir, version, remote string, publish bool) error {
 // if publish is true, it will also publish the operator to registry.
 func newHashreleaseOperator(dir, version, imageName, registry string, arches []string, publish bool) error {
 	if err := buildHashreleaseOperator(dir, version, imageName, registry, arches); err != nil {
-		return fmt.Errorf("Error building operator: %s", err)
+		return fmt.Errorf("error building operator: %s", err)
 	}
 	if !publish {
 		logrus.Info("skip publishing images to registry")
@@ -194,9 +194,9 @@ func modifyComponentConfig(repoRootDir, configFile string, updates []string) err
 	localFilePath := fmt.Sprintf("%s/%s", repoRootDir, configFile)
 	var root yaml.Node
 	if data, err := os.ReadFile(localFilePath); err != nil {
-		return fmt.Errorf("Error reading local file %s: %s", configFile, err)
+		return fmt.Errorf("error reading local file %s: %s", configFile, err)
 	} else if err = yaml.Unmarshal(data, &root); err != nil {
-		return fmt.Errorf("Error unmarshalling local file %s: %s", configFile, err)
+		return fmt.Errorf("error unmarshalling local file %s: %s", configFile, err)
 	}
 
 	for _, override := range updates {
@@ -204,7 +204,7 @@ func modifyComponentConfig(repoRootDir, configFile string, updates []string) err
 		component := parts[0]
 		version := parts[1]
 		if err := updateComponentVersion(&root, []string{"components", component, "version"}, version); err != nil {
-			return fmt.Errorf("Error updating component %s to %s: %s", component, version, err)
+			return fmt.Errorf("error updating component %s to %s: %s", component, version, err)
 		}
 	}
 
@@ -213,11 +213,13 @@ func modifyComponentConfig(repoRootDir, configFile string, updates []string) err
 	encoder := yaml.NewEncoder(&buf)
 	encoder.SetIndent(2)
 	if err := encoder.Encode(&root); err != nil {
-		return fmt.Errorf("Error encoding updated config: %s", err)
+		return fmt.Errorf("error encoding updated config: %s", err)
 	}
-	encoder.Close()
+	if err := encoder.Close(); err != nil {
+		return fmt.Errorf("error closing encoder: %s", err)
+	}
 	if err := os.WriteFile(localFilePath, buf.Bytes(), 0o644); err != nil {
-		return fmt.Errorf("Error overwriting local file %s: %s", configFile, err)
+		return fmt.Errorf("error overwriting local file %s: %s", configFile, err)
 	}
 	return nil
 }
@@ -264,7 +266,7 @@ func updateComponentVersion(node *yaml.Node, path []string, version string) erro
 func retrieveBaseVersionConfig(baseVersion, repoRootDir string) error {
 	gitHashOrTag, err := extractGitHashOrTag(baseVersion)
 	if err != nil {
-		return fmt.Errorf("Error extracting git hash or tag from %q: %s", baseVersion, err)
+		return fmt.Errorf("error extracting git hash or tag from %q: %s", baseVersion, err)
 	}
 
 	for _, configFilePath := range []string{calicoConfig, enterpriseConfig} {
@@ -277,7 +279,7 @@ func retrieveBaseVersionConfig(baseVersion, repoRootDir string) error {
 		}).Debug("Replacing local file with downloaded file")
 
 		if _, err := runCommand("curl", []string{"-L", "-o", localFilePath, url}, nil); err != nil {
-			return fmt.Errorf("Error downloading %s from %s: %s", configFilePath, url, err)
+			return fmt.Errorf("error downloading %s from %s: %s", configFilePath, url, err)
 		}
 	}
 	return nil
@@ -288,18 +290,18 @@ func retrieveBaseVersionConfig(baseVersion, repoRootDir string) error {
 func extractGitHashOrTag(baseVersion string) (string, error) {
 	isReleaseVersion, err := isReleaseVersionFormat(baseVersion)
 	if err != nil {
-		return "", fmt.Errorf("Error determining if version is a release: %s", err)
+		return "", fmt.Errorf("error determining if version is a release: %s", err)
 	}
 	if isReleaseVersion {
 		return baseVersion, nil
 	}
 	gitHashRegex, err := regexp.Compile(`g([0-9a-f]{12})`)
 	if err != nil {
-		return "", fmt.Errorf("Error compiling git hash regex: %s", err)
+		return "", fmt.Errorf("error compiling git hash regex: %s", err)
 	}
 	matches := gitHashRegex.FindStringSubmatch(baseVersion)
 	if len(matches) > 1 {
 		return matches[1], nil
 	}
-	return "", fmt.Errorf("Error finding git hash in base version")
+	return "", fmt.Errorf("error finding git hash in base version")
 }

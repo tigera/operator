@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import (
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -250,8 +251,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		})
 
 		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
-		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyGatewayImage).To(Equal("myregistry.io/envoyproxy/gateway:v1.1.2"))
-		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyRatelimitImage).To(Equal("myregistry.io/envoyproxy/ratelimit:26f28d78"))
+		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyGatewayImage).To(Equal("myregistry.io/tigera/envoy-gateway:" + components.ComponentGatewayAPIEnvoyGateway.Version))
+		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyRatelimitImage).To(Equal("myregistry.io/tigera/envoy-ratelimit:" + components.ComponentGatewayAPIEnvoyRatelimit.Version))
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/envoyproxy/envoy:distroless-v1.31.0"))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
@@ -282,7 +283,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(deploy.Spec.Template.Spec.Containers).To(ContainElement(And(
 			HaveField("Name", "envoy-gateway"),
-			HaveField("Image", "myregistry.io/envoyproxy/gateway:v1.1.2"),
+			HaveField("Image", "myregistry.io/tigera/envoy-gateway:"+components.ComponentGatewayAPIEnvoyGateway.Version),
 		)))
 		Expect(deploy.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
 
@@ -290,7 +291,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(job.Spec.Template.Spec.Containers).To(ContainElement(And(
 			HaveField("Name", "envoy-gateway-certgen"),
-			HaveField("Image", "myregistry.io/envoyproxy/gateway:v1.1.2"),
+			HaveField("Image", "myregistry.io/tigera/envoy-gateway:"+components.ComponentGatewayAPIEnvoyGateway.Version),
 		)))
 		Expect(job.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
 
@@ -306,8 +307,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayConfig.APIVersion).NotTo(Equal(""), fmt.Sprintf("gatewayConfig = %#v", *gatewayConfig))
 		Expect(gatewayConfig.Provider.Kubernetes.RateLimitDeployment).NotTo(BeNil())
 		Expect(gatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container).NotTo(BeNil())
-		Expect(*gatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container.Image).To(Equal("myregistry.io/envoyproxy/ratelimit:26f28d78"))
+		Expect(*gatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container.Image).To(Equal("myregistry.io/tigera/envoy-ratelimit:" + components.ComponentGatewayAPIEnvoyRatelimit.Version))
 		Expect(gatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
-		Expect(*gatewayConfig.Provider.Kubernetes.ShutdownManager.Image).To(Equal("myregistry.io/envoyproxy/gateway:v1.1.2"))
+		Expect(*gatewayConfig.Provider.Kubernetes.ShutdownManager.Image).To(Equal("myregistry.io/tigera/envoy-gateway:" + components.ComponentGatewayAPIEnvoyGateway.Version))
 	})
 })

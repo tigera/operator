@@ -38,13 +38,9 @@ var gitRemoteFlag = &cli.StringFlag{
 }
 
 var baseOperatorFlag = &cli.StringFlag{
-	Name:    "base-version",
-	Aliases: []string{"base"},
-	Usage: "The version of the operator to base this new version from. " +
-		"It is expected in the format vX.Y.Z for releases and " +
-		"for hashrelease, either vX.Y.Z-n-g<git-hash>-<hashrelease-name> (legacy) or " +
-		"vX.Y.Z-<dev-tag-suffix>-n-g<git-hash>-<product-hashrelease-version> (new) " +
-		"where product-hashrelease-version is in the format vA.B.C-<product-dev-tag-suffix>-u-g<product-git-hash>.",
+	Name:     "base-version",
+	Aliases:  []string{"base"},
+	Usage:    "The version of the operator to use as the base for this new version.",
 	Sources:  cli.EnvVars("OPERATOR_BASE_VERSION"),
 	Required: true,
 	Action: func(ctx context.Context, c *cli.Command, value string) error {
@@ -87,20 +83,15 @@ var versionFlag = &cli.StringFlag{
 }
 
 var exceptCalicoFlag = &cli.StringSliceFlag{
-	Name: "except-calico",
-	Usage: "A list of Calico images and the version to use for them. " +
-		"This should use the format based on the config/calico_versions.yaml file. " +
-		"e.g. --except-calico calico/cni:vX.Y.Z --except-calico csi-node-driver-registrar:vA.B.C-n-g<git-hash>",
+	Name:    "except-calico",
+	Usage:   "Calico image and version to update where the image name adheres with config/calico_versions.yaml file. Can be specified multiple times.",
 	Sources: cli.EnvVars("OS_IMAGES_VERSIONS"),
 	Action:  validateOverrides,
 }
 
 var exceptEnterpriseFlag = &cli.StringSliceFlag{
 	Name:    "except-calico-enterprise",
-	Aliases: []string{"except-enterprise", "except-calient"},
-	Usage: "A list of Enterprise images and the versions to use for them. " +
-		"This should use the format based on the config/enterprise_versions.yaml file. " +
-		"e.g. --except-calico-enterprise linseed:vX.Y.Z --except-calico-enterprise security-event-webhooks-processor:vA.B.C-n-g<git-hash>",
+	Usage:   "Enterprise image and version to update where image name adheres with config/enterprise_versions.yaml file. Can be specified multiple times.",
 	Sources: cli.EnvVars("EE_IMAGES_VERSIONS"),
 	Action: func(ctx context.Context, c *cli.Command, values []string) error {
 		if len(values) == 0 && len(c.StringSlice("except-calico")) == 0 {
@@ -125,7 +116,7 @@ var (
 	archFlag    = &cli.StringSliceFlag{
 		Name:    "architecture",
 		Aliases: []string{"arch"},
-		Usage:   "The architecture to use for the release. Repeat for multiple architectures.",
+		Usage:   "The architecture(s) for the release. Can be specified multiple times.",
 		Sources: cli.EnvVars("ARCHS"),
 		Value:   archOptions,
 		Action: func(ctx context.Context, c *cli.Command, values []string) error {
@@ -140,17 +131,15 @@ var (
 )
 
 var registryFlag = &cli.StringFlag{
-	Name: "registry",
-	Usage: "The registry to push the new operator to. " +
-		"This is only used when creating a new operator for hashreleases.",
+	Name:    "registry",
+	Usage:   "The registry to push the new operator to (ONLY for hashreleases operator).",
 	Sources: cli.EnvVars("REGISTRY"),
 	Value:   quayRegistry,
 }
 
 var imageFlag = &cli.StringFlag{
-	Name: "image",
-	Usage: "The image name to use for the new operator. " +
-		"This is only used when creating a new operator for hashreleases.",
+	Name:    "image",
+	Usage:   "The image name to use for the new operator (ONLY for hashreleases operator).",
 	Sources: cli.EnvVars("IMAGE_NAME"),
 	Value:   defaultImageName,
 }

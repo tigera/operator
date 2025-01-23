@@ -47,9 +47,9 @@ func main() {
 			}
 			// check if git repo is dirty
 			if version, err := gitVersion(); err != nil {
-				return ctx, fmt.Errorf("Error getting git version: %s", err)
+				return ctx, fmt.Errorf("error getting git version: %s", err)
 			} else if strings.Contains(version, "dirty") {
-				return ctx, fmt.Errorf("Git repo is dirty, please commit changes before releasing")
+				return ctx, fmt.Errorf("git repo is dirty, please commit changes before releasing")
 			}
 			return ctx, nil
 		},

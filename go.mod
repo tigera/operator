@@ -8,6 +8,7 @@ require (
 	github.com/aws/aws-sdk-go v1.55.5
 	github.com/cloudflare/cfssl v1.6.5
 	github.com/containernetworking/cni v1.2.3
+	github.com/corazawaf/coraza-coreruleset v0.0.0-20240226094324-415b1017abdc
 	github.com/elastic/cloud-on-k8s/v2 v2.14.0
 	github.com/envoyproxy/gateway v1.1.2
 	github.com/go-ldap/ldap v3.0.3+incompatible
@@ -24,8 +25,10 @@ require (
 	github.com/projectcalico/api v0.0.0-20240708202104-e3f70b269c2c
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.74.0
 	github.com/r3labs/diff/v2 v2.15.1
+	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	github.com/tigera/api v0.0.0-20230406222214-ca74195900cb
+	github.com/urfave/cli/v3 v3.0.0-beta1
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.28.0
 	golang.org/x/net v0.30.0
@@ -80,6 +83,7 @@ require (
 	github.com/joeshaw/multierror v0.0.0-20140124173710-69b34d4ec901 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/magefile/mage v1.14.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
@@ -120,14 +124,6 @@ require (
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 )
-
-require (
-	github.com/corazawaf/coraza-coreruleset v0.0.0-20240226094324-415b1017abdc
-	github.com/sirupsen/logrus v1.9.3
-	github.com/urfave/cli/v3 v3.0.0-beta1
-)
-
-require github.com/magefile/mage v1.14.0 // indirect
 
 replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM

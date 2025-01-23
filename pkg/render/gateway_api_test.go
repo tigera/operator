@@ -282,7 +282,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(deploy.Spec.Template.Spec.Containers).To(ContainElement(And(
 			HaveField("Name", "envoy-gateway"),
-			HaveField("Image", "myregistry.io/envoyproxy/gateway:v1.1.2"),
+			HaveField("Image", "myregistry.io/tigera/envoy-gateway:master"),
 		)))
 		Expect(deploy.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
 
@@ -290,7 +290,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(job.Spec.Template.Spec.Containers).To(ContainElement(And(
 			HaveField("Name", "envoy-gateway-certgen"),
-			HaveField("Image", "myregistry.io/envoyproxy/gateway:v1.1.2"),
+			HaveField("Image", "myregistry.io/tigera/envoy-gateway:master"),
 		)))
 		Expect(job.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
 

@@ -5,6 +5,9 @@ using a previously released operator version.
 
 The base operator version must reference either a tag or commit hash in `tigera/operator`
 
+The new operator version will be built from the current codebase
+with updates made to the image list based on the changes passed in.
+
 ## Installation
 
 To install `release-from`, use the following command:

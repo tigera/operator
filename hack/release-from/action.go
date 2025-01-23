@@ -104,6 +104,11 @@ func newOperator(dir, version, remote string, publish bool) error {
 // newHashreleaseOperator creates a new operator for a hashrelease.
 // if publish is true, it will also publish the operator to registry.
 func newHashreleaseOperator(dir, version, imageName, registry string, arches []string, publish bool) error {
+	defer func() {
+	if _, err := runCommandInDir(dir, "git", []string{"checkout", "config/"}, nil); err != nil {
+		logrus.WithError(err).Error("error reverting changes in config/")
+	}
+	}
 	if err := buildHashreleaseOperator(dir, version, imageName, registry, arches); err != nil {
 		return fmt.Errorf("error building operator: %s", err)
 	}

@@ -1,4 +1,4 @@
-// Copyright (c) 2022, 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022 - 2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,13 +31,24 @@ type Metadata struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
+// +kubebuilder:validation:Enum=Error;Warning;Info;Debug
 type LogLevel string
 
 const (
-	LogLevelTrace LogLevel = "Trace"
+	LogLevelError LogLevel = "Error"
+	LogLevelWarn  LogLevel = "Warn"
 	LogLevelInfo  LogLevel = "Info"
 	LogLevelDebug LogLevel = "Debug"
-	LogLevelWarn  LogLevel = "Warn"
-	LogLevelFatal LogLevel = "Fatal"
-	LogLevelError LogLevel = "Error"
+)
+
+// +kubebuilder:validation:Enum=Fatal;Error;Warn;Info;Debug;Trace
+type LogSeverity string
+
+const (
+	LogSeverityFatal LogSeverity = "Fatal"
+	LogSeverityError LogSeverity = "Error"
+	LogSeverityWarn  LogSeverity = "Warn"
+	LogSeverityInfo  LogSeverity = "Info"
+	LogSeverityDebug LogSeverity = "Debug"
+	LogSeverityTrace LogSeverity = "Trace"
 )

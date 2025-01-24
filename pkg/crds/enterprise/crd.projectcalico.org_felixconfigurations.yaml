@@ -563,15 +563,20 @@ spec:
                   the first packet traverses the policy rules. Client applications need to handle reconnection attempts if initial
                   connection attempts fail. This may be problematic for some applications or for very low DNS TTLs.
 
+                  Inline - Parses DNS response inline with DNS response packet processing within IPTables.
+                  This guarantees the DNS rules reflect any change immediately.
+                  This mode works for iptables only and matches the same mode for BPFDNSPolicyMode.
                   This setting is ignored on Windows and "NoDelay" is always used.
 
                   This setting is ignored by eBPF and BPFDNSPolicyMode is used instead.
 
+                  Inline policy mode is not supported in NFTables mode. Default mode in DelayDeniedPacket in case of NFTables.
                   [Default: DelayDeniedPacket]
                 enum:
                 - NoDelay
                 - DelayDeniedPacket
                 - DelayDNSResponse
+                - Inline
                 type: string
               dnsPolicyNfqueueID:
                 description: |-
@@ -1609,6 +1614,32 @@ spec:
                   VXLANVNI is the VXLAN VNI to use for VXLAN traffic.  You may need to change this if the default value is
                   in use on your system. [Default: 4096]
                 type: integer
+              wafEventLogsFileDirectory:
+                description: |-
+                  WAFEventLogsFileDirectory sets the directory where WAFEvent log files are stored.
+                  [Default: /var/log/calico/waf]
+                type: string
+              wafEventLogsFileEnabled:
+                description: |-
+                  WAFEventLogsFileEnabled controls logging WAFEvent logs to a file. If false no WAFEvent logging to file will occur.
+                  [Default: false]
+                type: boolean
+              wafEventLogsFileMaxFileSizeMB:
+                description: |-
+                  WAFEventLogsFileMaxFileSizeMB sets the max size in MB of WAFEvent log files before rotation.
+                  [Default: 100]
+                type: integer
+              wafEventLogsFileMaxFiles:
+                description: |-
+                  WAFEventLogsFileMaxFiles sets the number of WAFEvent log files to keep.
+                  [Default: 5]
+                type: integer
+              wafEventLogsFlushInterval:
+                description: |-
+                  WAFEventLogsFlushInterval configures the interval at which Felix exports WAFEvent logs.
+                  [Default: 15s]
+                pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
+                type: string
               windowsDnsCacheFile:
                 description: |-
                   The name of the file that Felix uses to preserve learnt DNS information when restarting. [Default:

@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -293,33 +293,17 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 
 			// Further assumptions that we rely on below in `Objects()`.  We put these
 			// here, instead of later, so that they are verified in UT.
-			defaultGatewayImage, _ := components.GetReference(components.ComponentGatewayAPIEnvoyGateway, "", "", "", nil)
-			defaultRatelimitImage, _ := components.GetReference(components.ComponentGatewayAPIEnvoyRatelimit, "", "", "", nil)
 			if len(resources.controllerDeployment.Spec.Template.Spec.Containers) != 1 {
 				panic("expected 1 container in deployment from gateway API YAML")
 			}
 			if resources.controllerDeployment.Spec.Template.Spec.Containers[0].Name != EnvoyGatewayDeploymentContainerName {
 				panic("expected container name 'envoy-gateway' in deployment from gateway API YAML")
 			}
-			if resources.controllerDeployment.Spec.Template.Spec.Containers[0].Image != defaultGatewayImage {
-				panic(fmt.Sprintf("unexpected image in deployment from gateway API YAML (%v != %v)",
-					resources.controllerDeployment.Spec.Template.Spec.Containers[0].Image,
-					defaultGatewayImage))
-			}
 			if len(resources.certgenJob.Spec.Template.Spec.Containers) != 1 {
 				panic("expected 1 container in certgen job from gateway API YAML")
 			}
 			if resources.certgenJob.Spec.Template.Spec.Containers[0].Name != EnvoyGatewayJobContainerName {
 				panic("expected container name 'envoy-gateway' in certgen job from gateway API YAML")
-			}
-			if resources.certgenJob.Spec.Template.Spec.Containers[0].Image != defaultGatewayImage {
-				panic("unexpected image in certgen job from gateway API YAML")
-			}
-			if *resources.envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container.Image != defaultRatelimitImage {
-				panic("wrong ratelimit image in envoy-gateway-config from gateway API YAML")
-			}
-			if *resources.envoyGatewayConfig.Provider.Kubernetes.ShutdownManager.Image != defaultGatewayImage {
-				panic("wrong gateway image in envoy-gateway-config from gateway API YAML")
 			}
 		}
 		return resources

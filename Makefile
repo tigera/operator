@@ -567,6 +567,7 @@ release-publish-images: release-prereqs release-check-image-exists
 release-github: hack/bin/gh release-notes
 	@echo "Creating github release for $(VERSION)"
 	hack/bin/gh release create $(VERSION) --title $(VERSION) --draft --notes-file $(VERSION)-release-notes.md
+	@echo "$(VERSION) GitHub release created in draft state. Please review and publish: https://github.com/tigera/operator/releases/tag/$(VERSION) ."
 
 GITHUB_CLI_VERSION?=2.62.0
 hack/bin/gh:
@@ -575,6 +576,15 @@ hack/bin/gh:
 	tar -zxvf hack/bin/gh.tgz -C hack/bin/ gh_$(GITHUB_CLI_VERSION)_linux_amd64/bin/gh --strip-components=2
 	chmod +x $@
 	rm hack/bin/gh.tgz
+
+hack/bin/release-from: $(shell find ./hack/release-from -type f)
+	mkdir -p hack/bin
+	$(CONTAINERIZED) $(CALICO_BUILD) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	go build -buildvcs=false -o hack/bin/release-from ./hack/release-from'
+
+release-from: hack/bin/release-from var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
+	hack/bin/release-from
 
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:

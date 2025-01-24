@@ -310,9 +310,9 @@ var (
 	}
 
 	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:  "v1.1.2",
-		Image:    "envoyproxy/gateway",
-		Registry: "docker.io/",
+		Version:  "release-calient-v3.21-1",
+		Image:    "tigera/envoy-gateway",
+		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyProxy = Component{
@@ -322,9 +322,9 @@ var (
 	}
 
 	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:  "26f28d78",
-		Image:    "envoyproxy/ratelimit",
-		Registry: "docker.io/",
+		Version:  "release-calient-v3.21-1",
+		Image:    "tigera/envoy-ratelimit",
+		Registry: "",
 	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.

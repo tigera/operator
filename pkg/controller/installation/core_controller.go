@@ -1803,7 +1803,12 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		// Calico-node daemonset is not present. This is a fresh install in eBPF mode.
 		// Set the felix config.
 		if install.Spec.BPFEnabled() {
-			setBPFEnabledOnFelixConfiguration(fc, true)
+			err = setBPFEnabledOnFelixConfiguration(fc, true)
+			if err != nil {
+				reqLogger.Error(err, "Unable to enable eBPF data plane")
+				return false, err
+			}
+			updated = true
 		}
 	} else {
 		bpfEnabledOnDaemonsetWithEnvVar, err := bpfEnabledOnDaemonsetWithEnvVar(ds)

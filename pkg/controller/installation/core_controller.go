@@ -1805,7 +1805,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		if install.Spec.BPFEnabled() {
 			err = setBPFEnabledOnFelixConfiguration(fc, true)
 			if err != nil {
-				reqLogger.Error(err, "Unable to enable eBPF data plane")
+				reqLogger.Error(err, "Unable to enable eBPF data plane with a fresh install")
 				return false, err
 			}
 			updated = true

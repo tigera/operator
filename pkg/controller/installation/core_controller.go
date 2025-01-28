@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1792,13 +1792,21 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	// FelixConfiguration has the correct value set.
 
 	// If calico-node daemonset exists, we need to check the ENV VAR and set FelixConfiguration accordingly.
-	// Otherwise, just move on.
+	// Otherwise, this is a fresh install in eBPF mode, set the felix config.
 	ds := &appsv1.DaemonSet{}
 	err := r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, ds)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			reqLogger.Error(err, "An error occurred when getting the Daemonset resource")
 			return false, err
+		}
+		if install.Spec.BPFEnabled() {
+			err = setBPFEnabledOnFelixConfiguration(fc, true)
+			if err != nil {
+				reqLogger.Error(err, "Unable to enable eBPF data plane with a fresh install")
+				return false, err
+			}
+			updated = true
 		}
 	} else {
 		bpfEnabledOnDaemonsetWithEnvVar, err := bpfEnabledOnDaemonsetWithEnvVar(ds)

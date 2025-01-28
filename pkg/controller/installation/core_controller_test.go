@@ -1010,6 +1010,23 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 		})
 
+		It("should set BPFEnabled to true on FelixConfiguration on a fresh install in BPF Mode", func() {
+			network := operator.LinuxDataplaneBPF
+			fc := &crdv1.FelixConfiguration{}
+			logr := log.WithValues()
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			cr.Spec.CNI = &operator.CNISpec{}
+			updated, err := r.setDefaultsOnFelixConfiguration(ctx, cr, fc, logr)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(updated).To(BeTrue())
+
+			// Should set correct annoation and BPFEnabled field.
+			Expect(fc.Annotations).NotTo(BeNil())
+			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
+		})
+
 		It("should set BPFEnabled to false on FelixConfiguration if BPF is disabled on installation", func() {
 			createNodeDaemonSet()
 

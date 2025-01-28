@@ -1792,7 +1792,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	// FelixConfiguration has the correct value set.
 
 	// If calico-node daemonset exists, we need to check the ENV VAR and set FelixConfiguration accordingly.
-	// Otherwise, just move on.
+	// Otherwise, this is a fresh install in eBPF mode, set the felix config.
 	ds := &appsv1.DaemonSet{}
 	err := r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, ds)
 	if err != nil {
@@ -1800,8 +1800,6 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 			reqLogger.Error(err, "An error occurred when getting the Daemonset resource")
 			return false, err
 		}
-		// Calico-node daemonset is not present. This is a fresh install in eBPF mode.
-		// Set the felix config.
 		if install.Spec.BPFEnabled() {
 			err = setBPFEnabledOnFelixConfiguration(fc, true)
 			if err != nil {

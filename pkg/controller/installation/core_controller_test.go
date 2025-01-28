@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1002,6 +1002,23 @@ var _ = Describe("Testing core-controller installation", func() {
 			fc := &crdv1.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
+
+			// Should set correct annoation and BPFEnabled field.
+			Expect(fc.Annotations).NotTo(BeNil())
+			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
+			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
+		})
+
+		It("should set BPFEnabled to true on FelixConfiguration on a fresh install in BPF Mode", func() {
+			network := operator.LinuxDataplaneBPF
+			fc := &crdv1.FelixConfiguration{}
+			logr := log.WithValues()
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			cr.Spec.CNI = &operator.CNISpec{}
+			updated, err := r.setDefaultsOnFelixConfiguration(ctx, cr, fc, logr)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(updated).To(BeTrue())
 
 			// Should set correct annoation and BPFEnabled field.
 			Expect(fc.Annotations).NotTo(BeNil())

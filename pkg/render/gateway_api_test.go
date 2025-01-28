@@ -253,7 +253,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyGatewayImage).To(Equal("myregistry.io/tigera/envoy-gateway:" + components.ComponentGatewayAPIEnvoyGateway.Version))
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyRatelimitImage).To(Equal("myregistry.io/tigera/envoy-ratelimit:" + components.ComponentGatewayAPIEnvoyRatelimit.Version))
-		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/envoyproxy/envoy:distroless-v1.31.0"))
+		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
 		Expect(objsToDelete).To(HaveLen(0))
@@ -297,7 +297,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "envoy-proxy-config", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(*proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Image).To(Equal("myregistry.io/envoyproxy/envoy:distroless-v1.31.0"))
+		Expect(*proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Image).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
 
 		gatewayCM, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, "envoy-gateway-config", "tigera-gateway")

@@ -1012,13 +1012,14 @@ var _ = Describe("Testing core-controller installation", func() {
 
 		It("should set BPFEnabled to true on FelixConfiguration on a fresh install in BPF Mode", func() {
 			network := operator.LinuxDataplaneBPF
-			fc := &crdv1.FelixConfiguration{}
-			logr := log.WithValues()
 			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
-			cr.Spec.CNI = &operator.CNISpec{}
-			updated, err := r.setDefaultsOnFelixConfiguration(ctx, cr, fc, logr)
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(updated).To(BeTrue())
+
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
 
 			// Should set correct annoation and BPFEnabled field.
 			Expect(fc.Annotations).NotTo(BeNil())

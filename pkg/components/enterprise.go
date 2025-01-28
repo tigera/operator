@@ -316,9 +316,9 @@ var (
 	}
 
 	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:  "distroless-v1.31.0",
-		Image:    "envoyproxy/envoy",
-		Registry: "docker.io/",
+		Version:  "release-calient-v3.21-1",
+		Image:    "tigera/envoy-proxy",
+		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyRatelimit = Component{

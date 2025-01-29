@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -211,7 +211,7 @@ var KubeAPIServerServiceSelectorEntityRule = v3.EntityRule{
 // Helper creates a helper for building network policies for multi-tenant capable components.
 // It takes two arguments:
 // - mt: true if running in multi-tenant mode, false otherwise.
-// - ns: The tenant's namespce.
+// - ns: The tenant's namespace.
 func Helper(mt bool, ns string) *NetworkPolicyHelper {
 	return &NetworkPolicyHelper{
 		multiTenant: mt,

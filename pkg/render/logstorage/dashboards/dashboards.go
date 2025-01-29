@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,10 +41,12 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/version"
 )
 
 var (
-	Name                     = "dashboards-installer"
+	Name                     = fmt.Sprintf("dashboards-installer-%s", strings.ReplaceAll(version.VERSION, ".", "-"))
+	ServiceAccountName       = "dashboards-installer"
 	ElasticCredentialsSecret = "tigera-ee-dashboards-installer-elasticsearch-user-secret"
 	PolicyName               = networkpolicy.TigeraComponentPolicyPrefix + Name
 )
@@ -281,7 +283,7 @@ func (d *dashboards) Job() *batchv1.Job {
 				},
 			},
 			Volumes:            volumes,
-			ServiceAccountName: Name,
+			ServiceAccountName: ServiceAccountName,
 		},
 	}, d.cfg.Credentials).(*corev1.PodTemplateSpec)
 

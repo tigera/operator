@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -78,7 +78,7 @@ type NamespaceMigration interface {
 type CoreNamespaceMigration struct {
 	client            kubernetes.Interface
 	informer          cache.Controller
-	indexer           cache.Indexer
+	indexer           cache.Store
 	stopCh            chan struct{}
 	migrationComplete bool
 }
@@ -137,7 +137,13 @@ func NewCoreNamespaceMigration(cfg *rest.Config) (NamespaceMigration, error) {
 	}
 
 	// Informer handles managing the watch and signals us when nodes are added.
-	migration.indexer, migration.informer = cache.NewIndexerInformer(listWatcher, &v1.Node{}, 0, handlers, cache.Indexers{})
+	migration.indexer, migration.informer = cache.NewInformerWithOptions(cache.InformerOptions{
+		ListerWatcher: listWatcher,
+		ObjectType:    &v1.Node{},
+		ResyncPeriod:  0,
+		Handler:       handlers,
+		Indexers:      cache.Indexers{},
+	})
 
 	migration.stopCh = make(chan struct{})
 

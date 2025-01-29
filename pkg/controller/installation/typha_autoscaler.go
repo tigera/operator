@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ type typhaAutoscaler struct {
 	isDegradedChan    chan chan bool
 	nodeIndexInformer cache.SharedIndexInformer
 	typhaInformer     cache.Controller
-	typhaIndexer      cache.Indexer
+	typhaIndexer      cache.Store
 
 	// Number of currently running replicas.
 	activeReplicas int32
@@ -93,7 +93,13 @@ func newTyphaAutoscaler(cs kubernetes.Interface, nodeIndexInformer cache.SharedI
 			}
 		},
 	}
-	ta.typhaIndexer, ta.typhaInformer = cache.NewIndexerInformer(typhaListWatch, &appsv1.Deployment{}, 0, typhaHandlers, cache.Indexers{})
+	ta.typhaIndexer, ta.typhaInformer = cache.NewInformerWithOptions(cache.InformerOptions{
+		ListerWatcher: typhaListWatch,
+		ObjectType:    &appsv1.Deployment{},
+		ResyncPeriod:  0,
+		Handler:       typhaHandlers,
+		Indexers:      cache.Indexers{},
+	})
 
 	for _, option := range options {
 		option(ta)

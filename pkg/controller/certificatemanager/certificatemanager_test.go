@@ -78,28 +78,13 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		legacyBYOSecret          *corev1.Secret
 		legacyWithClientKeyUsage *corev1.Secret
 	)
-	BeforeEach(func() {
-		// Create a Kubernetes client.
-		scheme = k8sruntime.NewScheme()
-		err := apis.AddToScheme(scheme)
-		Expect(err).NotTo(HaveOccurred())
+	// Configure certs to match legacy operator-generated cert extensions - i.e., only valid for use as a server certificate.
+	legacyOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth}
+	modernOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth, tls.SetClientAuth}
 
-		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-
-		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
-
-		installation = &operatorv1.InstallationSpec{}
-		certificateManager, err = certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
-		Expect(err).NotTo(HaveOccurred())
-		keyPair, err := certificateManager.GetOrCreateKeyPair(cli, "temp", appNs, appDNSNames)
-		Expect(err).NotTo(HaveOccurred())
-		cm = &operatorv1.CertificateManagement{CACert: keyPair.GetCertificatePEM()}
-
-		// Configure certs to match legacy operator-generated cert extensions - i.e., only valid for use as a server certificate.
-		legacyOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth}
-		modernOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth, tls.SetClientAuth}
+	// Precompute expensive operations once.
+	BeforeSuite(func() {
+		var err error
 
 		certkeyusage.SetCertKeyUsage(legacySecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
 		// Create a legacy secret (how certs were before v1.24) with non-standardized legacy key and cert name, and no CA.
@@ -126,6 +111,30 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		Expect(err).NotTo(HaveOccurred())
 		expiredLegacySecret, err = secret.CreateTLSSecret(legacyCryptoCA, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, -time.Hour, legacyOpts, appSecretName)
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	BeforeEach(func() {
+		for _, secret := range []*corev1.Secret{legacySecret, byoSecret, legacyWithClientKeyUsage, legacyBYOSecret, expiredBYOSecret, expiredLegacySecret} {
+			// Clean up secret state.
+			secret.ResourceVersion = ""
+		}
+		// Create a Kubernetes client.
+		scheme = k8sruntime.NewScheme()
+		err := apis.AddToScheme(scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+
+		installation = &operatorv1.InstallationSpec{}
+		certificateManager, err = certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		keyPair, err := certificateManager.GetOrCreateKeyPair(cli, "temp", appNs, appDNSNames)
+		Expect(err).NotTo(HaveOccurred())
+		cm = &operatorv1.CertificateManagement{CACert: keyPair.GetCertificatePEM()}
 
 		ca, err := crypto.GetCAFromBytes(certificateManager.KeyPair().GetCertificatePEM(), certificateManager.KeyPair().Secret("").Data[corev1.TLSPrivateKeyKey])
 		Expect(err).NotTo(HaveOccurred())

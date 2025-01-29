@@ -45,7 +45,9 @@ import (
 )
 
 var (
-	Name                     = fmt.Sprintf("dashboards-installer-%s", strings.ReplaceAll(version.VERSION, ".", "-"))
+	// Take OperatorVersion up to max dev image length. In production "v1.36.2" is expected
+	OperatorVersion          = strings.ReplaceAll(version.VERSION, ".", "-")[:len("v1.36.0-1-dev-281-g9558bdac82b")]
+	Name                     = fmt.Sprintf("dashboards-installer-%s", OperatorVersion)
 	ServiceAccountName       = "dashboards-installer"
 	ElasticCredentialsSecret = "tigera-ee-dashboards-installer-elasticsearch-user-secret"
 	PolicyName               = networkpolicy.TigeraComponentPolicyPrefix + Name

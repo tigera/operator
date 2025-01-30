@@ -170,7 +170,7 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "security-event-webhooks-processor" }}
+{{ with index .Components "webhooks-processor" }}
 	ComponentSecurityEventWebhooksProcessor = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",

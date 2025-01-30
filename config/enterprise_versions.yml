@@ -46,12 +46,12 @@ components:
     image: tigera/dex
     version: master
   eck-kibana:
-    version: 8.16.1
+    version: 8.17.1
   kibana:
     image: tigera/kibana
     version: master
   eck-elasticsearch:
-    version: 8.16.1
+    version: 8.17.1
   elasticsearch:
     image: tigera/elasticsearch
     version: master

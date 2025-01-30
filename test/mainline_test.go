@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
+	rconfig "sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
@@ -314,6 +315,7 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 	Expect(err).NotTo(HaveOccurred())
 
 	// Create a manager to use in the tests.
+	skipNameValidation := true
 	mgr, err := manager.New(cfg, manager.Options{
 		Metrics: server.Options{
 			BindAddress: "0",
@@ -326,6 +328,9 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 		// was not updating and tests were failing as a result of looking at stale cluster state
 		NewClient: newNonCachingClient,
 		Client:    client.Options{},
+		Controller: rconfig.Controller{
+			SkipNameValidation: &skipNameValidation,
+		},
 	})
 	Expect(err).NotTo(HaveOccurred())
 

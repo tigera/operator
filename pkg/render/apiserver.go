@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -618,6 +618,9 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			Resources: []string{
 				"globalnetworkpolicies",
 				"networkpolicies",
+				"stagedkubernetesnetworkpolicies",
+				"stagednetworkpolicies",
+				"stagedglobalnetworkpolicies",
 				"caliconodestatuses",
 				"clusterinformations",
 				"hostendpoints",
@@ -1399,9 +1402,6 @@ func (c *apiServerComponent) tigeraApiServerClusterRole() *rbacv1.ClusterRole {
 			// Calico Enterprise backing storage.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{
-				"stagedkubernetesnetworkpolicies",
-				"stagednetworkpolicies",
-				"stagedglobalnetworkpolicies",
 				"licensekeys",
 				"alertexceptions",
 				"globalalerts",

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -534,9 +534,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"licensekeys",
 					"packetcaptures",
 					"remoteclusterconfigurations",
-					"stagedglobalnetworkpolicies",
-					"stagedkubernetesnetworkpolicies",
-					"stagednetworkpolicies",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},

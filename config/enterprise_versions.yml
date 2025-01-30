@@ -64,7 +64,7 @@ components:
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
     version: release-calient-v3.21-1
-  security-event-webhooks-processor:
+  webhooks-processor:
     image: tigera/webhooks-processor
     version: release-calient-v3.21-1
   compliance-controller:

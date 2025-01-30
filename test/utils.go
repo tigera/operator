@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -299,32 +299,32 @@ func (o *ObjectTrackerWithCalls) CallCount(gvr schema.GroupVersionResource, call
 	return o.callsByGVR[gvr][call]
 }
 
-func (o *ObjectTrackerWithCalls) Get(gvr schema.GroupVersionResource, ns, name string) (runtime.Object, error) {
+func (o *ObjectTrackerWithCalls) Get(gvr schema.GroupVersionResource, ns, name string, _ ...metav1.GetOptions) (runtime.Object, error) {
 	o.inc(gvr, ObjectTrackerCallGet)
 	return o.ObjectTracker.Get(gvr, ns, name)
 }
 
-func (o *ObjectTrackerWithCalls) Create(gvr schema.GroupVersionResource, obj runtime.Object, ns string) error {
+func (o *ObjectTrackerWithCalls) Create(gvr schema.GroupVersionResource, obj runtime.Object, ns string, _ ...metav1.CreateOptions) error {
 	o.inc(gvr, ObjectTrackerCallCreate)
 	return o.ObjectTracker.Create(gvr, obj, ns)
 }
 
-func (o *ObjectTrackerWithCalls) Update(gvr schema.GroupVersionResource, obj runtime.Object, ns string) error {
+func (o *ObjectTrackerWithCalls) Update(gvr schema.GroupVersionResource, obj runtime.Object, ns string, _ ...metav1.UpdateOptions) error {
 	o.inc(gvr, ObjectTrackerCallUpdate)
 	return o.ObjectTracker.Update(gvr, obj, ns)
 }
 
-func (o *ObjectTrackerWithCalls) List(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, ns string) (runtime.Object, error) {
+func (o *ObjectTrackerWithCalls) List(gvr schema.GroupVersionResource, gvk schema.GroupVersionKind, ns string, _ ...metav1.ListOptions) (runtime.Object, error) {
 	o.inc(gvr, ObjectTrackerCallList)
 	return o.ObjectTracker.List(gvr, gvk, ns)
 }
 
-func (o *ObjectTrackerWithCalls) Delete(gvr schema.GroupVersionResource, ns, name string) error {
+func (o *ObjectTrackerWithCalls) Delete(gvr schema.GroupVersionResource, ns, name string, _ ...metav1.DeleteOptions) error {
 	o.inc(gvr, ObjectTrackerCallDelete)
 	return o.ObjectTracker.Delete(gvr, ns, name)
 }
 
-func (o *ObjectTrackerWithCalls) Watch(gvr schema.GroupVersionResource, ns string) (watch.Interface, error) {
+func (o *ObjectTrackerWithCalls) Watch(gvr schema.GroupVersionResource, ns string, _ ...metav1.ListOptions) (watch.Interface, error) {
 	o.inc(gvr, ObjectTrackerCallWatch)
 	return o.ObjectTracker.Watch(gvr, ns)
 }

@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.14.0
+    controller-gen.kubebuilder.io/version: v0.16.5
   name: compliances.operator.tigera.io
 spec:
   group: operator.tigera.io
@@ -96,6 +96,12 @@ spec:
                                                   the Pod where this field is used. It makes that resource available
                                                   inside a container.
                                                 type: string
+                                              request:
+                                                description: |-
+                                                  Request is the name chosen for a request in the referenced claim.
+                                                  If empty, everything from the claim is made available, otherwise
+                                                  only the result of this request.
+                                                type: string
                                             required:
                                             - name
                                             type: object
@@ -170,6 +176,12 @@ spec:
                                                   Name must match the name of one entry in pod.spec.resourceClaims of
                                                   the Pod where this field is used. It makes that resource available
                                                   inside a container.
+                                                type: string
+                                              request:
+                                                description: |-
+                                                  Request is the name chosen for a request in the referenced claim.
+                                                  If empty, everything from the claim is made available, otherwise
+                                                  only the result of this request.
                                                 type: string
                                             required:
                                             - name
@@ -266,6 +278,12 @@ spec:
                                                   the Pod where this field is used. It makes that resource available
                                                   inside a container.
                                                 type: string
+                                              request:
+                                                description: |-
+                                                  Request is the name chosen for a request in the referenced claim.
+                                                  If empty, everything from the claim is made available, otherwise
+                                                  only the result of this request.
+                                                type: string
                                             required:
                                             - name
                                             type: object
@@ -340,6 +358,12 @@ spec:
                                                   Name must match the name of one entry in pod.spec.resourceClaims of
                                                   the Pod where this field is used. It makes that resource available
                                                   inside a container.
+                                                type: string
+                                              request:
+                                                description: |-
+                                                  Request is the name chosen for a request in the referenced claim.
+                                                  If empty, everything from the claim is made available, otherwise
+                                                  only the result of this request.
                                                 type: string
                                             required:
                                             - name
@@ -432,6 +456,12 @@ spec:
                                               the Pod where this field is used. It makes that resource available
                                               inside a container.
                                             type: string
+                                          request:
+                                            description: |-
+                                              Request is the name chosen for a request in the referenced claim.
+                                              If empty, everything from the claim is made available, otherwise
+                                              only the result of this request.
+                                            type: string
                                         required:
                                         - name
                                         type: object
@@ -506,6 +536,12 @@ spec:
                                               Name must match the name of one entry in pod.spec.resourceClaims of
                                               the Pod where this field is used. It makes that resource available
                                               inside a container.
+                                            type: string
+                                          request:
+                                            description: |-
+                                              Request is the name chosen for a request in the referenced claim.
+                                              If empty, everything from the claim is made available, otherwise
+                                              only the result of this request.
                                             type: string
                                         required:
                                         - name
@@ -601,6 +637,12 @@ spec:
                                                   the Pod where this field is used. It makes that resource available
                                                   inside a container.
                                                 type: string
+                                              request:
+                                                description: |-
+                                                  Request is the name chosen for a request in the referenced claim.
+                                                  If empty, everything from the claim is made available, otherwise
+                                                  only the result of this request.
+                                                type: string
                                             required:
                                             - name
                                             type: object
@@ -675,6 +717,12 @@ spec:
                                                   Name must match the name of one entry in pod.spec.resourceClaims of
                                                   the Pod where this field is used. It makes that resource available
                                                   inside a container.
+                                                type: string
+                                              request:
+                                                description: |-
+                                                  Request is the name chosen for a request in the referenced claim.
+                                                  If empty, everything from the claim is made available, otherwise
+                                                  only the result of this request.
                                                 type: string
                                             required:
                                             - name
@@ -771,6 +819,12 @@ spec:
                                                   the Pod where this field is used. It makes that resource available
                                                   inside a container.
                                                 type: string
+                                              request:
+                                                description: |-
+                                                  Request is the name chosen for a request in the referenced claim.
+                                                  If empty, everything from the claim is made available, otherwise
+                                                  only the result of this request.
+                                                type: string
                                             required:
                                             - name
                                             type: object
@@ -846,6 +900,12 @@ spec:
                                                   the Pod where this field is used. It makes that resource available
                                                   inside a container.
                                                 type: string
+                                              request:
+                                                description: |-
+                                                  Request is the name chosen for a request in the referenced claim.
+                                                  If empty, everything from the claim is made available, otherwise
+                                                  only the result of this request.
+                                                type: string
                                             required:
                                             - name
                                             type: object
@@ -895,16 +955,8 @@ spec:
                   Conditions represents the latest observed set of conditions for the component. A component may be one or more of
                   Ready, Progressing, Degraded or other customer types.
                 items:
-                  description: "Condition contains details for one aspect of the current
-                    state of this API Resource.\n---\nThis struct is intended for
-                    direct use as an array at the field path .status.conditions.  For
-                    example,\n\n\n\ttype FooStatus struct{\n\t    // Represents the
-                    observations of a foo's current state.\n\t    // Known .status.conditions.type
-                    are: \"Available\", \"Progressing\", and \"Degraded\"\n\t    //
-                    +patchMergeKey=type\n\t    // +patchStrategy=merge\n\t    // +listType=map\n\t
-                    \   // +listMapKey=type\n\t    Conditions []metav1.Condition `json:\"conditions,omitempty\"
-                    patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"`\n\n\n\t
-                    \   // other fields\n\t}"
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
                   properties:
                     lastTransitionTime:
                       description: |-
@@ -945,12 +997,7 @@ spec:
                       - Unknown
                       type: string
                     type:
-                      description: |-
-                        type of condition in CamelCase or in foo.example.com/CamelCase.
-                        ---
-                        Many .condition.type values are consistent across resources like Available, but because arbitrary conditions can be
-                        useful (see .node.status.conditions), the ability to deconflict is important.
-                        The regex it matches is (dns1123SubdomainFmt/)?(qualifiedNameFmt)
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
                       maxLength: 316
                       pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
                       type: string

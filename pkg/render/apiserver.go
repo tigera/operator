@@ -620,6 +620,9 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			Resources: []string{
 				"globalnetworkpolicies",
 				"networkpolicies",
+				"stagedkubernetesnetworkpolicies",
+				"stagednetworkpolicies",
+				"stagedglobalnetworkpolicies",
 				"caliconodestatuses",
 				"clusterinformations",
 				"hostendpoints",
@@ -1421,9 +1424,6 @@ func (c *apiServerComponent) tigeraApiServerClusterRole() *rbacv1.ClusterRole {
 			// Calico Enterprise backing storage.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{
-				"stagedkubernetesnetworkpolicies",
-				"stagednetworkpolicies",
-				"stagedglobalnetworkpolicies",
 				"licensekeys",
 				"alertexceptions",
 				"globalalerts",

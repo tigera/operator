@@ -233,7 +233,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = component{
-		Version:  "v0.25.0",
+		Version:  "v0.28.0",
 		Registry: "",
 	}
 

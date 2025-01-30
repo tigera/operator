@@ -64,7 +64,7 @@ components:
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
     version: master
-  security-event-webhooks-processor:
+  webhooks-processor:
     image: tigera/webhooks-processor
     version: master
   compliance-controller:

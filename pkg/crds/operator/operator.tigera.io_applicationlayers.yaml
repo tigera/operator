@@ -46,6 +46,16 @@ spec:
                 - Enabled
                 - Disabled
                 type: string
+              deploymentMode:
+                description: |-
+                  DeploymentMode controls the deployment mode of the L7LogCollector.
+                  When set to ServiceDeployment, the L7LogCollector will be deployed as a service and deployment.
+                  When set to DaemonSetSocket, the L7LogCollector will be deployed as a daemonset listening to a socket with predetermined hostpath path.
+                  When not set, the default value is DaemonSetSocket.
+                enum:
+                - ServiceDeployment
+                - DaemonSetSocket
+                type: string
               envoy:
                 description: User-configurable settings for the Envoy proxy.
                 properties:
@@ -261,6 +271,12 @@ spec:
                     format: int64
                     type: integer
                 type: object
+              serviceDeploymentReplicas:
+                description: |-
+                  ServiceDeploymentReplicas controls the number of replicas for the L7LogCollector service deployment.
+                  Only works for DeploymentMode=ServiceDeployment.
+                format: int32
+                type: integer
               sidecarInjection:
                 description: |-
                   SidecarInjection controls whether or not sidecar injection is enabled for the cluster.

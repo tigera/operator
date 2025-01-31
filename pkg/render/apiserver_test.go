@@ -1370,9 +1370,10 @@ var (
 			Verbs:     []string{"list"},
 		},
 		{
-			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
-			Verbs:     []string{"get"},
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"coreruleset-default"},
+			Verbs:         []string{"get"},
 		},
 		{
 			APIGroups: []string{""},
@@ -1524,9 +1525,10 @@ var (
 			Verbs:     []string{"list"},
 		},
 		{
-			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
-			Verbs:     []string{"get"},
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"coreruleset-default"},
+			Verbs:         []string{"get"},
 		},
 		{
 			APIGroups: []string{""},

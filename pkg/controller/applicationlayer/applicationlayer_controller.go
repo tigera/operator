@@ -281,6 +281,8 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		PerHostLogsEnabled:          r.isLogsCollectionEnabled(&instance.Spec),
 		PerHostALPEnabled:           r.isALPEnabled(&instance.Spec),
 		SidecarInjectionEnabled:     r.isSidecarInjectionEnabled(&instance.Spec),
+		DeploymentMode:              instance.Spec.DeploymentMode,
+		DeploymentReplicas:          instance.Spec.ServiceDeploymentReplicas,
 		LogRequestsPerInterval:      lcSpec.LogRequestsPerInterval,
 		LogIntervalSeconds:          lcSpec.LogIntervalSeconds,
 		WAFRulesetConfigMap:         wafRulesetConfig,

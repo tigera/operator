@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -383,7 +383,7 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			// 30s (init) + 10 * 30s (period set in controller/utils/component.go) which is 5+ minutes
 			// to account for a slow elasticsearch start.
 			FailureThreshold:    10,
-			InitialDelaySeconds: 30,
+			InitialDelaySeconds: 300,
 			TimeoutSeconds:      20,
 		},
 		Resources:       es.resourceRequirements(),

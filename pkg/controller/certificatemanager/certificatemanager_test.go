@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,14 +18,17 @@
 package certificatemanager_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/pem"
 	"runtime"
 	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/openshift/library-go/pkg/crypto"
 
@@ -78,28 +81,13 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		legacyBYOSecret          *corev1.Secret
 		legacyWithClientKeyUsage *corev1.Secret
 	)
-	BeforeEach(func() {
-		// Create a Kubernetes client.
-		scheme = k8sruntime.NewScheme()
-		err := apis.AddToScheme(scheme)
-		Expect(err).NotTo(HaveOccurred())
+	// Configure certs to match legacy operator-generated cert extensions - i.e., only valid for use as a server certificate.
+	legacyOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth}
+	modernOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth, tls.SetClientAuth}
 
-		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-
-		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
-
-		installation = &operatorv1.InstallationSpec{}
-		certificateManager, err = certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
-		Expect(err).NotTo(HaveOccurred())
-		keyPair, err := certificateManager.GetOrCreateKeyPair(cli, "temp", appNs, appDNSNames)
-		Expect(err).NotTo(HaveOccurred())
-		cm = &operatorv1.CertificateManagement{CACert: keyPair.GetCertificatePEM()}
-
-		// Configure certs to match legacy operator-generated cert extensions - i.e., only valid for use as a server certificate.
-		legacyOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth}
-		modernOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth, tls.SetClientAuth}
+	// Precompute expensive operations once.
+	BeforeSuite(func() {
+		var err error
 
 		certkeyusage.SetCertKeyUsage(legacySecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
 		// Create a legacy secret (how certs were before v1.24) with non-standardized legacy key and cert name, and no CA.
@@ -126,6 +114,30 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		Expect(err).NotTo(HaveOccurred())
 		expiredLegacySecret, err = secret.CreateTLSSecret(legacyCryptoCA, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, -time.Hour, legacyOpts, appSecretName)
 		Expect(err).NotTo(HaveOccurred())
+	})
+
+	BeforeEach(func() {
+		for _, secret := range []*corev1.Secret{legacySecret, byoSecret, legacyWithClientKeyUsage, legacyBYOSecret, expiredBYOSecret, expiredLegacySecret} {
+			// Clean up secret state.
+			secret.ResourceVersion = ""
+		}
+		// Create a Kubernetes client.
+		scheme = k8sruntime.NewScheme()
+		err := apis.AddToScheme(scheme)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+
+		installation = &operatorv1.InstallationSpec{}
+		certificateManager, err = certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		keyPair, err := certificateManager.GetOrCreateKeyPair(cli, "temp", appNs, appDNSNames)
+		Expect(err).NotTo(HaveOccurred())
+		cm = &operatorv1.CertificateManagement{CACert: keyPair.GetCertificatePEM()}
 
 		ca, err := crypto.GetCAFromBytes(certificateManager.KeyPair().GetCertificatePEM(), certificateManager.KeyPair().Secret("").Data[corev1.TLSPrivateKeyKey])
 		Expect(err).NotTo(HaveOccurred())
@@ -299,11 +311,14 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				Expect(kp.GetCertificatePEM()).NotTo(Equal(secret.Data[corev1.TLSCertKey]))
 			})
 
-			It("should return an error on byo expired secrets", func() {
+			It("should return an error on creating, but return nil on fetching expired byo certificates", func() {
 				secret := expiredBYOSecret
 				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
 				_, err := certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
 				Expect(err).To(HaveOccurred())
+				certificate, err := certificateManager.GetCertificate(cli, secret.Name, secret.Namespace)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(certificate).To(BeNil())
 			})
 
 			It("should return an error on legacy byo secrets without client key usage", func() {
@@ -331,6 +346,45 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				Expect(err).NotTo(HaveOccurred())
 				_, err = certificateManagerCM.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
 				Expect(err).To(HaveOccurred())
+			})
+
+			It("should replace certificates that are in grace period to avoid them from expiry", func() {
+				caSecret := certificateManager.KeyPair().Secret("")
+				privateKeyPEM, certificatePEM := caSecret.Data[corev1.TLSPrivateKeyKey], caSecret.Data[corev1.TLSCertKey]
+				privateKeyDER, _ := pem.Decode(privateKeyPEM)
+				Expect(privateKeyDER).NotTo(BeNil())
+				cryptoCA, err := crypto.GetCAFromBytes(certificatePEM, privateKeyPEM)
+				Expect(err).NotTo(HaveOccurred())
+				By("creating a certificate that expires within an hour, which is within the grace period for certificates.")
+				tlsCfg, err := cryptoCA.MakeServerCertForDuration(sets.New[string](appSecretName), time.Hour, tls.SetServerAuth, tls.SetClientAuth)
+				Expect(err).NotTo(HaveOccurred())
+				keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
+				err = tlsCfg.WriteCertConfig(crtContent, keyContent)
+				Expect(err).NotTo(HaveOccurred())
+
+				keyPair := &certificatemanagement.KeyPair{
+					Issuer:         certificateManager.KeyPair(),
+					Name:           appSecretName,
+					Namespace:      appSecretName,
+					PrivateKeyPEM:  keyContent.Bytes(),
+					CertificatePEM: crtContent.Bytes(),
+					DNSNames:       []string{appSecretName},
+				}
+				Expect(cli.Create(ctx, keyPair.Secret(appSecretName).DeepCopy())).NotTo(HaveOccurred())
+
+				By("fetching the secret, we can double check that our cert was indeed created successfully")
+				fetchedCert, err := certificateManager.GetCertificate(cli, appSecretName, appSecretName)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(fetchedCert.GetCertificatePEM()).To(Equal(keyPair.CertificatePEM))
+
+				By("fetching the secret, we force the certificate manager to dispose of the old one and create a new one that won't expire in quite some time.")
+				fetchedKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appSecretName, []string{appSecretName})
+				Expect(err).NotTo(HaveOccurred())
+				certificate, err := certificatemanagement.ParseCertificate(crtContent.Bytes())
+				Expect(err).NotTo(HaveOccurred())
+				fetchedCertificate, err := certificatemanagement.ParseCertificate(fetchedKeyPair.GetCertificatePEM())
+				Expect(err).NotTo(HaveOccurred())
+				Expect(certificate.NotAfter).NotTo(Equal(fetchedCertificate.NotAfter))
 			})
 		})
 	})

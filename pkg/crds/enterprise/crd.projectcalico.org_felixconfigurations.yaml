@@ -578,8 +578,8 @@ spec:
 
                   This setting is ignored by eBPF and BPFDNSPolicyMode is used instead.
 
-                  Inline policy mode is not supported in NFTables mode. Default mode in DelayDeniedPacket in case of NFTables.
-                  [Default: DelayDeniedPacket]
+                  This field has no effect in NFTables mode. Please use NFTablesDNSPolicyMode instead.
+                  [Default: Inline]
                 enum:
                 - NoDelay
                 - DelayDeniedPacket
@@ -1350,6 +1350,24 @@ spec:
                   NfNetlinkBufSize controls the size of NFLOG messages that the kernel will try to send to Felix.  NFLOG messages
                   are used to report flow verdicts from the kernel.  Warning: currently increasing the value may cause errors
                   due to a bug in the netlink library.
+                type: string
+              nftablesDNSPolicyMode:
+                description: |-
+                  NFTablesDNSPolicyMode specifies how DNS policy programming will be handled for NFTables.
+                  DelayDeniedPacket - Felix delays any denied packet that traversed a policy that included egress domain matches,
+                  but did not match. The packet is released after a fixed time, or after the destination IP address was programmed.
+                  DelayDNSResponse - Felix delays any DNS response until related IPSets are programmed. This introduces some
+                  latency to all DNS packets (even when no IPSet programming is required), but it ensures policy hit statistics
+                  are accurate. This is the recommended setting when you are making use of staged policies or policy rule hit
+                  statistics.
+                  NoDelay - Felix does not introduce any delay to the packets. DNS rules may not have been programmed by the time
+                  the first packet traverses the policy rules. Client applications need to handle reconnection attempts if initial
+                  connection attempts fail. This may be problematic for some applications or for very low DNS TTLs.
+                  [Default: DelayDeniedPacket]
+                enum:
+                - NoDelay
+                - DelayDeniedPacket
+                - DelayDNSResponse
                 type: string
               nftablesFilterAllowAction:
                 description: |-

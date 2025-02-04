@@ -221,7 +221,7 @@ else
 endif
 
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.1.2
+ENVOY_GATEWAY_VERSION ?= v1.2.6
 ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
 ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
 ENVOY_GATEWAY_RESOURCES = pkg/render/gateway_api_resources.yaml
@@ -833,6 +833,9 @@ vet:
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go vet ./...'
+
+mod-tidy:
+	$(DOCKER_RUN) sh -c 'go mod tidy'
 
 # Generate code
 # We use the upstream latest release of controller-gen as this is compatible with golang 1.19+ and we have no need

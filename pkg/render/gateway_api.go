@@ -49,7 +49,7 @@ type yamlKind struct {
 }
 
 // This struct defines all of the resources that we expect to read from the rendered Envoy Gateway
-// helm chart (as of v1.1.2).
+// helm chart (as of v1.2.6).
 type gatewayAPIResources struct {
 	namespace                 *corev1.Namespace
 	k8sCRDs                   []*apiextenv1.CustomResourceDefinition
@@ -245,8 +245,8 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 			if len(resources.k8sCRDs) != 10 {
 				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 10)", len(resources.k8sCRDs)))
 			}
-			if len(resources.envoyCRDs) != 7 {
-				panic(fmt.Sprintf("missing/extra envoy CRDs from gateway API YAML (%v != 7)", len(resources.envoyCRDs)))
+			if len(resources.envoyCRDs) != 8 {
+				panic(fmt.Sprintf("missing/extra envoy CRDs from gateway API YAML (%v != 8)", len(resources.envoyCRDs)))
 			}
 			if resources.controllerServiceAccount == nil {
 				panic("missing controller ServiceAccount from gateway API YAML")

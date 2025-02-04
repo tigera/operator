@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@ package render
 
 import (
 	"crypto/x509"
+	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -128,21 +128,21 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
-	var errMsgs []string
+	var joinedErr error
 	var err error
 
 	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
 	c.webhooksProcessorImage, err = components.GetReference(components.ComponentSecurityEventWebhooksProcessor, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+	if joinedErr != nil {
+		return joinedErr
 	}
 	return nil
 }

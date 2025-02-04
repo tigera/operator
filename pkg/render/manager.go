@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@ package render
 
 import (
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -184,23 +184,23 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, prefix, is)
-	errMsgs := []string{}
+	var joinedErr error
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
 	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
 	c.esProxyImage, err = components.GetReference(components.ComponentEsProxy, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+	if joinedErr != nil {
+		return joinedErr
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,10 +17,10 @@ package applicationlayer
 import (
 	"bytes"
 	_ "embed"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"text/template"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -122,25 +122,25 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	var err error
-	var errMsgs []string
+	var joinedErr error
 
 	c.config.proxyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
 	c.config.collectorImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
 	c.config.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+	if joinedErr != nil {
+		return joinedErr
 	}
 
 	return nil

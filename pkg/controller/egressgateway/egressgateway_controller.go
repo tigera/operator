@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ package egressgateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -24,7 +25,7 @@ import (
 	ocsv1 "github.com/openshift/api/security/v1"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	errors2 "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -251,7 +252,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 	variant, installation, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if errors2.IsNotFound(err) {
 			reqLogger.Error(err, "Installation not found")
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
 			// Set the EGW resource's condition to Degraded.
@@ -321,16 +322,16 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Reconcile all the EGWs
-	var errMsgs []string
+	var joinedErr error
 	for _, egw := range egwsToReconcile {
 		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, namespaceAndNames)
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
-			errMsgs = append(errMsgs, err.Error())
+			joinedErr = errors.Join(joinedErr, err)
 		}
 	}
-	if len(errMsgs) != 0 {
-		return reconcile.Result{}, fmt.Errorf(strings.Join(errMsgs, ";"))
+	if joinedErr != nil {
+		return reconcile.Result{}, joinedErr
 	}
 
 	if unreadyEGW != nil {

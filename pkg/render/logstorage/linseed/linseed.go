@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,9 +15,9 @@
 package linseed
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -133,22 +133,22 @@ func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
 	path := l.cfg.Installation.ImagePath
 	prefix := l.cfg.Installation.ImagePrefix
 	var err error
-	errMsgs := []string{}
+	var joinedErr error
 
 	// Calculate the image(s) to use for Linseed, given user registry configuration.
 	l.linseedImage, err = components.GetReference(components.ComponentLinseed, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
 	if l.cfg.Installation.CertificateManagement != nil {
 		l.csrImage, err = certificatemanagement.ResolveCSRInitImage(l.cfg.Installation, is)
 		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
+			joinedErr = errors.Join(joinedErr, err)
 		}
 	}
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+	if joinedErr != nil {
+		return joinedErr
 	}
 	return nil
 }

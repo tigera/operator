@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package render
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"strings"
@@ -195,20 +196,20 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	} else {
 		es.esImage, err = components.GetReference(components.ComponentElasticsearch, reg, path, prefix, is)
 	}
-	errMsgs := make([]string, 0)
+	var joinedErr error
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
 	if es.cfg.Installation.CertificateManagement != nil {
 		es.csrImage, err = certificatemanagement.ResolveCSRInitImage(es.cfg.Installation, is)
 		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
+			joinedErr = errors.Join(joinedErr, err)
 		}
 	}
 
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+	if joinedErr != nil {
+		return joinedErr
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,9 +15,9 @@
 package render
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
-	"strings"
 
 	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -145,47 +145,47 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	errMsgs := []string{}
+	var joinedErr error
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
 		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
+			joinedErr = errors.Join(joinedErr, err)
 		}
 		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
 		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
+			joinedErr = errors.Join(joinedErr, err)
 		}
 		if c.cfg.IsSidecarInjectionEnabled() {
 			c.l7AdmissionControllerImage, err = components.GetReference(components.ComponentL7AdmissionController, reg, path, prefix, is)
 			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
+				joinedErr = errors.Join(joinedErr, err)
 			}
 			c.l7AdmissionControllerEnvoyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, is)
 			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
+				joinedErr = errors.Join(joinedErr, err)
 			}
 			c.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
 			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
+				joinedErr = errors.Join(joinedErr, err)
 			}
 		}
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServerFIPS, reg, path, prefix, is)
 			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
+				joinedErr = errors.Join(joinedErr, err)
 			}
 		} else {
 			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, prefix, is)
 			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
+				joinedErr = errors.Join(joinedErr, err)
 			}
 		}
 	}
 
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+	if joinedErr != nil {
+		return joinedErr
 	}
 	return nil
 }

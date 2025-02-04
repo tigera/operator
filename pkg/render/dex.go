@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,7 @@
 package render
 
 import (
-	"fmt"
-	"strings"
+	"errors"
 
 	"gopkg.in/yaml.v2"
 
@@ -89,20 +88,20 @@ func (c *dexComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
 	c.image, err = components.GetReference(components.ComponentDex, reg, path, prefix, is)
 
-	var errMsgs []string
+	var joinedErr error
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
 	if c.cfg.Installation.CertificateManagement != nil {
 		c.csrInitImage, err = certificatemanagement.ResolveCSRInitImage(c.cfg.Installation, is)
 		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
+			joinedErr = errors.Join(joinedErr, err)
 		}
 	}
 
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+	if joinedErr != nil {
+		return joinedErr
 	}
 	return nil
 }

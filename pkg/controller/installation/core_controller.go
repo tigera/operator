@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
+
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	"github.com/go-logr/logr"
@@ -56,6 +57,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operator "github.com/tigera/operator/api/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
@@ -1590,11 +1592,11 @@ func GetTyphaNodeTLSConfig(cli client.Client, certificateManager certificatemana
 func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certificatemanager.CertificateManager, createKeyPairFunc func(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)) (*render.TyphaNodeTLS, error) {
 	// accumulate all the error messages so all problems with the certs
 	// and CA are reported.
-	var errMsgs []string
+	var joinedErr error
 	getOrCreateKeyPair := func(secretName, commonName string) (keyPair certificatemanagement.KeyPairInterface, cn string, uriSAN string) {
 		keyPair, err := createKeyPairFunc(cli, secretName, common.OperatorNamespace(), []string{commonName})
 		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
+			joinedErr = errors.Join(joinedErr, err)
 		} else {
 
 			if !keyPair.BYO() {
@@ -1603,7 +1605,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 				// todo: Integrate this with the new certificate manager or find another alternative for uriSAN and cn.
 				secret, err := utils.GetSecret(context.Background(), cli, secretName, common.OperatorNamespace())
 				if err != nil {
-					errMsgs = append(errMsgs, err.Error())
+					joinedErr = errors.Join(joinedErr, err)
 				} else if secret != nil {
 					data := secret.Data
 					if data != nil {
@@ -1612,7 +1614,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 				}
 			}
 			if cn == "" && uriSAN == "" {
-				errMsgs = append(errMsgs, "CertPair for Felix does not contain common-name or uri-san")
+				joinedErr = errors.Join(joinedErr, errors.New("CertPair for Felix does not contain common-name or uri-san"))
 			}
 		}
 		return
@@ -1622,25 +1624,25 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 	var trustedBundle certificatemanagement.TrustedBundle
 	configMap, err := getConfigMap(cli, render.TyphaCAConfigMapName)
 	if err != nil {
-		errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
+		joinedErr = errors.Join(joinedErr, err)
 	} else if configMap != nil {
 		if len(configMap.Data[render.TyphaCABundleName]) == 0 {
-			errMsgs = append(errMsgs, fmt.Sprintf("ConfigMap %q does not have a field named %q", render.TyphaCAConfigMapName, render.TyphaCABundleName))
+			joinedErr = errors.Join(joinedErr, fmt.Errorf("ConfigMap %q does not have a field named %q", render.TyphaCAConfigMapName, render.TyphaCABundleName))
 		} else {
 			trustedBundle, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates(node, typha,
 				certificatemanagement.NewCertificate(render.TyphaCAConfigMapName, common.CalicoNamespace, []byte(configMap.Data[render.TyphaCABundleName]), nil))
 			if err != nil {
-				errMsgs = append(errMsgs, fmt.Sprintf("Error creating trusted bundle %s", err))
+				joinedErr = errors.Join(joinedErr, fmt.Errorf("Error creating trusted bundle %s", err))
 			}
 		}
 	} else {
 		trustedBundle, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates(node, typha)
 		if err != nil {
-			errMsgs = append(errMsgs, fmt.Sprintf("Error creating trusted bundle %s", err))
+			joinedErr = errors.Join(joinedErr, fmt.Errorf("Error creating trusted bundle %s", err))
 		}
 	}
-	if len(errMsgs) != 0 {
-		return nil, fmt.Errorf(strings.Join(errMsgs, ";"))
+	if joinedErr != nil {
+		return nil, joinedErr
 	}
 	return &render.TyphaNodeTLS{
 		TrustedBundle:   trustedBundle,

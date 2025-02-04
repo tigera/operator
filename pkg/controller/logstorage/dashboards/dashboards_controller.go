@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -387,7 +387,7 @@ func parsePort(port string) (uint16, error) {
 		return 0, err
 	}
 	if kibanaPort > math.MaxInt16 {
-		return 0, fmt.Errorf(fmt.Sprintf("Kibana port is larger them max %d", math.MaxInt16))
+		return 0, fmt.Errorf("Kibana port is larger them max %d", math.MaxInt16)
 	}
 	return uint16(kibanaPort), nil
 }

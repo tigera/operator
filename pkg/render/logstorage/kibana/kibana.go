@@ -15,9 +15,9 @@
 package kibana
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
-	"strings"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -109,25 +109,25 @@ func (k *kibana) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := k.cfg.Installation.ImagePrefix
 
 	var err error
-	errMsgs := make([]string, 0)
+	var joinedErr error
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
 	k.kibanaImage, err = components.GetReference(components.ComponentKibana, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
 	if k.cfg.Installation.CertificateManagement != nil {
 		k.csrImage, err = certificatemanagement.ResolveCSRInitImage(k.cfg.Installation, is)
 		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
+			joinedErr = errors.Join(joinedErr, err)
 		}
 	}
 
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+	if joinedErr != nil {
+		return joinedErr
 	}
 	return nil
 }

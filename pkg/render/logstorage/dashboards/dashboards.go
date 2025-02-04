@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
 package dashboards
 
 import (
+	"errors"
 	"fmt"
-	"strings"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -99,22 +99,22 @@ func (d *dashboards) ResolveImages(is *operatorv1.ImageSet) error {
 	path := d.cfg.Installation.ImagePath
 	prefix := d.cfg.Installation.ImagePrefix
 	var err error
-	errMsgs := []string{}
+	var joinedErr error
 
 	// Calculate the image(s) to use for Dashboards, given user registry configuration.
 	d.image, err = components.GetReference(components.ComponentElasticTseeInstaller, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		joinedErr = errors.Join(joinedErr, err)
 	}
 
 	if d.cfg.Installation.CertificateManagement != nil {
 		d.csrImage, err = certificatemanagement.ResolveCSRInitImage(d.cfg.Installation, is)
 		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
+			joinedErr = errors.Join(joinedErr, err)
 		}
 	}
-	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+	if joinedErr != nil {
+		return joinedErr
 	}
 	return nil
 }

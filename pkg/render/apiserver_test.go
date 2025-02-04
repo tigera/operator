@@ -1370,6 +1370,12 @@ var (
 			Verbs:     []string{"list"},
 		},
 		{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"coreruleset-default"},
+			Verbs:         []string{"get"},
+		},
+		{
 			APIGroups: []string{""},
 			Resources: []string{"services/proxy"},
 			ResourceNames: []string{
@@ -1517,6 +1523,12 @@ var (
 			APIGroups: []string{""},
 			Resources: []string{"serviceaccounts"},
 			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"coreruleset-default"},
+			Verbs:         []string{"get"},
 		},
 		{
 			APIGroups: []string{""},

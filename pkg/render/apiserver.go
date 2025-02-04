@@ -1653,6 +1653,13 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"serviceaccounts"},
 			Verbs:     []string{"list"},
 		},
+		// Access for WAF API to read in coreruleset configmap
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"coreruleset-default"},
+			Verbs:         []string{"get"},
+		},
 		// Access to statistics.
 		{
 			APIGroups: []string{""},
@@ -1842,6 +1849,13 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{""},
 			Resources: []string{"serviceaccounts"},
 			Verbs:     []string{"list"},
+		},
+		// Access for WAF API to read in coreruleset configmap
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"coreruleset-default"},
+			Verbs:         []string{"get"},
 		},
 		// Access to statistics.
 		{

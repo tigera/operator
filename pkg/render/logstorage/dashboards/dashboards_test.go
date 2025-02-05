@@ -68,10 +68,10 @@ var _ = Describe("Dashboards rendering tests", func() {
 
 		expectedResources := []resourceTestObj{
 			{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
-			{GetJobName(), render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+			{Name, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 			{GetJobName(), render.ElasticsearchNamespace, &batchv1.Job{}, nil},
-			{GetJobName(), "", &rbacv1.ClusterRole{}, nil},
-			{GetJobName(), "", &rbacv1.ClusterRoleBinding{}, nil},
+			{Name, "", &rbacv1.ClusterRole{}, nil},
+			{Name, "", &rbacv1.ClusterRoleBinding{}, nil},
 		}
 
 		BeforeEach(func() {
@@ -109,7 +109,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 
-			role := rtest.GetResource(resources, "dashboards-installer", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			role := rtest.GetResource(resources, Name, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
 				APIGroups:     []string{"security.openshift.io"},
 				Resources:     []string{"securitycontextconstraints"},
@@ -289,9 +289,9 @@ var _ = Describe("Dashboards rendering tests", func() {
 			resources, _ := component.Objects()
 			job := rtest.GetResource(resources, GetJobName(), cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
 			Expect(job).NotTo(BeNil())
-			sa := rtest.GetResource(resources, GetJobName(), cfg.Namespace, corev1.GroupName, "v1", "ServiceAccount").(*corev1.ServiceAccount)
+			sa := rtest.GetResource(resources, Name, cfg.Namespace, corev1.GroupName, "v1", "ServiceAccount").(*corev1.ServiceAccount)
 			Expect(sa).NotTo(BeNil())
-			netPol := rtest.GetResource(resources, fmt.Sprintf("allow-tigera.%s", GetJobName()), cfg.Namespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+			netPol := rtest.GetResource(resources, PolicyName, cfg.Namespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
 			Expect(netPol).NotTo(BeNil())
 		})
 
@@ -325,7 +325,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 					Template: &operatorv1.DashboardsJobPodTemplateSpec{
 						Spec: &operatorv1.DashboardsJobPodSpec{
 							Containers: []operatorv1.DashboardsJobContainer{{
-								Name:      GetJobName(),
+								Name:      Name,
 								Resources: &dashboardsJobResources,
 							}},
 						},
@@ -338,7 +338,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			resources, _ := component.Objects()
 			job := rtest.GetResource(resources, GetJobName(), cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
 			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
-			Expect(job.Spec.Template.Spec.Containers[0].Name).To(Equal(GetJobName()))
+			Expect(job.Spec.Template.Spec.Containers[0].Name).To(Equal(Name))
 			Expect(job.Spec.Template.Spec.Containers[0].Resources).To(Equal(dashboardsJobResources))
 		})
 
@@ -423,7 +423,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
 				Name: "KIBANA_MTLS_ENABLED", Value: "true",
 			}))
-			netPol := rtest.GetResource(createResources, fmt.Sprintf("allow-tigera.%s", GetJobName()), render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+			netPol := rtest.GetResource(createResources, PolicyName, render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
 			Expect(netPol).NotTo(BeNil())
 			Expect(netPol.Spec.Egress).To(HaveLen(2))
 			Expect(netPol.Spec.Egress[1].Destination).To(Equal(v3.EntityRule{
@@ -438,9 +438,9 @@ var _ = Describe("Dashboards rendering tests", func() {
 			resources, _ := component.Objects()
 			job := rtest.GetResource(resources, GetJobName(), render.ElasticsearchNamespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
 			Expect(job).NotTo(BeNil())
-			sa := rtest.GetResource(resources, GetJobName(), render.ElasticsearchNamespace, corev1.GroupName, "v1", "ServiceAccount").(*corev1.ServiceAccount)
+			sa := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, corev1.GroupName, "v1", "ServiceAccount").(*corev1.ServiceAccount)
 			Expect(sa).NotTo(BeNil())
-			netPol := rtest.GetResource(resources, fmt.Sprintf("allow-tigera.%s", GetJobName()), render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+			netPol := rtest.GetResource(resources, PolicyName, render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
 			Expect(netPol).NotTo(BeNil())
 			Expect(netPol.Spec.Egress).To(HaveLen(2))
 			Expect(netPol.Spec.Egress[1].Destination).To(Equal(kibana.EntityRule))
@@ -501,9 +501,9 @@ var _ = Describe("Dashboards rendering tests", func() {
 			resources, _ := component.Objects()
 			job := rtest.GetResource(resources, GetJobName(), render.ElasticsearchNamespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
 			Expect(job).NotTo(BeNil())
-			sa := rtest.GetResource(resources, GetJobName(), render.ElasticsearchNamespace, corev1.GroupName, "v1", "ServiceAccount").(*corev1.ServiceAccount)
+			sa := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, corev1.GroupName, "v1", "ServiceAccount").(*corev1.ServiceAccount)
 			Expect(sa).NotTo(BeNil())
-			netPol := rtest.GetResource(resources, fmt.Sprintf("allow-tigera.%s", GetJobName()), render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+			netPol := rtest.GetResource(resources, PolicyName, render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
 			Expect(netPol).NotTo(BeNil())
 		})
 
@@ -578,12 +578,12 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	ExpectWithOffset(1, job.Spec.Template.Annotations).To(HaveKeyWithValue("hash.operator.tigera.io/elasticsearch-secrets", Not(BeEmpty())))
 
 	// Check permissions
-	clusterRoleBinding := rtest.GetResource(resources, GetJobName(), "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
-	Expect(clusterRoleBinding.RoleRef.Name).To(Equal(GetJobName()))
+	clusterRoleBinding := rtest.GetResource(resources, Name, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+	Expect(clusterRoleBinding.RoleRef.Name).To(Equal(Name))
 	Expect(clusterRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 		{
 			Kind:      "ServiceAccount",
-			Name:      ServiceAccountName,
+			Name:      Name,
 			Namespace: render.ElasticsearchNamespace,
 		},
 	}))
@@ -607,7 +607,7 @@ func expectedVolumes() []corev1.Volume {
 func expectedContainers() []corev1.Container {
 	return []corev1.Container{
 		{
-			Name:            GetJobName(),
+			Name:            Name,
 			ImagePullPolicy: render.ImagePullPolicy(),
 			SecurityContext: &corev1.SecurityContext{
 				Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},

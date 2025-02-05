@@ -45,10 +45,9 @@ import (
 )
 
 var (
-	ServiceAccountName       = "dashboards-installer"
+	Name                     = "dashboards-installer"
 	ElasticCredentialsSecret = "tigera-ee-dashboards-installer-elasticsearch-user-secret"
-	PolicyName               = networkpolicy.TigeraComponentPolicyPrefix + GetJobName()
-	SelectorContainsName     = "dashboards-installer"
+	PolicyName               = networkpolicy.TigeraComponentPolicyPrefix + Name
 )
 
 // GetJobName makes a unique job name per operator version.
@@ -183,7 +182,7 @@ func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: fmt.Sprintf("job-name contains '%s'", SelectorContainsName),
+			Selector: fmt.Sprintf("job-name contains '%s'", Name),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,
 		},
@@ -286,7 +285,7 @@ func (d *dashboards) Job() *batchv1.Job {
 			ImagePullSecrets: secret.GetReferenceList(d.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				{
-					Name:            GetJobName(),
+					Name:            Name,
 					Image:           d.image,
 					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
@@ -295,7 +294,7 @@ func (d *dashboards) Job() *batchv1.Job {
 				},
 			},
 			Volumes:            volumes,
-			ServiceAccountName: ServiceAccountName,
+			ServiceAccountName: Name,
 		},
 	}, d.cfg.Credentials).(*corev1.PodTemplateSpec)
 
@@ -343,7 +342,7 @@ func (d *dashboards) ServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      GetJobName(),
+			Name:      Name,
 			Namespace: d.cfg.Namespace,
 		},
 	}
@@ -353,7 +352,7 @@ func (d *dashboards) ClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: GetJobName(),
+			Name: Name,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -370,17 +369,17 @@ func (d *dashboards) ClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: GetJobName(),
+			Name: Name,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     GetJobName(),
+			Name:     Name,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      GetJobName(),
+				Name:      Name,
 				Namespace: d.cfg.Namespace,
 			},
 		},

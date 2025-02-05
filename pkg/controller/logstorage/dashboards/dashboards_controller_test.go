@@ -262,7 +262,7 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 				},
 			}
 			Expect(test.GetResource(cli, &dashboardJob)).To(BeNil())
-			dashboardInstaller := test.GetContainer(dashboardJob.Spec.Template.Spec.Containers, dashboards.GetJobName())
+			dashboardInstaller := test.GetContainer(dashboardJob.Spec.Template.Spec.Containers, dashboards.Name)
 			Expect(dashboardInstaller).ToNot(BeNil())
 			Expect(dashboardInstaller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s@%s", components.ComponentElasticTseeInstaller.Image, "sha256:dashboardhash")))
 		})

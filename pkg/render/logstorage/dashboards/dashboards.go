@@ -45,13 +45,22 @@ import (
 )
 
 var (
-	// Take OperatorVersion up to max dev image length. In production "v1.36.2" is expected
-	OperatorVersion          = strings.ReplaceAll(version.VERSION, ".", "-")[:len("v1.36.0-1-dev-281-g9558bdac82b")]
-	Name                     = fmt.Sprintf("dashboards-installer-%s", OperatorVersion)
 	ServiceAccountName       = "dashboards-installer"
 	ElasticCredentialsSecret = "tigera-ee-dashboards-installer-elasticsearch-user-secret"
-	PolicyName               = networkpolicy.TigeraComponentPolicyPrefix + Name
+	PolicyName               = networkpolicy.TigeraComponentPolicyPrefix + GetJobName()
 )
+
+// GetJobName makes a unique job name per operator version.
+// For dev images it takes the first 32 chars.
+func GetJobName() string {
+	operatorVersion := strings.ReplaceAll(version.VERSION, ".", "-")
+
+	if len(operatorVersion) >= 32 {
+		operatorVersion = operatorVersion[:32]
+	}
+
+	return fmt.Sprintf("dashboards-installer-%s", operatorVersion)
+}
 
 func Dashboards(c *Config) render.Component {
 	return &dashboards{
@@ -173,7 +182,7 @@ func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: fmt.Sprintf("job-name == '%s'", Name),
+			Selector: fmt.Sprintf("job-name == '%s'", GetJobName()),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,
 		},
@@ -265,7 +274,7 @@ func (d *dashboards) Job() *batchv1.Job {
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels:      map[string]string{"job-name": Name, "k8s-app": Name},
+			Labels:      map[string]string{"job-name": GetJobName(), "k8s-app": GetJobName()},
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
@@ -276,7 +285,7 @@ func (d *dashboards) Job() *batchv1.Job {
 			ImagePullSecrets: secret.GetReferenceList(d.cfg.PullSecrets),
 			Containers: []corev1.Container{
 				{
-					Name:            Name,
+					Name:            GetJobName(),
 					Image:           d.image,
 					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
@@ -292,13 +301,13 @@ func (d *dashboards) Job() *batchv1.Job {
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      Name,
+			Name:      GetJobName(),
 			Namespace: d.cfg.Namespace,
 		},
 		Spec: batchv1.JobSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"job-name": Name,
+					"job-name": GetJobName(),
 				},
 			},
 			Template: *podTemplate,
@@ -333,7 +342,7 @@ func (d *dashboards) ServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      Name,
+			Name:      GetJobName(),
 			Namespace: d.cfg.Namespace,
 		},
 	}
@@ -343,7 +352,7 @@ func (d *dashboards) ClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: Name,
+			Name: GetJobName(),
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -360,17 +369,17 @@ func (d *dashboards) ClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: Name,
+			Name: GetJobName(),
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     Name,
+			Name:     GetJobName(),
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      Name,
+				Name:      GetJobName(),
 				Namespace: d.cfg.Namespace,
 			},
 		},

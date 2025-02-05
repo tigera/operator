@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -207,7 +207,7 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 			dashboardJob := batchv1.Job{
 				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      dashboards.Name,
+					Name:      dashboards.GetJobName(),
 					Namespace: render.ElasticsearchNamespace,
 				},
 			}
@@ -231,7 +231,7 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 			dashboardJob := batchv1.Job{
 				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      dashboards.Name,
+					Name:      dashboards.GetJobName(),
 					Namespace: render.ElasticsearchNamespace,
 				},
 			}
@@ -257,12 +257,12 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 			dashboardJob := batchv1.Job{
 				TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      dashboards.Name,
+					Name:      dashboards.GetJobName(),
 					Namespace: render.ElasticsearchNamespace,
 				},
 			}
 			Expect(test.GetResource(cli, &dashboardJob)).To(BeNil())
-			dashboardInstaller := test.GetContainer(dashboardJob.Spec.Template.Spec.Containers, dashboards.Name)
+			dashboardInstaller := test.GetContainer(dashboardJob.Spec.Template.Spec.Containers, dashboards.GetJobName())
 			Expect(dashboardInstaller).ToNot(BeNil())
 			Expect(dashboardInstaller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s@%s", components.ComponentElasticTseeInstaller.Image, "sha256:dashboardhash")))
 		})

@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -69,7 +69,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 		expectedResources := []resourceTestObj{
 			{PolicyName, render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 			{Name, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
-			{Name, render.ElasticsearchNamespace, &batchv1.Job{}, nil},
+			{GetJobName(), render.ElasticsearchNamespace, &batchv1.Job{}, nil},
 			{Name, "", &rbacv1.ClusterRole{}, nil},
 			{Name, "", &rbacv1.ClusterRoleBinding{}, nil},
 		}
@@ -109,7 +109,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
 
-			role := rtest.GetResource(resources, "dashboards-installer", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			role := rtest.GetResource(resources, Name, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
 				APIGroups:     []string{"security.openshift.io"},
 				Resources:     []string{"securitycontextconstraints"},
@@ -124,7 +124,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			component := Dashboards(cfg)
 
 			resources, _ := component.Objects()
-			job, ok := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
+			job, ok := rtest.GetResource(resources, GetJobName(), render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
 			Expect(ok).To(BeTrue(), "Job not found")
 			Expect(job.Spec.Template.Spec.NodeSelector).To(Equal(map[string]string{"foo": "bar"}))
 		})
@@ -135,7 +135,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			component := Dashboards(cfg)
 
 			resources, _ := component.Objects()
-			job, ok := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
+			job, ok := rtest.GetResource(resources, GetJobName(), render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
 			Expect(ok).To(BeTrue(), "Job not found")
 			Expect(job.Spec.Template.Spec.Tolerations).To(ContainElement(corev1.Toleration{
 				Key:      "kubernetes.io/arch",
@@ -156,7 +156,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			component := Dashboards(cfg)
 
 			resources, _ := component.Objects()
-			job, ok := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
+			job, ok := rtest.GetResource(resources, GetJobName(), render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
 			Expect(ok).To(BeTrue(), "Job not found")
 			Expect(job.Spec.Template.Spec.Tolerations).To(ConsistOf(t))
 		})
@@ -252,7 +252,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			}
 			component := Dashboards(cfg)
 			createResources, _ := component.Objects()
-			d, ok := rtest.GetResource(createResources, Name, cfg.Namespace, "batch", "v1", "Job").(*batchv1.Job)
+			d, ok := rtest.GetResource(createResources, GetJobName(), cfg.Namespace, "batch", "v1", "Job").(*batchv1.Job)
 			Expect(ok).To(BeTrue(), "Job not found")
 
 			// The deployment should have the hash annotation set, as well as a volume and volume mount for the client secret.
@@ -287,11 +287,11 @@ var _ = Describe("Dashboards rendering tests", func() {
 			component := Dashboards(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
-			job := rtest.GetResource(resources, Name, cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
+			job := rtest.GetResource(resources, GetJobName(), cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
 			Expect(job).NotTo(BeNil())
 			sa := rtest.GetResource(resources, Name, cfg.Namespace, corev1.GroupName, "v1", "ServiceAccount").(*corev1.ServiceAccount)
 			Expect(sa).NotTo(BeNil())
-			netPol := rtest.GetResource(resources, fmt.Sprintf("allow-tigera.%s", Name), cfg.Namespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+			netPol := rtest.GetResource(resources, PolicyName, cfg.Namespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
 			Expect(netPol).NotTo(BeNil())
 		})
 
@@ -299,7 +299,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			component := Dashboards(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
-			job := rtest.GetResource(resources, Name, cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
+			job := rtest.GetResource(resources, GetJobName(), cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
 			envs := job.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_SPACE_ID", Value: cfg.Tenant.Spec.ID}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_SCHEME", Value: "https"}))
@@ -336,7 +336,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			component := Dashboards(cfg)
 
 			resources, _ := component.Objects()
-			job := rtest.GetResource(resources, Name, cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
+			job := rtest.GetResource(resources, GetJobName(), cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
 			Expect(job.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(job.Spec.Template.Spec.Containers[0].Name).To(Equal(Name))
 			Expect(job.Spec.Template.Spec.Containers[0].Resources).To(Equal(dashboardsJobResources))
@@ -394,7 +394,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			}
 			component := Dashboards(cfg)
 			createResources, _ := component.Objects()
-			d, ok := rtest.GetResource(createResources, Name, render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
+			d, ok := rtest.GetResource(createResources, GetJobName(), render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
 			Expect(ok).To(BeTrue(), "Job not found")
 
 			// The deployment should have the hash annotation set, as well as a volume and volume mount for the client secret.
@@ -423,7 +423,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
 				Name: "KIBANA_MTLS_ENABLED", Value: "true",
 			}))
-			netPol := rtest.GetResource(createResources, fmt.Sprintf("allow-tigera.%s", Name), render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+			netPol := rtest.GetResource(createResources, PolicyName, render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
 			Expect(netPol).NotTo(BeNil())
 			Expect(netPol.Spec.Egress).To(HaveLen(2))
 			Expect(netPol.Spec.Egress[1].Destination).To(Equal(v3.EntityRule{
@@ -436,11 +436,11 @@ var _ = Describe("Dashboards rendering tests", func() {
 			component := Dashboards(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
-			job := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
+			job := rtest.GetResource(resources, GetJobName(), render.ElasticsearchNamespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
 			Expect(job).NotTo(BeNil())
 			sa := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, corev1.GroupName, "v1", "ServiceAccount").(*corev1.ServiceAccount)
 			Expect(sa).NotTo(BeNil())
-			netPol := rtest.GetResource(resources, fmt.Sprintf("allow-tigera.%s", Name), render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+			netPol := rtest.GetResource(resources, PolicyName, render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
 			Expect(netPol).NotTo(BeNil())
 			Expect(netPol.Spec.Egress).To(HaveLen(2))
 			Expect(netPol.Spec.Egress[1].Destination).To(Equal(kibana.EntityRule))
@@ -450,7 +450,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			component := Dashboards(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
-			d := rtest.GetResource(resources, Name, cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
+			d := rtest.GetResource(resources, GetJobName(), cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_SPACE_ID", Value: cfg.Tenant.Spec.ID}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_SCHEME", Value: "https"}))
@@ -499,11 +499,11 @@ var _ = Describe("Dashboards rendering tests", func() {
 			component := Dashboards(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
-			job := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
+			job := rtest.GetResource(resources, GetJobName(), render.ElasticsearchNamespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
 			Expect(job).NotTo(BeNil())
 			sa := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, corev1.GroupName, "v1", "ServiceAccount").(*corev1.ServiceAccount)
 			Expect(sa).NotTo(BeNil())
-			netPol := rtest.GetResource(resources, fmt.Sprintf("allow-tigera.%s", Name), render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+			netPol := rtest.GetResource(resources, PolicyName, render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
 			Expect(netPol).NotTo(BeNil())
 		})
 
@@ -511,7 +511,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 			component := Dashboards(cfg)
 			Expect(component).NotTo(BeNil())
 			resources, _ := component.Objects()
-			d := rtest.GetResource(resources, Name, cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
+			d := rtest.GetResource(resources, GetJobName(), cfg.Namespace, batchv1.GroupName, "v1", "Job").(*batchv1.Job)
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_SPACE_ID", Value: cfg.Tenant.Spec.ID}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "KIBANA_SCHEME", Value: "https"}))
@@ -551,7 +551,7 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	}
 
 	// Check job
-	job := rtest.GetResource(resources, Name, render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
+	job := rtest.GetResource(resources, GetJobName(), render.ElasticsearchNamespace, "batch", "v1", "Job").(*batchv1.Job)
 	ExpectWithOffset(1, job).NotTo(BeNil())
 
 	// Check containers

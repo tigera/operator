@@ -8,7 +8,7 @@
   "spec": {
     "order": 1,
     "tier": "allow-tigera",
-    "selector": "job-name == 'dashboards-installer'",
+    "selector": "job-name contains 'dashboards-installer'",
     "types": [
       "Egress"
     ],

@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -151,7 +151,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	// Check if something modifies resources this controller creates.
 	err = c.WatchObject(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{
 		Namespace: helper.InstallNamespace(),
-		Name:      dashboards.Name,
+		Name:      dashboards.GetJobName(),
 	}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("log-storage-dashboards-controller failed to watch installer job: %v", err)

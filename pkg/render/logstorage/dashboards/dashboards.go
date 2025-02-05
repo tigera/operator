@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/version"
 )
 
 var (
@@ -48,6 +49,18 @@ var (
 	ElasticCredentialsSecret = "tigera-ee-dashboards-installer-elasticsearch-user-secret"
 	PolicyName               = networkpolicy.TigeraComponentPolicyPrefix + Name
 )
+
+// GetJobName makes a unique job name per operator version.
+// For dev images it takes the first 32 chars.
+func GetJobName() string {
+	operatorVersion := strings.ReplaceAll(version.VERSION, ".", "-")
+
+	if len(operatorVersion) >= 32 {
+		operatorVersion = operatorVersion[:32]
+	}
+
+	return fmt.Sprintf("dashboards-installer-%s", operatorVersion)
+}
 
 func Dashboards(c *Config) render.Component {
 	return &dashboards{
@@ -169,7 +182,7 @@ func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: fmt.Sprintf("job-name == '%s'", Name),
+			Selector: fmt.Sprintf("job-name contains '%s'", Name),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,
 		},
@@ -261,7 +274,7 @@ func (d *dashboards) Job() *batchv1.Job {
 
 	podTemplate := relasticsearch.DecorateAnnotations(&corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
-			Labels:      map[string]string{"job-name": Name, "k8s-app": Name},
+			Labels:      map[string]string{"job-name": GetJobName(), "k8s-app": GetJobName()},
 			Annotations: annotations,
 		},
 		Spec: corev1.PodSpec{
@@ -288,13 +301,13 @@ func (d *dashboards) Job() *batchv1.Job {
 	job := &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{Kind: "Job", APIVersion: "batch/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      Name,
+			Name:      GetJobName(),
 			Namespace: d.cfg.Namespace,
 		},
 		Spec: batchv1.JobSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"job-name": Name,
+					"job-name": GetJobName(),
 				},
 			},
 			Template: *podTemplate,

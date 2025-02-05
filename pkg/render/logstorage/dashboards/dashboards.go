@@ -48,6 +48,7 @@ var (
 	ServiceAccountName       = "dashboards-installer"
 	ElasticCredentialsSecret = "tigera-ee-dashboards-installer-elasticsearch-user-secret"
 	PolicyName               = networkpolicy.TigeraComponentPolicyPrefix + GetJobName()
+	SelectorContainsName     = "dashboards-installer"
 )
 
 // GetJobName makes a unique job name per operator version.
@@ -182,7 +183,7 @@ func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: fmt.Sprintf("job-name == '%s'", GetJobName()),
+			Selector: fmt.Sprintf("job-name contains '%s'", SelectorContainsName),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,
 		},

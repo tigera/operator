@@ -315,12 +315,12 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		{
 			APIGroups: []string{""},
 			Resources: []string{"secrets", "configmaps"},
-			Verbs:     []string{"get", "watch"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
-			Verbs:     []string{"get", "watch", "update"},
+			Verbs:     []string{"get", "list", "watch", "update"},
 		},
 		{
 			APIGroups: []string{"crd.projectcalico.org"},

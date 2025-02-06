@@ -377,7 +377,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		if authenticationCR != nil && authenticationCR.Status.State == operatorv1.TigeraStatusReady {
-			if !utils.IsDexDisabled(authenticationCR) {
+			if utils.DexEnabled(authenticationCR) {
 				// Do not include DEX TLS Secret Name if authentication CR does not have type Dex
 				secret := render.DexTLSSecretName
 				certificate, err := certificateManager.GetCertificate(r.client, secret, common.OperatorNamespace())

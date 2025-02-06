@@ -446,8 +446,14 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		cj := current.(*batchv1.Job)
 		dj := desired.(*batchv1.Job)
 
-		if cj.Spec.Template.Spec.Containers[0].Image != dj.Spec.Template.Spec.Containers[0].Image {
+		if len(cj.Spec.Template.Spec.Containers) != len(dj.Spec.Template.Spec.Containers) {
 			return dj
+		}
+
+		for i := range cj.Spec.Template.Spec.Containers {
+			if cj.Spec.Template.Spec.Containers[i].Image != dj.Spec.Template.Spec.Containers[i].Image {
+				return dj
+			}
 		}
 
 		if reflect.DeepEqual(cj.Spec.Template.Annotations, dj.Spec.Template.Annotations) {

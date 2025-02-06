@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -343,6 +343,8 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
 		MultiTenant:         multiTenant,
+		// We need v1.30 or higher for apiserver to come up.
+		KubernetesVersion: &common.VersionInfo{Major: 1, Minor: 30},
 	})
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), ctx, cancel, mgr

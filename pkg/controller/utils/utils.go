@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -896,12 +896,12 @@ func compareMap(m1, m2 map[string]string) bool {
 	return true
 }
 
-func IsDexDisabled(authentication *operatorv1.Authentication) bool {
-	disableDex := false
-	if authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
-		disableDex = true
+func DexEnabled(authentication *operatorv1.Authentication) bool {
+	enableDex := authentication != nil
+	if enableDex && authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
+		enableDex = false
 	}
-	return disableDex
+	return enableDex
 }
 
 func VerifySysctl(pluginData []operatorv1.Sysctl) error {

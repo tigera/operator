@@ -356,7 +356,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				cryptoCA, err := crypto.GetCAFromBytes(certificatePEM, privateKeyPEM)
 				Expect(err).NotTo(HaveOccurred())
 				By("creating a certificate that expires within an hour, which is within the grace period for certificates.")
-				tlsCfg, err := cryptoCA.MakeServerCertForDuration(sets.New[string](appSecretName), time.Hour, tls.SetServerAuth, tls.SetClientAuth)
+				tlsCfg, err := cryptoCA.MakeServerCertForDuration(sets.NewString(appSecretName), time.Hour, tls.SetServerAuth, tls.SetClientAuth)
 				Expect(err).NotTo(HaveOccurred())
 				keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
 				err = tlsCfg.WriteCertConfig(crtContent, keyContent)

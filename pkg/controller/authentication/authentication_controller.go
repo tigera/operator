@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,6 +28,18 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	"github.com/go-ldap/ldap"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -40,17 +52,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 var log = logf.Log.WithName("controller_authentication")
@@ -383,7 +384,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 	r.lastAvailabilityTransition = currentAvailabilityTransition
 
-	disableDex := utils.IsDexDisabled(authentication)
+	enableDex := utils.DexEnabled(authentication)
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
 	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, dexSecret, idpSecret, r.clusterDomain)
@@ -397,7 +398,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		Installation:   install,
 		DexConfig:      dexCfg,
 		ClusterDomain:  r.clusterDomain,
-		DeleteDex:      disableDex,
+		DeleteDex:      !enableDex,
 		TLSKeyPair:     tlsKeyPair,
 		TrustedBundle:  trustedBundle,
 		Authentication: authentication,
@@ -415,7 +416,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 
 	components := []render.Component{component}
 
-	if !disableDex {
+	if enableDex {
 		components = append(components,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 				Namespace:       render.DexNamespace,

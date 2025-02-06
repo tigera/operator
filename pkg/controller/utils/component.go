@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -446,9 +446,10 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		cj := current.(*batchv1.Job)
 		dj := desired.(*batchv1.Job)
 
-		// We're only comparing jobs based off of annotations for now so we can send a signal to recreate a job. Later
-		// we might want to have some better comparison of jobs so that a changed in the container spec would trigger
-		// a recreation of the job
+		if cj.Spec.Template.Spec.Containers[0].Image != dj.Spec.Template.Spec.Containers[0].Image {
+			return dj
+		}
+
 		if reflect.DeepEqual(cj.Spec.Template.Annotations, dj.Spec.Template.Annotations) {
 			return nil
 		}

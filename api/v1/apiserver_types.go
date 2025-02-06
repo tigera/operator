@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 /*
 
 
@@ -146,6 +146,10 @@ type APIServerDeploymentPodSpec struct {
 	// WARNING: Please note that this field will override the default API server Deployment tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+
+	// PriorityClassName allows to specify a PriorityClass resource to be used.
+	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
 }
 
 // APIServerDeploymentPodTemplateSpec is the API server Deployment's PodTemplateSpec
@@ -304,5 +308,12 @@ func (c *APIServerDeployment) GetDeploymentStrategy() *appsv1.DeploymentStrategy
 }
 
 func (c *APIServerDeployment) GetPriorityClassName() string {
+	if c.Spec != nil {
+		if c.Spec.Template != nil {
+			if c.Spec.Template.Spec != nil {
+				return c.Spec.Template.Spec.PriorityClassName
+			}
+		}
+	}
 	return ""
 }

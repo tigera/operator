@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -376,33 +376,30 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
-			r.status.SetDegraded(operatorv1.ResourceNotReady,
-				fmt.Sprintf("Authentication is not ready authenticationCR status: %s", authenticationCR.Status.State),
-				nil, reqLogger)
-			return reconcile.Result{}, nil
-		} else if authenticationCR != nil && !utils.IsDexDisabled(authenticationCR) {
-			// Do not include DEX TLS Secret Name if authentication CR does not have type Dex
-			secret := render.DexTLSSecretName
-			certificate, err := certificateManager.GetCertificate(r.client, secret, common.OperatorNamespace())
-			if err != nil {
-				r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Failed to retrieve %s", secret),
-					err, reqLogger)
-				return reconcile.Result{}, err
-			} else if certificate == nil {
-				reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secret))
-				r.status.SetDegraded(operatorv1.ResourceNotReady,
-					fmt.Sprintf("Waiting for secret '%s' to become available", secret),
-					nil, reqLogger)
-				return reconcile.Result{}, nil
+		if authenticationCR != nil && authenticationCR.Status.State == operatorv1.TigeraStatusReady {
+			if utils.DexEnabled(authenticationCR) {
+				// Do not include DEX TLS Secret Name if authentication CR does not have type Dex
+				secret := render.DexTLSSecretName
+				certificate, err := certificateManager.GetCertificate(r.client, secret, common.OperatorNamespace())
+				if err != nil {
+					r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Failed to retrieve %s", secret),
+						err, reqLogger)
+					return reconcile.Result{}, err
+				} else if certificate == nil {
+					reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secret))
+					r.status.SetDegraded(operatorv1.ResourceNotReady,
+						fmt.Sprintf("Waiting for secret '%s' to become available", secret),
+						nil, reqLogger)
+					return reconcile.Result{}, nil
+				}
+				trustedBundle.AddCertificates(certificate)
 			}
-			trustedBundle.AddCertificates(certificate)
-		}
 
-		keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get KeyValidator Config", err, reqLogger)
-			return reconcile.Result{}, err
+			keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get KeyValidator Config", err, reqLogger)
+				return reconcile.Result{}, err
+			}
 		}
 	}
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -462,8 +462,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready authenticationCR status: %s", authenticationCR.Status.State), nil, logc)
 		return reconcile.Result{}, nil
-	} else if authenticationCR != nil && !utils.IsDexDisabled(authenticationCR) {
-		// Do not include DEX TLS Secret Name is authentication CR does not have type Dex
+	} else if utils.DexEnabled(authenticationCR) {
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
 	}
 

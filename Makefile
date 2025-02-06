@@ -91,7 +91,7 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.94
+GO_BUILD_VER?=v0.95
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -220,8 +220,33 @@ else
   GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)
 endif
 
+ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
+ENVOY_GATEWAY_VERSION ?= v1.2.6
+ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
+ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
+ENVOY_GATEWAY_RESOURCES = pkg/render/gateway_api_resources.yaml
+
+$(ENVOY_GATEWAY_RESOURCES): hack/bin/helm-$(BUILDARCH)
+	echo "---" > $@
+	echo "apiVersion: v1" >> $@
+	echo "kind: Namespace" >> $@
+	echo "metadata:" >> $@
+	echo "  name: $(ENVOY_GATEWAY_NAMESPACE)" >> $@
+	hack/bin/helm-$(BUILDARCH) template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
+		--version $(ENVOY_GATEWAY_VERSION) \
+		-n $(ENVOY_GATEWAY_NAMESPACE) \
+		--include-crds \
+	>> $@
+
+hack/bin/helm-$(BUILDARCH):
+	mkdir -p hack/bin
+	curl -sSf -L --retry 5 -o hack/bin/helm3.tar.gz https://get.helm.sh/helm-v3.11.3-linux-$(BUILDARCH).tar.gz
+	tar -zxvf hack/bin/helm3.tar.gz -C hack/bin linux-$(BUILDARCH)/helm
+	mv hack/bin/linux-$(BUILDARCH)/helm hack/bin/helm-$(BUILDARCH)
+	rmdir hack/bin/linux-$(BUILDARCH)
+
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES)
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
@@ -284,14 +309,14 @@ GINKGO_ARGS?= -v -trace -r
 GINKGO_FOCUS?=.*
 
 .PHONY: ut
-ut:
+ut: $(ENVOY_GATEWAY_RESOURCES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs:
+run-fvs: $(ENVOY_GATEWAY_RESOURCES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
@@ -476,9 +501,21 @@ endif
 ###############################################################################
 # Release
 ###############################################################################
-## Determines if we are on a tag and if so builds a release.
-maybe-build-release:
-	./hack/maybe-build-release.sh
+VERSION_REGEX := ^v[0-9]+\.[0-9]+\.[0-9]+$$
+release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
+	$(eval VALID_TAG := $(shell echo $(RELEASE_TAG) | grep -Eq "$(VERSION_REGEX)" && echo true))
+	$(if $(VALID_TAG),,$(error $(RELEASE_TAG) is not a valid version. Please use a version in the format vX.Y.Z))
+
+# Skip releasing if the image already exists.
+	@if !$(MAKE) VERSION=$(RELEASE_TAG) release-check-image-exists; then \
+		echo "Images for $(RELEASE_TAG) already exists"; \
+		exit 0; \
+	fi
+
+	$(MAKE) release VERSION=$(RELEASE_TAG)
+	$(MAKE) release-publish-images VERSION=$(RELEASE_TAG)
+	$(MAKE) release-github VERSION=$(RELEASE_TAG)
+
 
 release-notes: var-require-all-VERSION-GITHUB_TOKEN clean
 	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .
@@ -527,26 +564,10 @@ release-publish-images: release-prereqs release-check-image-exists
 	# Push images.
 	$(MAKE) push-all push-manifests push-non-manifests RELEASE=true IMAGETAG=$(VERSION)
 
-## Pushes a github release and release artifacts produced by `make release-build`.
-release-publish: release-prereqs
-	# Push the git tag.
-	git push origin $(VERSION)
-
-	$(MAKE) release-publish-images IMAGETAG=$(VERSION)
-	$(MAKE) release-github
-
-	@echo "Finalize the GitHub release based on the pushed tag."
-	@echo ""
-	@echo "  https://$(PACKAGE_NAME)/releases/tag/$(VERSION)"
-	@echo ""
-	@echo "If this is the latest stable release, then run the following to push 'latest' images."
-	@echo ""
-	@echo "  make VERSION=$(VERSION) release-publish-latest"
-	@echo ""
-
 release-github: hack/bin/gh release-notes
 	@echo "Creating github release for $(VERSION)"
 	hack/bin/gh release create $(VERSION) --title $(VERSION) --draft --notes-file $(VERSION)-release-notes.md
+	@echo "$(VERSION) GitHub release created in draft state. Please review and publish: https://github.com/tigera/operator/releases/tag/$(VERSION) ."
 
 GITHUB_CLI_VERSION?=2.62.0
 hack/bin/gh:
@@ -555,6 +576,15 @@ hack/bin/gh:
 	tar -zxvf hack/bin/gh.tgz -C hack/bin/ gh_$(GITHUB_CLI_VERSION)_linux_amd64/bin/gh --strip-components=2
 	chmod +x $@
 	rm hack/bin/gh.tgz
+
+hack/bin/release-from: $(shell find ./hack/release-from -type f)
+	mkdir -p hack/bin
+	$(CONTAINERIZED) $(CALICO_BUILD) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	go build -buildvcs=false -o hack/bin/release-from ./hack/release-from'
+
+release-from: hack/bin/release-from var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
+	hack/bin/release-from
 
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:
@@ -673,6 +703,11 @@ define copy_crds
 		$(eval product := $(2))
 	@cp $(dir)/libcalico-go/config/crd/* pkg/crds/$(product)/ && echo "Copied $(product) CRDs"
 endef
+define copy_eck_crds
+    $(eval dir := $(1))
+		$(eval product := $(2))
+	@cp $(dir)/charts/tigera-operator/crds/eck/* pkg/crds/$(product)/ && echo "Copied $(product) ECK CRDs"
+endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
 .PHONY: update-calico-crds update-enterprise-crds
@@ -708,6 +743,7 @@ read-libcalico-enterprise-version:
 
 update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
+	$(call copy_eck_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 
 prepare-for-enterprise-crds:
 	$(call prep_local_crds,"enterprise")
@@ -762,7 +798,6 @@ help: # Some kind of magic from https://gist.github.com/rcmachado/af3db315e31383
 #####################################
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
-CONTROLLER_GEN_VERSION ?= v0.14.0
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
@@ -783,11 +818,8 @@ deploy: manifests kustomize
 
 # Generate manifests e.g. CRD
 # Can also generate RBAC and webhooks but that is not enabled currently.
-# We use the upstream latest release of controller-gen as this is compatible with golang 1.19+ and we have no need
-# for custom projectcalico.org types.
 manifests:
-	$(DOCKER_RUN) sh -c 'go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION) && \
-		controller-gen crd paths="./api/..." output:crd:artifacts:config=config/crd/bases'
+	$(DOCKER_RUN) sh -c 'controller-gen crd paths="./api/..." output:crd:artifacts:config=config/crd/bases'
 	for x in $$(find config/crd/bases/*); do sed -i -e '/creationTimestamp: null/d' -e '/^---/d' -e '/^\s*$$/d' $$x; done
 
 # Run go fmt against code
@@ -802,12 +834,14 @@ vet:
 	sh -c '$(GIT_CONFIG_SSH) \
 	go vet ./...'
 
+mod-tidy:
+	$(DOCKER_RUN) sh -c 'go mod tidy'
+
 # Generate code
 # We use the upstream latest release of controller-gen as this is compatible with golang 1.19+ and we have no need
 # for custom projectcalico.org types.
 generate:
-	$(DOCKER_RUN) sh -c 'go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION) && \
-		controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./api/..." && \
+	$(DOCKER_RUN) sh -c 'controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./api/..." && \
 		controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./pkg/..." && \
 		controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./internal/controller/..."'
 	-# Run fix because generate was removing `//go:build !ignore_autogenerated` from the generated files

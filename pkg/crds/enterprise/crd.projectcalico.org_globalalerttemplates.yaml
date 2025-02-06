@@ -2,8 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: (devel)
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.16.5
   name: globalalerttemplates.crd.projectcalico.org
 spec:
   group: crd.projectcalico.org
@@ -20,39 +19,48 @@ spec:
       openAPIV3Schema:
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
           spec:
             properties:
               aggregateBy:
-                description: An optional list of fields to aggregate results. Only
-                  used if Type is RuleBased.
+                description: |-
+                  An optional list of fields to aggregate results.
+                  Only used if Type is RuleBased.
                 items:
                   type: string
                 type: array
               condition:
-                description: Compare the value of the metric to the threshold using
-                  this condition. Only used if Type is RuleBased.
+                description: |-
+                  Compare the value of the metric to the threshold using this condition.
+                  Only used if Type is RuleBased.
                 type: string
               dataSet:
-                description: DataSet determines which dataset type the Query will
-                  use. Required and used only if Type is RuleBased.
+                description: |-
+                  DataSet determines which dataset type the Query will use.
+                  Required and used only if Type is RuleBased.
                 type: string
               description:
                 description: Human-readable description of the template.
                 type: string
               detector:
-                description: Parameters for configuring an AnomalyDetection run. Only
-                  used if Type is AnomalyDetection.
+                description: |-
+                  Parameters for configuring an AnomalyDetection run.
+                  Only used if Type is AnomalyDetection.
                 properties:
                   name:
                     description: Name specifies the AnomalyDetection Detector to run.
@@ -61,24 +69,25 @@ spec:
                 - name
                 type: object
               field:
-                description: Which field to aggregate results by if using a metric
-                  other than count. Only used if Type is RuleBased.
+                description: |-
+                  Which field to aggregate results by if using a metric other than count.
+                  Only used if Type is RuleBased.
                 type: string
               lookback:
-                description: How much data to gather at once. If Type is RuleBased,
-                  it must exceed audit log flush interval, dnsLogsFlushInterval, or
-                  flowLogsFlushInterval as appropriate.
+                description: |-
+                  How much data to gather at once.
+                  If Type is RuleBased, it must exceed audit log flush interval, dnsLogsFlushInterval, or flowLogsFlushInterval as appropriate.
                 type: string
               metric:
-                description: A metric to apply to aggregated results. count is the
-                  number of log entries matching the aggregation pattern. Others are
-                  applied only to numeric fields in the logs. Only used if Type is
-                  RuleBased.
+                description: |-
+                  A metric to apply to aggregated results. count is the number of log entries matching the aggregation pattern.
+                  Others are applied only to numeric fields in the logs.
+                  Only used if Type is RuleBased.
                 type: string
               period:
-                description: If Type is RuleBased, it is how often the query defined
-                  will run. If Type is AnomalyDetection it is how often the detector
-                  will be run.
+                description: |-
+                  If Type is RuleBased, it is how often the query defined will run.
+                  If Type is AnomalyDetection it is how often the detector will be run.
                 type: string
               query:
                 description: Which data to include from the source data set. Written
@@ -88,8 +97,9 @@ spec:
                 description: Severity of the alert for display in Manager.
                 type: integer
               substitutions:
-                description: An optional list of values to replace variable names
-                  in query. Only used if Type is RuleBased.
+                description: |-
+                  An optional list of values to replace variable names in query.
+                  Only used if Type is RuleBased.
                 items:
                   description: GlobalAlertSubstitution substitutes for the variables
                     in the set operators of a Query.
@@ -109,13 +119,14 @@ spec:
                   description is used if this is omitted.
                 type: string
               threshold:
-                description: A numeric value to compare the value of the metric against.
+                description: |-
+                  A numeric value to compare the value of the metric against.
                   Only used if Type is RuleBased.
                 type: number
               type:
-                description: 'Type will dictate how the fields of the GlobalAlert
-                  will be utilized. Each Type will have different usages and defaults
-                  for the fields. [Default: RuleBased]'
+                description: |-
+                  Type will dictate how the fields of the GlobalAlert will be utilized.
+                  Each Type will have different usages and defaults for the fields. [Default: RuleBased]
                 type: string
             required:
             - description
@@ -124,9 +135,3 @@ spec:
         type: object
     served: true
     storage: true
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

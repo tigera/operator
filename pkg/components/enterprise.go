@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -69,12 +69,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = Component{
-		Version:  "8.15.3",
+		Version:  "8.17.1",
 		Registry: "",
 	}
 
 	ComponentEckKibana = Component{
-		Version:  "8.15.3",
+		Version:  "8.17.1",
 		Registry: "",
 	}
 
@@ -91,7 +91,7 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version:  "2.6.1",
+		Version:  "2.16.0",
 		Registry: "",
 	}
 
@@ -233,7 +233,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = Component{
-		Version:  "v0.27.0",
+		Version:  "v0.28.0",
 		Registry: "",
 	}
 
@@ -308,6 +308,24 @@ var (
 		Image:    "tigera/node-driver-registrar",
 		Registry: "",
 	}
+
+	ComponentGatewayAPIEnvoyGateway = Component{
+		Version:  "master",
+		Image:    "tigera/envoy-gateway",
+		Registry: "",
+	}
+
+	ComponentGatewayAPIEnvoyProxy = Component{
+		Version:  "master",
+		Image:    "tigera/envoy-proxy",
+		Registry: "",
+	}
+
+	ComponentGatewayAPIEnvoyRatelimit = Component{
+		Version:  "master",
+		Image:    "tigera/envoy-ratelimit",
+		Registry: "",
+	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
@@ -355,5 +373,8 @@ var (
 		ComponentTigeraFlexVolume,
 		ComponentTigeraCSI,
 		ComponentTigeraCSINodeDriverRegistrar,
+		ComponentGatewayAPIEnvoyGateway,
+		ComponentGatewayAPIEnvoyProxy,
+		ComponentGatewayAPIEnvoyRatelimit,
 	}
 )

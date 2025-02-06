@@ -1,0 +1,77 @@
+version: v1.0
+
+name: Operator CD
+
+execution_time_limit:
+  hours: 4
+
+agent:
+  machine:
+    type: f1-standard-2
+    os_image: ubuntu2004
+
+global_job_config:
+  secrets:
+    - name: docker-hub
+    - name: oss-release-secrets
+    # Mount the github SSH secret for pulling private repositories.
+    - name: private-repo
+  prologue:
+    commands:
+      - echo $DOCKERHUB_PASSWORD | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+      # Correct permissions since they are too open by default:
+      - chmod 0600 ~/.keys/*
+      # Add the key to the ssh agent:
+      - ssh-add ~/.keys/*
+      # Free up some space
+      - sudo rm -rf ~/.kiex ~/.phpbrew ~/.rbenv ~/.nvm ~/.kerl
+      # Semaphore mounts a copy-on-write FS as /var/lib/docker in order to provide a pre-loaded cache of
+      # some images. However, the cache is not useful to us and the copy-on-write FS is a big problem given
+      # how much we churn docker containers during testing.  Disable it.
+      - sudo systemctl stop docker
+      - sudo umount /var/lib/docker && sudo killall qemu-nbd || true
+      - sudo systemctl start docker
+      - checkout
+      # Restore all the build specific caches
+      - "cache restore bin-amd64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-pkg-cache-amd64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-mod-cache-amd64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore bin-arm64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-pkg-cache-arm64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-mod-cache-arm64-${SEMAPHORE_GIT_SHA}"
+      - "cache restore bin-ppc64le-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-pkg-cache-ppc64le-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-mod-cache-ppc64le-${SEMAPHORE_GIT_SHA}"
+      - "cache restore bin-s390x-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-pkg-cache-s390x-${SEMAPHORE_GIT_SHA}"
+      - "cache restore go-mod-cache-s390x-${SEMAPHORE_GIT_SHA}"
+
+blocks:
+  - name: Release
+    run:
+      when: "tag =~ '^v'"
+    task:
+      secrets:
+        - name: quay-robot-semaphore_v2
+        - name: operator-redhat-connect
+      prologue:
+        commands:
+          - docker login -u="$QUAY_USERNAME" -p="$QUAY_TOKEN" quay.io;
+          - export BRANCH_NAME=$SEMAPHORE_GIT_BRANCH
+      jobs:
+        - name: Publish Release
+          commands:
+            - make release-tag RELEASE_TAG=${SEMAPHORE_GIT_RELEASE_TAG}
+          env_vars:
+            - name: CONFIRM
+              value: "true"
+
+promotions:
+  - name: Clean Up
+    pipeline_file: clean_up.yml
+    # Auto promote to clean up since this likely wasn't promoted from the CI pipeline (since we only promote to the
+    # clean up pipeline if we're not running on master or a release branch).
+    # We only auto promote if the cd has passed, because if it's failed we'll likely just want to run CD again, but if
+    # we've cleared the cache it will take a long time.
+    auto_promote:
+      when: "result = 'passed'"

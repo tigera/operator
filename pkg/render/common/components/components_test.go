@@ -15,6 +15,9 @@
 package components
 
 import (
+	"reflect"
+	"strings"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -92,6 +95,111 @@ var _ = Describe("Common components render tests", func() {
 			},
 		}
 	})
+
+	var findUnhandled func(handledFields []string, prefix string, typ reflect.Type) (unhandledFields []string)
+	findUnhandled = func(handledFields []string, prefix string, typ reflect.Type) (unhandledFields []string) {
+		for typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice {
+			typ = typ.Elem()
+		}
+		if typ.Kind() == reflect.Struct {
+			numFields := typ.NumField()
+		nextField:
+			for i := 0; i < numFields; i++ {
+				fullName := prefix + typ.Field(i).Name
+				isPrefix := false
+				for _, handledField := range handledFields {
+					if fullName == handledField {
+						// The current dotted field name is
+						// one that we handle.
+						continue nextField
+					}
+					if strings.HasPrefix(handledField, fullName) {
+						isPrefix = true
+					}
+				}
+				if isPrefix {
+					// The current dotted field name is a prefix
+					// of (at least) one that we handle.
+					// Recurse to check its sub-fields.
+					unhandledFields = append(unhandledFields, findUnhandled(handledFields, fullName+".", typ.Field(i).Type)...)
+				} else {
+					// The current dotted field name isn't
+					// handled itself, and isn't a prefix
+					// either, so it must be unhandled.
+					unhandledFields = append(unhandledFields, fullName)
+				}
+			}
+		}
+		return
+	}
+
+	DescribeTable("check for unhandled fields",
+		func(overrides any, expectUnhandled bool, allowedExtraFields ...string) {
+			// Call applyReplicatedPodResourceOverrides to discover all the fields that
+			// we handle.
+			r := &replicatedPodResource{}
+			applyReplicatedPodResourceOverrides(r, overrides)
+			handledFields := append(overrideFieldsHandledInLastApplyCall, allowedExtraFields...)
+
+			// Now traverse the structure to find any unhandled fields.
+			unhandledFields := findUnhandled(handledFields, "", reflect.TypeOf(overrides))
+			if expectUnhandled {
+				Expect(unhandledFields).NotTo(BeEmpty())
+			} else {
+				Expect(unhandledFields).To(BeEmpty())
+			}
+		},
+		Entry("APIServerDeployment", &v1.APIServerDeployment{}, false),
+		Entry("CalicoKubeControllersDeployment", &v1.CalicoKubeControllersDeployment{}, false),
+		Entry("CalicoNodeDaemonSet", &v1.CalicoNodeDaemonSet{}, false),
+		Entry("CalicoNodeWindowsDaemonSet", &v1.CalicoNodeWindowsDaemonSet{}, false),
+		Entry("CalicoWindowsUpgradeDaemonSet", &v1.CalicoWindowsUpgradeDaemonSet{}, false),
+		Entry("ComplianceBenchmarkerDaemonSet", &v1.ComplianceBenchmarkerDaemonSet{}, false),
+		Entry("ComplianceControllerDeployment", &v1.ComplianceControllerDeployment{}, false),
+		Entry("ComplianceReporterPodTemplate", &v1.ComplianceReporterPodTemplate{}, false),
+		Entry("ComplianceServerDeployment", &v1.ComplianceServerDeployment{}, false),
+		Entry("ComplianceSnapshotterDeployment", &v1.ComplianceSnapshotterDeployment{}, false),
+		Entry("CSINodeDriverDaemonSet", &v1.CSINodeDriverDaemonSet{}, false),
+		Entry("DashboardsJob", &v1.DashboardsJob{}, false),
+		Entry("DexDeployment", &v1.DexDeployment{}, false),
+		Entry("ECKOperatorStatefulSet", &v1.ECKOperatorStatefulSet{}, false),
+		// EgressGateway operates as a top-level CR and also as its own customization
+		// structure, so it does have fields other than those covered by the override
+		// machinery.
+		Entry("EgressGateway", &v1.EgressGateway{}, false,
+			"TypeMeta",
+			"ObjectMeta",
+			"Spec.Replicas",
+			"Spec.IPPools",
+			"Spec.ExternalNetworks",
+			"Spec.LogSeverity",
+			"Spec.EgressGatewayFailureDetection",
+			"Spec.AWS",
+			"Status",
+		),
+		Entry("EKSLogForwarderDeployment", &v1.EKSLogForwarderDeployment{}, false),
+		Entry("ElasticsearchMetricsDeployment", &v1.ElasticsearchMetricsDeployment{}, false),
+		Entry("ESGatewayDeployment", &v1.ESGatewayDeployment{}, false),
+		Entry("FluentdDaemonSet", &v1.FluentdDaemonSet{}, false),
+		Entry("GatewayCertgenJob", &v1.GatewayCertgenJob{}, false),
+		Entry("GatewayControllerDeployment", &v1.GatewayControllerDeployment{}, false),
+		Entry("GatewayDeployment", &v1.GatewayDeployment{}, false),
+		Entry("GuardianDeployment", &v1.GuardianDeployment{}, false),
+		Entry("IntrusionDetectionControllerDeployment", &v1.IntrusionDetectionControllerDeployment{}, false),
+		Entry("Kibana", &v1.Kibana{}, false),
+		Entry("L7LogCollectorDaemonSet", &v1.L7LogCollectorDaemonSet{}, false),
+		Entry("LinseedDeployment", &v1.LinseedDeployment{}, false),
+		Entry("ManagerDeployment", &v1.ManagerDeployment{}, false),
+		Entry("PacketCaptureAPIDeployment", &v1.PacketCaptureAPIDeployment{}, false),
+		Entry("PolicyRecommendationDeployment", &v1.PolicyRecommendationDeployment{}, false),
+		Entry("TyphaDeployment", &v1.TyphaDeployment{}, false),
+
+		// This last entry checks that the code above really does identify when a
+		// structure has unhandled fields.  To do this we can use any available structure
+		// with some field names that don't overlap with those that are handled by our
+		// override code.
+		Entry("Installation", &v1.Installation{}, true),
+	)
 
 	DescribeTable("test ApplyDaemonSetOverrides",
 		func(original func() appsv1.DaemonSet, override func() *v1.CalicoNodeDaemonSet, expectations func(set appsv1.DaemonSet)) {

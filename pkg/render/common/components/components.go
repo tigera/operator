@@ -17,8 +17,10 @@ package components
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
+	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -173,6 +175,11 @@ func getField(overrides any, fieldNames ...string) (value reflect.Value) {
 			fieldNames = fieldNames[1:]
 		}
 	}
+
+	// Record that we're handling `fieldNames`.  See `overrideFieldsHandledInLastApplyCall` for
+	// why.
+	recordHandledField(fieldNames)
+
 	typ := reflect.TypeOf(overrides)
 	for _, fieldName := range fieldNames {
 		if typ.Kind() == reflect.Pointer {
@@ -199,6 +206,8 @@ func getField(overrides any, fieldNames ...string) (value reflect.Value) {
 
 // applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
 func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any) *replicatedPodResource {
+	resetHandledFields()
+
 	// If `overrides` has a Metadata field, and it's non-nil, non-clashing labels and annotations from that
 	// metadata are added into `r.labels` and `r.annotations`.
 	if metadata := GetMetadata(overrides); metadata != nil {
@@ -292,6 +301,20 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 	}
 
 	return r
+}
+
+// For UT purposes, only, this variable stores the override fields that were handled in that most
+// recent `applyReplicatedPodResourceOverrides` call.  UT code then checks that the structures we
+// use for `overrides` do not have any _other_ fields than those (except for known special cases).
+var overrideFieldsHandledInLastApplyCall []string
+
+func resetHandledFields() {
+	overrideFieldsHandledInLastApplyCall = nil
+}
+
+func recordHandledField(fieldNames []string) {
+	dottedName := strings.Join(fieldNames, ".")
+	overrideFieldsHandledInLastApplyCall = append(overrideFieldsHandledInLastApplyCall, dottedName)
 }
 
 // ApplyDaemonSetOverrides applies the overrides to the given DaemonSet.
@@ -494,5 +517,54 @@ func ClusterRoleBinding(name, clusterRole, sa string, namespaces []string) *rbac
 			Name:     clusterRole,
 		},
 		Subjects: subjects,
+	}
+}
+
+// ApplyEnvoyProxyOverrides applies the overrides to the given EnvoyProxy.
+// Note: overrides must not be nil pointer.
+func ApplyEnvoyProxyOverrides(ep *envoyapi.EnvoyProxy, overrides any) {
+	// Catch if caller passes in an explicit nil.
+	if overrides == nil {
+		return
+	}
+
+	// Initialize a pod template spec for the override logic to work on.
+	r := &replicatedPodResource{
+		podTemplateSpec: &corev1.PodTemplateSpec{
+			Spec: corev1.PodSpec{
+				Containers: []corev1.Container{{
+					Name: "envoy",
+				}},
+			},
+		},
+	}
+
+	// Apply the overrides.
+	applyReplicatedPodResourceOverrides(r, overrides)
+
+	// Merge overridden fields into the EnvoyProxy.
+	if r.deploymentStrategy != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Strategy = r.deploymentStrategy
+	}
+	if r.podTemplateSpec.Annotations != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Annotations = r.podTemplateSpec.Annotations
+	}
+	if r.podTemplateSpec.Labels != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels = r.podTemplateSpec.Labels
+	}
+	if r.podTemplateSpec.Spec.Affinity != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Affinity = r.podTemplateSpec.Spec.Affinity
+	}
+	if r.podTemplateSpec.Spec.Tolerations != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Tolerations = r.podTemplateSpec.Spec.Tolerations
+	}
+	if r.podTemplateSpec.Spec.NodeSelector != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.NodeSelector = r.podTemplateSpec.Spec.NodeSelector
+	}
+	if r.podTemplateSpec.Spec.TopologySpreadConstraints != nil {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.TopologySpreadConstraints = r.podTemplateSpec.Spec.TopologySpreadConstraints
+	}
+	if !reflect.DeepEqual(r.podTemplateSpec.Spec.Containers[0].Resources, corev1.ResourceRequirements{}) {
+		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Resources = &r.podTemplateSpec.Spec.Containers[0].Resources
 	}
 }

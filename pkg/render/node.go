@@ -400,7 +400,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			{
 				// For enforcing admin network policies.
 				APIGroups: []string{"policy.networking.k8s.io"},
-				Resources: []string{"adminnetworkpolicies"},
+				Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
 				Verbs:     []string{"watch", "list"},
 			},
 			{
@@ -1662,7 +1662,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		*c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds > 0 {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "FELIX_ENDPOINTSTATUSPATHPREFIX",
-			Value: c.varRunCalicoVolume().VolumeSource.HostPath.Path,
+			Value: "/var/run/calico",
 		})
 	}
 

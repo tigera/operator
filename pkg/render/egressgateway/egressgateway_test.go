@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 	var timeout int32 = 40
 	var pullSecrets []*corev1.Secret
 	rbac := "rbac.authorization.k8s.io"
-	logSeverity := operatorv1.LogLevelInfo
+	logSeverity := operatorv1.LogSeverityInfo
 	labels := map[string]string{"egress-code": "red"}
 
 	topoConstraint := corev1.TopologySpreadConstraint{

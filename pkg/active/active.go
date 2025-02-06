@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -100,7 +100,13 @@ func WaitUntilActive(cs *kubernetes.Clientset, client client.Client, ctx context
 
 	handlers := cache.ResourceEventHandlerFuncs{AddFunc: func(obj interface{}) {}}
 	indexers := cache.Indexers{}
-	indexer, informer := cache.NewIndexerInformer(listWatch, &corev1.ConfigMap{}, 0, handlers, indexers)
+	indexer, informer := cache.NewInformerWithOptions(cache.InformerOptions{
+		ListerWatcher: listWatch,
+		ObjectType:    &corev1.ConfigMap{},
+		Handler:       handlers,
+		ResyncPeriod:  0,
+		Indexers:      indexers,
+	})
 
 	stopCh := make(chan struct{})
 	go informer.Run(stopCh)

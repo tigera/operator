@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -163,7 +163,7 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "security-event-webhooks-processor" }}
+{{ with index .Components "webhooks-processor" }}
 	ComponentSecurityEventWebhooksProcessor = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
@@ -357,6 +357,27 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "gateway-api-envoy-gateway" }}
+	ComponentGatewayAPIEnvoyGateway = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "gateway-api-envoy-proxy" }}
+	ComponentGatewayAPIEnvoyProxy = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "gateway-api-envoy-ratelimit" }}
+	ComponentGatewayAPIEnvoyRatelimit = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
@@ -404,5 +425,8 @@ var (
 		ComponentTigeraFlexVolume,
 		ComponentTigeraCSI,
 		ComponentTigeraCSINodeDriverRegistrar,
+		ComponentGatewayAPIEnvoyGateway,
+		ComponentGatewayAPIEnvoyProxy,
+		ComponentGatewayAPIEnvoyRatelimit,
 	}
 )

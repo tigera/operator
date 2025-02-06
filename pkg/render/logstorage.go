@@ -40,7 +40,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -232,6 +231,8 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate = append(toCreate, es.elasticsearchInternalAllowTigeraPolicy())
 	toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(ElasticsearchNamespace))
 
+	toCreate = append(toCreate, CreateOperatorSecretsRoleBinding(ElasticsearchNamespace))
+
 	if len(es.cfg.PullSecrets) > 0 {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(ElasticsearchNamespace, es.cfg.PullSecrets...)...)...)
 	}
@@ -370,9 +371,6 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	sc := securitycontext.NewNonRootContext()
-	// Set the user and group to be the default elasticsearch ID
-	sc.RunAsUser = ptr.Int64ToPtr(1000)
-	sc.RunAsGroup = ptr.Int64ToPtr(1000)
 
 	esContainer := corev1.Container{
 		Name: "elasticsearch",
@@ -409,43 +407,47 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
-	annotations := es.cfg.TrustedBundle.HashAnnotations()
-	annotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret)
-	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
+	initFSContainer := corev1.Container{
+		Name:            "elastic-internal-init-filesystem",
+		Image:           es.esImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    resource.MustParse("100m"),
+				"memory": resource.MustParse("50Mi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":    resource.MustParse("100m"),
+				"memory": resource.MustParse("50Mi"),
+			},
+		},
+		// Without a root context, it is not able to ln and chown.
+		SecurityContext: securitycontext.NewRootContext(true),
+	}
+
+	suspendContainer := corev1.Container{
+		Name:            "elastic-internal-suspend",
+		Image:           es.esImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		// Without a root context, it is not able to start.
+		SecurityContext: securitycontext.NewRootContext(true),
+	}
 
 	var volumes []corev1.Volume
-
 	var autoMountToken bool
-	if es.cfg.Installation.CertificateManagement != nil {
+	if es.cfg.Installation.CertificateManagement == nil {
+		initContainers = append(initContainers, initFSContainer, suspendContainer)
+	} else {
 		// If certificate management is used, we need to override a mounting options for this init container.
-		initFSName := "elastic-internal-init-filesystem"
-		initFSContainer := corev1.Container{
-			Name:            initFSName,
-			Image:           es.esImage,
-			ImagePullPolicy: ImagePullPolicy(),
-			Command:         []string{"bash", "-c", "mkdir /mnt/elastic-internal/transport-certificates/ && touch /mnt/elastic-internal/transport-certificates/$HOSTNAME.tls.key && /mnt/elastic-internal/scripts/prepare-fs.sh"},
-			Resources: corev1.ResourceRequirements{
-				Limits: corev1.ResourceList{
-					"cpu":    resource.MustParse("100m"),
-					"memory": resource.MustParse("50Mi"),
-				},
-				Requests: corev1.ResourceList{
-					"cpu":    resource.MustParse("100m"),
-					"memory": resource.MustParse("50Mi"),
-				},
-			},
-			// Without a root context, it is not able to ln and chown.
-			SecurityContext: securitycontext.NewRootContext(true),
-			VolumeMounts: []corev1.VolumeMount{
-				// Create transport mount, such that ECK will not auto-fill this with a secret volume.
-				{
-					Name:      CSRVolumeNameTransport,
-					MountPath: "/csr",
-					ReadOnly:  false,
-				},
+		initFSContainer.Command = []string{"bash", "-c", "mkdir /mnt/elastic-internal/transport-certificates/ && touch /mnt/elastic-internal/transport-certificates/$HOSTNAME.tls.key && /mnt/elastic-internal/scripts/prepare-fs.sh"}
+		initFSContainer.VolumeMounts = []corev1.VolumeMount{
+			// Create transport mount, such that ECK will not auto-fill this with a secret volume.
+			{
+				Name:      CSRVolumeNameTransport,
+				MountPath: "/csr",
+				ReadOnly:  false,
 			},
 		}
-
 		csrInitContainerHTTP := es.cfg.ElasticsearchKeyPair.InitContainer(ElasticsearchNamespace)
 		csrInitContainerHTTP.Name = "key-cert-elastic"
 		csrInitContainerHTTP.VolumeMounts[0].Name = CSRVolumeNameHTTP
@@ -468,6 +470,7 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 		initContainers = append(
 			initContainers,
 			initFSContainer,
+			suspendContainer,
 			csrInitContainerHTTP,
 			csrInitContainerTransport)
 
@@ -513,6 +516,10 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	if es.cfg.Installation.KubernetesProvider.IsGKE() {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
+
+	annotations := es.cfg.TrustedBundle.HashAnnotations()
+	annotations[ElasticsearchTLSHashAnnotation] = rmeta.SecretsAnnotationHash(es.cfg.ElasticsearchUserSecret)
+	annotations[es.cfg.ElasticsearchKeyPair.HashAnnotationKey()] = es.cfg.ElasticsearchKeyPair.HashAnnotationValue()
 
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1018,7 +1025,7 @@ func (es *elasticsearchComponent) elasticsearchRolesAndBindings() ([]*rbacv1.Rol
 			{
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
-				Verbs:     []string{"create", "delete", "deletecollection", "get", "list", "update", "watch"},
+				Verbs:     []string{"create", "delete", "deletecollection", "update"},
 			},
 		},
 	}
@@ -1032,7 +1039,7 @@ func (es *elasticsearchComponent) elasticsearchRolesAndBindings() ([]*rbacv1.Rol
 			{
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
-				Verbs:     []string{"create", "delete", "deletecollection", "get", "list", "update", "watch"},
+				Verbs:     []string{"create", "delete", "deletecollection", "update"},
 			},
 		},
 	}
@@ -1181,6 +1188,7 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged, m.cfg.Installation.Azure),
 		m.elasticsearchExternalService(),
 		m.linseedExternalService(),
+		CreateOperatorSecretsRoleBinding(ElasticsearchNamespace),
 	)
 
 	for _, r := range roles {
@@ -1367,7 +1375,7 @@ func (m managedClusterLogStorage) kubeControllersRolesAndBindings() ([]*rbacv1.R
 			{
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
-				Verbs:     []string{"create", "delete", "deletecollection", "get", "list", "update", "watch"},
+				Verbs:     []string{"create", "delete", "deletecollection", "update"},
 			},
 		},
 	}

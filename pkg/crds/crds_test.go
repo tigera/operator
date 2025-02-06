@@ -21,43 +21,25 @@ import (
 	opv1 "github.com/tigera/operator/api/v1"
 )
 
+// The real test here is simply calling these functions will result in a panic if any of the CRDs cannot be parsed
+
 var _ = Describe("test crds pkg", func() {
-	Context("GetCalicoCRDSource", func() {
-		Measure("should quickly load calico source CRDs", func(b Benchmarker) {
-			runtime := b.Time("runtime", func() {
-				_ = getCalicoCRDSource()
-			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading calico CRDs shouldnt take too long.")
-		}, 50)
+	It("can parse Calico CRDs", func() {
+		Expect(func() { Expect(getCalicoCRDSource()).ToNot(BeEmpty()) }).ToNot(Panic())
 	})
-	Context("GetEnterpriseCRDSource", func() {
-		Measure("should quickly load enterprise source CRDs", func(b Benchmarker) {
-			runtime := b.Time("runtime", func() {
-				_ = getEnterpriseCRDSource()
-			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading enterprise CRDs shouldnt take too long.")
-		}, 50)
+	It("can parse Enterprise CRDs", func() {
+		Expect(func() { Expect(getEnterpriseCRDSource()).ToNot(BeEmpty()) }).ToNot(Panic())
 	})
-	Context("GetOperatorCRDSource", func() {
-		Measure("should quickly load operator source CRDs", func(b Benchmarker) {
-			runtime := b.Time("runtime", func() {
-				_ = getEnterpriseCRDSource()
-			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading operator CRDs shouldnt take too long.")
-		}, 50)
+	It("can parse Operator CRDs used with calico", func() {
+		Expect(func() { Expect(getOperatorCRDSource(opv1.Calico)).ToNot(BeEmpty()) }).ToNot(Panic())
 	})
-	Context("GetCRDs", func() {
-		Measure("should quickly load calico CRDs", func(b Benchmarker) {
-			runtime := b.Time("runtime", func() {
-				_ = GetCRDs(opv1.Calico)
-			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading calico CRDs shouldnt take too long.")
-		}, 50)
-		Measure("should quickly load enterprise CRDs", func(b Benchmarker) {
-			runtime := b.Time("runtime", func() {
-				_ = GetCRDs(opv1.TigeraSecureEnterprise)
-			})
-			Expect(runtime.Seconds()).Should(BeNumerically("<", 0.2), "loading enterprise CRDs shouldnt take too long.")
-		}, 50)
+	It("can parse Operator CRDs used with Enterprise", func() {
+		Expect(func() { Expect(getOperatorCRDSource(opv1.TigeraSecureEnterprise)).ToNot(BeEmpty()) }).ToNot(Panic())
+	})
+	It("can get all CRDS used with Calico", func() {
+		Expect(func() { Expect(GetCRDs(opv1.Calico)).ToNot(BeEmpty()) }).ToNot(Panic())
+	})
+	It("can get all CRDS used with Enterprise", func() {
+		Expect(func() { Expect(GetCRDs(opv1.TigeraSecureEnterprise)).ToNot(BeEmpty()) }).ToNot(Panic())
 	})
 })

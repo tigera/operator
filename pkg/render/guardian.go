@@ -124,6 +124,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		CreateNamespace(GuardianNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
 	}
 
+	objs = append(objs, CreateOperatorSecretsRoleBinding(GuardianNamespace))
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PullSecrets...)...)...)
 	objs = append(objs,
 		c.serviceAccount(),
@@ -313,21 +314,24 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 }
 
 func (c *GuardianComponent) container() []corev1.Container {
+	envVars := []corev1.EnvVar{
+		{Name: "GUARDIAN_PORT", Value: "9443"},
+		{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
+		{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
+		{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(c.cfg.TunnelCAType)},
+		{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+	}
+	envVars = append(envVars, c.cfg.Installation.Proxy.EnvVars()...)
+
 	return []corev1.Container{
 		{
 			Name:            GuardianDeploymentName,
 			Image:           c.image,
 			ImagePullPolicy: ImagePullPolicy(),
-			Env: []corev1.EnvVar{
-				{Name: "GUARDIAN_PORT", Value: "9443"},
-				{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
-				{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
-				{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(c.cfg.TunnelCAType)},
-				{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-				{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-				{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-			},
-			VolumeMounts: c.volumeMounts(),
+			Env:             envVars,
+			VolumeMounts:    c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{

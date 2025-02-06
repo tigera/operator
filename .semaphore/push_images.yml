@@ -53,8 +53,10 @@ blocks:
       jobs:
         - name: Build
           commands:
-            - make cd CONFIRM=true;
-            - make maybe-build-release;
+            - make cd
+          env_vars:
+            - name: CONFIRM
+              value: "true"
 
 promotions:
   - name: Clean Up

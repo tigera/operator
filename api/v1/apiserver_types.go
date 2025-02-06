@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 /*
 
 
@@ -25,6 +25,9 @@ import (
 
 // APIServerSpec defines the desired state of Tigera API server.
 type APIServerSpec struct {
+	// +optional
+	Logging *APIServerPodLogging `json:"logging,omitempty"`
+
 	// APIServerDeployment configures the calico-apiserver (or tigera-apiserver in Enterprise) Deployment. If
 	// used in conjunction with ControlPlaneNodeSelector or ControlPlaneTolerations, then these overrides
 	// take precedence.
@@ -145,6 +148,10 @@ type APIServerDeploymentPodSpec struct {
 	// WARNING: Please note that this field will override the default API server Deployment tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations,omitempty"`
+
+	// PriorityClassName allows to specify a PriorityClass resource to be used.
+	// +optional
+	PriorityClassName string `json:"priorityClassName,omitempty"`
 }
 
 // APIServerDeploymentPodTemplateSpec is the API server Deployment's PodTemplateSpec
@@ -184,4 +191,26 @@ type APIServerDeploymentSpec struct {
 	// Template describes the API server Deployment pod that will be created.
 	// +optional
 	Template *APIServerDeploymentPodTemplateSpec `json:"template,omitempty"`
+}
+
+type APIServerPodLogging struct {
+	// +optional
+	APIServerLogging *APIServerLogging `json:"apiServer,omitempty"`
+
+	// +optional
+	QueryServerLogging *QueryServerLogging `json:"queryServer,omitempty"`
+}
+
+type APIServerLogging struct {
+	// LogSeverity defines log level for APIServer container.
+	// +optional
+	// +kubebuilder:default=Info
+	LogSeverity *LogSeverity `json:"logSeverity,omitempty"`
+}
+
+type QueryServerLogging struct {
+	// LogSeverity defines log level for QueryServer container.
+	// +optional
+	// +kubebuilder:default=Info
+	LogSeverity *LogSeverity `json:"logSeverity,omitempty"`
 }

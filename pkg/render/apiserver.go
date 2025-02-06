@@ -19,8 +19,6 @@ import (
 	"net/url"
 	"strings"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/api/pkg/lib/numorstring"
 	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +30,8 @@ import (
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -247,6 +247,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
 		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider, PSSPrivileged, c.cfg.Installation.Azure),
+		CreateOperatorSecretsRoleBinding(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)),
 		c.tigeraApiServerClusterRole(),
 		c.tigeraApiServerClusterRoleBinding(),
 		c.uisettingsgroupGetterClusterRole(),
@@ -305,6 +306,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Global OSS-only objects.
 	globalCalicoObjects := []client.Object{
 		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider, podSecurityNamespaceLabel, c.cfg.Installation.Azure),
+		CreateOperatorSecretsRoleBinding(rmeta.APIServerNamespace(operatorv1.Calico)),
 	}
 
 	// Compile the final arrays based on the variant.
@@ -605,7 +607,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 		{
 			// Kubernetes admin network policy resources.
 			APIGroups: []string{"policy.networking.k8s.io"},
-			Resources: []string{"adminnetworkpolicies"},
+			Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
 			Verbs: []string{
 				"get",
 				"list",
@@ -1014,9 +1016,11 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	name, _ := c.resourceNameBasedOnVariant("tigera-apiserver", "calico-apiserver")
 	hostNetwork := c.hostNetwork()
 	dnsPolicy := corev1.DNSClusterFirst
+	deploymentStrategyType := appsv1.RollingUpdateDeploymentStrategyType
 	if hostNetwork {
 		// Adjust DNS policy so we can access in-cluster services.
 		dnsPolicy = corev1.DNSClusterFirstWithHostNet
+		deploymentStrategyType = appsv1.RecreateDeploymentStrategyType
 	}
 
 	var initContainers []corev1.Container
@@ -1051,7 +1055,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.cfg.Installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
+				Type: deploymentStrategyType,
 			},
 			Selector: c.deploymentSelector(),
 			Template: corev1.PodTemplateSpec{
@@ -1194,6 +1198,16 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
 
+	// set Log_LEVEL for apiserver container
+	if logging := c.cfg.APIServer.Logging; logging != nil &&
+		logging.APIServerLogging != nil && logging.APIServerLogging.LogSeverity != nil {
+		env = append(env,
+			corev1.EnvVar{Name: "LOG_LEVEL", Value: strings.ToLower(string(*logging.APIServerLogging.LogSeverity))})
+	} else {
+		// set default LOG_LEVEL to info when not set by the user
+		env = append(env, corev1.EnvVar{Name: "LOG_LEVEL", Value: "info"})
+	}
+
 	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
@@ -1264,8 +1278,6 @@ func (c *apiServerComponent) startUpArgs() []string {
 // queryServerContainer creates the query server container.
 func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	env := []corev1.EnvVar{
-		// Set queryserver logging to "info"
-		{Name: "LOGLEVEL", Value: "info"},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", QueryServerPort)},
 		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
@@ -1283,6 +1295,16 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 	if c.cfg.KeyValidatorConfig != nil {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
+	}
+
+	// set LogLEVEL for queryserver container
+	if logging := c.cfg.APIServer.Logging; logging != nil &&
+		logging.QueryServerLogging != nil && logging.QueryServerLogging.LogSeverity != nil {
+		env = append(env,
+			corev1.EnvVar{Name: "LOGLEVEL", Value: strings.ToLower(string(*logging.QueryServerLogging.LogSeverity))})
+	} else {
+		// set default LOGLEVEL to info when not set by the user
+		env = append(env, corev1.EnvVar{Name: "LOGLEVEL", Value: "info"})
 	}
 
 	volumeMounts := []corev1.VolumeMount{
@@ -1625,6 +1647,19 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"pods"},
 			Verbs:     []string{"list"},
 		},
+		// Additional "list" requests required to view serviceaccount labels.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"serviceaccounts"},
+			Verbs:     []string{"list"},
+		},
+		// Access for WAF API to read in coreruleset configmap
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"coreruleset-default"},
+			Verbs:         []string{"get"},
+		},
 		// Access to statistics.
 		{
 			APIGroups: []string{""},
@@ -1808,6 +1843,19 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{""},
 			Resources: []string{"pods"},
 			Verbs:     []string{"list"},
+		},
+		// Additional "list" requests required to view serviceaccount labels.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"serviceaccounts"},
+			Verbs:     []string{"list"},
+		},
+		// Access for WAF API to read in coreruleset configmap
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"coreruleset-default"},
+			Verbs:         []string{"get"},
 		},
 		// Access to statistics.
 		{

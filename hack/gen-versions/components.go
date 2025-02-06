@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ var defaultImages = map[string]string{
 	"calico/kube-controllers":    "calico/kube-controllers",
 	"calico/node":                "calico/node",
 	"calico/node-windows":        "calico/node-windows",
+	"calico/goldmane":            "calico/goldmane",
 	"calicoctl":                  "calico/ctl",
 	"flannel":                    "coreos/flannel",
 	"flexvol":                    "calico/pod2daemon-flexvol",

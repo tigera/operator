@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,12 +32,14 @@ import (
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -65,6 +67,7 @@ var _ = Describe("Kibana rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-kibana", Namespace: kibana.Namespace}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: kibana.Namespace}},
 			&kbv1.Kibana{ObjectMeta: metav1.ObjectMeta{Name: kibana.CRName, Namespace: kibana.Namespace}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: kibana.Namespace}},
 		}
 
 		BeforeEach(func() {
@@ -130,11 +133,15 @@ var _ = Describe("Kibana rendering tests", func() {
 					Drop: []corev1.Capability{"ALL"},
 				},
 			))
+			Expect(kibanaCR.Spec.PodTemplate.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
+				Name:      "kibana-plugins",
+				MountPath: "/mnt/dummy-location/",
+			}))
+
 			Expect(kibanaCR.Spec.PodTemplate.Spec.Containers[0].SecurityContext.SeccompProfile).To(Equal(
 				&corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				}))
-
 			resultKB := rtest.GetResource(createResources, kibana.CRName, kibana.Namespace,
 				"kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.lifespan"]).To(Equal("8h"))

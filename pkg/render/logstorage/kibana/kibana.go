@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -154,6 +154,7 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, render.CreateNamespace(Namespace, k.cfg.Installation.KubernetesProvider, render.PSSBaseline, k.cfg.Installation.Azure))
 		toCreate = append(toCreate, k.allowTigeraPolicy())
 		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(Namespace))
+		toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(Namespace))
 		toCreate = append(toCreate, k.serviceAccount())
 
 		if k.cfg.Installation.KubernetesProvider.IsOpenShift() {
@@ -236,7 +237,15 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	var initContainers []corev1.Container
 	var volumes []corev1.Volume
 	var automountToken bool
-	var volumeMounts []corev1.VolumeMount
+	volumeMounts := []corev1.VolumeMount{
+		{
+			// We need to override this mount and change the mountPath. Otherwise, ECK will mount an emptyDir in the
+			// original location (/usr/share/kibana/plugins), which would remove our custom theme resulting in
+			// crash-looping pods, because our custom config is unexpected.
+			Name:      "kibana-plugins",
+			MountPath: "/mnt/dummy-location/",
+		},
+	}
 	if k.cfg.Installation.CertificateManagement != nil {
 		config["elasticsearch.ssl.certificateAuthorities"] = []string{"/mnt/elastic-internal/http-certs/ca.crt"}
 		automountToken = true

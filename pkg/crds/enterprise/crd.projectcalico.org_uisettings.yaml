@@ -2,8 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: (devel)
-  creationTimestamp: null
+    controller-gen.kubebuilder.io/version: v0.16.5
   name: uisettings.crd.projectcalico.org
 spec:
   group: crd.projectcalico.org
@@ -20,14 +19,19 @@ spec:
       openAPIV3Schema:
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -161,9 +165,9 @@ spec:
                 - nodes
                 type: object
               user:
-                description: The user associated with these settings. This is filled
-                  in by the APIServer on a create request if the owning group is filtered
-                  by user. Cannot be modified.
+                description: |-
+                  The user associated with these settings. This is filled in by the APIServer on a create request if the owning
+                  group is filtered by user. Cannot be modified.
                 type: string
               view:
                 description: View data. One of View, Layer or Dashboard should be
@@ -178,12 +182,11 @@ spec:
                       nodes.
                     type: boolean
                   hostAggregationSelectors:
-                    description: The set of selectors used to aggregate hosts (Kubernetes
-                      nodes). Nodes are aggregated based on the supplied set of selectors.
-                      In the case of overlapping selectors, the order specified in
-                      the slice is the order checked and so the first selector to
-                      match is used.  The nodes will be aggregated into a graph node
-                      with the name specified in the NamedSelector.
+                    description: |-
+                      The set of selectors used to aggregate hosts (Kubernetes nodes). Nodes are aggregated based on the supplied set
+                      of selectors. In the case of overlapping selectors, the order specified in the slice is the order checked and so
+                      the first selector to match is used.  The nodes will be aggregated into a graph node with the name specified in
+                      the NamedSelector.
                     items:
                       description: A Calico format label selector with an associated
                         name.
@@ -198,43 +201,42 @@ spec:
                       type: object
                     type: array
                   layers:
-                    description: The set of layer names that are active in this view.  Note
-                      that layers may be defined, but it is not necessary to have
-                      each layer "active". Corresponds directly to the name of the
-                      UISettings resource that contains a layer definition.
+                    description: |-
+                      The set of layer names that are active in this view.  Note that layers may be defined, but it is not necessary
+                      to have each layer "active". Corresponds directly to the name of the UISettings resource that contains a layer
+                      definition.
                     items:
                       type: string
                     type: array
                   layoutType:
-                    description: Layout type. Semi-arbitrary value used to specify
-                      the layout-type/algorithm. For example could specify different
-                      layout algorithms, or click-to-grid.  Mostly here for future
-                      use.
+                    description: |-
+                      Layout type. Semi-arbitrary value used to specify the layout-type/algorithm. For example could specify
+                      different layout algorithms, or click-to-grid.  Mostly here for future use.
                     type: string
                   nodes:
-                    description: Graph node specific view data. This provides information
-                      about what is in focus, expanded, hidden, deemphasized etc.
-                      at a per-node level.
+                    description: |-
+                      Graph node specific view data. This provides information about what is in focus, expanded, hidden,
+                      deemphasized etc. at a per-node level.
                     items:
                       description: UIGraphNodeView contains the view configuration
                         for a specific graph node.
                       properties:
                         deemphasize:
-                          description: Whether the UI should de-emphasize the node
-                            when visible. This is just a UI directive and does not
-                            correspond to a backend parameter.
+                          description: |-
+                            Whether the UI should de-emphasize the node when visible. This is just a UI directive and does not correspond to
+                            a backend parameter.
                           type: boolean
                         expanded:
-                          description: This node is expanded to the next level.  This
-                            node can, for example, be a layer that is expanded into
-                            its constituent parts.
+                          description: |-
+                            This node is expanded to the next level.  This node can, for example, be a layer that is expanded into its
+                            constituent parts.
                           type: boolean
                         followEgress:
                           type: boolean
                         followIngress:
-                          description: Whether the ingress/egress connections to/from
-                            this node are included in the graph.  This effectively
-                            brings more nodes into focus.
+                          description: |-
+                            Whether the ingress/egress connections to/from this node are included in the graph.  This effectively brings
+                            more nodes into focus.
                           type: boolean
                         hide:
                           description: Whether the UI should hide the node. This is
@@ -242,9 +244,9 @@ spec:
                             parameter.
                           type: boolean
                         hideUnrelated:
-                          description: Whether the UI should hide unrelated nodes.
-                            This is just a UI directive and does not correspond to
-                            a backend parameter.
+                          description: |-
+                            Whether the UI should hide unrelated nodes. This is just a UI directive and does not correspond to a backend
+                            parameter.
                           type: boolean
                         id:
                           description: The node ID.
@@ -289,11 +291,10 @@ spec:
                       type: object
                     type: array
                   splitIngressEgress:
-                    description: Whether to split HostEndpoints, NetworkSets and Networks
-                      into separate ingress and egress nodes or to combine them. In
-                      a service-centric view, splitting these makes the graph clearer.
-                      This never splits pods which represent a true microservice which
-                      has ingress and egress connections.
+                    description: |-
+                      Whether to split HostEndpoints, NetworkSets and Networks into separate ingress and egress nodes or to combine
+                      them. In a service-centric view, splitting these makes the graph clearer. This never splits pods which represent
+                      a true microservice which has ingress and egress connections.
                     type: boolean
                 type: object
             required:
@@ -303,9 +304,3 @@ spec:
         type: object
     served: true
     storage: true
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -306,7 +306,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	disableDex := utils.IsDexDisabled(authentication)
+	enableDex := utils.DexEnabled(authentication)
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
 	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, dexSecret, idpSecret, r.clusterDomain)
@@ -320,7 +320,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		Installation:   install,
 		DexConfig:      dexCfg,
 		ClusterDomain:  r.clusterDomain,
-		DeleteDex:      disableDex,
+		DeleteDex:      !enableDex,
 		TLSKeyPair:     tlsKeyPair,
 		TrustedBundle:  trustedBundle,
 		Authentication: authentication,
@@ -337,7 +337,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 
 	components := []render.Component{component}
 
-	if !disableDex {
+	if enableDex {
 		components = append(components,
 			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 				Namespace:       render.DexNamespace,

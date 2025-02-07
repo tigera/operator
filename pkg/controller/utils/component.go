@@ -456,6 +456,9 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 			}
 		}
 
+		// We're only comparing jobs based off of annotations and containers images for now so we can send a signal to recreate a job.
+		// Later we might want to have some better comparison of jobs so that a changed in the container spec would trigger
+		// a recreation of the job
 		if reflect.DeepEqual(cj.Spec.Template.Annotations, dj.Spec.Template.Annotations) {
 			return nil
 		}

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -950,9 +950,11 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 	hostNetwork := c.hostNetwork()
 	dnsPolicy := corev1.DNSClusterFirst
+	deploymentStrategyType := appsv1.RollingUpdateDeploymentStrategyType
 	if hostNetwork {
 		// Adjust DNS policy so we can access in-cluster services.
 		dnsPolicy = corev1.DNSClusterFirstWithHostNet
+		deploymentStrategyType = appsv1.RecreateDeploymentStrategyType
 	}
 
 	var initContainers []corev1.Container
@@ -979,7 +981,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		Spec: appsv1.DeploymentSpec{
 			Replicas: c.cfg.Installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
+				Type: deploymentStrategyType,
 			},
 			// For legacy reasons we use apiserver: true here instead of the k8s-app: name label,
 			// so we need to set it explicitly rather than use the common labeling logic.

@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -44,9 +44,13 @@ import (
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
 )
 
-// OperatorCSRSignerName when this value is set as a signer on a CSR, the CSR controller will handle
-// the request.
-const OperatorCSRSignerName = "tigera.io/operator-signer"
+const (
+	// OperatorCSRSignerName when this value is set as a signer on a CSR, the CSR controller will handle
+	// the request.
+	OperatorCSRSignerName = "tigera.io/operator-signer"
+	// GRACE_PERIOD is when we start rolling out a new certificate, during which the current cert is still valid (30d).
+	gracePeriod = 30 * 24 * time.Hour
+)
 
 var log = logf.Log.WithName("tls")
 
@@ -468,9 +472,31 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 		}
 
 		if timeInvalid {
-			return nil, nil, fmt.Errorf("secret %s/%s is not valid at this date", secretNamespace, secretName)
+			if readCertOnly {
+				cm.log.Info("secret %s/%s is not valid at this date, so we return nil and continue as though it does not exist", secretNamespace, secretName)
+				return nil, nil, nil
+			}
+			return nil, nil, fmt.Errorf("secret %s/%s is not valid at this date for a certificate not created by the operator, user action required", secretNamespace, secretName)
 		}
 		return nil, nil, newCertExtKeyUsageError(secretName, secretNamespace, requiredKeyUsages)
+	}
+
+	if !readCertOnly && x509Cert.NotAfter.Before(time.Now().Add(gracePeriod)) {
+		// The certificate is not valid one month from now. Let's start the rotation process, so there will be plenty of time
+		// to roll out the changes without disruption. All components that need to trust this certificate are already
+		// trusting the issuer, so there will be no disruption.
+		if !strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) {
+			cm.log.V(2).Info("Warning: this certificate will soon expire and is not managed by the operator, user action required!", "name", secretName)
+		} else {
+			if cm.keyPair.CertificateManagement != nil {
+				// When certificate management is enabled, we can simply return a certificate management key pair;
+				// the old secret will be deleted automatically.
+				return certificateManagementKeyPair(cm, secretName, secretNamespace, dnsNames), nil, nil
+			}
+			cm.log.Info("rotating the certificate because it is expiring soon", "name", secretName)
+			// By returning nil, the controller will issue a new certificate.
+			return nil, nil, nil
+		}
 	}
 
 	var issuer certificatemanagement.KeyPairInterface

@@ -156,7 +156,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// one that we are providing here.
 	crdComponent := render.NewPassthrough(render.GatewayAPICRDs(log)...)
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
-	if gatewayAPI.Spec.CRDManagement != nil && *gatewayAPI.Spec.CRDManagement == operatorv1.GatewayCRDManagementPreferExisting {
+	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.GatewayCRDManagementPreferExisting {
 		handler.SetCreateOnly()
 	}
 	err = handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil)

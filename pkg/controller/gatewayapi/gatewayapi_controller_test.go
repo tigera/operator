@@ -132,7 +132,7 @@ var _ = Describe("Gateway API controller tests", func() {
 				Expect(gatewayCRD.Spec.Versions).To(ContainElement(MatchFields(IgnoreExtras, Fields{"Name": Equal("v0123456789")})))
 			}
 		},
-		Entry("default", func(_ *operatorv1.GatewayAPI) {}, true),
+		Entry("default", func(_ *operatorv1.GatewayAPI) {}, false),
 		Entry("Reconcile", func(gwapi *operatorv1.GatewayAPI) {
 			setting := operatorv1.GatewayCRDManagementReconcile
 			gwapi.Spec.CRDManagement = &setting

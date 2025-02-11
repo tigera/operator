@@ -1,5 +1,5 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/enterprise.go.tpl
-title: release-calient-v3.21-1
+title: v3.21.0-1.0
 components:
   libcalico-go:
     version: release-calient-v3.21-1

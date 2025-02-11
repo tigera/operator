@@ -18,52 +18,52 @@
 package components
 
 var (
-	EnterpriseRelease string = "release-calient-v3.21-1"
+	EnterpriseRelease string = "v3.21.0-1.0"
 
 	ComponentAPIServer = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/cnx-apiserver",
 		Registry: "",
 	}
 
 	ComponentComplianceBenchmarker = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/compliance-benchmarker",
 		Registry: "",
 	}
 
 	ComponentComplianceController = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/compliance-controller",
 		Registry: "",
 	}
 
 	ComponentComplianceReporter = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/compliance-reporter",
 		Registry: "",
 	}
 
 	ComponentComplianceServer = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/compliance-server",
 		Registry: "",
 	}
 
 	ComponentComplianceSnapshotter = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/compliance-snapshotter",
 		Registry: "",
 	}
 
 	ComponentTigeraCSRInitContainer = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/key-cert-provisioner",
 		Registry: "",
 	}
 
 	ComponentDeepPacketInspection = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/deep-packet-inspection",
 		Registry: "",
 	}
@@ -79,13 +79,13 @@ var (
 	}
 
 	ComponentElasticTseeInstaller = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/intrusion-detection-job-installer",
 		Registry: "",
 	}
 
 	ComponentElasticsearch = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/elasticsearch",
 		Registry: "",
 	}
@@ -96,121 +96,121 @@ var (
 	}
 
 	ComponentElasticsearchOperator = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/eck-operator",
 		Registry: "",
 	}
 
 	ComponentUIAPIs = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/ui-apis",
 		Registry: "",
 	}
 
 	ComponentESGateway = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/es-gateway",
 		Registry: "",
 	}
 
 	ComponentLinseed = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/linseed",
 		Registry: "",
 	}
 
 	ComponentFluentd = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/fluentd",
 		Registry: "",
 	}
 
 	ComponentFluentdWindows = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/fluentd-windows",
 		Registry: "",
 	}
 
 	ComponentGuardian = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/guardian",
 		Registry: "",
 	}
 
 	ComponentIntrusionDetectionController = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/intrusion-detection-controller",
 		Registry: "",
 	}
 
 	ComponentSecurityEventWebhooksProcessor = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/webhooks-processor",
 		Registry: "",
 	}
 
 	ComponentKibana = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/kibana",
 		Registry: "",
 	}
 
 	ComponentManager = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/cnx-manager",
 		Registry: "",
 	}
 
 	ComponentDex = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/dex",
 		Registry: "",
 	}
 
 	ComponentManagerProxy = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/voltron",
 		Registry: "",
 	}
 
 	ComponentPacketCapture = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/packetcapture",
 		Registry: "",
 	}
 
 	ComponentPolicyRecommendation = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/policy-recommendation",
 		Registry: "",
 	}
 
 	ComponentEgressGateway = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/egress-gateway",
 		Registry: "",
 	}
 
 	ComponentL7Collector = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/l7-collector",
 		Registry: "",
 	}
 
 	ComponentEnvoyProxy = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/envoy",
 		Registry: "",
 	}
 
 	ComponentDikastes = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/dikastes",
 		Registry: "",
 	}
 
 	ComponentL7AdmissionController = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/l7-admission-controller",
 		Registry: "",
 	}
@@ -221,13 +221,13 @@ var (
 	}
 
 	ComponentPrometheus = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/prometheus",
 		Registry: "",
 	}
 
 	ComponentTigeraPrometheusService = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/prometheus-service",
 		Registry: "",
 	}
@@ -238,91 +238,91 @@ var (
 	}
 
 	ComponentPrometheusAlertmanager = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/alertmanager",
 		Registry: "",
 	}
 
 	ComponentQueryServer = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/cnx-queryserver",
 		Registry: "",
 	}
 
 	ComponentTigeraKubeControllers = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/kube-controllers",
 		Registry: "",
 	}
 
 	ComponentTigeraNode = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/cnx-node",
 		Registry: "",
 	}
 
 	ComponentTigeraNodeWindows = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/cnx-node-windows",
 		Registry: "",
 	}
 
 	ComponentTigeraTypha = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/typha",
 		Registry: "",
 	}
 
 	ComponentTigeraCNI = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/cni",
 		Registry: "",
 	}
 
 	ComponentTigeraCNIWindows = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/cni-windows",
 		Registry: "",
 	}
 
 	ComponentElasticsearchMetrics = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/elasticsearch-metrics",
 		Registry: "",
 	}
 
 	ComponentTigeraFlexVolume = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/pod2daemon-flexvol",
 		Registry: "",
 	}
 
 	ComponentTigeraCSI = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/csi",
 		Registry: "",
 	}
 
 	ComponentTigeraCSINodeDriverRegistrar = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/node-driver-registrar",
 		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/envoy-gateway",
 		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/envoy-proxy",
 		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:  "release-calient-v3.21-1",
+		Version:  "v3.21.0-1.0",
 		Image:    "tigera/envoy-ratelimit",
 		Registry: "",
 	}

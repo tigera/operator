@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -185,6 +185,11 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"operator.tigera.io"},
+				Resources: []string{"managementclusters"},
+				Verbs:     []string{"get", "list"},
 			},
 		}...)
 	}

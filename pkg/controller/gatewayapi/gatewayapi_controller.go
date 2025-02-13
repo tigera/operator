@@ -158,7 +158,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// one that we are providing here.
 	crdComponent := render.NewPassthrough(render.GatewayAPICRDs(log)...)
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
-	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.GatewayCRDManagementPreferExisting {
+	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
 	}
 	err = handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil)
@@ -169,13 +169,13 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 			// None of the CRDs previously existed, and all of them were just created by
 			// us.  Therefore, in future we can consider the CRDs as Tigera
 			// operator-owned, and reconcile them so as to deliver future updates.
-			setting := operatorv1.GatewayCRDManagementReconcile
+			setting := operatorv1.CRDManagementReconcile
 			gatewayAPI.Spec.CRDManagement = &setting
 		} else {
 			// Some (i.e. at least one) of the CRDs already existed.  Therefore we have
 			// to assume that someone or something else is provisioning the CRDs in this
 			// cluster, and make sure not to clobber them.
-			setting := operatorv1.GatewayCRDManagementPreferExisting
+			setting := operatorv1.CRDManagementPreferExisting
 			gatewayAPI.Spec.CRDManagement = &setting
 		}
 		// Patch that value back into the datastore.

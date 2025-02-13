@@ -3979,7 +3979,7 @@ func (in *GatewayAPISpec) DeepCopyInto(out *GatewayAPISpec) {
 	}
 	if in.CRDManagement != nil {
 		in, out := &in.CRDManagement, &out.CRDManagement
-		*out = new(GatewayCRDManagement)
+		*out = new(CRDManagement)
 		**out = **in
 	}
 }

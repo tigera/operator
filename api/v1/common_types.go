@@ -52,3 +52,11 @@ const (
 	LogSeverityDebug LogSeverity = "Debug"
 	LogSeverityTrace LogSeverity = "Trace"
 )
+
+// +kubebuilder:validation:Enum=Reconcile;PreferExisting
+type CRDManagement string
+
+const (
+	CRDManagementReconcile      CRDManagement = "Reconcile"
+	CRDManagementPreferExisting CRDManagement = "PreferExisting"
+)

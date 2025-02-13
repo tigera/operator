@@ -22,14 +22,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// +kubebuilder:validation:Enum=Reconcile;PreferExisting
-type GatewayCRDManagement string
-
-const (
-	GatewayCRDManagementReconcile      GatewayCRDManagement = "Reconcile"
-	GatewayCRDManagementPreferExisting GatewayCRDManagement = "PreferExisting"
-)
-
 // GatewayAPISpec has fields that can be used to customize our GatewayAPI support.
 type GatewayAPISpec struct {
 	// Allow optional customization of the gateway controller deployment.
@@ -53,7 +45,7 @@ type GatewayAPISpec struct {
 	// Alternatively, if this field is set to "Reconcile", the Tigera operator will keep the
 	// cluster's Gateway API CRDs aligned with those that it would install on a cluster that
 	// does not yet have any version of those CRDs.
-	CRDManagement *GatewayCRDManagement `json:"crdManagement,omitempty"`
+	CRDManagement *CRDManagement `json:"crdManagement,omitempty"`
 }
 
 //+kubebuilder:object:root=true

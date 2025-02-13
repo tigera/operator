@@ -137,16 +137,16 @@ var _ = Describe("Gateway API controller tests", func() {
 				By("checking that CRDManagement field has been updated to PreferExisting")
 				Expect(c.Get(ctx, utils.DefaultTSEEInstanceKey, gwapi)).NotTo(HaveOccurred())
 				Expect(gwapi.Spec.CRDManagement).NotTo(BeNil())
-				Expect(*gwapi.Spec.CRDManagement).To(Equal(operatorv1.GatewayCRDManagementPreferExisting))
+				Expect(*gwapi.Spec.CRDManagement).To(Equal(operatorv1.CRDManagementPreferExisting))
 			}
 		},
 		Entry("default", func(_ *operatorv1.GatewayAPI) {}, false),
 		Entry("Reconcile", func(gwapi *operatorv1.GatewayAPI) {
-			setting := operatorv1.GatewayCRDManagementReconcile
+			setting := operatorv1.CRDManagementReconcile
 			gwapi.Spec.CRDManagement = &setting
 		}, true),
 		Entry("PreferExisting", func(gwapi *operatorv1.GatewayAPI) {
-			setting := operatorv1.GatewayCRDManagementPreferExisting
+			setting := operatorv1.CRDManagementPreferExisting
 			gwapi.Spec.CRDManagement = &setting
 		}, false),
 	)

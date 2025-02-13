@@ -36,6 +36,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
@@ -130,6 +131,13 @@ var _ = Describe("Gateway API controller tests", func() {
 				Expect(gatewayCRD.Spec.Versions).NotTo(ContainElement(MatchFields(IgnoreExtras, Fields{"Name": Equal("v0123456789")})))
 			} else {
 				Expect(gatewayCRD.Spec.Versions).To(ContainElement(MatchFields(IgnoreExtras, Fields{"Name": Equal("v0123456789")})))
+			}
+
+			if gwapi.Spec.CRDManagement == nil {
+				By("checking that CRDManagement field has been updated to PreferExisting")
+				Expect(c.Get(ctx, utils.DefaultTSEEInstanceKey, gwapi)).NotTo(HaveOccurred())
+				Expect(gwapi.Spec.CRDManagement).NotTo(BeNil())
+				Expect(*gwapi.Spec.CRDManagement).To(Equal(operatorv1.GatewayCRDManagementPreferExisting))
 			}
 		},
 		Entry("default", func(_ *operatorv1.GatewayAPI) {}, false),

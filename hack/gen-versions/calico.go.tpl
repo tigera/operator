@@ -154,7 +154,27 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-
+{{ with index .Components "calico/whisker"}}
+	ComponentCalicoWhisker = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "calico/whisker-backend"}}
+	ComponentCalicoWhiskerBackend = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "calico/guardian" }}
+	ComponentCalicoGuardian = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 	ComponentOperatorInit = Component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",

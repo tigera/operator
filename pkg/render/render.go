@@ -47,5 +47,5 @@ func SetClusterCriticalPod(t *corev1.PodTemplateSpec) {
 
 // ImagePullPolicy returns the image pull policy to use for all components.
 func ImagePullPolicy() corev1.PullPolicy {
-	return corev1.PullIfNotPresent
+	return corev1.PullAlways
 }

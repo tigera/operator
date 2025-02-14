@@ -136,6 +136,23 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoWhisker = Component{
+		Version:  "master",
+		Image:    "calico/whisker",
+		Registry: "",
+	}
+
+	ComponentCalicoWhiskerBackend = Component{
+		Version:  "master",
+		Image:    "calico/whisker-backend",
+		Registry: "",
+	}
+
+	ComponentCalicoGuardian = Component{
+		Version:  "master",
+		Image:    "calico/guardian",
+		Registry: "",
+	}
 	ComponentOperatorInit = Component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",

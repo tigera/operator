@@ -27,3 +27,9 @@ components:
     version: master
   key-cert-provisioner:
     version: master
+  calico/whisker:
+    version: master
+  calico/whisker-backend:
+    version: master
+  calico/guardian:
+    version: master

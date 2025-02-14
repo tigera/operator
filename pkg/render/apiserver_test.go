@@ -1505,6 +1505,16 @@ var (
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
 		{
+			APIGroups: []string{
+				"policy.networking.k8s.io",
+			},
+			Resources: []string{
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
+			},
+			Verbs: []string{"get", "watch", "list"},
+		},
+		{
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
 			Verbs:     []string{"get", "delete"},

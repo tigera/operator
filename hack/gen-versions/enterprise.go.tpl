@@ -357,27 +357,6 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "gateway-api-envoy-gateway" }}
-	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
-{{ with index .Components "gateway-api-envoy-proxy" }}
-	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
-{{ with index .Components "gateway-api-envoy-ratelimit" }}
-	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
-	}
-{{- end }}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
@@ -425,8 +404,5 @@ var (
 		ComponentTigeraFlexVolume,
 		ComponentTigeraCSI,
 		ComponentTigeraCSINodeDriverRegistrar,
-		ComponentGatewayAPIEnvoyGateway,
-		ComponentGatewayAPIEnvoyProxy,
-		ComponentGatewayAPIEnvoyRatelimit,
 	}
 )

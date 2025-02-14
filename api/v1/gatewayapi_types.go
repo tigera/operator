@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +32,20 @@ type GatewayAPISpec struct {
 
 	// Allow optional customization of gateway deployments.
 	GatewayDeployment *GatewayDeployment `json:"gatewayDeployment,omitempty"`
+
+	// Configure how to manage and update Gateway API CRDs.  The default behaviour - which is
+	// used when this field is not set, or is set to "PreferExisting" - is that the Tigera
+	// operator will create the Gateway API CRDs if they do not already exist, but will not
+	// overwrite any existing Gateway API CRDs.  This setting may be preferable if the customer
+	// is using other implementations of the Gateway API concurrently with the Gateway API
+	// support in Calico Enterprise.  It is then the customer's responsibility to ensure that
+	// CRDs are installed that meet the needs of all the Gateway API implementations in their
+	// cluster.
+	//
+	// Alternatively, if this field is set to "Reconcile", the Tigera operator will keep the
+	// cluster's Gateway API CRDs aligned with those that it would install on a cluster that
+	// does not yet have any version of those CRDs.
+	CRDManagement *CRDManagement `json:"crdManagement,omitempty"`
 }
 
 //+kubebuilder:object:root=true

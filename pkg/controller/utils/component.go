@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -50,6 +51,12 @@ type ComponentHandler interface {
 
 	// Set this component handler to "create only" operation - i.e. it only creates resources if
 	// they do not already exist, and never tries to correct existing resources.
+	//
+	// When a component handler is "create only", and some of the objects that it is asked to
+	// create already exist, but no other error occurs, the CreateOrUpdateOrDelete() method will
+	// return an error that satisfies `errors.IsAlreadyExists`.  If a more serious error occurs,
+	// the method will return that more serious error instead.  If none of the objects already
+	// exist, and no other errors occur, the method will return nil.
 	SetCreateOnly()
 }
 
@@ -151,7 +158,13 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	if c.createOnly {
 		// This component handler only creates resources if they do not already exist.
 		logCtx.Info("Create-only operation, ignoring existing object")
-		return nil
+		return errors.NewAlreadyExists(
+			schema.GroupResource{
+				Group:    obj.GetObjectKind().GroupVersionKind().Group,
+				Resource: obj.GetObjectKind().GroupVersionKind().Kind,
+			},
+			obj.GetName(),
+		)
 	}
 
 	// The object exists. Update it, unless the user has marked it as "ignored".
@@ -290,22 +303,30 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	objsToCreate, objsToDelete := component.Objects()
 	osType := component.SupportedOSType()
 
+	var alreadyExistsErr error = nil
+
 	for _, obj := range objsToCreate {
 		key := client.ObjectKeyFromObject(obj)
 
 		// Pass in a DeepCopy so any modifications made by createOrUpdateObject won't be included
 		// if we need to retry the function
+		alreadyRetriedConflict := false
+	conflictRetry:
 		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
-		if err != nil && errors.IsConflict(err) {
-			// If the error is a resource Conflict, try the update again
-			cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")
-			err = c.createOrUpdateObject(ctx, obj, osType)
-			if err != nil {
+		if err != nil {
+			if errors.IsAlreadyExists(err) {
+				// Remember that we've had an "already exists" error, but otherwise
+				// carry on.
+				alreadyExistsErr = err
+			} else if errors.IsConflict(err) && !alreadyRetriedConflict {
+				// If the error is a resource Conflict, try the update again.
+				cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")
+				alreadyRetriedConflict = true
+				goto conflictRetry
+			} else {
+				cmpLog.Error(err, "Failed to create or update object", "key", key)
 				return err
 			}
-		} else if err != nil {
-			cmpLog.Error(err, "Failed to create or update object", "key", key)
-			return err
 		}
 
 		// Keep track of some objects so we can report on their status.
@@ -367,7 +388,10 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	if status != nil {
 		status.ReadyToMonitor()
 	}
-	return nil
+
+	// alreadyExistsErr is only non-nil if this component handler is in "create only" mode and
+	// one (or more) of objsToCreate already existed.
+	return alreadyExistsErr
 }
 
 // skipAddingOwnerReference returns true if owner is a namespaced resource and

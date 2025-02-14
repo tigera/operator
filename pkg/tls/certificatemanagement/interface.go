@@ -70,6 +70,7 @@ type TrustedBundle interface {
 	ConfigMap(namespace string) *corev1.ConfigMap
 	HashAnnotations() map[string]string
 	VolumeMounts(osType meta.OSType) []corev1.VolumeMount
+	VolumeMountPath(osType meta.OSType) string
 	Volume() corev1.Volume
 	AddCertificates(certificates ...CertificateInterface)
 }

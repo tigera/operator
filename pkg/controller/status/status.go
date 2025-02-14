@@ -76,7 +76,7 @@ type StatusManager interface {
 	IsProgressing() bool
 	IsDegraded() bool
 	ReadyToMonitor()
-	SetMetaData(meta *metav1.ObjectMeta)
+	SetMetaData(meta metav1.Object)
 }
 
 type statusManager struct {
@@ -854,10 +854,10 @@ func (m *statusManager) clearProgressingWithReason(reason operator.TigeraStatusR
 	m.set(true, conditions...)
 }
 
-func (m *statusManager) SetMetaData(meta *metav1.ObjectMeta) {
+func (m *statusManager) SetMetaData(meta metav1.Object) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.observedGeneration = meta.Generation
+	meta.SetGeneration(m.observedGeneration)
 }
 
 func hasPendingCSR(ctx context.Context, m *statusManager, labelMap map[string]string) (bool, error) {

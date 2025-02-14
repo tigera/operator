@@ -1804,6 +1804,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"projectcalico.org",
 				"networking.k8s.io",
 				"extensions",
+				"policy.networking.k8s.io",
 			},
 			// Use both the networkpolicies and tier.networkpolicies resource types to ensure identical behavior
 			// irrespective of the Calico RBAC scheme (see the ClusterRole "tigera-tiered-policy-passthrough" for
@@ -1824,6 +1825,8 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"managedclusters",
 				"packetcaptures",
 				"policyrecommendationscopes",
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},

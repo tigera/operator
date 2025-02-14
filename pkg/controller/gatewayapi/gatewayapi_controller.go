@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,9 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -156,9 +158,45 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// one that we are providing here.
 	crdComponent := render.NewPassthrough(render.GatewayAPICRDs(log)...)
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
-	handler.SetCreateOnly()
+	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
+		handler.SetCreateOnly()
+	}
 	err = handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil)
-	if err != nil {
+	if gatewayAPI.Spec.CRDManagement == nil && (err == nil || errors.IsAlreadyExists(err)) {
+		// The GatewayAPI CR does not yet have a specified value for its CRDManagement
+		// field, and we can now infer a reasonable value.
+		if err == nil {
+			// None of the CRDs previously existed, and all of them were just created by
+			// us.  Therefore, in future we can consider the CRDs as Tigera
+			// operator-owned, and reconcile them so as to deliver future updates.
+			setting := operatorv1.CRDManagementReconcile
+			gatewayAPI.Spec.CRDManagement = &setting
+		} else {
+			// Some (i.e. at least one) of the CRDs already existed.  Therefore we have
+			// to assume that someone or something else is provisioning the CRDs in this
+			// cluster, and make sure not to clobber them.
+			setting := operatorv1.CRDManagementPreferExisting
+			gatewayAPI.Spec.CRDManagement = &setting
+		}
+		// Patch that value back into the datastore.
+		err = r.client.Patch(ctx, &operatorv1.GatewayAPI{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: utils.DefaultTSEEInstanceKey.Name,
+			},
+			Spec: operatorv1.GatewayAPISpec{
+				CRDManagement: gatewayAPI.Spec.CRDManagement,
+			},
+		}, client.MergeFrom(&operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				CRDManagement: nil,
+			},
+		}))
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to patch CRDManagement field", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+	if err != nil && !errors.IsAlreadyExists(err) {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI CRDs", err, log)
 		return reconcile.Result{}, err
 	}

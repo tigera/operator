@@ -318,7 +318,6 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 				// Remember that we've had an "already exists" error, but otherwise
 				// carry on.
 				alreadyExistsErr = err
-				err = nil
 			} else if errors.IsConflict(err) && !alreadyRetriedConflict {
 				// If the error is a resource Conflict, try the update again.
 				cmpLog.WithValues("key", key, "conflict_message", err).Info("Failed to update object, retrying.")

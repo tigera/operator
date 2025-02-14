@@ -54,6 +54,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "goldmane" }}
+	ComponentGoldmane = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "compliance-snapshotter" }}
 	ComponentComplianceSnapshotter = Component{
 		Version:  "{{ .Version }}",

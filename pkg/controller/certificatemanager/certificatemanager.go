@@ -664,6 +664,10 @@ func (a *readOnlyTrustedBundle) VolumeMounts(osType meta.OSType) []corev1.Volume
 	return a.bundle.VolumeMounts(osType)
 }
 
+func (a *readOnlyTrustedBundle) VolumeMountPath(osType rmeta.OSType) string {
+	return a.bundle.VolumeMountPath(osType)
+}
+
 func (a *readOnlyTrustedBundle) Volume() corev1.Volume {
 	return a.bundle.Volume()
 }

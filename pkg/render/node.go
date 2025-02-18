@@ -1296,6 +1296,7 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 	return corev1.Container{
 		Name:            CalicoNodeObjectName,
 		Image:           c.nodeImage,
+		ImagePullPolicy: ImagePullPolicy(),
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),

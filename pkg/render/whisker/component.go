@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -170,9 +171,8 @@ func (c *Component) whiskerContainer() corev1.Container {
 			{Name: "LOG_LEVEL", Value: "DEBUG"},
 			{Name: "CA_CERT_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			configMapMount(c.cfg.TrustedCertBundle.VolumeMountPath(rmeta.OSTypeLinux), c.cfg.TrustedCertBundle.ConfigMap(WhiskerNamespace)),
-		},
+		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
 	}
 }
 
@@ -202,9 +202,8 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 			{Name: "PORT", Value: "3002"},
 			{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			configMapMount(c.cfg.TrustedCertBundle.VolumeMountPath(rmeta.OSTypeLinux), c.cfg.TrustedCertBundle.ConfigMap(WhiskerNamespace)),
-		},
+		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
 	}
 }
 
@@ -229,6 +228,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		Image:           c.goldmaneImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env:             env,
+		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,
 	}
 }
@@ -266,10 +266,10 @@ func (c *Component) guardianContainer() corev1.Container {
 			{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: bundle.MountPath()},
 			{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: bundle.MountPath()},
 		}, c.cfg.Installation.Proxy.EnvVars()...),
-		VolumeMounts: []corev1.VolumeMount{
+		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts: append([]corev1.VolumeMount{
 			secretMount("/certs", c.cfg.TunnelSecret),
-			configMapMount(bundle.VolumeMountPath(rmeta.OSTypeLinux), bundle.ConfigMap("")),
-		},
+		}, c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)...),
 	}
 }
 
@@ -280,7 +280,7 @@ func (c *Component) deployment() *appsv1.Deployment {
 	}
 
 	ctrs := []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer(), c.goldmaneContainer()}
-	volumes := []corev1.Volume{configMapVolume(c.cfg.TrustedCertBundle.ConfigMap(WhiskerNamespace))}
+	volumes := []corev1.Volume{c.cfg.TrustedCertBundle.Volume()}
 	if c.cfg.ManagementClusterConnection != nil {
 		ctrs = append(ctrs, c.guardianContainer())
 		volumes = append(volumes, secretVolume(c.cfg.TunnelSecret))
@@ -329,20 +329,6 @@ func secretVolume(scrt *corev1.Secret) corev1.Volume {
 	return corev1.Volume{
 		Name:         fmt.Sprintf("%s-%s", scrt.Name, "scrt"),
 		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: scrt.Name}},
-	}
-}
-
-func configMapMount(path string, cm *corev1.ConfigMap) corev1.VolumeMount {
-	return corev1.VolumeMount{
-		Name:      fmt.Sprintf("%s-%s", cm.Name, "cm"),
-		MountPath: path,
-	}
-}
-
-func configMapVolume(cm *corev1.ConfigMap) corev1.Volume {
-	return corev1.Volume{
-		Name:         fmt.Sprintf("%s-%s", cm.Name, "cm"),
-		VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{LocalObjectReference: corev1.LocalObjectReference{Name: cm.Name}}},
 	}
 }
 

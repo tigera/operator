@@ -455,6 +455,25 @@ func GetManagementClusterConnection(ctx context.Context, c client.Client) (*oper
 	return managementClusterConnection, nil
 }
 
+type ClientObjType[E any] interface {
+	*E
+	client.Object
+}
+
+func Get[E any, ClientObj ClientObjType[E]](ctx context.Context, key client.ObjectKey, c client.Client) (*E, error) {
+	obj := new(E)
+
+	err := c.Get(ctx, key, ClientObj(obj))
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return obj, nil
+}
+
 // GetNonClusterHost finds the NonClusterHost CR in your cluster.
 func GetNonClusterHost(ctx context.Context, cli client.Client) (*operatorv1.NonClusterHost, error) {
 	nonclusterhost := &operatorv1.NonClusterHost{}

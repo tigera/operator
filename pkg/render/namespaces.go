@@ -100,8 +100,8 @@ func CreateNamespace(name string, provider operatorv1.Provider, pss PodSecurityS
 
 	// Add in labels for configuring pod security standards.
 	// https://kubernetes.io/docs/concepts/security/pod-security-standards/
-	ns.Labels["pod-security.kubernetes.io/enforce"] = string(pss)
-	ns.Labels["pod-security.kubernetes.io/enforce-version"] = "latest"
+	//ns.Labels["pod-security.kubernetes.io/enforce"] = string(pss)
+	//ns.Labels["pod-security.kubernetes.io/enforce-version"] = "latest"
 
 	switch provider {
 	case operatorv1.ProviderOpenShift:

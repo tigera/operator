@@ -50,6 +50,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentGoldmane = Component{
+		Version:  "latest",
+		Image:    "caseydavenport/goldmane",
+		Registry: "",
+	}
+
 	ComponentComplianceSnapshotter = Component{
 		Version:  "master",
 		Image:    "tigera/compliance-snapshotter",

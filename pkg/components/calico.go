@@ -131,27 +131,27 @@ var (
 	}
 
 	ComponentCalicoGoldmane = Component{
-		Version:  "master",
+		Version:  "bmv1.10",
 		Image:    "calico/goldmane",
-		Registry: "",
+		Registry: "gcr.io/unique-caldron-775/brianmcmahon/",
 	}
 
 	ComponentCalicoWhisker = Component{
-		Version:  "master",
+		Version:  "bmv1.10",
 		Image:    "calico/whisker",
-		Registry: "",
+		Registry: "gcr.io/unique-caldron-775/brianmcmahon/",
 	}
 
 	ComponentCalicoWhiskerBackend = Component{
-		Version:  "master",
+		Version:  "bmv1.10",
 		Image:    "calico/whisker-backend",
-		Registry: "",
+		Registry: "gcr.io/unique-caldron-775/brianmcmahon/",
 	}
 
 	ComponentCalicoGuardian = Component{
-		Version:  "master",
+		Version:  "bmv1.10",
 		Image:    "calico/guardian",
-		Registry: "",
+		Registry: "gcr.io/unique-caldron-775/brianmcmahon/",
 	}
 	ComponentOperatorInit = Component{
 		Version: version.VERSION,

@@ -639,7 +639,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	routeConfig, routeConfigErr := getVoltronRouteConfig(ctx, r.client, helper.InstallNamespace())
 	if routeConfigErr != nil {
-		log.Error(routeConfigErr, "error with voltron route config, continuing")
+		log.Error(routeConfigErr, "error with voltron route config, route configuration will not be added to voltron")
 	}
 
 	// Check if non-cluster host log ingestion is enabled.

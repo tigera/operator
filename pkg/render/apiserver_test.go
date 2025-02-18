@@ -1484,6 +1484,7 @@ var (
 				"projectcalico.org",
 				"networking.k8s.io",
 				"extensions",
+				"policy.networking.k8s.io",
 			},
 			Resources: []string{
 				"tiers",
@@ -1501,6 +1502,8 @@ var (
 				"managedclusters",
 				"packetcaptures",
 				"policyrecommendationscopes",
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},

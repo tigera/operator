@@ -15,6 +15,9 @@ components:
   cnx-queryserver:
     image: tigera/cnx-queryserver
     version: master
+  goldmane:
+    image: caseydavenport/goldmane
+    version: latest
   cnx-kube-controllers:
     image: tigera/kube-controllers
     version: master

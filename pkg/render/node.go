@@ -1295,8 +1295,7 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            CalicoNodeObjectName,
-		Image:           "gcr.io/unique-caldron-775/brianmcmahon/calico/node:bmv1.10",
-		ImagePullPolicy: corev1.PullAlways,
+		Image:           c.nodeImage,
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),

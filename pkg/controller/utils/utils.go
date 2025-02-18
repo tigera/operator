@@ -460,7 +460,7 @@ type ClientObjType[E any] interface {
 	client.Object
 }
 
-func Get[E any, ClientObj ClientObjType[E]](ctx context.Context, key client.ObjectKey, c client.Client) (*E, error) {
+func GetIfExists[E any, ClientObj ClientObjType[E]](ctx context.Context, key client.ObjectKey, c client.Client) (*E, error) {
 	obj := new(E)
 
 	err := c.Get(ctx, key, ClientObj(obj))

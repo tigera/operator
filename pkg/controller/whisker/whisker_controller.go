@@ -69,6 +69,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	for _, secretName := range []string{
 		monitor.PrometheusServerTLSSecretName,
+		whisker.ManagedClusterConnectionSecretName,
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
 	} {
@@ -80,11 +81,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
-	}
-
-	// Watch for changes to the secrets associated with the ManagementClusterConnection.
-	if err = utils.AddSecretsWatch(c, whisker.ManagedClusterConnectionSecretName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, whisker.ManagedClusterConnectionSecretName, err)
 	}
 
 	if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {
@@ -100,7 +96,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	if err := utils.AddDeploymentWatch(c, whisker.WhiskerDeploymentName, whisker.WhiskerNamespace); err != nil {
-		return fmt.Errorf("%s failed to watch Guardian deployment: %w", controllerName, err)
+		return fmt.Errorf("%s failed to watch Whisker deployment: %w", controllerName, err)
 	}
 
 	// Watch for changes to TigeraStatus.
@@ -121,9 +117,9 @@ func newReconciler(
 	opts options.AddOptions,
 ) *Reconciler {
 	c := &Reconciler{
-		Client:         cli,
-		Scheme:         schema,
-		Provider:       p,
+		cli:            cli,
+		scheme:         schema,
+		provider:       p,
 		status:         statusMgr,
 		clusterDomain:  opts.ClusterDomain,
 		tierWatchReady: tierWatchReady,
@@ -137,9 +133,9 @@ var _ reconcile.Reconciler = &Reconciler{}
 
 // Reconciler reconciles a ManagementClusterConnection object
 type Reconciler struct {
-	Client                     client.Client
-	Scheme                     *runtime.Scheme
-	Provider                   operatorv1.Provider
+	cli                        client.Client
+	scheme                     *runtime.Scheme
+	provider                   operatorv1.Provider
 	status                     status.StatusManager
 	clusterDomain              string
 	tierWatchReady             *utils.ReadyFlag
@@ -147,8 +143,8 @@ type Reconciler struct {
 	lastAvailabilityTransition metav1.Time
 }
 
-// Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
-// state read and what is in the ManagementClusterConnection.Spec. The Controller will requeue the Request to be
+// Reconcile reads that state of the cluster for a Whisker object and makes changes based on the
+// state read and what is in the Whisker.Spec. The Controller will requeue the Request to be
 // processed again if the returned error is non-nil or Result.Requeue is true, otherwise upon completion it will
 // remove the work from the queue.
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -156,15 +152,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	reqLogger.Info("Reconciling Whisker")
 	result := reconcile.Result{}
 
-	variant, instl, err := utils.GetInstallation(ctx, r.Client)
+	variant, installation, err := utils.GetInstallation(ctx, r.cli)
 	if err != nil {
 		return result, err
 	}
 
-	// TODO don't rely on the managed cluster connection since it won't be there to start.
-	whiskerCR, err := utils.Get[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.Client)
+	whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying GoldRush CR", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Whisker CR", err, reqLogger)
 		return result, err
 	} else if whiskerCR == nil {
 		r.status.OnCRNotFound()
@@ -174,21 +169,21 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// SetMetaData in the TigeraStatus such as observedGenerations.
 	defer r.status.SetMetaData(&whiskerCR.ObjectMeta)
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.Client)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return result, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.Client, instl, r.clusterDomain, common.OperatorNamespace())
+	certificateManager, err := certificatemanager.Create(r.cli, installation, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the certificate manager", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Copy the secret from the operator namespace to the guardian namespace if it is present.
 	tunnelSecret := &corev1.Secret{}
-	err = r.Client.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
+	err = r.cli.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
 		if !k8serrors.IsNotFound(err) {
 			return result, err
@@ -196,31 +191,31 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		tunnelSecret = nil
 	}
 
-	linseedCASecret, err := getResource[corev1.Secret](ctx, r.Client, newNSObjectKey(render.VoltronLinseedPublicCert, common.OperatorNamespace()))
+	linseedCASecret, err := utils.GetIfExists[corev1.Secret](ctx, newNSObjectKey(render.VoltronLinseedPublicCert, common.OperatorNamespace()), r.cli)
 	if err != nil {
 		return result, err
 	}
 
 	var trustedCertBundle certificatemanagement.TrustedBundle
 
-	mgmtConnCR, err := utils.Get[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.Client)
+	managementClusterConnection, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying ManagementClusterConnection", err, reqLogger)
 		return result, err
-	} else if mgmtConnCR != nil {
-		preDefaultPatchFrom := client.MergeFrom(mgmtConnCR.DeepCopy())
-		mgmtConnCR.FillDefaults()
+	} else if managementClusterConnection != nil {
+		preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
+		managementClusterConnection.FillDefaults()
 
 		// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 		// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-		if err := r.Client.Patch(ctx, mgmtConnCR, preDefaultPatchFrom); err != nil {
+		if err := r.cli.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
-		log.V(2).Info("Loaded ManagementClusterConnection config", "config", mgmtConnCR)
+		log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
 
-		if mgmtConnCR.Spec.TLS.CA == operatorv1.CATypePublic {
+		if managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic {
 			// If we need to trust a public CA, then we want Guardian to mount all the system certificates.
 			trustedCertBundle, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates()
 			if err != nil {
@@ -236,9 +231,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		trustedCertBundle = certificateManager.CreateTrustedBundle()
 	}
 
-	secretsToTrust := []string{render.ProjectCalicoAPIServerTLSSecretName(instl.Variant)}
+	secretsToTrust := []string{render.ProjectCalicoAPIServerTLSSecretName(installation.Variant)}
 	for _, secretName := range secretsToTrust {
-		secret, err := certificateManager.GetCertificate(r.Client, secretName, common.OperatorNamespace())
+		secret, err := certificateManager.GetCertificate(r.cli, secretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)
 			return reconcile.Result{}, err
@@ -250,19 +245,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		trustedCertBundle.AddCertificates(secret)
 	}
 
-	ch := utils.NewComponentHandler(log, r.Client, r.Scheme, whiskerCR)
+	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
 	cfg := &whisker.Configuration{
 		PullSecrets:                 pullSecrets,
-		OpenShift:                   r.Provider.IsOpenShift(),
-		Installation:                instl,
+		OpenShift:                   r.provider.IsOpenShift(),
+		Installation:                installation,
 		TunnelSecret:                tunnelSecret,
 		TrustedCertBundle:           trustedCertBundle,
 		LinseedPublicCASecret:       linseedCASecret,
-		ManagementClusterConnection: mgmtConnCR,
+		ManagementClusterConnection: managementClusterConnection,
 	}
 
 	components := []render.Component{whisker.Whisker(cfg)}
-	if err = imageset.ApplyImageSet(ctx, r.Client, variant, components...); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.cli, variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -281,19 +276,4 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 func newNSObjectKey(name, namespace string) client.ObjectKey {
 	return types.NamespacedName{Name: name, Namespace: namespace}
-}
-
-func getResource[R any, T interface {
-	*R
-	client.Object
-}](ctx context.Context, cli client.Client, key client.ObjectKey, opts ...client.GetOption) (*R, error) {
-	r := new(R)
-	if err := cli.Get(ctx, key, T(r), opts...); err != nil {
-		if k8serrors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return r, nil
 }

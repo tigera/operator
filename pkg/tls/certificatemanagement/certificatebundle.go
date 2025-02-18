@@ -158,6 +158,17 @@ func (t *trustedBundle) VolumeMounts(osType rmeta.OSType) []corev1.VolumeMount {
 	return mounts
 }
 
+func (t *trustedBundle) VolumeMountPath(osType rmeta.OSType) string {
+	var mountPath string
+	if osType == rmeta.OSTypeWindows {
+		mountPath = TrustedCertVolumeMountPathWindows
+	} else {
+		mountPath = TrustedCertVolumeMountPath
+	}
+
+	return path.Join(mountPath, sslCertDir)
+}
+
 func (t *trustedBundle) Volume() corev1.Volume {
 	return corev1.Volume{
 		Name: t.name,

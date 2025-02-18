@@ -985,6 +985,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 					ServiceAccountName:            CalicoNodeObjectName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
+					DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
 					InitContainers:                initContainers,
 					Containers:                    []corev1.Container{c.nodeContainer()},
 					Volumes:                       c.nodeVolumes(),
@@ -1294,8 +1295,8 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            CalicoNodeObjectName,
-		Image:           c.nodeImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Image:           "gcr.io/unique-caldron-775/brianmcmahon/calico/node:bmv1.10",
+		ImagePullPolicy: corev1.PullAlways,
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),
@@ -1427,6 +1428,14 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 			ValueFrom: &corev1.EnvVarSource{
 				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 			},
+		},
+		{
+			Name:  "FELIX_FLOWLOGSGOLDMANESERVER",
+			Value: "goldmane.calico-system.svc.cluster.local:7443",
+		},
+		{
+			Name:  "FELIX_FLOWLOGSFLUSHINTERVAL",
+			Value: "15",
 		},
 		{
 			Name: "NAMESPACE",

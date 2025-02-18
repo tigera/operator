@@ -639,7 +639,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	routeConfig, routeConfigErr := getVoltronRouteConfig(ctx, r.client, helper.InstallNamespace())
 	if routeConfigErr != nil {
-		log.Error(routeConfigErr, "error with voltron route config, continuing")
+		log.Error(routeConfigErr, "error with voltron route config, route configuration will not be added to voltron")
 	}
 
 	// Check if non-cluster host log ingestion is enabled.
@@ -724,6 +724,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// Don't block creating manager resources if there is a route error (so we are waiting until after CreateOrUpdateOrDelete)
+	// but do go degraded after creating the resources if there is a route error.
 	if routeConfigErr != nil {
 		r.status.SetDegraded(operatorv1.InternalServerError, "Failed to create Voltron Route Configuration", routeConfigErr, logc)
 		return reconcile.Result{}, routeConfigErr

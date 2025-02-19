@@ -1073,7 +1073,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 
 	if c.vppDataplaneEnabled() {
 		volumes = append(volumes,
-			// Volume that contains the felix dataplane binary
+			// Volume that contains the felix data plane binary
 			corev1.Volume{Name: "felix-plugins", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico/felix-plugins"}}},
 		)
 	}
@@ -1201,7 +1201,7 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 // bpffsInitContainer creates an init container that attempts to mount the BPF filesystem.  doing this from an
 // init container reduces the privileges needed by the main container.  It's important that the BPF filesystem is
 // mounted on the host itself, otherwise, a restart of the node container would tear down the mount and destroy
-// the BPF dataplane's BPF maps.
+// the BPF data plane's BPF maps.
 func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 	bidirectional := corev1.MountPropagationBidirectional
 	mounts := []corev1.VolumeMount{

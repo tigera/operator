@@ -423,7 +423,7 @@ var _ = Describe("Node rendering tests", func() {
 				verifyProbesAndLifecycle(ds, false, false)
 			})
 
-			It("should render node correctly for BPF dataplane", func() {
+			It("should render node correctly for BPF data plane", func() {
 				expectedResources := []struct {
 					name    string
 					ns      string
@@ -3257,7 +3257,7 @@ var _ = Describe("Node rendering tests", func() {
 				Entry("OCP Enterprise w/ BGP", true, true, operatorv1.BGPEnabled),
 			)
 
-			Context("With VPP dataplane", func() {
+			Context("With VPP data plane", func() {
 				It("should set cluster type correctly", func() {
 					vpp := operatorv1.LinuxDataplaneVPP
 					cfg.Installation.CalicoNetwork.LinuxDataplane = &vpp

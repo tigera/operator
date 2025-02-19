@@ -73,21 +73,21 @@ type FelixConfigurationSpec struct {
 	IPv6Support *bool `json:"ipv6Support,omitempty" confignamev1:"Ipv6Support"`
 
 	// RouterefreshInterval is the period at which Felix re-checks the routes
-	// in the dataplane to ensure that no other process has accidentally broken Calico’s rules.
+	// in the data plane to ensure that no other process has accidentally broken Calico’s rules.
 	// Set to 0 to disable route refresh. [Default: 90s]
 	RouteRefreshInterval *metav1.Duration `json:"routeRefreshInterval,omitempty" configv1timescale:"seconds"`
 	// InterfaceRefreshInterval is the period at which Felix rescans local interfaces to verify their state.
 	// The rescan can be disabled by setting the interval to 0.
 	InterfaceRefreshInterval *metav1.Duration `json:"interfaceRefreshInterval,omitempty" configv1timescale:"seconds"`
 	// IptablesRefreshInterval is the period at which Felix re-checks the IP sets
-	// in the dataplane to ensure that no other process has accidentally broken Calico’s rules.
+	// in the data plane to ensure that no other process has accidentally broken Calico’s rules.
 	// Set to 0 to disable IP sets refresh. Note: the default for this value is lower than the
 	// other refresh intervals as a workaround for a Linux kernel bug that was fixed in kernel
 	// version 4.11. If you are using v4.11 or greater you may want to set this to, a higher value
 	// to reduce Felix CPU usage. [Default: 10s]
 	IptablesRefreshInterval *metav1.Duration `json:"iptablesRefreshInterval,omitempty" configv1timescale:"seconds"`
 	// IptablesPostWriteCheckInterval is the period after Felix has done a write
-	// to the dataplane that it schedules an extra read back in order to check the write was not
+	// to the data plane that it schedules an extra read back in order to check the write was not
 	// clobbered by another process. This should only occur if another application on the system
 	// doesn’t respect the iptables lock. [Default: 1s]
 	IptablesPostWriteCheckInterval *metav1.Duration `json:"iptablesPostWriteCheckInterval,omitempty" configv1timescale:"seconds" confignamev1:"IptablesPostWriteCheckIntervalSecs"`
@@ -314,13 +314,13 @@ type FelixConfigurationSpec struct {
 	// NFTablesMode configures nftables support in Felix. [Default: Disabled]
 	NFTablesMode *NFTablesMode `json:"nftablesMode,omitempty"`
 
-	// BPFEnabled, if enabled Felix will use the BPF dataplane. [Default: false]
+	// BPFEnabled, if enabled Felix will use the BPF data plane. [Default: false]
 	BPFEnabled *bool `json:"bpfEnabled,omitempty" validate:"omitempty"`
 	// BPFDisableUnprivileged, if enabled, Felix sets the kernel.unprivileged_bpf_disabled sysctl to disable
 	// unprivileged use of BPF.  This ensures that unprivileged users cannot access Calico's BPF maps and
 	// cannot insert their own BPF programs to interfere with Calico's. [Default: true]
 	BPFDisableUnprivileged *bool `json:"bpfDisableUnprivileged,omitempty" validate:"omitempty"`
-	// BPFLogLevel controls the log level of the BPF programs when in BPF dataplane mode.  One of "Off", "Info", or
+	// BPFLogLevel controls the log level of the BPF programs when in BPF data plane mode.  One of "Off", "Info", or
 	// "Debug".  The logs are emitted to the BPF trace pipe, accessible with the command `tc exec bpf debug`.
 	// [Default: Off].
 	// +optional
@@ -345,7 +345,7 @@ type FelixConfigurationSpec struct {
 	// BPFKubeProxyIptablesCleanupEnabled, if enabled in BPF mode, Felix will proactively clean up the upstream
 	// Kubernetes kube-proxy's iptables chains.  Should only be enabled if kube-proxy is not running.  [Default: true]
 	BPFKubeProxyIptablesCleanupEnabled *bool `json:"bpfKubeProxyIptablesCleanupEnabled,omitempty" validate:"omitempty"`
-	// BPFKubeProxyMinSyncPeriod, in BPF mode, controls the minimum time between updates to the dataplane for Felix's
+	// BPFKubeProxyMinSyncPeriod, in BPF mode, controls the minimum time between updates to the data plane for Felix's
 	// embedded kube-proxy.  Lower values give reduced set-up latency.  Higher values reduce Felix CPU usage by
 	// batching up more work.  [Default: 1s]
 	BPFKubeProxyMinSyncPeriod *metav1.Duration `json:"bpfKubeProxyMinSyncPeriod,omitempty" validate:"omitempty" configv1timescale:"seconds"`

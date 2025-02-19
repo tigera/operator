@@ -529,13 +529,13 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 	}
 
-	// Default dataplane is iptables.
+	// Default data plane is iptables.
 	if instance.Spec.CalicoNetwork.LinuxDataplane == nil {
 		dpIptables := operator.LinuxDataplaneIptables
 		instance.Spec.CalicoNetwork.LinuxDataplane = &dpIptables
 	}
 
-	// Default Windows dataplane is disabled
+	// Default Windows data plane is disabled
 	winDataplaneDisabled := operator.WindowsDataplaneDisabled
 	if instance.Spec.CalicoNetwork.WindowsDataplane == nil {
 		instance.Spec.CalicoNetwork.WindowsDataplane = &winDataplaneDisabled
@@ -583,7 +583,7 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 
 	needIPv4Autodetection := false
 	if *instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneBPF {
-		// BPF dataplane requires IP autodetection even if we're not using Calico IPAM.
+		// BPF data plane requires IP autodetection even if we're not using Calico IPAM.
 		needIPv4Autodetection = true
 	}
 	if currentPools != nil {
@@ -1666,17 +1666,17 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
 	updated := false
 
-	// Set the FelixConfiguration nftables dataplane mode based on the operator configuration. We do this unconditonally because
+	// Set the FelixConfiguration nftables data plane mode based on the operator configuration. We do this unconditonally because
 	// we don't need to handle upgrades from versions that were previously FelixConfiguration only - nftables mode has always
 	// been controlled by the operator.
 	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
 		if *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables {
-			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
+			// The operator is configured to use the nftables data plane. Configure Felix to use nftables.
 			nftablesMode := crdv1.NFTablesModeEnabled
 			fc.Spec.NFTablesMode = &nftablesMode
 			updated = true
 		} else {
-			// The operator is configured to use another dataplane. Disable nftables.
+			// The operator is configured to use another data plane. Disable nftables.
 			nftablesMode := crdv1.NFTablesModeDisabled
 			fc.Spec.NFTablesMode = &nftablesMode
 			updated = true
@@ -1747,7 +1747,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	}
 
 	if install.Spec.KubernetesProvider == operator.ProviderDockerEE {
-		// Set bpfHostConntrackBypass to false for eBPF dataplane to work with MKE
+		// Set bpfHostConntrackBypass to false for eBPF data plane to work with MKE
 		if install.Spec.BPFEnabled() && fc.Spec.BPFHostConntrackBypass == nil {
 			disableBPFHostConntrackBypass(fc)
 			updated = true

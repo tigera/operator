@@ -447,7 +447,7 @@ const (
 	BGPDisabled BGPOption = "Disabled"
 )
 
-// LinuxDataplaneOption controls which dataplane is to be used on Linux nodes.
+// LinuxDataplaneOption controls which data plane is to be used on Linux nodes.
 //
 // One of: Iptables, BPF, VPP, Nftables
 // +kubebuilder:validation:Enum=Iptables;BPF;VPP;Nftables;
@@ -476,15 +476,15 @@ type Sysctl struct {
 
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
-	// LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
-	// causes the operator to add required mounts and environment variables for the particular dataplane.
+	// LinuxDataplane is used to select the data plane used for Linux nodes. In particular, it
+	// causes the operator to add required mounts and environment variables for the particular data plane.
 	// If not specified, iptables mode is used.
 	// Default: Iptables
 	// +optional
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
 
-	// WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
-	// causes the operator to add required mounts and environment variables for the particular dataplane.
+	// WindowsDataplane is used to select the data plane used for Windows nodes. In particular, it
+	// causes the operator to add required mounts and environment variables for the particular data plane.
 	// If not specified, it is disabled and the operator will not render the Calico Windows nodes daemonset.
 	// Default: Disabled
 	// +optional
@@ -542,7 +542,7 @@ type CalicoNetworkSpec struct {
 	Sysctl []Sysctl `json:"sysctl,omitempty"`
 
 	// LinuxPolicySetupTimeoutSeconds delays new pods from running containers
-	// until their policy has been programmed in the dataplane.
+	// until their policy has been programmed in the data plane.
 	// The specified delay defines the maximum amount of time
 	// that the Calico CNI plugin will wait for policy to be programmed.
 	//

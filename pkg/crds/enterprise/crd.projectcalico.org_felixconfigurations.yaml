@@ -240,7 +240,7 @@ spec:
                   cannot insert their own BPF programs to interfere with Calico's. [Default: true]
                 type: boolean
               bpfEnabled:
-                description: 'BPFEnabled, if enabled Felix will use the BPF dataplane.
+                description: 'BPFEnabled, if enabled Felix will use the BPF data plane.
                   [Default: false]'
                 type: boolean
               bpfEnforceRPF:
@@ -311,7 +311,7 @@ spec:
                 type: boolean
               bpfKubeProxyMinSyncPeriod:
                 description: |-
-                  BPFKubeProxyMinSyncPeriod, in BPF mode, controls the minimum time between updates to the dataplane for Felix's
+                  BPFKubeProxyMinSyncPeriod, in BPF mode, controls the minimum time between updates to the data plane for Felix's
                   embedded kube-proxy.  Lower values give reduced set-up latency.  Higher values reduce Felix CPU usage by
                   batching up more work.  [Default: 1s]
                 pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
@@ -337,7 +337,7 @@ spec:
                 type: object
               bpfLogLevel:
                 description: |-
-                  BPFLogLevel controls the log level of the BPF programs when in BPF dataplane mode.  One of "Off", "Info", or
+                  BPFLogLevel controls the log level of the BPF programs when in BPF data plane mode.  One of "Off", "Info", or
                   "Debug".  The logs are emitted to the BPF trace pipe, accessible with the command `tc exec bpf debug`.
                   [Default: Off].
                 pattern: ^(?i)(Off|Info|Debug)?$
@@ -465,12 +465,12 @@ spec:
                 type: string
               dataplaneDriver:
                 description: |-
-                  DataplaneDriver filename of the external dataplane driver to use.  Only used if UseInternalDataplaneDriver
+                  DataplaneDriver filename of the external data plane driver to use.  Only used if UseInternalDataplaneDriver
                   is set to false.
                 type: string
               dataplaneWatchdogTimeout:
                 description: |-
-                  DataplaneWatchdogTimeout is the readiness/liveness timeout used for Felix's (internal) dataplane driver.
+                  DataplaneWatchdogTimeout is the readiness/liveness timeout used for Felix's (internal) data plane driver.
                   Deprecated: replaced by the generic HealthTimeoutOverrides.
                 type: string
               debugDisableLogDropping:
@@ -500,13 +500,13 @@ spec:
                 type: string
               debugSimulateDataplaneApplyDelay:
                 description: |-
-                  DebugSimulateDataplaneApplyDelay adds an artificial delay to every dataplane operation.  This is useful for
+                  DebugSimulateDataplaneApplyDelay adds an artificial delay to every data plane operation.  This is useful for
                   simulating a heavily loaded system for test purposes only.
                 pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               debugSimulateDataplaneHangAfter:
                 description: |-
-                  DebugSimulateDataplaneHangAfter is used to simulate a hang in the dataplane after the specified duration.
+                  DebugSimulateDataplaneHangAfter is used to simulate a hang in the data plane after the specified duration.
                   This is useful in tests of the watchdog system only!
                 pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
@@ -629,14 +629,14 @@ spec:
               dnsPacketsNfqueueMaxHoldDuration:
                 description: |-
                   DNSPacketsNfqueueMaxHoldDuration is the max length of time to hold on to a DNS response while waiting for the
-                  the dataplane to be programmed. Used when DNSPolicyMode is DelayDNSResponse.
+                  the data plane to be programmed. Used when DNSPolicyMode is DelayDNSResponse.
                   [Default: 3s]
                 pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
               dnsPacketsNfqueueSize:
                 description: |-
                   DNSPacketsNfqueueSize is the size of the NFQUEUE for captured DNS packets. This is the maximum number of DNS
-                  packets that may be queued awaiting programming in the dataplane. Used when DNSPolicyMode is DelayDNSResponse.
+                  packets that may be queued awaiting programming in the data plane. Used when DNSPolicyMode is DelayDNSResponse.
                   [Default: 100]
                 type: integer
               dnsPolicyMode:
@@ -1200,7 +1200,7 @@ spec:
               iptablesPostWriteCheckInterval:
                 description: |-
                   IptablesPostWriteCheckInterval is the period after Felix has done a write
-                  to the dataplane that it schedules an extra read back in order to check the write was not
+                  to the data plane that it schedules an extra read back in order to check the write was not
                   clobbered by another process. This should only occur if another application on the system
                   doesn't respect the iptables lock. [Default: 1s]
                 pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
@@ -1208,7 +1208,7 @@ spec:
               iptablesRefreshInterval:
                 description: |-
                   IptablesRefreshInterval is the period at which Felix re-checks the IP sets
-                  in the dataplane to ensure that no other process has accidentally broken Calico's rules.
+                  in the data plane to ensure that no other process has accidentally broken Calico's rules.
                   Set to 0 to disable IP sets refresh. Note: the default for this value is lower than the
                   other refresh intervals as a workaround for a Linux kernel bug that was fixed in kernel
                   version 4.11. If you are using v4.11 or greater you may want to set this to, a higher value
@@ -1217,7 +1217,7 @@ spec:
                 type: string
               ipv6Support:
                 description: IPv6Support controls whether Felix enables support for
-                  IPv6 (if supported by the in-use dataplane).
+                  IPv6 (if supported by the in-use data plane).
                 type: boolean
               kubeMasqueradeBit:
                 description: |-
@@ -1581,7 +1581,7 @@ spec:
               routeRefreshInterval:
                 description: |-
                   RouteRefreshInterval is the period at which Felix re-checks the routes
-                  in the dataplane to ensure that no other process has accidentally broken Calico's rules.
+                  in the data plane to ensure that no other process has accidentally broken Calico's rules.
                   Set to 0 to disable route refresh. [Default: 90s]
                 pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                 type: string
@@ -1675,7 +1675,7 @@ spec:
               tproxyUpstreamConnMark:
                 description: |-
                   TPROXYUpstreamConnMark tells Felix which mark is used by the proxy for its upstream
-                  connections so that Felix can program the dataplane correctly.  [Default: 0x17]
+                  connections so that Felix can program the data plane correctly.  [Default: 0x17]
                 format: int32
                 type: integer
               usageReportingEnabled:
@@ -1694,8 +1694,8 @@ spec:
                 type: string
               useInternalDataplaneDriver:
                 description: |-
-                  UseInternalDataplaneDriver, if true, Felix will use its internal dataplane programming logic.  If false, it
-                  will launch an external dataplane driver and communicate with it over protobuf.
+                  UseInternalDataplaneDriver, if true, Felix will use its internal data plane programming logic.  If false, it
+                  will launch an external data plane driver and communicate with it over protobuf.
                 type: boolean
               vxlanEnabled:
                 description: |-

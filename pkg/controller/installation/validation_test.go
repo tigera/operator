@@ -777,14 +777,14 @@ var _ = Describe("Installation validation tests", func() {
 			Expect(err).To(MatchError("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds negative value is not valid"))
 		})
 
-		It("should return an error when LinuxPolicySetupTimeoutSeconds is set but no dataplane is specified", func() {
+		It("should return an error when LinuxPolicySetupTimeoutSeconds is set but no data plane is specified", func() {
 			tos := int32(10)
 			instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &tos
 			err := validateCustomResource(instance)
-			Expect(err).To(MatchError("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds requires the Iptables Linux dataplane to be set"))
+			Expect(err).To(MatchError("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds requires the Iptables Linux data plane to be set"))
 		})
 
-		It("should return an error when LinuxPolicySetupTimeoutSeconds is set for an unsupported dataplane", func() {
+		It("should return an error when LinuxPolicySetupTimeoutSeconds is set for an unsupported data plane", func() {
 			dp := operator.LinuxDataplaneVPP
 			// Enable BGP to pass VPP validation.
 			bgp := operator.BGPEnabled
@@ -793,10 +793,10 @@ var _ = Describe("Installation validation tests", func() {
 			instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &tos
 			instance.Spec.CalicoNetwork.BGP = &bgp
 			err := validateCustomResource(instance)
-			Expect(err).To(MatchError("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is supported only for the Iptables and BPF Linux dataplanes"))
+			Expect(err).To(MatchError("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is supported only for the Iptables and BPF Linux data planes"))
 		})
 
-		It("should not error if LinuxPolicySetupTimeoutSeconds is set as a positive int32, with the Calico CNI plugin and Iptables dataplane", func() {
+		It("should not error if LinuxPolicySetupTimeoutSeconds is set as a positive int32, with the Calico CNI plugin and Iptables data plane", func() {
 			tos := int32(10)
 			cniType := operator.PluginCalico
 			dp := operator.LinuxDataplaneIptables

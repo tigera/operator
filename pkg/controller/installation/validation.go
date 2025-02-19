@@ -145,7 +145,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			isIPv4 := !strings.Contains(pool.CIDR, ":")
 			if isIPv4 {
 				if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
-					return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4 is required for the BPF dataplane")
+					return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4 is required for the BPF data plane")
 				}
 			} else {
 				// This is an IPv6 pool.
@@ -154,7 +154,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				}
 
 				if bpfDataplane && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 == nil {
-					return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV6 is required for the BPF dataplane")
+					return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV6 is required for the BPF data plane")
 				}
 			}
 
@@ -207,10 +207,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		// VPP specific validation
 		if instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneVPP {
 			if instance.Spec.Variant != operatorv1.Calico {
-				return fmt.Errorf("The VPP dataplane only supports the Calico variant (configured: %s)", instance.Spec.Variant)
+				return fmt.Errorf("The VPP data plane only supports the Calico variant (configured: %s)", instance.Spec.Variant)
 			}
 			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
-				return fmt.Errorf("The VPP dataplane only supports the Calico CNI (configured: %s)", instance.Spec.CNI.Type)
+				return fmt.Errorf("The VPP data plane only supports the Calico CNI (configured: %s)", instance.Spec.CNI.Type)
 			}
 			if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
 				return fmt.Errorf("VPP requires BGP to be enabled")
@@ -275,11 +275,11 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds negative value is not valid")
 			}
 			if instance.Spec.CalicoNetwork.LinuxDataplane == nil {
-				return fmt.Errorf("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds requires the Iptables Linux dataplane to be set")
+				return fmt.Errorf("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds requires the Iptables Linux data plane to be set")
 			}
 			if *instance.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneIptables &&
 				*instance.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneBPF {
-				return fmt.Errorf("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is supported only for the Iptables and BPF Linux dataplanes")
+				return fmt.Errorf("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is supported only for the Iptables and BPF Linux data planes")
 			}
 		}
 	}
@@ -333,7 +333,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		if instance.Spec.CalicoNetwork != nil &&
 			instance.Spec.CalicoNetwork.LinuxDataplane != nil &&
 			*instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
-			return fmt.Errorf("Non-privileged Calico is not supported when BPF dataplane is enabled")
+			return fmt.Errorf("Non-privileged Calico is not supported when BPF data plane is enabled")
 		}
 
 		// Only allowed to run as non-privileged for OS Calico

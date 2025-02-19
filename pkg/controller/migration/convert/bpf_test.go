@@ -111,7 +111,7 @@ var _ = Describe("convert bpf config", func() {
 		Expect(data).To(Equal(cmData))
 	})
 
-	It("converts dataplane to BPF given bpfenabled env var set to true", func() {
+	It("converts data plane to BPF given bpfenabled env var set to true", func() {
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 		comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 			Name:  "FELIX_BPFENABLED",
@@ -126,7 +126,7 @@ var _ = Describe("convert bpf config", func() {
 		Expect(data).To(Equal(cmData))
 	})
 
-	It("converts dataplane to empty given bpfenabled env var set to false", func() {
+	It("converts data plane to empty given bpfenabled env var set to false", func() {
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 		comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 			Name:  "FELIX_BPFENABLED",
@@ -143,7 +143,7 @@ var _ = Describe("convert bpf config", func() {
 		Expect(data).To(BeNil())
 	})
 
-	It("converts dataplane to empty given bpfenabled env var set not set", func() {
+	It("converts data plane to empty given bpfenabled env var set not set", func() {
 		comps.client = fake.NewClientBuilder().WithScheme(scheme).WithObjects(endPointCM, f).Build()
 		comps.node.Spec.Template.Spec.Containers[0].Env = nil
 		err := handleBPF(&comps, i)

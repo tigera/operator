@@ -892,7 +892,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 		Context("with LinuxDataplane=Nftables", func() {
 			BeforeEach(func() {
-				By("Setting the dataplane to nftables in the Installation")
+				By("Setting the data plane to nftables in the Installation")
 				nft := operator.LinuxDataplaneNftables
 				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
 					LinuxDataplane: &nft,
@@ -918,7 +918,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				// Set the dataplane to IPTables.
+				// Set the data plane to IPTables.
 				err = c.Get(ctx, types.NamespacedName{Name: "default"}, cr)
 				Expect(err).ShouldNot(HaveOccurred())
 				ipt := operator.LinuxDataplaneIptables
@@ -1048,7 +1048,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 
-			// Set dataplane to IPTables.
+			// Set data plane to IPTables.
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, cr)
 			Expect(err).ShouldNot(HaveOccurred())
 			network = operator.LinuxDataplaneIptables

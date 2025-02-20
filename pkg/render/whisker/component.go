@@ -214,7 +214,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 	if c.cfg.LinseedPublicCASecret != nil {
 		env = append(env, corev1.EnvVar{
 			Name:  "PUSH_URL",
-			Value: "https://localhost:9443/api/v1/flows/bulk"})
+			Value: "https://localhost:8080/api/v1/flows/bulk"})
 		volumeMounts = []corev1.VolumeMount{
 			secretMount("/certs", c.cfg.LinseedPublicCASecret),
 		}
@@ -360,11 +360,6 @@ func (c *Component) clusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{""},
 			Resources: []string{"secrets"},
-			Verbs:     []string{"get", "list", "watch"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"felixconfigurations"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 	}

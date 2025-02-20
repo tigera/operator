@@ -55,6 +55,14 @@ var log = logf.Log.WithName(controllerName)
 // Add creates a new Reconciler Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
+	enabled, err := utils.WhiskerEnabled(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("failed to check if whisker was enabled: %w", err)
+	}
+	if !enabled {
+		return nil
+	}
+
 	statusManager := status.New(mgr.GetClient(), "gold-rush", opts.KubernetesVersion)
 
 	// Create the reconciler
@@ -178,16 +186,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	// Copy the secret from the operator namespace to the guardian namespace if it is present.
-	tunnelSecret := &corev1.Secret{}
-	err = r.cli.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
-	if err != nil {
-		if !k8serrors.IsNotFound(err) {
-			return result, err
-		}
-		tunnelSecret = nil
-	}
-
 	linseedCASecret, err := utils.GetIfExists[corev1.Secret](ctx,
 		types.NamespacedName{Name: render.VoltronLinseedPublicCert, Namespace: common.OperatorNamespace()}, r.cli)
 	if err != nil {
@@ -195,12 +193,22 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	var trustedCertBundle certificatemanagement.TrustedBundle
-
+	tunnelSecret := &corev1.Secret{}
 	managementClusterConnection, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying ManagementClusterConnection", err, reqLogger)
 		return result, err
 	} else if managementClusterConnection != nil {
+		// Copy the secret from the operator namespace to the guardian namespace if it is present.
+
+		err = r.cli.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
+		if err != nil {
+			if !k8serrors.IsNotFound(err) {
+				return result, err
+			}
+			tunnelSecret = nil
+		}
+
 		preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
 		managementClusterConnection.FillDefaults()
 
@@ -228,6 +236,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if trustedCertBundle == nil {
 		trustedCertBundle = certificateManager.CreateTrustedBundle()
 	}
+
+	trustedCertBundle.SetName("whisker-trusted-bundle")
 
 	secretsToTrust := []string{render.ProjectCalicoAPIServerTLSSecretName(installation.Variant)}
 	for _, secretName := range secretsToTrust {

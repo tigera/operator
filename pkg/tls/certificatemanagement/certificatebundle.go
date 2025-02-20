@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -97,6 +97,10 @@ func createTrustedBundle(includeSystemBundle bool, name string, ca CertificateIn
 	bundle.AddCertificates(certificates...)
 
 	return bundle, err
+}
+
+func (t *trustedBundle) SetName(name string) {
+	t.name = name
 }
 
 // AddCertificates Adds the certificates to the bundle.

@@ -93,3 +93,12 @@ type ManagementClusterConnectionStatus struct {
 func init() {
 	SchemeBuilder.Register(&ManagementClusterConnection{}, &ManagementClusterConnectionList{})
 }
+
+func (cr *ManagementClusterConnection) FillDefaults() {
+	if cr.Spec.TLS == nil {
+		cr.Spec.TLS = &ManagementClusterTLS{}
+	}
+	if cr.Spec.TLS.CA == "" {
+		cr.Spec.TLS.CA = CATypeTigera
+	}
+}

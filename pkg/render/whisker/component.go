@@ -52,11 +52,6 @@ const (
 func Whisker(cfg *Configuration) render.Component {
 	c := &Component{cfg: cfg}
 
-	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
-	if c.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
-	}
-
 	return c
 }
 

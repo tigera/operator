@@ -18,9 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -136,14 +134,12 @@ var _ reconcile.Reconciler = &Reconciler{}
 
 // Reconciler reconciles a ManagementClusterConnection object
 type Reconciler struct {
-	cli                        client.Client
-	scheme                     *runtime.Scheme
-	provider                   operatorv1.Provider
-	status                     status.StatusManager
-	clusterDomain              string
-	tierWatchReady             *utils.ReadyFlag
-	resolvedPodProxies         []*httpproxy.Config
-	lastAvailabilityTransition metav1.Time
+	cli            client.Client
+	scheme         *runtime.Scheme
+	provider       operatorv1.Provider
+	status         status.StatusManager
+	clusterDomain  string
+	tierWatchReady *utils.ReadyFlag
 }
 
 // Reconcile reads that state of the cluster for a Whisker object and makes changes based on the
@@ -232,8 +228,4 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.ClearDegraded()
 
 	return result, nil
-}
-
-func newNSObjectKey(name, namespace string) client.ObjectKey {
-	return types.NamespacedName{Name: name, Namespace: namespace}
 }

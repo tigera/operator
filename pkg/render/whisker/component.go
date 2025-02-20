@@ -19,8 +19,6 @@ import (
 
 	"github.com/tigera/operator/pkg/components"
 
-	"k8s.io/apimachinery/pkg/util/intstr"
-
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
@@ -137,7 +135,6 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 			secret.CopyToNamespace(WhiskerNamespace, c.cfg.TunnelSecret)[0],
 			// TODO maybe the controller needs to create this?
 			c.cfg.TrustedCertBundle.ConfigMap(WhiskerNamespace),
-			c.guardianService(),
 		)
 	}
 	objs = append(objs, c.deployment())
@@ -168,7 +165,7 @@ func (c *Component) whiskerContainer() corev1.Container {
 		Image:           c.whiskerImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: []corev1.EnvVar{
-			{Name: "LOG_LEVEL", Value: "DEBUG"},
+			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "CA_CERT_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
@@ -197,7 +194,7 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 		Image:           c.whiskerBackendImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: []corev1.EnvVar{
-			{Name: "LOG_LEVEL", Value: "DEBUG"},
+			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "CA_CERT_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 			{Name: "PORT", Value: "3002"},
 			{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
@@ -217,7 +214,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 	if c.cfg.LinseedPublicCASecret != nil {
 		env = append(env, corev1.EnvVar{
 			Name:  "PUSH_URL",
-			Value: fmt.Sprintf("https://%s.%s.svc/api/v1/flows/bulk", "tigera-guardian", WhiskerNamespace)})
+			Value: "https://localhost:9443/api/v1/flows/bulk"})
 		volumeMounts = []corev1.VolumeMount{
 			secretMount("/certs", c.cfg.LinseedPublicCASecret),
 		}
@@ -259,7 +256,7 @@ func (c *Component) guardianContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: append([]corev1.EnvVar{
 			{Name: "GUARDIAN_PORT", Value: "9443"},
-			{Name: "GUARDIAN_LOGLEVEL", Value: "DEBUG"},
+			{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
 			{Name: "GUARDIAN_VOLTRON_URL", Value: voltronURL},
 			{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(tunnelCAType)},
 			{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: bundle.MountPath()},
@@ -332,49 +329,6 @@ func secretVolume(scrt *corev1.Secret) corev1.Volume {
 	}
 }
 
-func (c *Component) guardianService() *corev1.Service {
-	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GuardianServiceName,
-			Namespace: WhiskerNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{
-				"k8s-app": WhiskerDeploymentName,
-			},
-			Ports: []corev1.ServicePort{
-				{
-					Name: "linseed",
-					Port: 443,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: 8080,
-					},
-					Protocol: corev1.ProtocolTCP,
-				},
-				{
-					Name: "elasticsearch",
-					Port: 9200,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: 8080,
-					},
-					Protocol: corev1.ProtocolTCP,
-				},
-				{
-					Name: "kibana",
-					Port: 5601,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: 8080,
-					},
-					Protocol: corev1.ProtocolTCP,
-				},
-			},
-		},
-	}
-}
-
 func (c *Component) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -399,8 +353,13 @@ func (c *Component) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 func (c *Component) clusterRole() *rbacv1.ClusterRole {
 	policyRules := []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{"*"},
-			Resources: []string{"*"},
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
@@ -417,11 +376,4 @@ func (c *Component) clusterRole() *rbacv1.ClusterRole {
 		},
 		Rules: policyRules,
 	}
-}
-
-func copySecret(s *corev1.Secret) *corev1.Secret {
-	x := s.DeepCopy()
-	x.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: s.Namespace}
-
-	return x
 }

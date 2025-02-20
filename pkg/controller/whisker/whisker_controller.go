@@ -52,8 +52,8 @@ const (
 
 var log = logf.Log.WithName(controllerName)
 
-// Add creates a new ManagementClusterConnection Controller and adds it to the Manager. The Manager will set fields on the Controller
-// and start it when the Manager is started. This controller is meant only for enterprise users.
+// Add creates a new Reconciler Controller and adds it to the Manager. The Manager will set fields on the Controller
+// and start it when the Manager is started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
 	statusManager := status.New(mgr.GetClient(), "gold-rush", opts.KubernetesVersion)
 
@@ -70,6 +70,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	for _, secretName := range []string{
 		monitor.PrometheusServerTLSSecretName,
 		whisker.ManagedClusterConnectionSecretName,
+		certificatemanagement.CASecretName,
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
 	} {
@@ -81,10 +82,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
-	}
-
-	if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, certificatemanagement.CASecretName, err)
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
@@ -191,7 +188,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		tunnelSecret = nil
 	}
 
-	linseedCASecret, err := utils.GetIfExists[corev1.Secret](ctx, newNSObjectKey(render.VoltronLinseedPublicCert, common.OperatorNamespace()), r.cli)
+	linseedCASecret, err := utils.GetIfExists[corev1.Secret](ctx,
+		types.NamespacedName{Name: render.VoltronLinseedPublicCert, Namespace: common.OperatorNamespace()}, r.cli)
 	if err != nil {
 		return result, err
 	}

@@ -651,7 +651,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 	}
-	if c.cfg.KubernetesVersion == nil || !(c.cfg.KubernetesVersion != nil && c.cfg.KubernetesVersion.Major < 2 && c.cfg.KubernetesVersion.Minor < 30) {
+	if c.cfg.KubernetesVersion == nil || !(c.cfg.KubernetesVersion != nil && c.cfg.KubernetesVersion.Major < 2 && c.cfg.KubernetesVersion.Minor > 30) {
 		// If the kubernetes version is higher than 1.30, we add extra RBAC permissions to allow establishing watches.
 		// https://v1-30.docs.kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/
 		rules = append(rules, rbacv1.PolicyRule{

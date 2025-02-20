@@ -31,5 +31,3 @@ components:
     version: master
   calico/whisker-backend:
     version: master
-  calico/guardian:
-    version: master

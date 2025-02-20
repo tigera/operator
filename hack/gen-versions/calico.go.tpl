@@ -200,5 +200,7 @@ var (
 		ComponentCalicoCSIRegistrar,
 		ComponentCalicoCSIRegistrarFIPS,
 		ComponentCalicoGoldmane,
+		ComponentCalicoWhisker,
+		ComponentCalicoWhiskerBackend,
 	}
 )

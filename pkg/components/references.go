@@ -59,9 +59,7 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 			ComponentCalicoCSIRegistrarFIPS,
 			ComponentCalicoGoldmane,
 			ComponentCalicoWhisker,
-			ComponentCalicoWhiskerBackend,
-			ComponentCalicoGuardian:
-
+			ComponentCalicoWhiskerBackend:
 			registry = CalicoRegistry
 		case ComponentOperatorInit:
 			registry = InitRegistry

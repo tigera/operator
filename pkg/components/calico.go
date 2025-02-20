@@ -148,11 +148,6 @@ var (
 		Registry: "",
 	}
 
-	ComponentCalicoGuardian = Component{
-		Version:  "master",
-		Image:    "calico/guardian",
-		Registry: "",
-	}
 	ComponentOperatorInit = Component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -178,5 +173,7 @@ var (
 		ComponentCalicoCSIRegistrar,
 		ComponentCalicoCSIRegistrarFIPS,
 		ComponentCalicoGoldmane,
+		ComponentCalicoWhisker,
+		ComponentCalicoWhiskerBackend,
 	}
 )

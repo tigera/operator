@@ -43,11 +43,9 @@ const (
 	WhiskerDeploymentName     = WhiskerName
 	WhiskerClusterRoleName    = WhiskerName
 
-	GuardianContainerName              = "guardian"
 	GoldmaneContainerName              = "goldmane"
 	WhiskerContainerName               = "whisker"
 	WhiskerBackendContainerName        = "whisker-backend"
-	GuardianServiceName                = "tigera-guardian"
 	ManagedClusterConnectionSecretName = "tigera-managed-cluster-connection"
 )
 
@@ -64,20 +62,17 @@ func Whisker(cfg *Configuration) render.Component {
 
 // Configuration contains all the config information needed to render the component.
 type Configuration struct {
-	PullSecrets                 []*corev1.Secret
-	OpenShift                   bool
-	Installation                *operatorv1.InstallationSpec
-	TunnelSecret                *corev1.Secret
-	TrustedCertBundle           certificatemanagement.TrustedBundle
-	LinseedPublicCASecret       *corev1.Secret
-	ManagementClusterConnection *operatorv1.ManagementClusterConnection
+	PullSecrets           []*corev1.Secret
+	OpenShift             bool
+	Installation          *operatorv1.InstallationSpec
+	TrustedCertBundle     certificatemanagement.TrustedBundle
+	LinseedPublicCASecret *corev1.Secret
 }
 
 type Component struct {
 	cfg *Configuration
 
 	goldmaneImage       string
-	guardianImage       string
 	whiskerImage        string
 	whiskerBackendImage string
 }
@@ -104,11 +99,6 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 		return err
 	}
 
-	c.guardianImage, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -130,20 +120,9 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 		c.whiskerService(),
 		c.cfg.TrustedCertBundle.ConfigMap(WhiskerNamespace))
 
-	if c.cfg.ManagementClusterConnection != nil {
-		objs = append(objs,
-			secret.CopyToNamespace(WhiskerNamespace, c.cfg.TunnelSecret)[0],
-			// TODO maybe the controller needs to create this?
-			c.cfg.TrustedCertBundle.ConfigMap(WhiskerNamespace),
-		)
-	}
+	objs = append(objs, c.cfg.TrustedCertBundle.ConfigMap(WhiskerNamespace))
 	objs = append(objs, c.deployment())
-
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(WhiskerNamespace, c.cfg.PullSecrets...)...)...)
-
-	if c.cfg.ManagementClusterConnection != nil && c.cfg.TunnelSecret != nil {
-		objs = append(objs, secret.CopyToNamespace(WhiskerNamespace, c.cfg.TunnelSecret)[0])
-	}
 
 	return objs, nil
 }
@@ -245,31 +224,6 @@ func (c *Component) goldmaneService() *corev1.Service {
 	}
 }
 
-func (c *Component) guardianContainer() corev1.Container {
-	tunnelCAType := c.cfg.ManagementClusterConnection.Spec.TLS.CA
-	voltronURL := c.cfg.ManagementClusterConnection.Spec.ManagementClusterAddr
-	bundle := c.cfg.TrustedCertBundle
-
-	return corev1.Container{
-		Name:            GuardianContainerName,
-		Image:           c.guardianImage,
-		ImagePullPolicy: render.ImagePullPolicy(),
-		Env: append([]corev1.EnvVar{
-			{Name: "GUARDIAN_PORT", Value: "9443"},
-			{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
-			{Name: "GUARDIAN_VOLTRON_URL", Value: voltronURL},
-			{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(tunnelCAType)},
-			{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: bundle.MountPath()},
-			{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: bundle.MountPath()},
-			{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: bundle.MountPath()},
-		}, c.cfg.Installation.Proxy.EnvVars()...),
-		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts: append([]corev1.VolumeMount{
-			secretMount("/certs", c.cfg.TunnelSecret),
-		}, c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)...),
-	}
-}
-
 func (c *Component) deployment() *appsv1.Deployment {
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
@@ -278,11 +232,6 @@ func (c *Component) deployment() *appsv1.Deployment {
 
 	ctrs := []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer(), c.goldmaneContainer()}
 	volumes := []corev1.Volume{c.cfg.TrustedCertBundle.Volume()}
-	if c.cfg.ManagementClusterConnection != nil {
-		ctrs = append(ctrs, c.guardianContainer())
-		volumes = append(volumes, secretVolume(c.cfg.TunnelSecret))
-	}
-
 	if c.cfg.LinseedPublicCASecret != nil {
 		volumes = append(volumes, secretVolume(c.cfg.LinseedPublicCASecret))
 	}

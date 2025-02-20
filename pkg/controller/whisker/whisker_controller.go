@@ -20,7 +20,6 @@ import (
 
 	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -42,7 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/whisker"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -78,7 +76,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	for _, secretName := range []string{
 		monitor.PrometheusServerTLSSecretName,
 		whisker.ManagedClusterConnectionSecretName,
-		certificatemanagement.CASecretName,
+		"whisker-trusted-bundle",
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
 	} {
@@ -192,51 +190,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return result, err
 	}
 
-	var trustedCertBundle certificatemanagement.TrustedBundle
-	tunnelSecret := &corev1.Secret{}
-	managementClusterConnection, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying ManagementClusterConnection", err, reqLogger)
-		return result, err
-	} else if managementClusterConnection != nil {
-		// Copy the secret from the operator namespace to the guardian namespace if it is present.
-
-		err = r.cli.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
-		if err != nil {
-			if !k8serrors.IsNotFound(err) {
-				return result, err
-			}
-			tunnelSecret = nil
-		}
-
-		preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
-		managementClusterConnection.FillDefaults()
-
-		// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
-		// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-		if err := r.cli.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
-
-		if managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic {
-			// If we need to trust a public CA, then we want Guardian to mount all the system certificates.
-			trustedCertBundle, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates()
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		} else {
-			trustedCertBundle = certificateManager.CreateTrustedBundle()
-		}
-	}
-
-	if trustedCertBundle == nil {
-		trustedCertBundle = certificateManager.CreateTrustedBundle()
-	}
-
+	trustedCertBundle := certificateManager.CreateTrustedBundle()
 	trustedCertBundle.SetName("whisker-trusted-bundle")
 
 	secretsToTrust := []string{render.ProjectCalicoAPIServerTLSSecretName(installation.Variant)}
@@ -255,13 +209,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
 	cfg := &whisker.Configuration{
-		PullSecrets:                 pullSecrets,
-		OpenShift:                   r.provider.IsOpenShift(),
-		Installation:                installation,
-		TunnelSecret:                tunnelSecret,
-		TrustedCertBundle:           trustedCertBundle,
-		LinseedPublicCASecret:       linseedCASecret,
-		ManagementClusterConnection: managementClusterConnection,
+		PullSecrets:           pullSecrets,
+		OpenShift:             r.provider.IsOpenShift(),
+		Installation:          installation,
+		TrustedCertBundle:     trustedCertBundle,
+		LinseedPublicCASecret: linseedCASecret,
 	}
 
 	components := []render.Component{whisker.Whisker(cfg)}

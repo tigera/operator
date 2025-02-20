@@ -37,3 +37,6 @@ components:
     version: master
   calico/envoy-ratelimit:
     version: master
+  calico/guardian:
+    version: master
+

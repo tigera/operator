@@ -166,6 +166,11 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoGuardian = Component{
+		Version:  "master",
+		Image:    "calico/guardian",
+		Registry: "",
+	}
 	ComponentOperatorInit = Component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -196,5 +201,6 @@ var (
 		ComponentCalicoEnvoyGateway,
 		ComponentCalicoEnvoyProxy,
 		ComponentCalicoEnvoyRatelimit,
+		ComponentCalicoGuardian,
 	}
 )

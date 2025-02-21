@@ -102,7 +102,6 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objs = append(objs,
-		render.CreateOperatorSecretsRoleBinding(WhiskerNamespace),
 		c.serviceAccount(),
 		c.role(),
 		c.roleBinding(),

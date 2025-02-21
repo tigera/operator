@@ -63,7 +63,7 @@ var _ = Describe("Mainline component function tests", func() {
 	var cancel context.CancelFunc
 	var operatorDone chan struct{}
 	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false, false)
 
 		By("Cleaning up resources before the test")
 		cleanupResources(c)
@@ -229,7 +229,7 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 	var cancel context.CancelFunc
 
 	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false, false)
 		verifyCRDsExist(c)
 	})
 
@@ -271,7 +271,7 @@ var _ = Describe("Mainline component function tests with ignored resource", func
 
 var _ = Describe("Mainline component function tests - multi-tenant", func() {
 	It("should set up all controllers correctly in multi-tenant mode", func() {
-		_, _, cancel, _ := setupManager(ManageCRDsDisable, true)
+		_, _, cancel, _ := setupManager(ManageCRDsDisable, true, false)
 		cancel()
 	})
 })
@@ -309,7 +309,7 @@ func newNonCachingClient(config *rest.Config, options client.Options) (client.Cl
 	return client.New(config, options)
 }
 
-func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
+func setupManager(manageCRDs bool, multiTenant bool, whiskerCRDExists bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
@@ -349,6 +349,7 @@ func setupManager(manageCRDs bool, multiTenant bool) (client.Client, context.Con
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
 		MultiTenant:         multiTenant,
+		WhiskerCRDExists:    whiskerCRDExists,
 	})
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), ctx, cancel, mgr

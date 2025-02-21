@@ -136,6 +136,18 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoWhisker = Component{
+		Version:  "master",
+		Image:    "calico/whisker",
+		Registry: "",
+	}
+
+	ComponentCalicoWhiskerBackend = Component{
+		Version:  "master",
+		Image:    "calico/whisker-backend",
+		Registry: "",
+	}
+
 	ComponentOperatorInit = Component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -161,5 +173,7 @@ var (
 		ComponentCalicoCSIRegistrar,
 		ComponentCalicoCSIRegistrarFIPS,
 		ComponentCalicoGoldmane,
+		ComponentCalicoWhisker,
+		ComponentCalicoWhiskerBackend,
 	}
 )

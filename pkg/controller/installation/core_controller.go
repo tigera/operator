@@ -1373,7 +1373,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if instance.Spec.Variant == operator.Calico && r.whiskerCRDExists {
 		whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.client)
 		if err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, "Unable Retrieve Whisker CR", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceReadError, "Unable retrieve Whisker CR", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		goldmaneRunning = whiskerCR != nil

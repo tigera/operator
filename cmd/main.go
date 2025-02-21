@@ -367,9 +367,9 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
 
-	whiskerEnabled, err := utils.WhiskerEnabled(mgr.GetConfig())
+	whiskerCRDExists, err := utils.WhiskerCRDExists(mgr.GetConfig())
 	if err != nil {
-		log.Error(err, "failed to check if whisker was enabled")
+		log.Error(err, "failed to check if Whisker CRD exists.")
 		os.Exit(1)
 	}
 
@@ -446,7 +446,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
 		MultiTenant:         multiTenant,
-		WhiskerCRDExists:    whiskerEnabled,
+		WhiskerCRDExists:    whiskerCRDExists,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
 	}
 

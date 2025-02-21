@@ -68,7 +68,7 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 	return false, nil
 }
 
-func WhiskerEnabled(cfg *rest.Config) (bool, error) {
+func WhiskerCRDExists(cfg *rest.Config) (bool, error) {
 	c, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return false, err

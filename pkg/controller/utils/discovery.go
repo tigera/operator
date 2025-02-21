@@ -84,7 +84,6 @@ func WhiskerEnabled(cfg *rest.Config) (bool, error) {
 		}
 	}
 
-	// Default to single-tenant.
 	return false, nil
 }
 

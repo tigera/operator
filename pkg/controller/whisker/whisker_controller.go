@@ -18,9 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -168,18 +166,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return result, err
 	}
 
-	linseedCASecret, err := utils.GetIfExists[corev1.Secret](ctx,
-		types.NamespacedName{Name: render.VoltronLinseedPublicCert, Namespace: common.OperatorNamespace()}, r.cli)
-	if err != nil {
-		return result, err
-	}
-
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
 	cfg := &whisker.Configuration{
-		PullSecrets:           pullSecrets,
-		OpenShift:             r.provider.IsOpenShift(),
-		Installation:          installation,
-		LinseedPublicCASecret: linseedCASecret,
+		PullSecrets:  pullSecrets,
+		OpenShift:    r.provider.IsOpenShift(),
+		Installation: installation,
 	}
 
 	components := []render.Component{whisker.Whisker(cfg)}

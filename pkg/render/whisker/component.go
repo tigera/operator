@@ -15,8 +15,6 @@
 package whisker
 
 import (
-	"fmt"
-
 	"github.com/tigera/operator/pkg/components"
 
 	"github.com/tigera/operator/pkg/common"
@@ -56,10 +54,9 @@ func Whisker(cfg *Configuration) render.Component {
 
 // Configuration contains all the config information needed to render the component.
 type Configuration struct {
-	PullSecrets           []*corev1.Secret
-	OpenShift             bool
-	Installation          *operatorv1.InstallationSpec
-	LinseedPublicCASecret *corev1.Secret
+	PullSecrets  []*corev1.Secret
+	OpenShift    bool
+	Installation *operatorv1.InstallationSpec
 }
 
 type Component struct {
@@ -234,20 +231,6 @@ func (c *Component) deployment() *appsv1.Deployment {
 				},
 			},
 		},
-	}
-}
-
-func secretMount(path string, scrt *corev1.Secret) corev1.VolumeMount {
-	return corev1.VolumeMount{
-		Name:      fmt.Sprintf("%s-%s", scrt.Name, "scrt"),
-		MountPath: path,
-	}
-}
-
-func secretVolume(scrt *corev1.Secret) corev1.Volume {
-	return corev1.Volume{
-		Name:         fmt.Sprintf("%s-%s", scrt.Name, "scrt"),
-		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: scrt.Name}},
 	}
 }
 

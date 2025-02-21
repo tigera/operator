@@ -446,7 +446,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
 		MultiTenant:         multiTenant,
-		WhiskerEnabled:      whiskerEnabled,
+		WhiskerCRDExists:    whiskerEnabled,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
 	}
 

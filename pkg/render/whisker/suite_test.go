@@ -25,6 +25,6 @@ import (
 
 func TestRender(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/ut/monitor_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render/tiers Suite", []Reporter{junitReporter})
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/whisker_render_suite.xml")
+	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render/whisker Suite", []Reporter{junitReporter})
 }

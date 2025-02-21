@@ -181,6 +181,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 	}
 
+	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 
 	return result, nil

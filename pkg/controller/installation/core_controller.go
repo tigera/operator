@@ -197,6 +197,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
+		whiskerEnabled:       opts.WhiskerEnabled,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -232,6 +233,13 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 			if !apierrors.IsNotFound(err) {
 				return fmt.Errorf("tigera-installation-controller failed to watch openshift infrastructure config: %w", err)
 			}
+		}
+	}
+
+	if r.whiskerEnabled {
+		err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to whisker resource: %w", err)
 		}
 	}
 
@@ -376,7 +384,7 @@ type ReconcileInstallation struct {
 	clusterDomain        string
 	manageCRDs           bool
 	tierWatchReady       *utils.ReadyFlag
-
+	whiskerEnabled       bool
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
@@ -1360,8 +1368,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	var goldmaneRunning bool
+	if r.whiskerEnabled {
+		whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.client)
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Unable Retrieve Whisker CR", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		goldmaneRunning = whiskerCR != nil
+	}
+
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
+		GoldmaneRunning:               goldmaneRunning,
 		K8sServiceEp:                  k8sapi.Endpoint,
 		Installation:                  &instance.Spec,
 		IPPools:                       crdPoolsToOperator(currentPools.Items),

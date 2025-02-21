@@ -32,7 +32,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // The names of the components related to the Guardian related rendered objects.
@@ -60,7 +59,6 @@ type Configuration struct {
 	PullSecrets           []*corev1.Secret
 	OpenShift             bool
 	Installation          *operatorv1.InstallationSpec
-	TrustedCertBundle     certificatemanagement.TrustedBundle
 	LinseedPublicCASecret *corev1.Secret
 }
 
@@ -113,9 +111,8 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 		c.clusterRoleBinding(),
 		c.goldmaneService(),
 		c.whiskerService(),
-		c.cfg.TrustedCertBundle.ConfigMap(WhiskerNamespace))
+	)
 
-	objs = append(objs, c.cfg.TrustedCertBundle.ConfigMap(WhiskerNamespace))
 	objs = append(objs, c.deployment())
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(WhiskerNamespace, c.cfg.PullSecrets...)...)...)
 
@@ -140,10 +137,8 @@ func (c *Component) whiskerContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
-			{Name: "CA_CERT_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
 	}
 }
 
@@ -169,12 +164,10 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
-			{Name: "CA_CERT_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 			{Name: "PORT", Value: "3002"},
 			{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
 	}
 }
 
@@ -184,15 +177,6 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		{Name: "CA_CERT_PATH", Value: "/certs/tls.crt"},
 		{Name: "PORT", Value: "7443"},
 	}
-	var volumeMounts []corev1.VolumeMount
-	if c.cfg.LinseedPublicCASecret != nil {
-		env = append(env, corev1.EnvVar{
-			Name:  "PUSH_URL",
-			Value: "https://localhost:8080/api/v1/flows/bulk"})
-		volumeMounts = []corev1.VolumeMount{
-			secretMount("/certs", c.cfg.LinseedPublicCASecret),
-		}
-	}
 
 	return corev1.Container{
 		Name:            GoldmaneContainerName,
@@ -200,7 +184,6 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    volumeMounts,
 	}
 }
 
@@ -226,10 +209,6 @@ func (c *Component) deployment() *appsv1.Deployment {
 	}
 
 	ctrs := []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer(), c.goldmaneContainer()}
-	volumes := []corev1.Volume{c.cfg.TrustedCertBundle.Volume()}
-	if c.cfg.LinseedPublicCASecret != nil {
-		volumes = append(volumes, secretVolume(c.cfg.LinseedPublicCASecret))
-	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -252,7 +231,6 @@ func (c *Component) deployment() *appsv1.Deployment {
 					Tolerations:        tolerations,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers:         ctrs,
-					Volumes:            volumes,
 				},
 			},
 		},

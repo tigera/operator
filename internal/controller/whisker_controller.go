@@ -33,8 +33,8 @@ type WhiskerReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=managementclusterconnections,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=managementclusterconnections/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=whiskers,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=whiskers/status,verbs=get;update;patch
 
 func (r *WhiskerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
 	return whisker.Add(mgr, opts)

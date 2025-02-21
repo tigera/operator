@@ -30,7 +30,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -51,15 +50,11 @@ var log = logf.Log.WithName(controllerName)
 // Add creates a new Reconciler Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	enabled, err := utils.WhiskerEnabled(mgr.GetConfig())
-	if err != nil {
-		return fmt.Errorf("failed to check if whisker was enabled: %w", err)
-	}
-	if !enabled {
+	if !opts.WhiskerEnabled {
 		return nil
 	}
 
-	statusManager := status.New(mgr.GetClient(), "gold-rush", opts.KubernetesVersion)
+	statusManager := status.New(mgr.GetClient(), "whisker", opts.KubernetesVersion)
 
 	// Create the reconciler
 	tierWatchReady := &utils.ReadyFlag{}
@@ -74,7 +69,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	for _, secretName := range []string{
 		monitor.PrometheusServerTLSSecretName,
 		whisker.ManagedClusterConnectionSecretName,
-		"whisker-trusted-bundle",
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
 	} {
@@ -174,33 +168,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return result, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.cli, installation, r.clusterDomain, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the certificate manager", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	linseedCASecret, err := utils.GetIfExists[corev1.Secret](ctx,
 		types.NamespacedName{Name: render.VoltronLinseedPublicCert, Namespace: common.OperatorNamespace()}, r.cli)
 	if err != nil {
 		return result, err
-	}
-
-	trustedCertBundle := certificateManager.CreateTrustedBundle()
-	trustedCertBundle.SetName("whisker-trusted-bundle")
-
-	secretsToTrust := []string{render.ProjectCalicoAPIServerTLSSecretName(installation.Variant)}
-	for _, secretName := range secretsToTrust {
-		secret, err := certificateManager.GetCertificate(r.cli, secretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)
-			return reconcile.Result{}, err
-		} else if secret == nil {
-			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
-			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret '%s' to become available", secretName), nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		trustedCertBundle.AddCertificates(secret)
 	}
 
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
@@ -208,7 +179,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		PullSecrets:           pullSecrets,
 		OpenShift:             r.provider.IsOpenShift(),
 		Installation:          installation,
-		TrustedCertBundle:     trustedCertBundle,
 		LinseedPublicCASecret: linseedCASecret,
 	}
 

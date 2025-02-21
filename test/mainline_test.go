@@ -134,6 +134,25 @@ var _ = Describe("Mainline component function tests", func() {
 		mgr = nil
 	})
 
+	It("Should install whisker", func() {
+		operatorDone = createInstallation(c, mgr, shutdownContext, nil)
+		verifyCalicoHasDeployed(c)
+
+		By("Creating a CRD resource not named default")
+		instance := &operator.Whisker{
+			TypeMeta:   metav1.TypeMeta{Kind: "Whisker", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		}
+		err := c.Create(context.Background(), instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		defer c.Delete(context.Background(), instance)
+
+		By("Verifying resources were created")
+		whisker := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "whisker", Namespace: "calico-system"}}
+		ExpectResourceCreated(c, whisker)
+	})
+
 	It("should recreate resources with DeletionTimestamp set", func() {
 		// Reconcile as usual, allowing resources to be created.
 		operatorDone = createInstallation(c, mgr, shutdownContext, nil)

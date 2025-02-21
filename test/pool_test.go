@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ var _ = Describe("IPPool FV tests", func() {
 	var operatorDone chan struct{}
 
 	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false, false)
 
 		By("Cleaning up resources before the test")
 		cleanupResources(c)

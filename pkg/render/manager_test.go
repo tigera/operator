@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -350,6 +350,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Verbs:     []string{"get", "list"},
 			},
 			{
+				APIGroups: []string{"policy.networking.k8s.io"},
+				Resources: []string{
+					"adminnetworkpolicies",
+					"baselineadminnetworkpolicies",
+				},
+				Verbs: []string{"list"},
+			},
+			{
 				APIGroups: []string{""},
 				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "pods"},
 				Verbs:     []string{"list"},
@@ -618,6 +626,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{"networking.k8s.io"},
 				Resources: []string{"networkpolicies"},
 				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"policy.networking.k8s.io"},
+				Resources: []string{
+					"adminnetworkpolicies",
+					"baselineadminnetworkpolicies",
+				},
+				Verbs: []string{"list"},
 			},
 			{
 				APIGroups: []string{""},

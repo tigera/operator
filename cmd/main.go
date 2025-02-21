@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -367,6 +367,12 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
 
+	whiskerEnabled, err := utils.WhiskerEnabled(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "failed to check if whisker was enabled")
+		os.Exit(1)
+	}
+
 	// Determine if we're running in single or multi-tenant mode.
 	multiTenant, err := utils.MultiTenant(ctx, clientset)
 	if err != nil {
@@ -440,6 +446,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
 		MultiTenant:         multiTenant,
+		WhiskerEnabled:      whiskerEnabled,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
 	}
 

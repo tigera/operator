@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ import (
 // use to determine if they should run at all, or store them and influence their
 // reconciliation loops.
 type AddOptions struct {
+	WhiskerCRDExists    bool
 	DetectedProvider    v1.Provider
 	EnterpriseCRDExists bool
 	ClusterDomain       string

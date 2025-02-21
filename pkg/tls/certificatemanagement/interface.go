@@ -71,7 +71,6 @@ type TrustedBundle interface {
 	HashAnnotations() map[string]string
 	VolumeMounts(osType meta.OSType) []corev1.VolumeMount
 	Volume() corev1.Volume
-	SetName(string)
 	AddCertificates(certificates ...CertificateInterface)
 }
 

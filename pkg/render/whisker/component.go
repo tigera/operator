@@ -38,7 +38,7 @@ const (
 	WhiskerNamespace          = common.CalicoNamespace
 	WhiskerServiceAccountName = WhiskerName
 	WhiskerDeploymentName     = WhiskerName
-	WhiskerClusterRoleName    = WhiskerName
+	WhiskerRoleName           = WhiskerName
 
 	GoldmaneContainerName              = "goldmane"
 	WhiskerContainerName               = "whisker"
@@ -104,8 +104,8 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs,
 		render.CreateOperatorSecretsRoleBinding(WhiskerNamespace),
 		c.serviceAccount(),
-		c.clusterRole(),
-		c.clusterRoleBinding(),
+		c.role(),
+		c.roleBinding(),
 		c.goldmaneService(),
 		c.whiskerService(),
 	)
@@ -234,45 +234,42 @@ func (c *Component) deployment() *appsv1.Deployment {
 	}
 }
 
-func (c *Component) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
+func (c *Component) roleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: WhiskerClusterRoleName,
+			Name:      WhiskerRoleName,
+			Namespace: WhiskerNamespace,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     WhiskerClusterRoleName,
+			Kind:     "Role",
+			Name:     WhiskerRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      WhiskerClusterRoleName,
+				Name:      WhiskerRoleName,
 				Namespace: WhiskerNamespace,
 			},
 		},
 	}
 }
 
-func (c *Component) clusterRole() *rbacv1.ClusterRole {
+func (c *Component) role() *rbacv1.Role {
 	policyRules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
 			Resources: []string{"configmaps"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 		},
-		{
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"get", "list", "watch"},
-		},
 	}
 
-	return &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: WhiskerClusterRoleName,
+			Name:      WhiskerRoleName,
+			Namespace: WhiskerNamespace,
 		},
 		Rules: policyRules,
 	}

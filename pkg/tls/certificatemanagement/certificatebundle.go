@@ -99,10 +99,6 @@ func createTrustedBundle(includeSystemBundle bool, name string, ca CertificateIn
 	return bundle, err
 }
 
-func (t *trustedBundle) SetName(name string) {
-	t.name = name
-}
-
 // AddCertificates Adds the certificates to the bundle.
 func (t *trustedBundle) AddCertificates(certificates ...CertificateInterface) {
 	for _, cert := range certificates {

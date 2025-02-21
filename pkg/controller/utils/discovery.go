@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -62,11 +62,28 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 		case "ManagementCluster":
 			fallthrough
 		case "EgressGateway":
-			fallthrough
-		case "ManagementClusterConnection":
 			return true, nil
 		}
 	}
+	return false, nil
+}
+
+func WhiskerEnabled(cfg *rest.Config) (bool, error) {
+	c, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return false, err
+	}
+
+	resources, err := c.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
+	if err != nil {
+		return false, err
+	}
+	for _, res := range resources.APIResources {
+		if strings.EqualFold(res.Kind, "Whisker") {
+			return true, nil
+		}
+	}
+
 	return false, nil
 }
 

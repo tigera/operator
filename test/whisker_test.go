@@ -116,7 +116,7 @@ var _ = Describe("Tests for Whisker installation", func() {
 		mgr = nil
 	})
 
-	FIt("Should install whisker", func() {
+	It("Should install whisker", func() {
 		operatorDone = createInstallation(c, mgr, shutdownContext, nil)
 		verifyCalicoHasDeployed(c)
 

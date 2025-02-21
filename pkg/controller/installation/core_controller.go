@@ -197,7 +197,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
-		whiskerEnabled:       opts.WhiskerEnabled,
+		whiskerCRDExists:     opts.WhiskerCRDExists,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -236,7 +236,7 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 		}
 	}
 
-	if r.whiskerEnabled {
+	if r.whiskerCRDExists {
 		err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to whisker resource: %w", err)
@@ -384,7 +384,7 @@ type ReconcileInstallation struct {
 	clusterDomain        string
 	manageCRDs           bool
 	tierWatchReady       *utils.ReadyFlag
-	whiskerEnabled       bool
+	whiskerCRDExists     bool
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
@@ -1369,7 +1369,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	var goldmaneRunning bool
-	if r.whiskerEnabled {
+	// Goldmane can only be running if the variant is Calico and the Whisker CRD exists.
+	if instance.Spec.Variant == operator.Calico && r.whiskerCRDExists {
 		whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.client)
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceReadError, "Unable Retrieve Whisker CR", err, reqLogger)

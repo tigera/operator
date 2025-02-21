@@ -26,7 +26,7 @@ import (
 // use to determine if they should run at all, or store them and influence their
 // reconciliation loops.
 type AddOptions struct {
-	WhiskerEnabled      bool
+	WhiskerCRDExists    bool
 	DetectedProvider    v1.Provider
 	EnterpriseCRDExists bool
 	ClusterDomain       string

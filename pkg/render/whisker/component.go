@@ -113,7 +113,12 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.deployment())
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(WhiskerNamespace, c.cfg.PullSecrets...)...)...)
 
-	return objs, nil
+	// Whisker needs to be removed if the installation is not Calico, since it's not supported (yet!) for any other variant.
+	if c.cfg.Installation.Variant == operatorv1.Calico {
+		return objs, nil
+	} else {
+		return nil, objs
+	}
 }
 
 func (c *Component) Ready() bool {

@@ -48,15 +48,13 @@ var log = logf.Log.WithName(controllerName)
 // Add creates a new Reconciler Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.WhiskerEnabled {
+	// If the CRD doesn't exist just exit since nothing can be installed here without the Whisker CR.
+	if !opts.WhiskerCRDExists {
 		return nil
 	}
 
 	statusManager := status.New(mgr.GetClient(), "whisker", opts.KubernetesVersion)
-
-	// Create the reconciler
-	tierWatchReady := &utils.ReadyFlag{}
-	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, tierWatchReady, opts)
+	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts)
 
 	// Create a new controller
 	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: reconciler})
@@ -106,16 +104,14 @@ func newReconciler(
 	schema *runtime.Scheme,
 	statusMgr status.StatusManager,
 	p operatorv1.Provider,
-	tierWatchReady *utils.ReadyFlag,
 	opts options.AddOptions,
 ) *Reconciler {
 	c := &Reconciler{
-		cli:            cli,
-		scheme:         schema,
-		provider:       p,
-		status:         statusMgr,
-		clusterDomain:  opts.ClusterDomain,
-		tierWatchReady: tierWatchReady,
+		cli:           cli,
+		scheme:        schema,
+		provider:      p,
+		status:        statusMgr,
+		clusterDomain: opts.ClusterDomain,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -126,12 +122,11 @@ var _ reconcile.Reconciler = &Reconciler{}
 
 // Reconciler reconciles a ManagementClusterConnection object
 type Reconciler struct {
-	cli            client.Client
-	scheme         *runtime.Scheme
-	provider       operatorv1.Provider
-	status         status.StatusManager
-	clusterDomain  string
-	tierWatchReady *utils.ReadyFlag
+	cli           client.Client
+	scheme        *runtime.Scheme
+	provider      operatorv1.Provider
+	status        status.StatusManager
+	clusterDomain string
 }
 
 // Reconcile reads that state of the cluster for a Whisker object and makes changes based on the

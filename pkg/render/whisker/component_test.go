@@ -45,7 +45,7 @@ var _ = Describe("ComponentRendering", func() {
 					Variant:            operatorv1.Calico,
 				},
 			},
-			8, 0,
+			7, 0,
 		),
 		Entry("Should return objects to delete when variant is not Calico",
 			&whisker.Configuration{
@@ -54,7 +54,7 @@ var _ = Describe("ComponentRendering", func() {
 					Variant:            operatorv1.TigeraSecureEnterprise,
 				},
 			},
-			0, 8,
+			0, 7,
 		),
 	)
 

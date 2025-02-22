@@ -698,16 +698,6 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	return calicoPluginConfig
 }
 
-func (c *nodeComponent) createBandwidthPlugin() map[string]interface{} {
-	// bandwidth plugin
-	bandwidthPlugin := map[string]interface{}{
-		"type":         "bandwidth",
-		"capabilities": map[string]bool{"bandwidth": true},
-	}
-
-	return bandwidthPlugin
-}
-
 func (c *nodeComponent) createPortmapPlugin() map[string]interface{} {
 	// Determine portmap configuration to use.
 	portmapPlugin := map[string]interface{}{
@@ -748,7 +738,6 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 
 	plugins := make([]interface{}, 0)
 	plugins = append(plugins, c.createCalicoPluginConfig())
-	plugins = append(plugins, c.createBandwidthPlugin())
 
 	// optional portmap plugin
 	if c.cfg.Installation.CalicoNetwork.HostPorts != nil &&

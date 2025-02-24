@@ -133,4 +133,5 @@ replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM
 	github.com/imdario/mergo => github.com/imdario/mergo v0.3.16 // Per advice at https://github.com/darccio/mergo?tab=readme-ov-file#100
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v1.0.1
+	github.com/tigera/operator/api => ./api
 )

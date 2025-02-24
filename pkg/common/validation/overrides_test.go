@@ -25,7 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	opv1 "github.com/tigera/operator/api/v1"
+	opv1 "github.com/tigera/operator/operator-api/v1"
 	node "github.com/tigera/operator/pkg/common/validation/calico-node"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

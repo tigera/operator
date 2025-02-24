@@ -22,7 +22,7 @@ import (
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"

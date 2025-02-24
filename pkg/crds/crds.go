@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 
-	opv1 "github.com/tigera/operator/api/v1"
+	opv1 "github.com/tigera/operator/operator-api/v1"
 )
 
 var (

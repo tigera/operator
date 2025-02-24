@@ -23,7 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
-	operator "github.com/tigera/operator/api/v1"
+	operator "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/controller/status"
 	. "github.com/tigera/operator/test"
 

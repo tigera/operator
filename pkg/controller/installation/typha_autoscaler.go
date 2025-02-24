@@ -26,7 +26,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	operator "github.com/tigera/operator/api/v1"
+	operator "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

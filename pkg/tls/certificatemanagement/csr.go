@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 

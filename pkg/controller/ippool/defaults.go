@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
-	operator "github.com/tigera/operator/api/v1"
+	operator "github.com/tigera/operator/operator-api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/ptr"
 	corev1 "k8s.io/api/core/v1"

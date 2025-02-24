@@ -17,7 +17,7 @@ package validation
 import (
 	"fmt"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/tigera/operator/pkg/common/k8svalidation"

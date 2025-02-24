@@ -19,7 +19,7 @@ import (
 	"fmt"
 
 	"github.com/stretchr/testify/mock"
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

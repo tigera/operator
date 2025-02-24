@@ -23,7 +23,7 @@ import (
 	"github.com/go-ldap/ldap"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	rauth "github.com/tigera/operator/pkg/render/common/authentication"

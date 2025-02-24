@@ -24,7 +24,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operator "github.com/tigera/operator/api/v1"
+	operator "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"

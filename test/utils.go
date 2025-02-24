@@ -39,7 +39,7 @@ import (
 	"github.com/openshift/library-go/pkg/crypto"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operator "github.com/tigera/operator/api/v1"
+	operator "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/controller/status"
 
 	corev1 "k8s.io/api/core/v1"

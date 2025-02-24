@@ -473,7 +473,7 @@ fix:
 format-check:
 	@$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	files=$$(gofmt -l ./pkg ./internal/controller ./api ./test); \
+	files=$$(gofmt -l ./pkg ./internal/controller ./operator-api ./test); \
 	[ "$$files" = "" ] && exit 0; \
 	echo The following files need a format update:; \
 	echo $$files; \

@@ -17,7 +17,7 @@ package convert
 import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	v1 "github.com/tigera/operator/api/v1"
+	v1 "github.com/tigera/operator/operator-api/v1"
 )
 
 var _ = Describe("addon manager", func() {

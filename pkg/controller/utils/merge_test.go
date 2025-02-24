@@ -28,7 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	opv1 "github.com/tigera/operator/api/v1"
+	opv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/test"
 )
 

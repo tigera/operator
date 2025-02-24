@@ -34,7 +34,7 @@ import (
 
 	"github.com/tigera/api/pkg/lib/numorstring"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"

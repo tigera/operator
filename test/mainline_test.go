@@ -41,8 +41,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
+	operator "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"

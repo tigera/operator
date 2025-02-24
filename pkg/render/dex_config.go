@@ -20,7 +20,7 @@ import (
 	"strconv"
 	"strings"
 
-	oprv1 "github.com/tigera/operator/api/v1"
+	oprv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"

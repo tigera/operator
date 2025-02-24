@@ -23,7 +23,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
-	operator "github.com/tigera/operator/api/v1"
+	operator "github.com/tigera/operator/operator-api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"

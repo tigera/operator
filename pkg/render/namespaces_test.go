@@ -23,7 +23,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/render"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 )

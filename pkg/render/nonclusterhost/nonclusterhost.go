@@ -21,7 +21,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"

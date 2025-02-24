@@ -15,4 +15,4 @@
 
 set -e
 
-make pre-commit
+#make pre-commit

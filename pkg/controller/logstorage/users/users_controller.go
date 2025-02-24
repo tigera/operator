@@ -23,7 +23,7 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render/logstorage/dashboards"
 	corev1 "k8s.io/api/core/v1"

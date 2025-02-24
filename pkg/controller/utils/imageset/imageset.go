@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"strings"
 
-	operator "github.com/tigera/operator/api/v1"
+	operator "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"

@@ -15,7 +15,7 @@
 package render
 
 import (
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

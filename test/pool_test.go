@@ -34,7 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operator "github.com/tigera/operator/api/v1"
+	operator "github.com/tigera/operator/operator-api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 )
 

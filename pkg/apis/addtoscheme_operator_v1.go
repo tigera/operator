@@ -21,7 +21,7 @@ import (
 	ocsv1 "github.com/openshift/api/security/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	tigera "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operator "github.com/tigera/operator/api/v1"
+	operator "github.com/tigera/operator/operator-api/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"

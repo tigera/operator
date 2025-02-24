@@ -25,7 +25,7 @@ import (
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/test"
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"

@@ -21,7 +21,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
-	op "github.com/tigera/operator/api/v1"
+	op "github.com/tigera/operator/operator-api/v1"
 )
 
 var _ = Describe("test GetReference", func() {

@@ -15,7 +15,7 @@
 package convert
 
 import (
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/controller/migration/cni"
 	v1 "k8s.io/api/core/v1"
 

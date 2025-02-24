@@ -28,8 +28,8 @@ import (
 
 	"github.com/olivere/elastic/v7"
 
-	operator "github.com/tigera/operator/api/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operator "github.com/tigera/operator/operator-api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/logstorage"

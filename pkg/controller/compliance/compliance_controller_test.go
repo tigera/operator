@@ -35,7 +35,7 @@ import (
 	"github.com/tigera/operator/test"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"

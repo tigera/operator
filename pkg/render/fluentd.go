@@ -27,7 +27,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"

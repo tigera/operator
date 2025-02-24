@@ -21,7 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	appsv1 "k8s.io/api/apps/v1"

@@ -22,7 +22,7 @@ import (
 
 	"github.com/tigera/operator/pkg/controller/utils"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/operator-api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"k8s.io/apimachinery/pkg/runtime"

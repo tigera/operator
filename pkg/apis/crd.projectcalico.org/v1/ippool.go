@@ -15,6 +15,7 @@
 package v1
 
 import (
+	operatorapi "github.com/tigera/operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -76,7 +77,7 @@ type IPPoolSpec struct {
 	AllowedUses []IPPoolAllowedUse `json:"allowedUses,omitempty" validate:"omitempty"`
 
 	// AssignmentMode determines if IP addresses from this pool should be  assigned automatically or on request only
-	AssignmentMode AssignmentMode `json:"assignmentMode,omitempty" validate:"omitempty,assignmentMode"`
+	AssignmentMode operatorapi.AssignmentMode `json:"assignmentMode,omitempty" validate:"omitempty,assignmentMode"`
 }
 
 type IPPoolAllowedUse string
@@ -103,11 +104,9 @@ const (
 	IPIPModeCrossSubnet IPIPMode = "CrossSubnet"
 )
 
-type AssignmentMode string
-
 const (
-	Automatic AssignmentMode = "Automatic"
-	Manual    AssignmentMode = "Manual"
+	Automatic operatorapi.AssignmentMode = "Automatic"
+	Manual    operatorapi.AssignmentMode = "Manual"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -236,7 +236,8 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 		}
 	}
 
-	if r.whiskerCRDExists {
+	if r.whiskerCRDExists && !r.enterpriseCRDsExist {
+		// Whisker is only supported on OSS clusters that have the CRD installed.
 		err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to whisker resource: %w", err)

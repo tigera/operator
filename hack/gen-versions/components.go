@@ -52,6 +52,9 @@ var defaultImages = map[string]string{
 	"tigera-cni-windows":         "tigera/cni-windows",
 	"calico/apiserver":           "calico/apiserver",
 	"tigera/linseed":             "tigera/linseed",
+	"calico/envoy-gateway":       "calico/envoy-gateway",
+	"calico/envoy-proxy":         "calico/envoy-proxy",
+	"calico/envoy-ratelimit":     "calico/envoy-ratelimit",
 }
 
 var ignoredImages = map[string]struct{}{

@@ -25,7 +25,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operator "github.com/tigera/operator/api/v1"
-	v1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -224,7 +223,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operator.ResourceNotReady, "Error querying APIServer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	apiAvailable := apiserver != nil && apiserver.Status.State == v1.TigeraStatusReady
+	apiAvailable := apiserver != nil && apiserver.Status.State == operator.TigeraStatusReady
 
 	// Create a lookup map of pools owned by this controller for easy access.
 	// This controller will only modify IP pools if:
@@ -247,8 +246,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			// Without this logic, this controller would consider these pools as not owned by itself, resulting in errors
 			// when it attempts to create overlappin IP pools.
 			for _, cnp := range installation.Spec.CalicoNetwork.IPPools {
-				v1p := v1.IPPool{}
-				v1p.FromProjectCalicoV1(p)
+				v1p := operator.IPPool{}
+				FromProjectCalicoV1(v1p, p)
 				reqLogger.V(1).Info("Comparing IP pool", "clusterPool", p, "installationPool", cnp)
 				if !reflect.DeepEqual(cnp, v1p) {
 					// The IP pool in the cluster doesn't match the IP pool in the Installation - ignore it.
@@ -278,7 +277,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	for _, p := range installation.Spec.CalicoNetwork.IPPools {
 		// We need to check if updates are required, but the installation uses the operator API format and the queried
 		// pools are in crd.projectcalico.org/v1 format. Compare the pools using the crd.projectcalico.org/v1 format.
-		v1res, err := p.ToProjectCalicoV1()
+		v1res, err := ToProjectCalicoV1(p)
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
 			return reconcile.Result{}, err
@@ -393,11 +392,126 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-func CRDPoolsToOperator(crds []crdv1.IPPool) []v1.IPPool {
-	pools := []v1.IPPool{}
+// ToProjectCalicoV1 converts an IPPool to a crd.projectcalico.org/v1 IPPool resource.
+func ToProjectCalicoV1(p operator.IPPool) (*crdv1.IPPool, error) {
+	pool := crdv1.IPPool{
+		TypeMeta: metav1.TypeMeta{Kind: "IPPool", APIVersion: "crd.projectcalico.org/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   p.Name,
+			Labels: map[string]string{},
+		},
+		Spec: crdv1.IPPoolSpec{CIDR: p.CIDR},
+	}
+
+	// Set encap.
+	switch p.Encapsulation {
+	case operator.EncapsulationIPIP:
+		pool.Spec.IPIPMode = crdv1.IPIPModeAlways
+		pool.Spec.VXLANMode = crdv1.VXLANModeNever
+	case operator.EncapsulationIPIPCrossSubnet:
+		pool.Spec.IPIPMode = crdv1.IPIPModeCrossSubnet
+		pool.Spec.VXLANMode = crdv1.VXLANModeNever
+	case operator.EncapsulationVXLAN:
+		pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+		pool.Spec.IPIPMode = crdv1.IPIPModeNever
+	case operator.EncapsulationVXLANCrossSubnet:
+		pool.Spec.VXLANMode = crdv1.VXLANModeCrossSubnet
+		pool.Spec.IPIPMode = crdv1.IPIPModeNever
+	}
+
+	// Set NAT
+	switch p.NATOutgoing {
+	case operator.NATOutgoingEnabled:
+		pool.Spec.NATOutgoing = true
+	}
+
+	if p.DisableNewAllocations != nil {
+		pool.Spec.Disabled = *p.DisableNewAllocations
+	}
+
+	// Set BlockSize
+	if p.BlockSize != nil {
+		pool.Spec.BlockSize = int(*p.BlockSize)
+	}
+
+	// Set selector.
+	pool.Spec.NodeSelector = p.NodeSelector
+
+	// Set BGP export.
+	if p.DisableBGPExport != nil {
+		pool.Spec.DisableBGPExport = *p.DisableBGPExport
+	}
+
+	for _, use := range p.AllowedUses {
+		pool.Spec.AllowedUses = append(pool.Spec.AllowedUses, crdv1.IPPoolAllowedUse(use))
+	}
+
+	pool.Spec.AssignmentMode = p.AssignmentMode
+
+	return &pool, nil
+}
+
+// FromProjectCalicoV1 populates the IP pool with the data from the given
+// crd.projectcalico.org/v1 IP pool. It is the direct inverse of ToProjectCalicoV1,
+// and should be updated with every new field added to the IP pool structure.
+func FromProjectCalicoV1(p operator.IPPool, crd crdv1.IPPool) {
+	p.Name = crd.Name
+	p.CIDR = crd.Spec.CIDR
+
+	// Set encap.
+	switch crd.Spec.IPIPMode {
+	case crdv1.IPIPModeAlways:
+		p.Encapsulation = operator.EncapsulationIPIP
+	case crdv1.IPIPModeCrossSubnet:
+		p.Encapsulation = operator.EncapsulationIPIPCrossSubnet
+	}
+	switch crd.Spec.VXLANMode {
+	case crdv1.VXLANModeAlways:
+		p.Encapsulation = operator.EncapsulationVXLAN
+	case crdv1.VXLANModeCrossSubnet:
+		p.Encapsulation = operator.EncapsulationVXLANCrossSubnet
+	}
+
+	// Set NAT
+	if crd.Spec.NATOutgoing {
+		p.NATOutgoing = operator.NATOutgoingEnabled
+	} else {
+		p.NATOutgoing = operator.NATOutgoingDisabled
+	}
+
+	// Configure DisableNewAllocations
+	disableAlloc := false
+	if crd.Spec.Disabled {
+		disableAlloc = true
+	}
+	p.DisableNewAllocations = &disableAlloc
+
+	// Set BlockSize
+	blockSize := int32(crd.Spec.BlockSize)
+	p.BlockSize = &blockSize
+
+	// Set selector.
+	p.NodeSelector = crd.Spec.NodeSelector
+
+	// Set BGP export.
+	disableExport := false
+	if crd.Spec.DisableBGPExport {
+		disableExport = true
+	}
+	p.DisableBGPExport = &disableExport
+
+	for _, use := range crd.Spec.AllowedUses {
+		p.AllowedUses = append(p.AllowedUses, operator.IPPoolAllowedUse(use))
+	}
+
+	p.AssignmentMode = crd.Spec.AssignmentMode
+}
+
+func CRDPoolsToOperator(crds []crdv1.IPPool) []operator.IPPool {
+	pools := []operator.IPPool{}
 	for _, p := range crds {
-		op := v1.IPPool{}
-		op.FromProjectCalicoV1(p)
+		op := operator.IPPool{}
+		FromProjectCalicoV1(op, p)
 		pools = append(pools, op)
 	}
 	return pools

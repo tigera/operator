@@ -154,12 +154,3 @@ components:
   key-cert-provisioner:
     image: tigera/key-cert-provisioner
     version: master
-  gateway-api-envoy-gateway:
-    image: tigera/envoy-gateway
-    version: master
-  gateway-api-envoy-proxy:
-    image: tigera/envoy-proxy
-    version: master
-  gateway-api-envoy-ratelimit:
-    image: tigera/envoy-ratelimit
-    version: master

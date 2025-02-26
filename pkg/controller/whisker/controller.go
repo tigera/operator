@@ -18,7 +18,12 @@ import (
 	"context"
 	"fmt"
 
+	"golang.org/x/net/http/httpproxy"
+	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -28,6 +33,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -36,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/whisker"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -65,6 +72,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	for _, secretName := range []string{
 		monitor.PrometheusServerTLSSecretName,
 		whisker.ManagedClusterConnectionSecretName,
+		certificatemanagement.CASecretName,
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
 	} {
@@ -76,6 +84,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
+	}
+
+	err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("%s failed to watch management cluster connection resource: %w", controllerName, err)
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
@@ -122,11 +135,14 @@ var _ reconcile.Reconciler = &Reconciler{}
 
 // Reconciler reconciles a ManagementClusterConnection object
 type Reconciler struct {
-	cli           client.Client
-	scheme        *runtime.Scheme
-	provider      operatorv1.Provider
-	status        status.StatusManager
-	clusterDomain string
+	cli                        client.Client
+	scheme                     *runtime.Scheme
+	provider                   operatorv1.Provider
+	status                     status.StatusManager
+	clusterDomain              string
+	tierWatchReady             *utils.ReadyFlag
+	resolvedPodProxies         []*httpproxy.Config
+	lastAvailabilityTransition metav1.Time
 }
 
 // Reconcile reads that state of the cluster for a Whisker object and makes changes based on the
@@ -161,11 +177,86 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return result, err
 	}
 
+	certificateManager, err := certificatemanager.Create(r.cli, installation, r.clusterDomain, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the certificate manager", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	linseedCASecret, err := utils.GetIfExists[corev1.Secret](ctx,
+		types.NamespacedName{Name: render.VoltronLinseedPublicCert, Namespace: common.OperatorNamespace()}, r.cli)
+	if err != nil {
+		return result, err
+	}
+
+	var trustedCertBundle certificatemanagement.TrustedBundle
+	tunnelSecret := &corev1.Secret{}
+	managementClusterConnection, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying ManagementClusterConnection", err, reqLogger)
+		return result, err
+	} else if managementClusterConnection != nil {
+		// Copy the secret from the operator namespace to the guardian namespace if it is present.
+
+		err = r.cli.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
+		if err != nil {
+			if !k8serrors.IsNotFound(err) {
+				return result, err
+			}
+			tunnelSecret = nil
+		}
+
+		preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
+		managementClusterConnection.FillDefaults()
+
+		// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
+		// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+		if err := r.cli.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
+
+		if managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic {
+			// If we need to trust a public CA, then we want Guardian to mount all the system certificates.
+			trustedCertBundle, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates()
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		} else {
+			trustedCertBundle = certificateManager.CreateTrustedBundle()
+		}
+	}
+
+	if trustedCertBundle == nil {
+		trustedCertBundle = certificateManager.CreateTrustedBundle()
+	}
+
+	secretsToTrust := []string{render.ProjectCalicoAPIServerTLSSecretName(installation.Variant)}
+	for _, secretName := range secretsToTrust {
+		secret, err := certificateManager.GetCertificate(r.cli, secretName, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if secret == nil {
+			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret '%s' to become available", secretName), nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		trustedCertBundle.AddCertificates(secret)
+	}
+
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
 	cfg := &whisker.Configuration{
-		PullSecrets:  pullSecrets,
-		OpenShift:    r.provider.IsOpenShift(),
-		Installation: installation,
+		PullSecrets:                 pullSecrets,
+		OpenShift:                   r.provider.IsOpenShift(),
+		Installation:                installation,
+		TunnelSecret:                tunnelSecret,
+		TrustedCertBundle:           trustedCertBundle,
+		LinseedPublicCASecret:       linseedCASecret,
+		ManagementClusterConnection: managementClusterConnection,
 	}
 
 	components := []render.Component{whisker.Whisker(cfg)}

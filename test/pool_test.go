@@ -49,13 +49,13 @@ var _ = Describe("IPPool FV tests", func() {
 	var operatorDone chan struct{}
 
 	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false, false)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist, WhiskerCRDNotExists)
 
 		By("Cleaning up resources before the test")
 		cleanupResources(c)
 
 		By("Verifying CRDs are installed")
-		verifyCRDsExist(c)
+		verifyCRDsExist(c, operator.TigeraSecureEnterprise)
 
 		By("Creating the tigera-operator namespace, if it doesn't exist")
 		ns := &corev1.Namespace{

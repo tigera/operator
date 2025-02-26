@@ -53,7 +53,7 @@ var (
 func init() {
 	yamlDelimRe = regexp.MustCompile(`\n---`)
 
-	calicoCRDNames := []string{"installation", "apiserver", "imageset", "tigerastatus"}
+	calicoCRDNames := []string{"installation", "apiserver", "imageset", "tigerastatus", "whisker"}
 	calicoOprtrCRDsRe = regexp.MustCompile(fmt.Sprintf("(%s)", strings.Join(calicoCRDNames, "|")))
 }
 

@@ -21,10 +21,10 @@ require (
 	github.com/openshift/library-go v0.0.0-20240930172803-190f286b06b1
 	github.com/pkg/errors v0.9.1
 	github.com/projectcalico/api v0.0.0-20240708202104-e3f70b269c2c
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.78.2
 	github.com/r3labs/diff/v2 v2.15.1
 	github.com/sirupsen/logrus v1.9.3
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/tigera/api v0.0.0-20230406222214-ca74195900cb
 	github.com/urfave/cli/v3 v3.0.0-beta1
 	go.uber.org/zap v1.27.0
@@ -39,13 +39,11 @@ require (
 	k8s.io/apiserver v0.32.1
 	k8s.io/client-go v0.32.1
 	k8s.io/kube-aggregator v0.30.5
-	sigs.k8s.io/controller-runtime v0.20.2
+	sigs.k8s.io/controller-runtime v0.20.1
 	sigs.k8s.io/gateway-api v1.2.1
 	sigs.k8s.io/kind v0.24.0 // Do not remove, not used by code but used by build
 	sigs.k8s.io/yaml v1.4.0
 )
-
-require github.com/tigera/operator/api v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/BurntSushi/toml v1.4.0 // indirect
@@ -96,15 +94,16 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_golang v1.20.5 // indirect
 	github.com/prometheus/client_model v0.6.1 // indirect
-	github.com/prometheus/common v0.60.1 // indirect
+	github.com/prometheus/common v0.61.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
+	github.com/tigera/opeator/api v1.0.0
 	github.com/vmihailenco/msgpack v4.0.4+incompatible // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	go.elastic.co/apm/module/apmzap/v2 v2.6.0 // indirect
-	go.elastic.co/apm/v2 v2.6.0 // indirect
+	go.elastic.co/apm/module/apmzap/v2 v2.6.2 // indirect
+	go.elastic.co/apm/v2 v2.6.2 // indirect
 	go.elastic.co/fastjson v1.3.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
@@ -115,7 +114,7 @@ require (
 	golang.org/x/tools v0.24.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/protobuf v1.35.1 // indirect
+	google.golang.org/protobuf v1.35.2 // indirect
 	gopkg.in/asn1-ber.v1 v1.0.0-20181015200546-f715ec2f112d // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect

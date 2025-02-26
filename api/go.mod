@@ -2,11 +2,8 @@ module github.com/tigera/operator/api
 
 go 1.23.5
 
-replace github.com/tigera/operator => ../../operator
-
 require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1
-	github.com/tigera/operator v0.0.0-00010101000000-000000000000
 	k8s.io/api v0.32.2
 	k8s.io/apimachinery v0.32.2
 	sigs.k8s.io/controller-runtime v0.20.2
@@ -20,8 +17,6 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
-	github.com/projectcalico/api v0.0.0-20240708202104-e3f70b269c2c // indirect
-	github.com/tigera/api v0.0.0-20230406222214-ca74195900cb // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/text v0.21.0 // indirect

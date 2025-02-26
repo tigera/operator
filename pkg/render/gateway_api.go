@@ -350,17 +350,32 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 	prefix := pr.cfg.Installation.ImagePrefix
 
 	var err error
-	pr.envoyGatewayImage, err = components.GetReference(components.ComponentCalicoEnvoyGateway, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
-	pr.envoyProxyImage, err = components.GetReference(components.ComponentCalicoEnvoyProxy, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
-	pr.envoyRatelimitImage, err = components.GetReference(components.ComponentCalicoEnvoyRatelimit, reg, path, prefix, is)
-	if err != nil {
-		return err
+	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		pr.envoyGatewayImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyGateway, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		pr.envoyProxyImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyProxy, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		pr.envoyRatelimitImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyRatelimit, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+	} else {
+		pr.envoyGatewayImage, err = components.GetReference(components.ComponentCalicoEnvoyGateway, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		pr.envoyProxyImage, err = components.GetReference(components.ComponentCalicoEnvoyProxy, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		pr.envoyRatelimitImage, err = components.GetReference(components.ComponentCalicoEnvoyRatelimit, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

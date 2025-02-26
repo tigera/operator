@@ -308,6 +308,24 @@ var (
 		Image:    "tigera/node-driver-registrar",
 		Registry: "",
 	}
+
+	ComponentGatewayAPIEnvoyGateway = Component{
+		Version:  "master",
+		Image:    "tigera/envoy-gateway",
+		Registry: "",
+	}
+
+	ComponentGatewayAPIEnvoyProxy = Component{
+		Version:  "master",
+		Image:    "tigera/envoy-proxy",
+		Registry: "",
+	}
+
+	ComponentGatewayAPIEnvoyRatelimit = Component{
+		Version:  "master",
+		Image:    "tigera/envoy-ratelimit",
+		Registry: "",
+	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
@@ -355,5 +373,8 @@ var (
 		ComponentTigeraFlexVolume,
 		ComponentTigeraCSI,
 		ComponentTigeraCSINodeDriverRegistrar,
+		ComponentGatewayAPIEnvoyGateway,
+		ComponentGatewayAPIEnvoyProxy,
+		ComponentGatewayAPIEnvoyRatelimit,
 	}
 )

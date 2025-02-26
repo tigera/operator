@@ -45,13 +45,13 @@ var _ = Describe("Tests for Whisker installation", func() {
 	var operatorDone chan struct{}
 
 	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, false, true)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, EnterpriseCRDsNotExist, WhiskerCRDExists)
 
 		By("Cleaning up resources before the test")
 		cleanupResources(c)
 
 		By("Verifying CRDs are installed")
-		verifyCRDsExist(c)
+		verifyCRDsExist(c, operator.Calico)
 
 		By("Creating the tigera-operator namespace, if it doesn't exist")
 		ns := &corev1.Namespace{

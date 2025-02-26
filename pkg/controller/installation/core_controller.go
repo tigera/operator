@@ -1326,6 +1326,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				canRemoveCNI = false
 			}
 		}
+		if canRemoveCNI {
+			reqLogger.Info("All finalizers have been removed, can remove CNI resources")
+		}
 	} else {
 		// In some rare scenarios, we can hit a deadlock where resources have been marked with a deletion timestamp but the operator
 		// does not recognize that it must remove their finalizers. This can happen if, for example, someone manually

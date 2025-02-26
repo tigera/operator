@@ -33,7 +33,7 @@ var _ = table.DescribeTable("IPPool operator.tigera.io <-> crd.projectcalico.org
 
 		// Convert back to operator.tigera.io, expect it to be equal to the input.
 		operPool := operator.IPPool{}
-		FromProjectCalicoV1(operPool, *crdPool)
+		FromProjectCalicoV1(&operPool, *crdPool)
 		Expect(operPool).To(Equal(input))
 	},
 

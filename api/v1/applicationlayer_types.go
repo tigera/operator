@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,6 +44,18 @@ type ApplicationLayerSpec struct {
 	// The per-host proxy will continue to be used for pods without this label.
 	// +optional
 	SidecarInjection *SidecarStatusType `json:"sidecarInjection,omitempty"`
+
+	// DeploymentMode controls the deployment mode of the L7LogCollector.
+	// When set to ServiceDeployment, the L7LogCollector will be deployed as a service and deployment.
+	// When set to DaemonSetSocket, the L7LogCollector will be deployed as a daemonset listening to a socket with predetermined hostpath path.
+	// When not set, the default value is DaemonSetSocket.
+	// +optional
+	DeploymentMode *ApplicationLayerDeploymentModeType `json:"deploymentMode,omitempty"`
+
+	// ServiceDeploymentReplicas controls the number of replicas for the L7LogCollector service deployment.
+	// Only works for DeploymentMode=ServiceDeployment.
+	// +optional
+	ServiceDeploymentReplicas *int32 `json:"serviceDeploymentReplicas,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Enabled;Disabled
@@ -58,20 +70,25 @@ type ApplicationLayerPolicyStatusType string
 // +kubebuilder:validation:Enum=Enabled;Disabled
 type SidecarStatusType string
 
+// +kubebuilder:validation:Enum=ServiceDeployment;DaemonSetSocket
+type ApplicationLayerDeploymentModeType string
+
 // +kubebuilder:validation:Enum=Enabled;Disabled
 type SidecarWebhookStateType string
 
 const (
-	WAFDisabled                    WAFStatusType                    = "Disabled"
-	WAFEnabled                     WAFStatusType                    = "Enabled"
-	L7LogCollectionDisabled        LogCollectionStatusType          = "Disabled"
-	L7LogCollectionEnabled         LogCollectionStatusType          = "Enabled"
-	ApplicationLayerPolicyEnabled  ApplicationLayerPolicyStatusType = "Enabled"
-	ApplicationLayerPolicyDisabled ApplicationLayerPolicyStatusType = "Disabled"
-	SidecarEnabled                 SidecarStatusType                = "Enabled"
-	SidecarDisabled                SidecarStatusType                = "Disabled"
-	SidecarWebhookStateEnabled     SidecarWebhookStateType          = "Enabled"
-	SidecarWebhookStateDisabled    SidecarWebhookStateType          = "Disabled"
+	WAFDisabled                                     WAFStatusType                      = "Disabled"
+	WAFEnabled                                      WAFStatusType                      = "Enabled"
+	L7LogCollectionDisabled                         LogCollectionStatusType            = "Disabled"
+	L7LogCollectionEnabled                          LogCollectionStatusType            = "Enabled"
+	ApplicationLayerPolicyEnabled                   ApplicationLayerPolicyStatusType   = "Enabled"
+	ApplicationLayerPolicyDisabled                  ApplicationLayerPolicyStatusType   = "Disabled"
+	SidecarEnabled                                  SidecarStatusType                  = "Enabled"
+	SidecarDisabled                                 SidecarStatusType                  = "Disabled"
+	SidecarWebhookStateEnabled                      SidecarWebhookStateType            = "Enabled"
+	SidecarWebhookStateDisabled                     SidecarWebhookStateType            = "Disabled"
+	ApplicationLayerDeploymentModeServiceDeployment ApplicationLayerDeploymentModeType = "ServiceDeployment"
+	ApplicationLayerDeploymentModeDaemonSetSocket   ApplicationLayerDeploymentModeType = "DaemonSetSocket"
 )
 
 type EnvoySettings struct {

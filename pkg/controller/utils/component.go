@@ -132,12 +132,32 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 		logCtx.V(2).Info("Failed converting object", "obj", obj)
 		return fmt.Errorf("failed converting object %+v", obj)
 	}
-	// Check to see if the object exists or not.
+
+	// Check to see if the object exists or not - this determines whether we should create or update.
 	err := c.client.Get(ctx, key, cur)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			// Anything other than "Not found" we should retry.
 			return err
+		}
+
+		// Check to see if the object's Namespace exists, and whether the Namespace
+		// is currently terminating. We cannot create objects in a terminating Namespace.
+		namespaceTerminating := false
+		if ns := cur.GetNamespace(); ns != "" {
+			nsKey := client.ObjectKey{Name: ns}
+			namespace, err := GetIfExists[v1.Namespace](ctx, nsKey, c.client)
+			if err != nil {
+				logCtx.WithValues("key", nsKey).Error(err, "Failed to get Namespace.")
+				return err
+			}
+			if namespace != nil {
+				namespaceTerminating = namespace.GetDeletionTimestamp() != nil
+			}
+		}
+		if namespaceTerminating {
+			logCtx.Info("Object's Namespace is terminating, skipping creation.")
+			return nil
 		}
 
 		// Otherwise, if it was not found, we should create it and move on.

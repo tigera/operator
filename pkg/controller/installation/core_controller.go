@@ -1355,7 +1355,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		if len(needsCleanup) > 0 {
 			// Add a component to remove the finalizers from the objects that need it.
-			reqLogger.Info("Removing finalizers from objects that are wronly marked for deletion")
+			reqLogger.Info("Removing finalizers from objects that are wrongly marked for deletion")
 			components = append(components, render.NewPassthrough(needsCleanup...))
 		}
 	}

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1291,6 +1291,53 @@ var _ = Describe("Component handler tests", func() {
 		Expect(c.Get(ctx, client.ObjectKey{Name: "my-clusterrolebinding"}, crbNewRoleRef)).NotTo(HaveOccurred())
 		Expect(crbNewRoleRef.ObjectMeta.ResourceVersion).To(Equal("2"),
 			"Expected update of ClusterRoleBinding to rev resourceversion to 2")
+	})
+
+	Context("with a terminating Namespace", func() {
+		var ns *corev1.Namespace
+		BeforeEach(func() {
+			// Create a Namespace with a finalizer to make sure it is not immediately deleted.
+			ns = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-namespace",
+					Finalizers: []string{"test-finalizer"},
+				},
+			}
+			Expect(c.Create(ctx, ns)).To(Succeed())
+
+			// Delete the Namespace to put it in the terminating state.
+			Expect(c.Get(ctx, client.ObjectKey{Name: ns.Name}, ns)).To(Succeed())
+			Expect(c.Delete(ctx, ns)).To(Succeed())
+			Expect(c.Get(ctx, client.ObjectKey{Name: ns.Name}, ns)).To(Succeed())
+			Expect(ns.DeletionTimestamp).NotTo(BeNil())
+		})
+
+		AfterEach(func() {
+			// Remove finalizers from the Namespace to allow it to be deleted.
+			ns.Finalizers = nil
+			Expect(c.Update(ctx, ns)).To(Succeed())
+			Expect(c.Get(ctx, client.ObjectKey{Name: ns.Name}, ns)).NotTo(Succeed())
+		})
+
+		It("does not attempt to create resources in a terminating Namespace", func() {
+			// Create a ConfigMap in the terminating Namespace.
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-configmap",
+					Namespace: ns.Name,
+				},
+			}
+
+			// Shouldn't return an error, but also shouldn't create the ConfigMap.
+			Expect(handler.CreateOrUpdateOrDelete(
+				ctx,
+				&fakeComponent{objs: []client.Object{cm}, supportedOSType: rmeta.OSTypeLinux},
+				sm,
+			)).NotTo(HaveOccurred())
+
+			// The ConfigMap should not exist.
+			Expect(c.Get(ctx, client.ObjectKey{Name: cm.Name, Namespace: cm.Namespace}, cm)).To(HaveOccurred())
+		})
 	})
 
 	Context("liveness and readiness probes", func() {

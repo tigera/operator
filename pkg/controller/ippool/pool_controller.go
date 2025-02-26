@@ -247,7 +247,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			// when it attempts to create overlappin IP pools.
 			for _, cnp := range installation.Spec.CalicoNetwork.IPPools {
 				v1p := operatorapi.IPPool{}
-				FromProjectCalicoV1(v1p, p)
+				FromProjectCalicoV1(&v1p, p)
 				reqLogger.V(1).Info("Comparing IP pool", "clusterPool", p, "installationPool", cnp)
 				if !reflect.DeepEqual(cnp, v1p) {
 					// The IP pool in the cluster doesn't match the IP pool in the Installation - ignore it.
@@ -454,7 +454,7 @@ func ToProjectCalicoV1(p operatorapi.IPPool) (*crdv1.IPPool, error) {
 // FromProjectCalicoV1 populates the IP pool with the data from the given
 // crd.projectcalico.org/v1 IP pool. It is the direct inverse of ToProjectCalicoV1,
 // and should be updated with every new field added to the IP pool structure.
-func FromProjectCalicoV1(p operatorapi.IPPool, crd crdv1.IPPool) {
+func FromProjectCalicoV1(p *operatorapi.IPPool, crd crdv1.IPPool) {
 	p.Name = crd.Name
 	p.CIDR = crd.Spec.CIDR
 
@@ -511,7 +511,7 @@ func CRDPoolsToOperator(crds []crdv1.IPPool) []operatorapi.IPPool {
 	pools := []operatorapi.IPPool{}
 	for _, p := range crds {
 		op := operatorapi.IPPool{}
-		FromProjectCalicoV1(op, p)
+		FromProjectCalicoV1(&op, p)
 		pools = append(pools, op)
 	}
 	return pools

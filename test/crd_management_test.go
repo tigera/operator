@@ -56,7 +56,8 @@ var _ = Describe("CRD management tests", func() {
 			Scheme: scheme,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		verifyCRDsExist(c)
+		verifyCRDsExist(c, operator.TigeraSecureEnterprise)
+
 		// Save the networkpolicies CRD so we can restore it when finished
 		npCRD = &apiextenv1.CustomResourceDefinition{
 			TypeMeta:   metav1.TypeMeta{Kind: "CustomResourceDefinition", APIVersion: "apiextensions.k8s.io/v1"},
@@ -147,7 +148,7 @@ var _ = Describe("CRD management tests", func() {
 		})
 
 		It("Should create CRD if it doesn't exist", func() {
-			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, false, false)
+			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, EnterpriseCRDsExist, WhiskerCRDNotExists)
 			operatorDone = createInstallation(c, mgr, shutdownContext, nil)
 
 			np := npCRD.DeepCopy()
@@ -181,7 +182,7 @@ var _ = Describe("CRD management tests", func() {
 			}, 60*time.Second, 1*time.Second).Should(BeNil())
 		})
 		It("Should add tier to networkpolicy CRD", func() {
-			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, false, false)
+			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, EnterpriseCRDsExist, WhiskerCRDNotExists)
 			operatorDone = createInstallation(c, mgr, shutdownContext, &operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise})
 
 			By("Checking that the networkpolicies CRD is updated with tier")

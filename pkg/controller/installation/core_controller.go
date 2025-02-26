@@ -236,7 +236,8 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 		}
 	}
 
-	if r.whiskerCRDExists {
+	if r.whiskerCRDExists && !r.enterpriseCRDsExist {
+		// Whisker is only supported on OSS clusters that have the CRD installed.
 		err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to whisker resource: %w", err)
@@ -1324,6 +1325,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				reqLogger.Info("Waiting for finalization to complete before removing CNI resources", "finalizer", f)
 				canRemoveCNI = false
 			}
+		}
+		if canRemoveCNI {
+			reqLogger.Info("All finalizers have been removed, can remove CNI resources")
 		}
 	} else {
 		// In some rare scenarios, we can hit a deadlock where resources have been marked with a deletion timestamp but the operator

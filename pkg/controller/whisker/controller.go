@@ -48,8 +48,8 @@ var log = logf.Log.WithName(controllerName)
 // Add creates a new Reconciler Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	// If the CRD doesn't exist just exit since nothing can be installed here without the Whisker CR.
-	if !opts.WhiskerCRDExists {
+	if !opts.WhiskerCRDExists || opts.EnterpriseCRDExists {
+		// Whisker is only supported in Calico deployments that have the CRD installed.
 		return nil
 	}
 

@@ -532,6 +532,8 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
+	promNamespace := common.TigeraPrometheusNamespace
+
 	prometheus := &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -600,7 +602,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
 					{
 						Name:      CalicoNodeAlertmanager,
-						Namespace: common.TigeraPrometheusNamespace,
+						Namespace: &promNamespace,
 						Port:      intstr.FromString("web"),
 						Scheme:    string(corev1.URISchemeHTTP),
 					},

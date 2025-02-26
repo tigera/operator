@@ -1240,16 +1240,18 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	components := []render.Component{}
 
-	namespaceCfg := &render.NamespaceConfiguration{
-		Installation: &instance.Spec,
-		PullSecrets:  pullSecrets,
-	}
-	// Render namespaces for Calico.
-	components = append(components, render.Namespaces(namespaceCfg))
+	if !installationMarkedForDeletion {
+		// Render namespaces for Calico.
+		namespaceCfg := &render.NamespaceConfiguration{
+			Installation: &instance.Spec,
+			PullSecrets:  pullSecrets,
+		}
+		components = append(components, render.Namespaces(namespaceCfg))
 
-	if newActiveCM != nil && !installationMarkedForDeletion {
-		log.Info("adding active configmap")
-		components = append(components, render.NewPassthrough(newActiveCM))
+		if newActiveCM != nil {
+			log.Info("adding active configmap")
+			components = append(components, render.NewPassthrough(newActiveCM))
+		}
 	}
 
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
@@ -1290,29 +1292,31 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	}
 
-	components = append(components,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       common.CalicoNamespace,
-			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName, kubecontrollers.KubeControllerServiceAccount},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
-				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
-			},
-			TrustedBundle: typhaNodeTLS.TrustedBundle,
-		}))
+	if !installationMarkedForDeletion {
+		components = append(components,
+			rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+				Namespace:       common.CalicoNamespace,
+				ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName, kubecontrollers.KubeControllerServiceAccount},
+				KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+					rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
+					rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
+					rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
+					rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
+				},
+				TrustedBundle: typhaNodeTLS.TrustedBundle,
+			}))
 
-	// Build a configuration for rendering calico/typha.
-	typhaCfg := render.TyphaConfiguration{
-		K8sServiceEp:      k8sapi.Endpoint,
-		Installation:      &instance.Spec,
-		TLS:               typhaNodeTLS,
-		MigrateNamespaces: needNsMigration,
-		ClusterDomain:     r.clusterDomain,
-		FelixHealthPort:   *felixConfiguration.Spec.HealthPort,
+		// Build a configuration for rendering calico/typha.
+		typhaCfg := render.TyphaConfiguration{
+			K8sServiceEp:      k8sapi.Endpoint,
+			Installation:      &instance.Spec,
+			TLS:               typhaNodeTLS,
+			MigrateNamespaces: needNsMigration,
+			ClusterDomain:     r.clusterDomain,
+			FelixHealthPort:   *felixConfiguration.Spec.HealthPort,
+		}
+		components = append(components, render.Typha(&typhaCfg))
 	}
-	components = append(components, render.Typha(&typhaCfg))
 
 	// See the section 'Use of Finalizers for graceful termination' at the top of this file for terminating details.
 	canRemoveCNI := false
@@ -1355,7 +1359,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		if len(needsCleanup) > 0 {
 			// Add a component to remove the finalizers from the objects that need it.
-			reqLogger.Info("Removing finalizers from objects that are wronly marked for deletion")
+			reqLogger.Info("Removing finalizers from objects that are wrongly marked for deletion")
 			components = append(components, render.NewPassthrough(needsCleanup...))
 		}
 	}

@@ -28,7 +28,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
-	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/apis"
@@ -301,7 +300,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 
 		// Check if we need to do any cleanup.
 		client := mgr.GetClient()
-		instance := &v1.Installation{}
+		instance := &operatortigeraiov1.Installation{}
 		retries := 0
 		for {
 			if err := client.Get(ctx, utils.DefaultInstanceKey, instance); errors.IsNotFound(err) {

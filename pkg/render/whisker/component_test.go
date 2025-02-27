@@ -122,7 +122,6 @@ var _ = Describe("ComponentRendering", func() {
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
-										{Name: "CA_CERT_PATH", Value: "/certs/tls.crt"},
 										{Name: "PORT", Value: "7443"},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
@@ -223,7 +222,7 @@ var _ = Describe("ComponentRendering", func() {
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 									VolumeMounts: []corev1.VolumeMount{
-										{Name: "tigera-tunnel-secret-scrt", MountPath: "/certs"},
+										{Name: "tigera-tunnel-secret-s", MountPath: "/certs"},
 										{Name: "tigera-ca-bundle", ReadOnly: true, MountPath: "/etc/pki/tls/certs"},
 									},
 								},
@@ -238,7 +237,7 @@ var _ = Describe("ComponentRendering", func() {
 									},
 								},
 								{
-									Name:         "tigera-tunnel-secret-scrt",
+									Name:         "tigera-tunnel-secret-s",
 									VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: "tigera-tunnel-secret"}},
 								},
 							},

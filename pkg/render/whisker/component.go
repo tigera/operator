@@ -302,17 +302,17 @@ func (c *Component) deployment() *appsv1.Deployment {
 	}
 }
 
-func secretMount(path string, scrt *corev1.Secret) corev1.VolumeMount {
+func secretMount(path string, secret *corev1.Secret) corev1.VolumeMount {
 	return corev1.VolumeMount{
-		Name:      fmt.Sprintf("%s-%s", scrt.Name, "scrt"),
+		Name:      fmt.Sprintf("%s-%s", secret.Name, "scrt"),
 		MountPath: path,
 	}
 }
 
-func secretVolume(scrt *corev1.Secret) corev1.Volume {
+func secretVolume(secret *corev1.Secret) corev1.Volume {
 	return corev1.Volume{
-		Name:         fmt.Sprintf("%s-%s", scrt.Name, "scrt"),
-		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: scrt.Name}},
+		Name:         fmt.Sprintf("%s-%s", secret.Name, "scrt"),
+		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secret.Name}},
 	}
 }
 

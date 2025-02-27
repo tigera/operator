@@ -474,6 +474,22 @@ func GetIfExists[E any, ClientObj ClientObjType[E]](ctx context.Context, key cli
 	return obj, nil
 }
 
+type MergeAble[E any, O ClientObjType[E]] interface {
+	ClientObjType[E]
+	client.Object
+	FillDefaults()
+	DeepCopy() O
+}
+
+func MergeDefaults[E any, O ClientObjType[E], M MergeAble[E, O]](ctx context.Context, c client.Client, obj M) error {
+	preDefaultPatchFrom := client.MergeFrom(obj.DeepCopy())
+	obj.FillDefaults()
+
+	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
+	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	return c.Patch(ctx, obj, preDefaultPatchFrom)
+}
+
 // GetNonClusterHost finds the NonClusterHost CR in your cluster.
 func GetNonClusterHost(ctx context.Context, cli client.Client) (*operatorv1.NonClusterHost, error) {
 	nonclusterhost := &operatorv1.NonClusterHost{}

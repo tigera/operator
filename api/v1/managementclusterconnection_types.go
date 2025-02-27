@@ -1,4 +1,4 @@
-// Copyright (c) 2012,2015-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2012,2015-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -92,4 +92,13 @@ type ManagementClusterConnectionStatus struct {
 
 func init() {
 	SchemeBuilder.Register(&ManagementClusterConnection{}, &ManagementClusterConnectionList{})
+}
+
+func (cr *ManagementClusterConnection) FillDefaults() {
+	if cr.Spec.TLS == nil {
+		cr.Spec.TLS = &ManagementClusterTLS{}
+	}
+	if cr.Spec.TLS.CA == "" {
+		cr.Spec.TLS.CA = CATypeTigera
+	}
 }

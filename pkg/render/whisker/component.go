@@ -15,6 +15,8 @@
 package whisker
 
 import (
+	"fmt"
+
 	"github.com/tigera/operator/pkg/components"
 
 	"github.com/tigera/operator/pkg/common"
@@ -30,6 +32,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // The names of the components related to the Guardian related rendered objects.
@@ -40,6 +43,7 @@ const (
 	WhiskerDeploymentName     = WhiskerName
 	WhiskerRoleName           = WhiskerName
 
+	GuardianContainerName              = "guardian"
 	GoldmaneContainerName              = "goldmane"
 	WhiskerContainerName               = "whisker"
 	WhiskerBackendContainerName        = "whisker-backend"
@@ -54,15 +58,19 @@ func Whisker(cfg *Configuration) render.Component {
 
 // Configuration contains all the config information needed to render the component.
 type Configuration struct {
-	PullSecrets  []*corev1.Secret
-	OpenShift    bool
-	Installation *operatorv1.InstallationSpec
+	PullSecrets                 []*corev1.Secret
+	OpenShift                   bool
+	Installation                *operatorv1.InstallationSpec
+	TunnelSecret                *corev1.Secret
+	TrustedCertBundle           certificatemanagement.TrustedBundleRO
+	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 }
 
 type Component struct {
 	cfg *Configuration
 
 	goldmaneImage       string
+	guardianImage       string
 	whiskerImage        string
 	whiskerBackendImage string
 }
@@ -89,6 +97,11 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 		return err
 	}
 
+	c.guardianImage, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -106,8 +119,11 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 		c.role(),
 		c.roleBinding(),
 		c.goldmaneService(),
-		c.whiskerService(),
-	)
+		c.whiskerService())
+
+	if c.cfg.ManagementClusterConnection != nil && c.cfg.TunnelSecret != nil {
+		objs = append(objs, secret.CopyToNamespace(WhiskerNamespace, c.cfg.TunnelSecret)[0])
+	}
 
 	objs = append(objs, c.deployment())
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(WhiskerNamespace, c.cfg.PullSecrets...)...)...)
@@ -138,8 +154,10 @@ func (c *Component) whiskerContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
+			{Name: "CA_CERT_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
 	}
 }
 
@@ -165,10 +183,12 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
+			{Name: "CA_CERT_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 			{Name: "PORT", Value: "3002"},
 			{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
 	}
 }
 
@@ -178,6 +198,18 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		{Name: "CA_CERT_PATH", Value: "/certs/tls.crt"},
 		{Name: "PORT", Value: "7443"},
 	}
+	var volumeMounts []corev1.VolumeMount
+	if c.cfg.ManagementClusterConnection != nil {
+		env = append(env,
+			corev1.EnvVar{
+				Name:  "PUSH_URL",
+				Value: "https://localhost:8080/api/v1/flows/bulk"},
+			corev1.EnvVar{
+				Name:  "CA_CERT_PATH",
+				Value: c.cfg.TrustedCertBundle.MountPath()},
+		)
+		volumeMounts = c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
+	}
 
 	return corev1.Container{
 		Name:            GoldmaneContainerName,
@@ -185,6 +217,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts:    volumeMounts,
 	}
 }
 
@@ -203,6 +236,31 @@ func (c *Component) goldmaneService() *corev1.Service {
 	}
 }
 
+func (c *Component) guardianContainer() corev1.Container {
+	tunnelCAType := c.cfg.ManagementClusterConnection.Spec.TLS.CA
+	voltronURL := c.cfg.ManagementClusterConnection.Spec.ManagementClusterAddr
+	bundle := c.cfg.TrustedCertBundle
+
+	return corev1.Container{
+		Name:            GuardianContainerName,
+		Image:           c.guardianImage,
+		ImagePullPolicy: render.ImagePullPolicy(),
+		Env: append([]corev1.EnvVar{
+			{Name: "GUARDIAN_PORT", Value: "9443"},
+			{Name: "GUARDIAN_LOGLEVEL", Value: "DEBUG"},
+			{Name: "GUARDIAN_VOLTRON_URL", Value: voltronURL},
+			{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(tunnelCAType)},
+			{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: bundle.MountPath()},
+			{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: bundle.MountPath()},
+			{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: bundle.MountPath()},
+		}, c.cfg.Installation.Proxy.EnvVars()...),
+		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts: append([]corev1.VolumeMount{
+			secretMount("/certs", c.cfg.TunnelSecret),
+		}, c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)...),
+	}
+}
+
 func (c *Component) deployment() *appsv1.Deployment {
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
@@ -210,6 +268,11 @@ func (c *Component) deployment() *appsv1.Deployment {
 	}
 
 	ctrs := []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer(), c.goldmaneContainer()}
+	volumes := []corev1.Volume{c.cfg.TrustedCertBundle.Volume()}
+	if c.cfg.ManagementClusterConnection != nil {
+		ctrs = append(ctrs, c.guardianContainer())
+		volumes = append(volumes, secretVolume(c.cfg.TunnelSecret))
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -232,15 +295,30 @@ func (c *Component) deployment() *appsv1.Deployment {
 					Tolerations:        tolerations,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers:         ctrs,
+					Volumes:            volumes,
 				},
 			},
 		},
 	}
 }
 
+func secretMount(path string, secret *corev1.Secret) corev1.VolumeMount {
+	return corev1.VolumeMount{
+		Name:      fmt.Sprintf("%s-%s", secret.Name, "scrt"),
+		MountPath: path,
+	}
+}
+
+func secretVolume(secret *corev1.Secret) corev1.Volume {
+	return corev1.Volume{
+		Name:         fmt.Sprintf("%s-%s", secret.Name, "scrt"),
+		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secret.Name}},
+	}
+}
+
 func (c *Component) roleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      WhiskerRoleName,
 			Namespace: WhiskerNamespace,

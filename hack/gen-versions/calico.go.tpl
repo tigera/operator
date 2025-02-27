@@ -202,5 +202,6 @@ var (
 		ComponentCalicoGoldmane,
 		ComponentCalicoWhisker,
 		ComponentCalicoWhiskerBackend,
+		ComponentCalicoGuardian,
 	}
 )

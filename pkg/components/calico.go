@@ -149,9 +149,9 @@ var (
 	}
 
 	ComponentCalicoGuardian = Component{
-		Version:  "bmv1.10",
+		Version:  "master",
 		Image:    "calico/guardian",
-		Registry: "gcr.io/unique-caldron-775/brianmcmahon/",
+		Registry: "",
 	}
 	ComponentOperatorInit = Component{
 		Version: version.VERSION,

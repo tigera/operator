@@ -174,12 +174,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.cli, installation, r.clusterDomain, common.OperatorNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the certificate manager", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	var tunnelSecret *corev1.Secret
 	managementClusterConnection, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
 	if err != nil {
@@ -197,6 +191,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 
 		log.V(2).Info("Loaded ManagementClusterConnection config", managementClusterConnection)
+	}
+
+	certificateManager, err := certificatemanager.Create(r.cli, installation, r.clusterDomain, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the certificate manager", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	trustedCertBundle, err := certificateManager.LoadTrustedBundle(ctx, r.cli, whisker.WhiskerNamespace)

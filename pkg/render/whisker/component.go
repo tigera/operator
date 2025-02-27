@@ -53,11 +53,6 @@ const (
 func Whisker(cfg *Configuration) render.Component {
 	c := &Component{cfg: cfg}
 
-	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
-	if c.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
-	}
-
 	return c
 }
 
@@ -126,18 +121,12 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 		c.goldmaneService(),
 		c.whiskerService())
 
-	if c.cfg.ManagementClusterConnection != nil {
-		objs = append(objs,
-			secret.CopyToNamespace(WhiskerNamespace, c.cfg.TunnelSecret)[0],
-		)
-	}
-	objs = append(objs, c.deployment())
-
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(WhiskerNamespace, c.cfg.PullSecrets...)...)...)
-
 	if c.cfg.ManagementClusterConnection != nil && c.cfg.TunnelSecret != nil {
 		objs = append(objs, secret.CopyToNamespace(WhiskerNamespace, c.cfg.TunnelSecret)[0])
 	}
+
+	objs = append(objs, c.deployment())
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(WhiskerNamespace, c.cfg.PullSecrets...)...)...)
 
 	// Whisker needs to be removed if the installation is not Calico, since it's not supported (yet!) for any other variant.
 	if c.cfg.Installation.Variant == operatorv1.Calico {

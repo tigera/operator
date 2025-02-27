@@ -18,9 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -138,13 +136,11 @@ var _ reconcile.Reconciler = &Reconciler{}
 
 // Reconciler reconciles a ManagementClusterConnection object
 type Reconciler struct {
-	cli                        client.Client
-	scheme                     *runtime.Scheme
-	provider                   operatorv1.Provider
-	status                     status.StatusManager
-	clusterDomain              string
-	resolvedPodProxies         []*httpproxy.Config
-	lastAvailabilityTransition metav1.Time
+	cli           client.Client
+	scheme        *runtime.Scheme
+	provider      operatorv1.Provider
+	status        status.StatusManager
+	clusterDomain string
 }
 
 // Reconcile reads that state of the cluster for a Whisker object and makes changes based on the
@@ -195,7 +191,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			return reconcile.Result{}, err
 		}
 
-		if err := utils.MergeDefaults(ctx, r.cli, managementClusterConnection); err != nil {
+		if err := utils.ApplyDefaults(ctx, r.cli, managementClusterConnection); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
 			return reconcile.Result{}, err
 		}

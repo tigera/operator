@@ -474,14 +474,15 @@ func GetIfExists[E any, ClientObj ClientObjType[E]](ctx context.Context, key cli
 	return obj, nil
 }
 
-type MergeAble[E any, O ClientObjType[E]] interface {
+type Defaultable[E any, O ClientObjType[E]] interface {
 	ClientObjType[E]
 	client.Object
 	FillDefaults()
 	DeepCopy() O
 }
 
-func MergeDefaults[E any, O ClientObjType[E], M MergeAble[E, O]](ctx context.Context, c client.Client, obj M) error {
+// ApplyDefaults sets any defaults that haven't been set on the given object and writes it to the k8s server.
+func ApplyDefaults[E any, O ClientObjType[E], D Defaultable[E, O]](ctx context.Context, c client.Client, obj D) error {
 	preDefaultPatchFrom := client.MergeFrom(obj.DeepCopy())
 	obj.FillDefaults()
 

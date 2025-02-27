@@ -154,10 +154,8 @@ func (c *Component) whiskerContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
-			{Name: "CA_CERT_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
 	}
 }
 
@@ -183,19 +181,16 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
-			{Name: "CA_CERT_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 			{Name: "PORT", Value: "3002"},
 			{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
 	}
 }
 
 func (c *Component) goldmaneContainer() corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "INFO"},
-		{Name: "CA_CERT_PATH", Value: "/certs/tls.crt"},
 		{Name: "PORT", Value: "7443"},
 	}
 	var volumeMounts []corev1.VolumeMount
@@ -239,7 +234,6 @@ func (c *Component) goldmaneService() *corev1.Service {
 func (c *Component) guardianContainer() corev1.Container {
 	tunnelCAType := c.cfg.ManagementClusterConnection.Spec.TLS.CA
 	voltronURL := c.cfg.ManagementClusterConnection.Spec.ManagementClusterAddr
-	bundle := c.cfg.TrustedCertBundle
 
 	return corev1.Container{
 		Name:            GuardianContainerName,
@@ -247,12 +241,9 @@ func (c *Component) guardianContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: append([]corev1.EnvVar{
 			{Name: "GUARDIAN_PORT", Value: "9443"},
-			{Name: "GUARDIAN_LOGLEVEL", Value: "DEBUG"},
+			{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
 			{Name: "GUARDIAN_VOLTRON_URL", Value: voltronURL},
 			{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(tunnelCAType)},
-			{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: bundle.MountPath()},
-			{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: bundle.MountPath()},
-			{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: bundle.MountPath()},
 		}, c.cfg.Installation.Proxy.EnvVars()...),
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts: append([]corev1.VolumeMount{
@@ -269,6 +260,7 @@ func (c *Component) deployment() *appsv1.Deployment {
 
 	ctrs := []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer(), c.goldmaneContainer()}
 	volumes := []corev1.Volume{c.cfg.TrustedCertBundle.Volume()}
+
 	if c.cfg.ManagementClusterConnection != nil {
 		ctrs = append(ctrs, c.guardianContainer())
 		volumes = append(volumes, secretVolume(c.cfg.TunnelSecret))

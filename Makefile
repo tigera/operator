@@ -538,7 +538,7 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release-github VERSION=$(RELEASE_TAG)
 
 
-release-notes: var-require-all-VERSION-GITHUB_TOKEN clean
+release-notes: var-require-all-VERSION-GITHUB_TOKEN
 	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .
 	@docker run --rm -v $(CURDIR):/workdir -e	GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) tigera/release-notes
 
@@ -585,7 +585,7 @@ release-publish-images: release-prereqs release-check-image-exists
 	# Push images.
 	$(MAKE) push-all push-manifests push-non-manifests RELEASE=true IMAGETAG=$(VERSION)
 
-release-github: hack/bin/gh release-notes
+release-github: release-notes hack/bin/gh
 	@echo "Creating github release for $(VERSION)"
 	hack/bin/gh release create $(VERSION) --title $(VERSION) --draft --notes-file $(VERSION)-release-notes.md
 	@echo "$(VERSION) GitHub release created in draft state. Please review and publish: https://github.com/tigera/operator/releases/tag/$(VERSION) ."

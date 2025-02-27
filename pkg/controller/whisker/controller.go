@@ -20,7 +20,6 @@ import (
 
 	"golang.org/x/net/http/httpproxy"
 	corev1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -79,6 +78,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
 		}
+	}
+
+	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("failed to add watch for config map %s/%s: %w", common.OperatorNamespace(), certificatemanagement.TrustedCertConfigMapName, err)
 	}
 
 	err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
@@ -140,7 +143,6 @@ type Reconciler struct {
 	provider                   operatorv1.Provider
 	status                     status.StatusManager
 	clusterDomain              string
-	tierWatchReady             *utils.ReadyFlag
 	resolvedPodProxies         []*httpproxy.Config
 	lastAvailabilityTransition metav1.Time
 }
@@ -152,20 +154,19 @@ type Reconciler struct {
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Whisker")
-	result := reconcile.Result{}
 
 	variant, installation, err := utils.GetInstallation(ctx, r.cli)
 	if err != nil {
-		return result, err
+		return reconcile.Result{}, err
 	}
 
 	whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Whisker CR", err, reqLogger)
-		return result, err
+		return reconcile.Result{}, err
 	} else if whiskerCR == nil {
 		r.status.OnCRNotFound()
-		return result, nil
+		return reconcile.Result{}, nil
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -174,7 +175,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
-		return result, err
+		return reconcile.Result{}, err
 	}
 
 	certificateManager, err := certificatemanager.Create(r.cli, installation, r.clusterDomain, common.OperatorNamespace())
@@ -183,58 +184,29 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	linseedCASecret, err := utils.GetIfExists[corev1.Secret](ctx,
-		types.NamespacedName{Name: render.VoltronLinseedPublicCert, Namespace: common.OperatorNamespace()}, r.cli)
-	if err != nil {
-		return result, err
-	}
-
-	tunnelSecret := &corev1.Secret{}
+	var tunnelSecret *corev1.Secret
 	managementClusterConnection, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying ManagementClusterConnection", err, reqLogger)
-		return result, err
+		return reconcile.Result{}, err
 	} else if managementClusterConnection != nil {
-		// Copy the secret from the operator namespace to the guardian namespace if it is present.
-
-		err = r.cli.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
+		tunnelSecret, err = utils.GetIfExists[corev1.Secret](ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, r.cli)
 		if err != nil {
-			if !k8serrors.IsNotFound(err) {
-				return result, err
-			}
-			tunnelSecret = nil
+			return reconcile.Result{}, err
 		}
 
-		preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
-		managementClusterConnection.FillDefaults()
-
-		// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
-		// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-		if err := r.cli.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
+		if err := utils.MergeDefaults(ctx, r.cli, managementClusterConnection); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
-		log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
+		log.V(2).Info("Loaded ManagementClusterConnection config", managementClusterConnection)
 	}
 
 	trustedCertBundle, err := certificateManager.LoadTrustedBundle(ctx, r.cli, whisker.WhiskerNamespace)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error loading trusted cert bundle", err, reqLogger)
-		return result, err
-	}
-
-	secretsToTrust := []string{render.ProjectCalicoAPIServerTLSSecretName(installation.Variant)}
-	for _, secretName := range secretsToTrust {
-		secret, err := certificateManager.GetCertificate(r.cli, secretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)
-			return reconcile.Result{}, err
-		} else if secret == nil {
-			reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secretName))
-			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret '%s' to become available", secretName), nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
+		return reconcile.Result{}, err
 	}
 
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
@@ -244,7 +216,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		Installation:                installation,
 		TunnelSecret:                tunnelSecret,
 		TrustedCertBundle:           trustedCertBundle,
-		LinseedPublicCASecret:       linseedCASecret,
 		ManagementClusterConnection: managementClusterConnection,
 	}
 
@@ -257,12 +228,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	for _, component := range components {
 		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-			return result, err
+			return reconcile.Result{}, err
 		}
 	}
 
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 
-	return result, nil
+	return reconcile.Result{}, nil
 }

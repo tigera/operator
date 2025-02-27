@@ -68,7 +68,6 @@ type Configuration struct {
 	Installation                *operatorv1.InstallationSpec
 	TunnelSecret                *corev1.Secret
 	TrustedCertBundle           certificatemanagement.TrustedBundleRO
-	LinseedPublicCASecret       *corev1.Secret
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 }
 
@@ -130,7 +129,6 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.ManagementClusterConnection != nil {
 		objs = append(objs,
 			secret.CopyToNamespace(WhiskerNamespace, c.cfg.TunnelSecret)[0],
-			secret.CopyToNamespace(WhiskerNamespace, c.cfg.LinseedPublicCASecret)[0],
 		)
 	}
 	objs = append(objs, c.deployment())
@@ -212,13 +210,16 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		{Name: "PORT", Value: "7443"},
 	}
 	var volumeMounts []corev1.VolumeMount
-	if c.cfg.LinseedPublicCASecret != nil {
-		env = append(env, corev1.EnvVar{
-			Name:  "PUSH_URL",
-			Value: "https://localhost:8080/api/v1/flows/bulk"})
-		volumeMounts = []corev1.VolumeMount{
-			secretMount("/certs", c.cfg.LinseedPublicCASecret),
-		}
+	if c.cfg.ManagementClusterConnection != nil {
+		env = append(env,
+			corev1.EnvVar{
+				Name:  "PUSH_URL",
+				Value: "https://localhost:8080/api/v1/flows/bulk"},
+			corev1.EnvVar{
+				Name:  "CA_CERT_PATH",
+				Value: c.cfg.TrustedCertBundle.MountPath()},
+		)
+		volumeMounts = c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
 	}
 
 	return corev1.Container{
@@ -282,10 +283,6 @@ func (c *Component) deployment() *appsv1.Deployment {
 	if c.cfg.ManagementClusterConnection != nil {
 		ctrs = append(ctrs, c.guardianContainer())
 		volumes = append(volumes, secretVolume(c.cfg.TunnelSecret))
-	}
-
-	if c.cfg.LinseedPublicCASecret != nil {
-		volumes = append(volumes, secretVolume(c.cfg.LinseedPublicCASecret))
 	}
 
 	return &appsv1.Deployment{

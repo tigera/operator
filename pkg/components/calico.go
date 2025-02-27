@@ -148,6 +148,24 @@ var (
 		Registry: "",
 	}
 
+	ComponentCalicoEnvoyGateway = Component{
+		Version:  "master",
+		Image:    "calico/envoy-gateway",
+		Registry: "",
+	}
+
+	ComponentCalicoEnvoyProxy = Component{
+		Version:  "master",
+		Image:    "calico/envoy-proxy",
+		Registry: "",
+	}
+
+	ComponentCalicoEnvoyRatelimit = Component{
+		Version:  "master",
+		Image:    "calico/envoy-ratelimit",
+		Registry: "",
+	}
+
 	ComponentOperatorInit = Component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -175,5 +193,8 @@ var (
 		ComponentCalicoGoldmane,
 		ComponentCalicoWhisker,
 		ComponentCalicoWhiskerBackend,
+		ComponentCalicoEnvoyGateway,
+		ComponentCalicoEnvoyProxy,
+		ComponentCalicoEnvoyRatelimit,
 	}
 )

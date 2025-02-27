@@ -168,6 +168,27 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "calico/envoy-gateway"}}
+	ComponentCalicoEnvoyGateway = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "calico/envoy-proxy"}}
+	ComponentCalicoEnvoyProxy = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "calico/envoy-ratelimit"}}
+	ComponentCalicoEnvoyRatelimit = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "calico/guardian" }}
 	ComponentCalicoGuardian = Component{
 		Version:  "{{ .Version }}",
@@ -202,5 +223,8 @@ var (
 		ComponentCalicoGoldmane,
 		ComponentCalicoWhisker,
 		ComponentCalicoWhiskerBackend,
+		ComponentCalicoEnvoyGateway,
+		ComponentCalicoEnvoyProxy,
+		ComponentCalicoEnvoyRatelimit,
 	}
 )

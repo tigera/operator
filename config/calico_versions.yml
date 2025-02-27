@@ -31,3 +31,9 @@ components:
     version: master
   calico/whisker-backend:
     version: master
+  calico/envoy-gateway:
+    version: master
+  calico/envoy-proxy:
+    version: master
+  calico/envoy-ratelimit:
+    version: master

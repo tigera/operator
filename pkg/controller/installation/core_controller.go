@@ -1201,7 +1201,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 
 		calicoVersion = components.EnterpriseRelease
-	} else {
+	} else if managmentClusterConnectionExists {
 		cert, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", render.VoltronLinseedPublicCert), err, reqLogger)

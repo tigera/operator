@@ -143,7 +143,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 			},
 		),
-		FEntry("Should configure guardian",
+		Entry("Should configure guardian",
 			&whisker.Configuration{
 				Installation: &operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderGKE,

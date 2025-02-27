@@ -31,3 +31,8 @@ components:
     version: master
   calico/whisker-backend:
     version: master
+  calico/guardian:
+    version: "bmv1.4"
+    image: "calico/guardian"
+    registry: "gcr.io/unique-caldron-775/brianmcmahon/"
+

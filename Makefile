@@ -480,7 +480,7 @@ endif
 maybe-build-release:
 	./hack/maybe-build-release.sh
 
-release-notes: var-require-all-VERSION-GITHUB_TOKEN clean
+release-notes: var-require-all-VERSION-GITHUB_TOKEN
 	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .
 	@docker run --rm -v $(CURDIR):/workdir -e	GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) tigera/release-notes
 
@@ -544,7 +544,7 @@ release-publish: release-prereqs
 	@echo "  make VERSION=$(VERSION) release-publish-latest"
 	@echo ""
 
-release-github: hack/bin/gh release-notes
+release-github: release-notes hack/bin/gh
 	@echo "Creating github release for $(VERSION)"
 	hack/bin/gh release create $(VERSION) --title $(VERSION) --draft --notes-file $(VERSION)-release-notes.md
 

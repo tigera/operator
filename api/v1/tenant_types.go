@@ -93,6 +93,10 @@ type TenantSpec struct {
 
 	// DashboardsJob configures the Dashboards job
 	DashboardsJob *DashboardsJob `json:"dashboardsJob,omitempty"`
+
+	// ManagedClusterVariant is the variant of the managed cluster.
+	// +optional
+	ManagedClusterVariant *ProductVariant `json:"managedClusterVariant,omitempty"`
 }
 
 // Index defines how to store a tenant's data

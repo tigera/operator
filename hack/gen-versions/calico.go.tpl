@@ -226,5 +226,6 @@ var (
 		ComponentCalicoEnvoyGateway,
 		ComponentCalicoEnvoyProxy,
 		ComponentCalicoEnvoyRatelimit,
+		ComponentCalicoGuardian,
 	}
 )

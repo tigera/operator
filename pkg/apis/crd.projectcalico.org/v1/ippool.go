@@ -104,11 +104,6 @@ const (
 	IPIPModeCrossSubnet IPIPMode = "CrossSubnet"
 )
 
-const (
-	Automatic operatorapi.AssignmentMode = "Automatic"
-	Manual    operatorapi.AssignmentMode = "Manual"
-)
-
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // IPPoolList contains a list of IPPool resources.

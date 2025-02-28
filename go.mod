@@ -21,7 +21,7 @@ require (
 	github.com/openshift/library-go v0.0.0-20240930172803-190f286b06b1
 	github.com/pkg/errors v0.9.1
 	github.com/projectcalico/api v0.0.0-20240708202104-e3f70b269c2c
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.74.0
 	github.com/r3labs/diff/v2 v2.15.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
@@ -44,8 +44,6 @@ require (
 	sigs.k8s.io/kind v0.24.0 // Do not remove, not used by code but used by build
 	sigs.k8s.io/yaml v1.4.0
 )
-
-require github.com/tigera/operator/api v0.0.0-00010101000000-000000000000
 
 require (
 	github.com/BurntSushi/toml v1.4.0 // indirect

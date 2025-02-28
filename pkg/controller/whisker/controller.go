@@ -18,7 +18,9 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -28,6 +30,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -36,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/whisker"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -65,6 +69,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	for _, secretName := range []string{
 		monitor.PrometheusServerTLSSecretName,
 		whisker.ManagedClusterConnectionSecretName,
+		certificatemanagement.CASecretName,
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
 	} {
@@ -73,9 +78,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
+	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("failed to add watch for config map %s/%s: %w", common.OperatorNamespace(), certificatemanagement.TrustedCertConfigMapName, err)
+	}
+
 	err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
+	}
+
+	err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("%s failed to watch management cluster connection resource: %w", controllerName, err)
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
@@ -136,20 +150,19 @@ type Reconciler struct {
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Whisker")
-	result := reconcile.Result{}
 
 	variant, installation, err := utils.GetInstallation(ctx, r.cli)
 	if err != nil {
-		return result, err
+		return reconcile.Result{}, err
 	}
 
 	whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Whisker CR", err, reqLogger)
-		return result, err
+		return reconcile.Result{}, err
 	} else if whiskerCR == nil {
 		r.status.OnCRNotFound()
-		return result, nil
+		return reconcile.Result{}, nil
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -158,14 +171,48 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
-		return result, err
+		return reconcile.Result{}, err
+	}
+
+	var tunnelSecret *corev1.Secret
+	managementClusterConnection, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying ManagementClusterConnection", err, reqLogger)
+		return reconcile.Result{}, err
+	} else if managementClusterConnection != nil {
+		tunnelSecret, err = utils.GetIfExists[corev1.Secret](ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, r.cli)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		if err := utils.ApplyDefaults(ctx, r.cli, managementClusterConnection); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		log.V(2).Info("Loaded ManagementClusterConnection config", managementClusterConnection)
+	}
+
+	certificateManager, err := certificatemanager.Create(r.cli, installation, r.clusterDomain, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the certificate manager", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	trustedCertBundle, err := certificateManager.LoadTrustedBundle(ctx, r.cli, whisker.WhiskerNamespace)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error loading trusted cert bundle", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
 	cfg := &whisker.Configuration{
-		PullSecrets:  pullSecrets,
-		OpenShift:    r.provider.IsOpenShift(),
-		Installation: installation,
+		PullSecrets:                 pullSecrets,
+		OpenShift:                   r.provider.IsOpenShift(),
+		Installation:                installation,
+		TunnelSecret:                tunnelSecret,
+		TrustedCertBundle:           trustedCertBundle,
+		ManagementClusterConnection: managementClusterConnection,
 	}
 
 	components := []render.Component{whisker.Whisker(cfg)}
@@ -177,12 +224,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	for _, component := range components {
 		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-			return result, err
+			return reconcile.Result{}, err
 		}
 	}
 
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 
-	return result, nil
+	return reconcile.Result{}, nil
 }

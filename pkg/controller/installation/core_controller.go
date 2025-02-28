@@ -1201,6 +1201,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 
 		calicoVersion = components.EnterpriseRelease
+	} else {
+		cert, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", render.VoltronLinseedPublicCert), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if cert != nil {
+			typhaNodeTLS.TrustedBundle.AddCertificates(cert)
+		}
 	}
 
 	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)

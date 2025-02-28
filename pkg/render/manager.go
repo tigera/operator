@@ -856,6 +856,16 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				Verbs:     []string{"create"},
 			},
 		)
+
+		if tenant.Spec.ManagedClusterVariant == &operatorv1.Calico {
+			// Voltron needs permissions to write flow logs.
+			cr.Rules = append(cr.Rules,
+				rbacv1.PolicyRule{
+					APIGroups: []string{"linseed.tigera.io"},
+					Resources: []string{"flowlogs"},
+					Verbs:     []string{"create"},
+				})
+		}
 	}
 
 	if kubernetesProvider.IsOpenShift() {

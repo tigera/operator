@@ -568,7 +568,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 			linseedEndpointEnv = corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Tenant.Namespace)}
 		}
 
-		if c.cfg.Tenant.Spec.ManagedClusterVariant == &operatorv1.Calico {
+		if c.cfg.Tenant.ManagedClusterIsCalico() {
 			// Voltron uses its own token to authorize with Linseed on behalf of Calico clusters.
 			// TODO: Rename this env.
 			env = append(env, corev1.EnvVar{Name: "GUARDIAN_READ_ONLY", Value: "true"})
@@ -623,7 +623,7 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 			env = append(env, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: c.cfg.Namespace})
 		}
 
-		if c.cfg.Tenant.Spec.ManagedClusterVariant == &operatorv1.Calico {
+		if c.cfg.Tenant.ManagedClusterIsCalico() {
 			// Calico clusters do not give Guardian impersonation permissions.
 			env = append(env, corev1.EnvVar{Name: "IMPERSONATE", Value: "false"})
 		}
@@ -857,7 +857,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 			},
 		)
 
-		if tenant.Spec.ManagedClusterVariant == &operatorv1.Calico {
+		if tenant.ManagedClusterIsCalico() {
 			// Voltron needs permissions to write flow logs.
 			cr.Rules = append(cr.Rules,
 				rbacv1.PolicyRule{

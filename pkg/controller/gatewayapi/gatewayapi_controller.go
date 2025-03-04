@@ -46,11 +46,6 @@ var log = logf.Log.WithName("controller_gatewayapi")
 // Start Watches within the Add function for any resources that this controller creates or monitors. This will trigger
 // calls to Reconcile() when an instance of one of the watched resources is modified.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	if !opts.EnterpriseCRDExists {
-		// No need to start this controller
-		return nil
-	}
-
 	r := newReconciler(mgr, opts)
 
 	c, err := ctrlruntime.NewController("gatewayapi-controller", mgr, controller.Options{Reconciler: r})
@@ -177,7 +172,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		// Patch that value back into the datastore.
 		err = r.client.Patch(ctx, &operatorv1.GatewayAPI{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: utils.DefaultTSEEInstanceKey.Name,
+				Name: gatewayAPI.Name,
 			},
 			Spec: operatorv1.GatewayAPISpec{
 				CRDManagement: gatewayAPI.Spec.CRDManagement,

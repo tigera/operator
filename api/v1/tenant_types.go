@@ -148,6 +148,10 @@ func (t *Tenant) SingleTenant() bool {
 	return t != nil && t.GetNamespace() == ""
 }
 
+func (t *Tenant) ManagedClusterIsCalico() bool {
+	return t != nil && t.Spec.ManagedClusterVariant != nil && *t.Spec.ManagedClusterVariant == Calico
+}
+
 // +kubebuilder:object:root=true
 
 // TenantList contains a list of Tenant

@@ -406,7 +406,10 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		annotations[fmt.Sprintf("hash.operator.tigera.io/%s", render.ElasticsearchLinseedUserSecret)] = rmeta.SecretsAnnotationHash(l.cfg.ElasticClientCredentialsSecret)
 	}
 
-	if l.cfg.TokenKeyPair != nil {
+	if l.cfg.TokenKeyPair != nil && !l.cfg.Tenant.ManagedClusterIsCalico() {
+		// If a token key pair is provided, configure Linseed to use it.
+		// We don't need to do this for OSS Calico managed clusters - they don't have permissions for the
+		// token controller to create tokens.
 		envVars = append(envVars,
 			corev1.EnvVar{Name: "TOKEN_CONTROLLER_ENABLED", Value: "true"},
 			corev1.EnvVar{Name: "LINSEED_TOKEN_KEY", Value: l.cfg.TokenKeyPair.VolumeMountKeyFilePath()},

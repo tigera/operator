@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package v1
 
 import (
+	operatorv1 "github.com/tigera/operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -76,7 +77,7 @@ type IPPoolSpec struct {
 	AllowedUses []IPPoolAllowedUse `json:"allowedUses,omitempty" validate:"omitempty"`
 
 	// AssignmentMode determines if IP addresses from this pool should be  assigned automatically or on request only
-	AssignmentMode AssignmentMode `json:"assignmentMode,omitempty" validate:"omitempty,assignmentMode"`
+	AssignmentMode operatorv1.AssignmentMode `json:"assignmentMode,omitempty" validate:"omitempty,assignmentMode"`
 }
 
 type IPPoolAllowedUse string
@@ -101,13 +102,6 @@ const (
 	IPIPModeNever       IPIPMode = "Never"
 	IPIPModeAlways      IPIPMode = "Always"
 	IPIPModeCrossSubnet IPIPMode = "CrossSubnet"
-)
-
-type AssignmentMode string
-
-const (
-	Automatic AssignmentMode = "Automatic"
-	Manual    AssignmentMode = "Manual"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -312,7 +312,6 @@ func (c *component) containers() []corev1.Container {
 		if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
 			commandArgs = append(
 				commandArgs,
-				"--waf-log-file", filepath.Join(CalicologsVolumePath, "waf", "waf.log"),
 				"--waf-ruleset-file", filepath.Join(ModSecurityRulesetVolumePath, "tigera.conf"),
 			)
 			if c.config.PerHostWAFEnabled {

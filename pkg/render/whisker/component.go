@@ -64,6 +64,10 @@ type Configuration struct {
 	TunnelSecret                *corev1.Secret
 	TrustedCertBundle           certificatemanagement.TrustedBundleRO
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
+
+	ClusterID     string
+	CalicoVersion string
+	ClusterType   string
 }
 
 type Component struct {
@@ -154,6 +158,9 @@ func (c *Component) whiskerContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
+			{Name: "CALICO_VERSION", Value: c.cfg.CalicoVersion},
+			{Name: "CLUSTER_ID", Value: c.cfg.ClusterID},
+			{Name: "CLUSTER_TYPE", Value: string(c.cfg.ClusterType)},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}

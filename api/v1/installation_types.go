@@ -222,8 +222,8 @@ type Azure struct {
 type PolicyMode string
 
 const (
-	Default PolicyMode = "Default"
-	Manual  PolicyMode = "Manual"
+	PolicyModeDefault PolicyMode = "Default"
+	PolicyModeManual  PolicyMode = "Manual"
 )
 
 type Logging struct {
@@ -657,6 +657,11 @@ func (nt NATOutgoingType) String() string {
 const NodeSelectorDefault string = "all()"
 
 type AssignmentMode string
+
+const (
+	AssignmentModeAutomatic = "Automatic"
+	AssignmentModeManual    = "Manual"
+)
 
 type IPPool struct {
 	// Name is the name of the IP pool. If omitted, this will be generated.

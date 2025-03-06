@@ -76,6 +76,9 @@ var _ = Describe("ComponentRendering", func() {
 					Variant:            operatorv1.Calico,
 				},
 				TrustedCertBundle: certificatemanagement.CreateTrustedBundle(nil),
+				ClusterID:         "test-cluster-id",
+				CalicoVersion:     "test-calico-version",
+				ClusterType:       "test-cluster-type",
 			},
 			&appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -102,6 +105,9 @@ var _ = Describe("ComponentRendering", func() {
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
+										{Name: "CALICO_VERSION", Value: "test-calico-version"},
+										{Name: "CLUSTER_ID", Value: "test-cluster-id"},
+										{Name: "CLUSTER_TYPE", Value: "test-cluster-type"},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 								},
@@ -156,7 +162,10 @@ var _ = Describe("ComponentRendering", func() {
 						},
 					},
 				},
-				TunnelSecret: &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tunnel-secret"}},
+				TunnelSecret:  &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-tunnel-secret"}},
+				ClusterID:     "test-cluster-id",
+				CalicoVersion: "test-calico-version",
+				ClusterType:   "test-cluster-type",
 			},
 			&appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -183,6 +192,9 @@ var _ = Describe("ComponentRendering", func() {
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
+										{Name: "CALICO_VERSION", Value: "test-calico-version"},
+										{Name: "CLUSTER_ID", Value: "test-cluster-id"},
+										{Name: "CLUSTER_TYPE", Value: "test-cluster-type"},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 								},

@@ -30,6 +30,9 @@ var defaultImages = map[string]string{
 	"calico/node":                "calico/node",
 	"calico/node-windows":        "calico/node-windows",
 	"calico/goldmane":            "calico/goldmane",
+	"calico/guardian":            "calico/guardian",
+	"calico/whisker":             "calico/whisker",
+	"calico/whisker-backend":     "calico/whisker-backend",
 	"calicoctl":                  "calico/ctl",
 	"flannel":                    "coreos/flannel",
 	"flexvol":                    "calico/pod2daemon-flexvol",
@@ -49,6 +52,12 @@ var defaultImages = map[string]string{
 	"tigera-cni-windows":         "tigera/cni-windows",
 	"calico/apiserver":           "calico/apiserver",
 	"tigera/linseed":             "tigera/linseed",
+	"calico/envoy-gateway":       "calico/envoy-gateway",
+	"calico/envoy-proxy":         "calico/envoy-proxy",
+	"calico/envoy-ratelimit":     "calico/envoy-ratelimit",
+	"tigera/envoy-gateway":       "tigera/envoy-gateway",
+	"tigera/envoy-proxy":         "tigera/envoy-proxy",
+	"tigera/envoy-ratelimit":     "tigera/envoy-ratelimit",
 }
 
 var ignoredImages = map[string]struct{}{

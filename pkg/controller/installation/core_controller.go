@@ -197,6 +197,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
+		whiskerCRDExists:     opts.WhiskerCRDExists,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -232,6 +233,14 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 			if !apierrors.IsNotFound(err) {
 				return fmt.Errorf("tigera-installation-controller failed to watch openshift infrastructure config: %w", err)
 			}
+		}
+	}
+
+	if r.whiskerCRDExists && !r.enterpriseCRDsExist {
+		// Whisker is only supported on OSS clusters that have the CRD installed.
+		err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to whisker resource: %w", err)
 		}
 	}
 
@@ -376,7 +385,7 @@ type ReconcileInstallation struct {
 	clusterDomain        string
 	manageCRDs           bool
 	tierWatchReady       *utils.ReadyFlag
-
+	whiskerCRDExists     bool
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
@@ -1192,6 +1201,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 
 		calicoVersion = components.EnterpriseRelease
+	} else {
+		cert, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", render.VoltronLinseedPublicCert), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if cert != nil {
+			typhaNodeTLS.TrustedBundle.AddCertificates(cert)
+		}
 	}
 
 	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
@@ -1317,6 +1334,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				canRemoveCNI = false
 			}
 		}
+		if canRemoveCNI {
+			reqLogger.Info("All finalizers have been removed, can remove CNI resources")
+		}
 	} else {
 		// In some rare scenarios, we can hit a deadlock where resources have been marked with a deletion timestamp but the operator
 		// does not recognize that it must remove their finalizers. This can happen if, for example, someone manually
@@ -1347,7 +1367,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		if len(needsCleanup) > 0 {
 			// Add a component to remove the finalizers from the objects that need it.
-			reqLogger.Info("Removing finalizers from objects that are wronly marked for deletion")
+			reqLogger.Info("Removing finalizers from objects that are wrongly marked for deletion")
 			components = append(components, render.NewPassthrough(needsCleanup...))
 		}
 	}
@@ -1360,8 +1380,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	var goldmaneRunning bool
+	// Goldmane can only be running if the variant is Calico and the Whisker CRD exists.
+	if instance.Spec.Variant == operator.Calico && r.whiskerCRDExists {
+		whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.client)
+		if err != nil {
+			r.status.SetDegraded(operator.ResourceReadError, "Unable retrieve Whisker CR", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		goldmaneRunning = whiskerCR != nil
+	}
+
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
+		GoldmaneRunning:               goldmaneRunning,
 		K8sServiceEp:                  k8sapi.Endpoint,
 		Installation:                  &instance.Spec,
 		IPPools:                       crdPoolsToOperator(currentPools.Items),

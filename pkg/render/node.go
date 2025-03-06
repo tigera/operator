@@ -90,11 +90,12 @@ type TyphaNodeTLS struct {
 // NodeConfiguration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/node on a cluster.
 type NodeConfiguration struct {
-	K8sServiceEp  k8sapi.ServiceEndpoint
-	Installation  *operatorv1.InstallationSpec
-	IPPools       []operatorv1.IPPool
-	TLS           *TyphaNodeTLS
-	ClusterDomain string
+	GoldmaneRunning bool
+	K8sServiceEp    k8sapi.ServiceEndpoint
+	Installation    *operatorv1.InstallationSpec
+	IPPools         []operatorv1.IPPool
+	TLS             *TyphaNodeTLS
+	ClusterDomain   string
 
 	// Optional fields.
 	LogCollector            *operatorv1.LogCollector
@@ -974,6 +975,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 					ServiceAccountName:            CalicoNodeObjectName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
+					DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
 					InitContainers:                initContainers,
 					Containers:                    []corev1.Container{c.nodeContainer()},
 					Volumes:                       c.nodeVolumes(),
@@ -1429,6 +1431,19 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "FELIX_TYPHACERTFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountCertificateFilePath()},
 		{Name: "FELIX_TYPHAKEYFILE", Value: c.cfg.TLS.NodeSecret.VolumeMountKeyFilePath()},
 		{Name: "NO_DEFAULT_POOLS", Value: "true"},
+	}
+
+	// Only append goldmane variables if goldmane is running.
+	if c.cfg.GoldmaneRunning {
+		nodeEnv = append(nodeEnv,
+			corev1.EnvVar{
+				Name:  "FELIX_FLOWLOGSGOLDMANESERVER",
+				Value: "goldmane.calico-system.svc.cluster.local:7443",
+			},
+			corev1.EnvVar{
+				Name:  "FELIX_FLOWLOGSFLUSHINTERVAL",
+				Value: "15",
+			})
 	}
 
 	// We need at least the CN or URISAN set, we depend on the validation

@@ -351,6 +351,9 @@ KUBECONTROLLERS_IMAGE := calico/kube-controllers
 TYPHA_IMAGE := calico/typha
 CSI_IMAGE := calico/csi
 NODE_DRIVER_REGISTRAR_IMAGE := calico/node-driver-registrar
+GOLDMANE_IMAGE := calico/goldmane
+WHISKER_IMAGE := calico/whisker
+WHISKER_BACKEND_IMAGE := calico/whisker-backend
 
 .PHONY: calico-node.tar
 calico-node.tar:
@@ -392,6 +395,21 @@ calico-node-driver-registrar.tar:
 	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
 
+.PHONY: calico-goldmane.tar
+calico-goldmane.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(GOLDMANE_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(GOLDMANE_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-goldmane.tar
+calico-whisker.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(WHISKER_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(WHISKER_IMAGE):$(VERSION_TAG)
+
+.PHONY: calico-goldmane.tar
+calico-whisker-backend.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(WHISKER_BACKEND_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(WHISKER_BACKEND_IMAGE):$(VERSION_TAG)
+
 IMAGE_TARS := calico-node.tar \
 	calico-apiserver.tar \
 	calico-cni.tar \
@@ -399,7 +417,10 @@ IMAGE_TARS := calico-node.tar \
 	calico-kube-controllers.tar \
 	calico-typha.tar \
 	calico-csi.tar \
-	calico-node-driver-registrar.tar
+	calico-node-driver-registrar.tar \
+	calico-goldmane.tar \
+	calico-whisker.tar \
+	calico-whisker-backend.tar
 
 load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 	# Load the latest tar files onto the currently running kind cluster.
@@ -517,7 +538,7 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release-github VERSION=$(RELEASE_TAG)
 
 
-release-notes: var-require-all-VERSION-GITHUB_TOKEN clean
+release-notes: var-require-all-VERSION-GITHUB_TOKEN
 	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .
 	@docker run --rm -v $(CURDIR):/workdir -e	GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) tigera/release-notes
 
@@ -564,7 +585,7 @@ release-publish-images: release-prereqs release-check-image-exists
 	# Push images.
 	$(MAKE) push-all push-manifests push-non-manifests RELEASE=true IMAGETAG=$(VERSION)
 
-release-github: hack/bin/gh release-notes
+release-github: release-notes hack/bin/gh
 	@echo "Creating github release for $(VERSION)"
 	hack/bin/gh release create $(VERSION) --title $(VERSION) --draft --notes-file $(VERSION)-release-notes.md
 	@echo "$(VERSION) GitHub release created in draft state. Please review and publish: https://github.com/tigera/operator/releases/tag/$(VERSION) ."

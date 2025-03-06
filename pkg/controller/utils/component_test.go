@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,7 +58,6 @@ const (
 )
 
 var _ = Describe("Component handler tests", func() {
-
 	var (
 		c        client.Client
 		instance *operatorv1.Manager
@@ -543,7 +542,6 @@ var _ = Describe("Component handler tests", func() {
 		default:
 			Expect(true).To(Equal(false), "Unexpected kind in test")
 		}
-
 	},
 		TableEntry{
 			Description: "set ImagePullPolicy on a DaemonSet",
@@ -635,7 +633,9 @@ var _ = Describe("Component handler tests", func() {
 							},
 						},
 					}},
-				}, client.ObjectKey{Name: "test-podtemplate"}, &corev1.PodTemplate{},
+				},
+				client.ObjectKey{Name: "test-podtemplate"},
+				&corev1.PodTemplate{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -654,7 +654,9 @@ var _ = Describe("Component handler tests", func() {
 							},
 						},
 					}},
-				}, client.ObjectKey{Name: "test-podtemplate"}, &corev1.PodTemplate{},
+				},
+				client.ObjectKey{Name: "test-podtemplate"},
+				&corev1.PodTemplate{},
 				map[string]string{
 					"kubernetes.io/os": "windows",
 				},
@@ -665,17 +667,21 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&apps.Deployment{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
-						Spec: apps.DeploymentSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									NodeSelector: map[string]string{},
+					objs: []client.Object{
+						&apps.Deployment{
+							ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
+							Spec: apps.DeploymentSpec{
+								Template: corev1.PodTemplateSpec{
+									Spec: corev1.PodSpec{
+										NodeSelector: map[string]string{},
+									},
 								},
 							},
-						}},
+						},
 					},
-				}, client.ObjectKey{Name: "test-deployment"}, &apps.Deployment{},
+				},
+				client.ObjectKey{Name: "test-deployment"},
+				&apps.Deployment{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -686,17 +692,21 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{&apps.Deployment{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
-						Spec: apps.DeploymentSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									NodeSelector: map[string]string{},
+					objs: []client.Object{
+						&apps.Deployment{
+							ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
+							Spec: apps.DeploymentSpec{
+								Template: corev1.PodTemplateSpec{
+									Spec: corev1.PodSpec{
+										NodeSelector: map[string]string{},
+									},
 								},
 							},
-						}},
+						},
 					},
-				}, client.ObjectKey{Name: "test-deployment"}, &apps.Deployment{},
+				},
+				client.ObjectKey{Name: "test-deployment"},
+				&apps.Deployment{},
 				map[string]string{
 					"kubernetes.io/os": "windows",
 				},
@@ -707,17 +717,21 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&apps.DaemonSet{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
-						Spec: apps.DaemonSetSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									NodeSelector: map[string]string{},
+					objs: []client.Object{
+						&apps.DaemonSet{
+							ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
+							Spec: apps.DaemonSetSpec{
+								Template: corev1.PodTemplateSpec{
+									Spec: corev1.PodSpec{
+										NodeSelector: map[string]string{},
+									},
 								},
 							},
-						}},
+						},
 					},
-				}, client.ObjectKey{Name: "test-daemonset"}, &apps.DaemonSet{},
+				},
+				client.ObjectKey{Name: "test-daemonset"},
+				&apps.DaemonSet{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -728,17 +742,21 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{&apps.DaemonSet{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
-						Spec: apps.DaemonSetSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									NodeSelector: map[string]string{},
+					objs: []client.Object{
+						&apps.DaemonSet{
+							ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
+							Spec: apps.DaemonSetSpec{
+								Template: corev1.PodTemplateSpec{
+									Spec: corev1.PodSpec{
+										NodeSelector: map[string]string{},
+									},
 								},
 							},
-						}},
+						},
 					},
-				}, client.ObjectKey{Name: "test-daemonset"}, &apps.DaemonSet{},
+				},
+				client.ObjectKey{Name: "test-daemonset"},
+				&apps.DaemonSet{},
 				map[string]string{
 					"kubernetes.io/os": "windows",
 				},
@@ -749,17 +767,21 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&apps.StatefulSet{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
-						Spec: apps.StatefulSetSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									NodeSelector: map[string]string{},
+					objs: []client.Object{
+						&apps.StatefulSet{
+							ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
+							Spec: apps.StatefulSetSpec{
+								Template: corev1.PodTemplateSpec{
+									Spec: corev1.PodSpec{
+										NodeSelector: map[string]string{},
+									},
 								},
 							},
-						}},
+						},
 					},
-				}, client.ObjectKey{Name: "test-statefulset"}, &apps.StatefulSet{},
+				},
+				client.ObjectKey{Name: "test-statefulset"},
+				&apps.StatefulSet{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -770,17 +792,21 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{&apps.StatefulSet{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
-						Spec: apps.StatefulSetSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									NodeSelector: map[string]string{},
+					objs: []client.Object{
+						&apps.StatefulSet{
+							ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
+							Spec: apps.StatefulSetSpec{
+								Template: corev1.PodTemplateSpec{
+									Spec: corev1.PodSpec{
+										NodeSelector: map[string]string{},
+									},
 								},
 							},
-						}},
+						},
 					},
-				}, client.ObjectKey{Name: "test-statefulset"}, &apps.StatefulSet{},
+				},
+				client.ObjectKey{Name: "test-statefulset"},
+				&apps.StatefulSet{},
 				map[string]string{
 					"kubernetes.io/os": "windows",
 				},
@@ -791,21 +817,25 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&batchv1.CronJob{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
-						Spec: batchv1.CronJobSpec{
-							JobTemplate: batchv1.JobTemplateSpec{
-								Spec: batchv1.JobSpec{
-									Template: corev1.PodTemplateSpec{
-										Spec: corev1.PodSpec{
-											NodeSelector: map[string]string{},
+					objs: []client.Object{
+						&batchv1.CronJob{
+							ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
+							Spec: batchv1.CronJobSpec{
+								JobTemplate: batchv1.JobTemplateSpec{
+									Spec: batchv1.JobSpec{
+										Template: corev1.PodTemplateSpec{
+											Spec: corev1.PodSpec{
+												NodeSelector: map[string]string{},
+											},
 										},
 									},
 								},
 							},
-						}},
+						},
 					},
-				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1.CronJob{},
+				},
+				client.ObjectKey{Name: "test-cronjob"},
+				&batchv1.CronJob{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -816,21 +846,25 @@ var _ = Describe("Component handler tests", func() {
 			Parameters: []interface{}{
 				&fakeComponent{
 					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{&batchv1.CronJob{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
-						Spec: batchv1.CronJobSpec{
-							JobTemplate: batchv1.JobTemplateSpec{
-								Spec: batchv1.JobSpec{
-									Template: corev1.PodTemplateSpec{
-										Spec: corev1.PodSpec{
-											NodeSelector: map[string]string{},
+					objs: []client.Object{
+						&batchv1.CronJob{
+							ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
+							Spec: batchv1.CronJobSpec{
+								JobTemplate: batchv1.JobTemplateSpec{
+									Spec: batchv1.JobSpec{
+										Template: corev1.PodTemplateSpec{
+											Spec: corev1.PodSpec{
+												NodeSelector: map[string]string{},
+											},
 										},
 									},
 								},
 							},
-						}},
+						},
 					},
-				}, client.ObjectKey{Name: "test-cronjob"}, &batchv1.CronJob{},
+				},
+				client.ObjectKey{Name: "test-cronjob"},
+				&batchv1.CronJob{},
 				map[string]string{
 					"kubernetes.io/os": "windows",
 				},
@@ -852,7 +886,8 @@ var _ = Describe("Component handler tests", func() {
 						},
 					}},
 				},
-				client.ObjectKey{Name: "test-job"}, &batchv1.Job{},
+				client.ObjectKey{Name: "test-job"},
+				&batchv1.Job{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -874,7 +909,8 @@ var _ = Describe("Component handler tests", func() {
 						},
 					}},
 				},
-				client.ObjectKey{Name: "test-job"}, &batchv1.Job{},
+				client.ObjectKey{Name: "test-job"},
+				&batchv1.Job{},
 				map[string]string{
 					"kubernetes.io/os": "windows",
 				},
@@ -896,7 +932,8 @@ var _ = Describe("Component handler tests", func() {
 						},
 					}},
 				},
-				client.ObjectKey{Name: "test-kibana"}, &kbv1.Kibana{},
+				client.ObjectKey{Name: "test-kibana"},
+				&kbv1.Kibana{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -929,7 +966,8 @@ var _ = Describe("Component handler tests", func() {
 						},
 					}},
 				},
-				client.ObjectKey{Name: "test-elasticsearch"}, &esv1.Elasticsearch{},
+				client.ObjectKey{Name: "test-elasticsearch"},
+				&esv1.Elasticsearch{},
 				map[string]string{
 					"kubernetes.io/os": "linux",
 				},
@@ -952,7 +990,9 @@ var _ = Describe("Component handler tests", func() {
 							},
 						},
 					}},
-				}, client.ObjectKey{Name: "test-deployment"}, &apps.Deployment{},
+				},
+				client.ObjectKey{Name: "test-deployment"},
+				&apps.Deployment{},
 				map[string]string{
 					"kubernetes.io/foo": "bar",
 					"kubernetes.io/os":  "linux",
@@ -976,7 +1016,9 @@ var _ = Describe("Component handler tests", func() {
 							},
 						},
 					}},
-				}, client.ObjectKey{Name: "test-deployment"}, &apps.Deployment{},
+				},
+				client.ObjectKey{Name: "test-deployment"},
+				&apps.Deployment{},
 				map[string]string{
 					"kubernetes.io/foo": "bar",
 					"kubernetes.io/os":  "windows",
@@ -996,7 +1038,9 @@ var _ = Describe("Component handler tests", func() {
 							},
 						},
 					}},
-				}, client.ObjectKey{Name: "test-alertmanager"}, &monitoringv1.Alertmanager{},
+				},
+				client.ObjectKey{Name: "test-alertmanager"},
+				&monitoringv1.Alertmanager{},
 				map[string]string{
 					"kubernetes.io/a":  "b",
 					"kubernetes.io/os": "linux",
@@ -1018,7 +1062,9 @@ var _ = Describe("Component handler tests", func() {
 							},
 						},
 					}},
-				}, client.ObjectKey{Name: "test-prometheus"}, &monitoringv1.Prometheus{},
+				},
+				client.ObjectKey{Name: "test-prometheus"},
+				&monitoringv1.Prometheus{},
 				map[string]string{
 					"kubernetes.io/a":  "b",
 					"kubernetes.io/os": "linux",
@@ -1245,6 +1291,53 @@ var _ = Describe("Component handler tests", func() {
 		Expect(c.Get(ctx, client.ObjectKey{Name: "my-clusterrolebinding"}, crbNewRoleRef)).NotTo(HaveOccurred())
 		Expect(crbNewRoleRef.ObjectMeta.ResourceVersion).To(Equal("2"),
 			"Expected update of ClusterRoleBinding to rev resourceversion to 2")
+	})
+
+	Context("with a terminating Namespace", func() {
+		var ns *corev1.Namespace
+		BeforeEach(func() {
+			// Create a Namespace with a finalizer to make sure it is not immediately deleted.
+			ns = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test-namespace",
+					Finalizers: []string{"test-finalizer"},
+				},
+			}
+			Expect(c.Create(ctx, ns)).To(Succeed())
+
+			// Delete the Namespace to put it in the terminating state.
+			Expect(c.Get(ctx, client.ObjectKey{Name: ns.Name}, ns)).To(Succeed())
+			Expect(c.Delete(ctx, ns)).To(Succeed())
+			Expect(c.Get(ctx, client.ObjectKey{Name: ns.Name}, ns)).To(Succeed())
+			Expect(ns.DeletionTimestamp).NotTo(BeNil())
+		})
+
+		AfterEach(func() {
+			// Remove finalizers from the Namespace to allow it to be deleted.
+			ns.Finalizers = nil
+			Expect(c.Update(ctx, ns)).To(Succeed())
+			Expect(c.Get(ctx, client.ObjectKey{Name: ns.Name}, ns)).NotTo(Succeed())
+		})
+
+		It("does not attempt to create resources in a terminating Namespace", func() {
+			// Create a ConfigMap in the terminating Namespace.
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-configmap",
+					Namespace: ns.Name,
+				},
+			}
+
+			// Shouldn't return an error, but also shouldn't create the ConfigMap.
+			Expect(handler.CreateOrUpdateOrDelete(
+				ctx,
+				&fakeComponent{objs: []client.Object{cm}, supportedOSType: rmeta.OSTypeLinux},
+				sm,
+			)).NotTo(HaveOccurred())
+
+			// The ConfigMap should not exist.
+			Expect(c.Get(ctx, client.ObjectKey{Name: cm.Name, Namespace: cm.Namespace}, cm)).To(HaveOccurred())
+		})
 	})
 
 	Context("liveness and readiness probes", func() {
@@ -1763,13 +1856,11 @@ var _ = Describe("Component handler tests", func() {
 				corev1.VolumeMount{Name: "y"},
 				corev1.VolumeMount{Name: "z"},
 			))
-
 		})
 	})
 })
 
 var _ = Describe("Mocked client Component handler tests", func() {
-
 	var (
 		c       client.Client
 		mc      mockClient
@@ -1804,8 +1895,9 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			},
 		}
 		setToDS := func(object client.Object) {
-			dsToSet := object.(*apps.DaemonSet)
-			ds.DeepCopyInto(dsToSet)
+			if dsToSet, ok := object.(*apps.DaemonSet); ok {
+				ds.DeepCopyInto(dsToSet)
+			}
 		}
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
@@ -1888,8 +1980,9 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			},
 		}
 		setToBaseNP := func(object client.Object) {
-			npToSet := object.(*v3.NetworkPolicy)
-			baseNP.DeepCopyInto(npToSet)
+			if npToSet, ok := object.(*v3.NetworkPolicy); ok {
+				baseNP.DeepCopyInto(npToSet)
+			}
 		}
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
@@ -1912,8 +2005,9 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			modifiedNP := baseNP.DeepCopy()
 			modifiedNP.Spec.Selector = "k8s-app == 'invalid-component'"
 			setToModifiedNP := func(object client.Object) {
-				npToSet := object.(*v3.NetworkPolicy)
-				modifiedNP.DeepCopyInto(npToSet)
+				if npToSet, ok := object.(*v3.NetworkPolicy); ok {
+					modifiedNP.DeepCopyInto(npToSet)
+				}
 			}
 
 			mc.Info = append(mc.Info, mockReturn{
@@ -1942,8 +2036,9 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			Spec:       v3.TierSpec{Order: &order},
 		}
 		setToBaseTier := func(object client.Object) {
-			tierToSet := object.(*v3.Tier)
-			baseTier.DeepCopyInto(tierToSet)
+			if tierToSet, ok := object.(*v3.Tier); ok {
+				baseTier.DeepCopyInto(tierToSet)
+			}
 		}
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
@@ -1967,8 +2062,9 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			modifiedTier := baseTier.DeepCopy()
 			modifiedTier.Spec.Order = &over9000
 			setToModifiedTier := func(object client.Object) {
-				tierToSet := object.(*v3.Tier)
-				modifiedTier.DeepCopyInto(tierToSet)
+				if tierToSet, ok := object.(*v3.Tier); ok {
+					modifiedTier.DeepCopyInto(tierToSet)
+				}
 			}
 
 			mc.Info = append(mc.Info, mockReturn{
@@ -2058,9 +2154,11 @@ func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.
 func (mc *mockClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	panic("List not implemented in mockClient")
 }
+
 func (mc *mockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	panic("Create not implemented in mockClient")
 }
+
 func (mc *mockClient) Delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
 	panic("Delete not implemented in mockClient")
 }
@@ -2088,9 +2186,11 @@ func (mc *mockClient) Update(ctx context.Context, obj client.Object, opts ...cli
 
 	return v
 }
+
 func (mc *mockClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
 	panic("Patch not implemented in mockClient")
 }
+
 func (mc *mockClient) DeleteAllOf(ctx context.Context, obj client.Object, opts ...client.DeleteAllOfOption) error {
 	panic("DeleteAll not implemented in mockClient")
 }
@@ -2098,9 +2198,11 @@ func (mc *mockClient) DeleteAllOf(ctx context.Context, obj client.Object, opts .
 func (mc *mockClient) Status() client.StatusWriter {
 	panic("Status not implemented in mockClient")
 }
+
 func (mc *mockClient) Scheme() *runtime.Scheme {
 	panic("Scheme not implemented in mockClient")
 }
+
 func (mc *mockClient) RESTMapper() restMeta.RESTMapper {
 	panic("RESTMapper not implemented in mockClient")
 }

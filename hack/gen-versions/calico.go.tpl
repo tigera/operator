@@ -154,7 +154,48 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-
+{{ with index .Components "calico/whisker"}}
+	ComponentCalicoWhisker = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "calico/whisker-backend"}}
+	ComponentCalicoWhiskerBackend = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "calico/envoy-gateway"}}
+	ComponentCalicoEnvoyGateway = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "calico/envoy-proxy"}}
+	ComponentCalicoEnvoyProxy = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "calico/envoy-ratelimit"}}
+	ComponentCalicoEnvoyRatelimit = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
+{{ with index .Components "calico/guardian" }}
+	ComponentCalicoGuardian = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 	ComponentOperatorInit = Component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -180,5 +221,11 @@ var (
 		ComponentCalicoCSIRegistrar,
 		ComponentCalicoCSIRegistrarFIPS,
 		ComponentCalicoGoldmane,
+		ComponentCalicoWhisker,
+		ComponentCalicoWhiskerBackend,
+		ComponentCalicoEnvoyGateway,
+		ComponentCalicoEnvoyProxy,
+		ComponentCalicoEnvoyRatelimit,
+		ComponentCalicoGuardian,
 	}
 )

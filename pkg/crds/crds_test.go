@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,5 +41,8 @@ var _ = Describe("test crds pkg", func() {
 	})
 	It("can get all CRDS used with Enterprise", func() {
 		Expect(func() { Expect(GetCRDs(opv1.TigeraSecureEnterprise)).ToNot(BeEmpty()) }).ToNot(Panic())
+	})
+	It("installs GatewayAPI CRD with Calico OSS", func() {
+		Expect(getOperatorCRDSource(opv1.Calico)).To(HaveKey(ContainSubstring("gatewayapis")))
 	})
 })

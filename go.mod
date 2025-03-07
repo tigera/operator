@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go v1.55.5
 	github.com/cloudflare/cfssl v1.6.5
 	github.com/containernetworking/cni v1.2.3
-	github.com/corazawaf/coraza-coreruleset v0.0.0-20240226094324-415b1017abdc
+	github.com/corazawaf/coraza-coreruleset/v4 v4.7.0
 	github.com/elastic/cloud-on-k8s/v2 v2.14.0
 	github.com/envoyproxy/gateway v1.2.6
 	github.com/go-ldap/ldap v3.0.3+incompatible

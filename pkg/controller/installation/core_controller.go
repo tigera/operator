@@ -64,6 +64,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
@@ -2030,7 +2031,7 @@ func crdPoolsToOperator(crds []crdv1.IPPool) []operator.IPPool {
 	pools := []v1.IPPool{}
 	for _, p := range crds {
 		op := v1.IPPool{}
-		op.FromProjectCalicoV1(p)
+		ippool.FromProjectCalicoV1(&op, p)
 		pools = append(pools, op)
 	}
 	return pools

@@ -42,6 +42,8 @@ const (
 	WhiskerServiceAccountName = WhiskerName
 	WhiskerDeploymentName     = WhiskerName
 	WhiskerRoleName           = WhiskerName
+	GoldmaneServerSecret      = "goldmane-server-secret"
+	GoldmaneServiceName       = "goldmane"
 
 	GuardianContainerName              = "guardian"
 	GoldmaneContainerName              = "goldmane"
@@ -64,6 +66,7 @@ type Configuration struct {
 	TunnelSecret                *corev1.Secret
 	TrustedCertBundle           certificatemanagement.TrustedBundleRO
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
+	GoldmaneServerKeyPair       certificatemanagement.KeyPairInterface
 }
 
 type Component struct {
@@ -189,21 +192,38 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 }
 
 func (c *Component) goldmaneContainer() corev1.Container {
+	var volumeMounts []corev1.VolumeMount
+
 	env := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "INFO"},
 		{Name: "PORT", Value: "7443"},
 	}
-	var volumeMounts []corev1.VolumeMount
+
+	if c.cfg.GoldmaneServerKeyPair != nil {
+		env = append(env, corev1.EnvVar{
+			Name:  "SERVER_KEY_PATH",
+			Value: c.cfg.GoldmaneServerKeyPair.VolumeMountKeyFilePath(),
+		})
+		env = append(env, corev1.EnvVar{
+			Name:  "SERVER_CERT_PATH",
+			Value: c.cfg.GoldmaneServerKeyPair.VolumeMountCertificateFilePath(),
+		})
+
+		volumeMounts = append(volumeMounts, c.cfg.GoldmaneServerKeyPair.VolumeMount(c.SupportedOSType()))
+	}
+
 	if c.cfg.ManagementClusterConnection != nil {
 		env = append(env,
 			corev1.EnvVar{
 				Name:  "PUSH_URL",
-				Value: "https://localhost:8080/api/v1/flows/bulk"},
+				Value: "https://localhost:8080/api/v1/flows/bulk",
+			},
 			corev1.EnvVar{
 				Name:  "CA_CERT_PATH",
-				Value: c.cfg.TrustedCertBundle.MountPath()},
+				Value: c.cfg.TrustedCertBundle.MountPath(),
+			},
 		)
-		volumeMounts = c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
+		volumeMounts = append(volumeMounts, c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())...)
 	}
 
 	return corev1.Container{
@@ -219,7 +239,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 func (c *Component) goldmaneService() *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "goldmane",
+			Name:      GoldmaneServiceName,
 			Namespace: WhiskerNamespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -260,6 +280,10 @@ func (c *Component) deployment() *appsv1.Deployment {
 
 	ctrs := []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer(), c.goldmaneContainer()}
 	volumes := []corev1.Volume{c.cfg.TrustedCertBundle.Volume()}
+
+	if c.cfg.GoldmaneServerKeyPair != nil {
+		volumes = append(volumes, c.cfg.GoldmaneServerKeyPair.Volume())
+	}
 
 	if c.cfg.ManagementClusterConnection != nil {
 		ctrs = append(ctrs, c.guardianContainer())

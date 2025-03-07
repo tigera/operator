@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -297,7 +298,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	var keyValidatorConfig authentication.KeyValidatorConfig
 	includeV3NetworkPolicy := false
+	useNewQueryServerPort := false
 	if installationSpec.Variant == operatorv1.TigeraSecureEnterprise {
+		useNewQueryServerPort, err = setNewDefaultQueryServerPort(ctx, r.client, instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 		trustedBundle = certificateManager.CreateTrustedBundle()
 		applicationLayer, err = utils.GetApplicationLayer(ctx, r.client)
 		if err != nil {
@@ -426,6 +432,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		Installation:                installationSpec,
 		APIServer:                   &instance.Spec,
 		ForceHostNetwork:            false,
+		UseNewQueryServerPort:       useNewQueryServerPort,
 		ApplicationLayer:            applicationLayer,
 		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,
@@ -489,6 +496,58 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+// setNewDefaultQueryServerPort determines if it is a new Calico Enterprise installation and sets an annotation to define the
+// QueryServer default port on the APIServer.
+func setNewDefaultQueryServerPort(ctx context.Context, cli client.Client, instance *operatorv1.APIServer) (bool, error) {
+	annotationNewQueryServerPort := "apiserver.operator.tigera.io/use-new-queryserver-default-port"
+	// Rely on the APIServer deployment to determine if this is a new Calico Enterprise installation.
+	apiServerDeployment := &appsv1.Deployment{}
+	apiServerNamespacedName := types.NamespacedName{
+		Name:      rmeta.APIServerDeploymentName(operatorv1.TigeraSecureEnterprise),
+		Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
+	}
+
+	if err := cli.Get(ctx, apiServerNamespacedName, apiServerDeployment); err != nil {
+		// Handle new installations where the APIServer deployment does not exist.
+		if errors.IsNotFound(err) {
+			if err := patchApiServerAnnotation(ctx, cli, instance, annotationNewQueryServerPort, "true"); err != nil {
+				return false, err
+			}
+			return true, nil
+		} else {
+			return false, err
+		}
+	}
+
+	// If the deployment exists, check if it has the QueryServer container.
+	hasQueryServerContainer := false
+	for _, container := range apiServerDeployment.Spec.Template.Spec.Containers {
+		if container.Name == "tigera-queryserver" {
+			hasQueryServerContainer = true
+			break
+		}
+	}
+	if !hasQueryServerContainer {
+		if err := patchApiServerAnnotation(ctx, cli, instance, annotationNewQueryServerPort, "true"); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+
+	// If the deployment exists and has the QueryServer container, check if the APIServer already has the annotation.
+	hasAnnotation := instance.Annotations != nil && instance.Annotations[annotationNewQueryServerPort] == "true"
+	return hasAnnotation, nil
+}
+
+func patchApiServerAnnotation(ctx context.Context, cli client.Client, instance *operatorv1.APIServer, annotation, value string) error {
+	patchFrom := client.MergeFrom(instance.DeepCopy())
+	if instance.Annotations == nil {
+		instance.Annotations = make(map[string]string)
+	}
+	instance.Annotations[annotation] = value
+	return cli.Patch(ctx, instance, patchFrom)
 }
 
 func validateAPIServerResource(instance *operatorv1.APIServer) error {

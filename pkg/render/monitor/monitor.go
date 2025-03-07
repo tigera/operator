@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -532,6 +532,8 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
+	promNamespace := common.TigeraPrometheusNamespace
+
 	prometheus := &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -600,7 +602,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
 					{
 						Name:      CalicoNodeAlertmanager,
-						Namespace: common.TigeraPrometheusNamespace,
+						Namespace: &promNamespace,
 						Port:      intstr.FromString("web"),
 						Scheme:    string(corev1.URISchemeHTTP),
 					},

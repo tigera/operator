@@ -24,8 +24,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	pcv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 )
 
 // InstallationSpec defines configuration for a Calico or Calico Enterprise installation.
@@ -224,8 +222,8 @@ type Azure struct {
 type PolicyMode string
 
 const (
-	Default PolicyMode = "Default"
-	Manual  PolicyMode = "Manual"
+	PolicyModeDefault PolicyMode = "Default"
+	PolicyModeManual  PolicyMode = "Manual"
 )
 
 type Logging struct {
@@ -658,6 +656,13 @@ func (nt NATOutgoingType) String() string {
 
 const NodeSelectorDefault string = "all()"
 
+type AssignmentMode string
+
+const (
+	AssignmentModeAutomatic = "Automatic"
+	AssignmentModeManual    = "Manual"
+)
+
 type IPPool struct {
 	// Name is the name of the IP pool. If omitted, this will be generated.
 	Name string `json:"name,omitempty"`
@@ -705,7 +710,7 @@ type IPPool struct {
 	AllowedUses []IPPoolAllowedUse `json:"allowedUses,omitempty" validate:"omitempty"`
 
 	// AssignmentMode determines if IP addresses from this pool should be  assigned automatically or on request only
-	AssignmentMode pcv1.AssignmentMode `json:"assignmentMode,omitempty" validate:"omitempty,assignmentMode"`
+	AssignmentMode AssignmentMode `json:"assignmentMode,omitempty" validate:"omitempty,assignmentMode"`
 }
 
 type IPPoolAllowedUse string
@@ -715,121 +720,6 @@ const (
 	IPPoolAllowedUseTunnel       IPPoolAllowedUse = "Tunnel"
 	IPPoolAllowedUseLoadBalancer IPPoolAllowedUse = "LoadBalancer"
 )
-
-// ToProjectCalicoV1 converts an IPPool to a crd.projectcalico.org/v1 IPPool resource.
-func (p *IPPool) ToProjectCalicoV1() (*pcv1.IPPool, error) {
-	pool := pcv1.IPPool{
-		TypeMeta: metav1.TypeMeta{Kind: "IPPool", APIVersion: "crd.projectcalico.org/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   p.Name,
-			Labels: map[string]string{},
-		},
-		Spec: pcv1.IPPoolSpec{CIDR: p.CIDR},
-	}
-
-	// Set encap.
-	switch p.Encapsulation {
-	case EncapsulationIPIP:
-		pool.Spec.IPIPMode = pcv1.IPIPModeAlways
-		pool.Spec.VXLANMode = pcv1.VXLANModeNever
-	case EncapsulationIPIPCrossSubnet:
-		pool.Spec.IPIPMode = pcv1.IPIPModeCrossSubnet
-		pool.Spec.VXLANMode = pcv1.VXLANModeNever
-	case EncapsulationVXLAN:
-		pool.Spec.VXLANMode = pcv1.VXLANModeAlways
-		pool.Spec.IPIPMode = pcv1.IPIPModeNever
-	case EncapsulationVXLANCrossSubnet:
-		pool.Spec.VXLANMode = pcv1.VXLANModeCrossSubnet
-		pool.Spec.IPIPMode = pcv1.IPIPModeNever
-	}
-
-	// Set NAT
-	switch p.NATOutgoing {
-	case NATOutgoingEnabled:
-		pool.Spec.NATOutgoing = true
-	}
-
-	if p.DisableNewAllocations != nil {
-		pool.Spec.Disabled = *p.DisableNewAllocations
-	}
-
-	// Set BlockSize
-	if p.BlockSize != nil {
-		pool.Spec.BlockSize = int(*p.BlockSize)
-	}
-
-	// Set selector.
-	pool.Spec.NodeSelector = p.NodeSelector
-
-	// Set BGP export.
-	if p.DisableBGPExport != nil {
-		pool.Spec.DisableBGPExport = *p.DisableBGPExport
-	}
-
-	for _, use := range p.AllowedUses {
-		pool.Spec.AllowedUses = append(pool.Spec.AllowedUses, pcv1.IPPoolAllowedUse(use))
-	}
-
-	pool.Spec.AssignmentMode = p.AssignmentMode
-
-	return &pool, nil
-}
-
-// FromProjectCalicoV1 populates the IP pool with the data from the given
-// crd.projectcalico.org/v1 IP pool. It is the direct inverse of ToProjectCalicoV1,
-// and should be updated with every new field added to the IP pool structure.
-func (p *IPPool) FromProjectCalicoV1(crd pcv1.IPPool) {
-	p.Name = crd.Name
-	p.CIDR = crd.Spec.CIDR
-
-	// Set encap.
-	switch crd.Spec.IPIPMode {
-	case pcv1.IPIPModeAlways:
-		p.Encapsulation = EncapsulationIPIP
-	case pcv1.IPIPModeCrossSubnet:
-		p.Encapsulation = EncapsulationIPIPCrossSubnet
-	}
-	switch crd.Spec.VXLANMode {
-	case pcv1.VXLANModeAlways:
-		p.Encapsulation = EncapsulationVXLAN
-	case pcv1.VXLANModeCrossSubnet:
-		p.Encapsulation = EncapsulationVXLANCrossSubnet
-	}
-
-	// Set NAT
-	if crd.Spec.NATOutgoing {
-		p.NATOutgoing = NATOutgoingEnabled
-	} else {
-		p.NATOutgoing = NATOutgoingDisabled
-	}
-
-	// Configure DisableNewAllocations
-	disableAlloc := false
-	if crd.Spec.Disabled {
-		disableAlloc = true
-	}
-	p.DisableNewAllocations = &disableAlloc
-
-	// Set BlockSize
-	blockSize := int32(crd.Spec.BlockSize)
-	p.BlockSize = &blockSize
-
-	// Set selector.
-	p.NodeSelector = crd.Spec.NodeSelector
-
-	// Set BGP export.
-	disableExport := false
-	if crd.Spec.DisableBGPExport {
-		disableExport = true
-	}
-	p.DisableBGPExport = &disableExport
-
-	for _, use := range crd.Spec.AllowedUses {
-		p.AllowedUses = append(p.AllowedUses, IPPoolAllowedUse(use))
-	}
-
-	p.AssignmentMode = crd.Spec.AssignmentMode
-}
 
 // CNIPluginType describes the type of CNI plugin used.
 //

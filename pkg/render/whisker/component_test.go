@@ -115,6 +115,7 @@ var _ = Describe("ComponentRendering", func() {
 										{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
+									VolumeMounts:    certificatemanagement.CreateTrustedBundle(nil).VolumeMounts(rmeta.OSTypeAny),
 								},
 								{
 									Name:            whisker.GoldmaneContainerName,
@@ -142,6 +143,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 			},
 		),
+
 		Entry("Should configure guardian",
 			&whisker.Configuration{
 				Installation: &operatorv1.InstallationSpec{
@@ -196,6 +198,7 @@ var _ = Describe("ComponentRendering", func() {
 										{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
+									VolumeMounts:    certificatemanagement.CreateTrustedBundle(nil).VolumeMounts(rmeta.OSTypeAny),
 								},
 								{
 									Name:            whisker.GoldmaneContainerName,

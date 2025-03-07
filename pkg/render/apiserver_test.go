@@ -268,7 +268,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Value).To(Equal("kubernetes"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].ValueFrom).To(BeNil())
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Name).To(Equal("LISTEN_ADDR"))
-		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Value).To(Equal(":8080"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[1].Value).To(Equal(fmt.Sprintf(":%d", render.QueryServerTargetPort)))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[1].ValueFrom).To(BeNil())
 		Expect(d.Spec.Template.Spec.Containers[1].Env[2].Name).To(Equal("TLS_CERT"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[2].Value).To(Equal("/tigera-apiserver-certs/tls.crt"))
@@ -301,7 +301,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].VolumeMounts[1].SubPathExpr).To(Equal(""))
 
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Path).To(Equal("/version"))
-		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo("8080"))
+		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Port.String()).To(BeEquivalentTo(fmt.Sprintf("%d", render.QueryServerTargetPort)))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.HTTPGet.Scheme).To(BeEquivalentTo("HTTPS"))
 		Expect(d.Spec.Template.Spec.Containers[1].LivenessProbe.InitialDelaySeconds).To(BeEquivalentTo(90))
 

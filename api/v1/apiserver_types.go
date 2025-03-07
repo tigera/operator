@@ -83,6 +83,12 @@ type APIServerDeploymentContainer struct {
 	// +kubebuilder:validation:Enum=calico-apiserver;tigera-queryserver;calico-l7-admission-controller
 	Name string `json:"name"`
 
+	// Ports allows customization of container's ports.
+	// If specified, this overrides the named APIServer Deployment container's ports.
+	// If omitted, the API server Deployment will use its default value for this container's port.
+	// +optional
+	Ports []v1.ContainerPort `json:"ports,omitempty"`
+
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
 	// If specified, this overrides the named API server Deployment container's resources.
 	// If omitted, the API server Deployment will use its default value for this container's resources.

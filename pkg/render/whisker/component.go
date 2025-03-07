@@ -188,6 +188,7 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 			{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
 	}
 }
 

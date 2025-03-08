@@ -36,7 +36,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -199,6 +201,27 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	// Goldmane needs a server certificate for it's gRPC API.
+	// TODO: Add this to the trusted bundle. This isn't stritctly needed, since the bundle already includes the operator CA that
+	// signed this certificate. But in order to support custom user-supplied certificates, we will need to do this.
+	goldmaneCertificateNames := dns.GetServiceDNSNames(whisker.GoldmaneServiceName, whisker.WhiskerNamespace, r.clusterDomain)
+	goldmaneCertificateNames = append(goldmaneCertificateNames, "localhost", "127.0.0.1")
+	keyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.GoldmaneServerSecret, common.OperatorNamespace(), goldmaneCertificateNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+		return reconcile.Result{}, err
+	}
+	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+		Namespace:       whisker.WhiskerNamespace,
+		TruthNamespace:  common.OperatorNamespace(),
+		ServiceAccounts: []string{whisker.WhiskerServiceAccountName},
+		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+			rcertificatemanagement.NewKeyPairOption(keyPair, true, true),
+		},
+		// TrustedBundle is managed by the core controller.
+		TrustedBundle: nil,
+	})
+
 	trustedCertBundle, err := certificateManager.LoadTrustedBundle(ctx, r.cli, whisker.WhiskerNamespace)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error loading trusted cert bundle", err, reqLogger)
@@ -213,9 +236,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TunnelSecret:                tunnelSecret,
 		TrustedCertBundle:           trustedCertBundle,
 		ManagementClusterConnection: managementClusterConnection,
+		GoldmaneServerKeyPair:       keyPair,
 	}
 
-	components := []render.Component{whisker.Whisker(cfg)}
+	components := []render.Component{certComponent, whisker.Whisker(cfg)}
 	if err = imageset.ApplyImageSet(ctx, r.cli, variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err

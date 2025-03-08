@@ -1535,6 +1535,9 @@ spec:
                         type: object
                     type: object
                 type: object
+              managedClusterVariant:
+                description: ManagedClusterVariant is the variant of the managed cluster.
+                type: string
               name:
                 description: Name is a human readable name for this tenant.
                 type: string

@@ -12,15 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package whisker
+package goldmane
 
 import (
 	"context"
 	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -37,14 +35,14 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
-	controllerName = "whisker-controller"
-	ResourceName   = "whisker"
+	controllerName = "goldmane-controller"
+	ResourceName   = "goldmane"
 )
 
 var log = logf.Log.WithName(controllerName)
@@ -52,7 +50,7 @@ var log = logf.Log.WithName(controllerName)
 // Add creates a new Reconciler Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	statusManager := status.New(mgr.GetClient(), "whisker", opts.KubernetesVersion)
+	statusManager := status.New(mgr.GetClient(), "goldmane", opts.KubernetesVersion)
 	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts)
 
 	// Create a new controller
@@ -62,11 +60,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	for _, secretName := range []string{
-		monitor.PrometheusServerTLSSecretName,
-		whisker.ManagedClusterConnectionSecretName,
 		certificatemanagement.CASecretName,
-		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
-		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
@@ -144,48 +138,29 @@ type Reconciler struct {
 // remove the work from the queue.
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling Whisker")
+	reqLogger.Info("Reconciling Goldmane")
 
 	variant, installation, err := utils.GetInstallation(ctx, r.cli)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.cli)
+	goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Whisker CR", err, reqLogger)
 		return reconcile.Result{}, err
-	} else if whiskerCR == nil {
+	} else if goldmaneCR == nil {
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
-	defer r.status.SetMetaData(&whiskerCR.ObjectMeta)
+	defer r.status.SetMetaData(&goldmaneCR.ObjectMeta)
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
-	}
-
-	var tunnelSecret *corev1.Secret
-	managementClusterConnection, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying ManagementClusterConnection", err, reqLogger)
-		return reconcile.Result{}, err
-	} else if managementClusterConnection != nil {
-		tunnelSecret, err = utils.GetIfExists[corev1.Secret](ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, r.cli)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		if err := utils.ApplyDefaults(ctx, r.cli, managementClusterConnection); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		log.V(2).Info("Loaded ManagementClusterConnection config", managementClusterConnection)
 	}
 
 	certificateManager, err := certificatemanager.Create(r.cli, installation, r.clusterDomain, common.OperatorNamespace())
@@ -200,17 +175,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
-	cfg := &whisker.Configuration{
-		PullSecrets:                 pullSecrets,
-		OpenShift:                   r.provider.IsOpenShift(),
-		Installation:                installation,
-		TunnelSecret:                tunnelSecret,
-		TrustedCertBundle:           trustedCertBundle,
-		ManagementClusterConnection: managementClusterConnection,
+	ch := utils.NewComponentHandler(log, r.cli, r.scheme, goldmaneCR)
+	cfg := &goldmane.Configuration{
+		PullSecrets:       pullSecrets,
+		OpenShift:         r.provider.IsOpenShift(),
+		Installation:      installation,
+		TrustedCertBundle: trustedCertBundle,
 	}
 
-	components := []render.Component{whisker.Whisker(cfg)}
+	components := []render.Component{goldmane.Goldmane(cfg)}
 	if err = imageset.ApplyImageSet(ctx, r.cli, variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err

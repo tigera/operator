@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/api/pkg/lib/numorstring"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -48,7 +49,7 @@ import (
 // The names of the components related to the Guardian related rendered objects.
 const (
 	GuardianName                   = "tigera-guardian"
-	GuardianNamespace              = GuardianName
+	GuardianNamespace              = common.CalicoNamespace
 	GuardianServiceAccountName     = GuardianName
 	GuardianClusterRoleName        = GuardianName
 	GuardianClusterRoleBindingName = GuardianName
@@ -91,7 +92,7 @@ type GuardianConfiguration struct {
 	OpenShift                   bool
 	Installation                *operatorv1.InstallationSpec
 	TunnelSecret                *corev1.Secret
-	TrustedCertBundle           certificatemanagement.TrustedBundle
+	TrustedCertBundle           certificatemanagement.TrustedBundleRO
 	TunnelCAType                operatorv1.CAType
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 
@@ -133,21 +134,24 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.deployment(),
 		c.service(),
 		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
-		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
-
-		// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
-		// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
-		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
-		managerServiceAccount(ManagerNamespace),
-		managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil),
-		managerClusterRoleBinding([]string{ManagerNamespace}),
-
-		// Install default UI settings for this managed cluster.
-		managerClusterWideSettingsGroup(),
-		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
 	)
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		objs = append(objs,
+			// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
+			// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
+			CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
+			managerServiceAccount(ManagerNamespace),
+			managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil),
+			managerClusterRoleBinding([]string{ManagerNamespace}),
+
+			// Install default UI settings for this managed cluster.
+			managerClusterWideSettingsGroup(),
+			managerUserSpecificSettingsGroup(),
+			managerClusterWideTigeraLayer(),
+			managerClusterWideDefaultView(),
+		)
+	}
 
 	return objs, nil
 }
@@ -157,6 +161,40 @@ func (c *GuardianComponent) Ready() bool {
 }
 
 func (c *GuardianComponent) service() *corev1.Service {
+	ports := []corev1.ServicePort{
+		{
+			Name: "linseed",
+			Port: 443,
+			TargetPort: intstr.IntOrString{
+				Type:   intstr.Int,
+				IntVal: 8080,
+			},
+			Protocol: corev1.ProtocolTCP,
+		},
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		ports = append(ports,
+			corev1.ServicePort{
+				Name: "elasticsearch",
+				Port: 9200,
+				TargetPort: intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: 8080,
+				},
+				Protocol: corev1.ProtocolTCP,
+			},
+			corev1.ServicePort{
+				Name: "kibana",
+				Port: 5601,
+				TargetPort: intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: 8080,
+				},
+				Protocol: corev1.ProtocolTCP,
+			},
+		)
+	}
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GuardianServiceName,
@@ -166,35 +204,7 @@ func (c *GuardianComponent) service() *corev1.Service {
 			Selector: map[string]string{
 				"k8s-app": GuardianName,
 			},
-			Ports: []corev1.ServicePort{
-				{
-					Name: "linseed",
-					Port: 443,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: 8080,
-					},
-					Protocol: corev1.ProtocolTCP,
-				},
-				{
-					Name: "elasticsearch",
-					Port: 9200,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: 8080,
-					},
-					Protocol: corev1.ProtocolTCP,
-				},
-				{
-					Name: "kibana",
-					Port: 5601,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: 8080,
-					},
-					Protocol: corev1.ProtocolTCP,
-				},
-			},
+			Ports: ports,
 		},
 	}
 }
@@ -319,11 +329,16 @@ func (c *GuardianComponent) container() []corev1.Container {
 		{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
 		{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
 		{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(c.cfg.TunnelCAType)},
-		{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 	}
 	envVars = append(envVars, c.cfg.Installation.Proxy.EnvVars()...)
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+			corev1.EnvVar{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+			corev1.EnvVar{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		)
+	}
 
 	return []corev1.Container{
 		{

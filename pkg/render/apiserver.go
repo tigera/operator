@@ -57,7 +57,6 @@ const (
 
 const (
 	QueryServerPort        = 8080
-	QueryServerTargetPort  = 50234
 	QueryserverNamespace   = "tigera-system"
 	QueryserverServiceName = "tigera-api"
 
@@ -120,7 +119,6 @@ type APIServerConfiguration struct {
 	Installation                *operatorv1.InstallationSpec
 	APIServer                   *operatorv1.APIServerSpec
 	ForceHostNetwork            bool
-	UseNewQueryServerPort       bool
 	ApplicationLayer            *operatorv1.ApplicationLayer
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
@@ -159,13 +157,10 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			errMsgs = append(errMsgs, err.Error())
 		}
 		if c.cfg.IsSidecarInjectionEnabled() {
-			/*
-				c.l7AdmissionControllerImage, err = components.GetReference(components.ComponentL7AdmissionController, reg, path, prefix, is)
-				if err != nil {
-					errMsgs = append(errMsgs, err.Error())
-				}
-			*/
-			c.l7AdmissionControllerImage = "gcr.io/unique-caldron-775/lucassampaio/tigera/l7-admission-controller:lucas-202503041125"
+			c.l7AdmissionControllerImage, err = components.GetReference(components.ComponentL7AdmissionController, reg, path, prefix, is)
+			if err != nil {
+				errMsgs = append(errMsgs, err.Error())
+			}
 			c.l7AdmissionControllerEnvoyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, is)
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
@@ -328,7 +323,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects = append(globalObjects, globalCalicoObjects...)
 
 		// Add in a NetworkPolicy.
-		namespacedObjects = append(namespacedObjects, c.networkPolicy(c.cfg))
+		namespacedObjects = append(namespacedObjects, c.networkPolicy())
 
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
@@ -534,17 +529,10 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 		Action: v3.Pass,
 	})
 
-	apiServerTargetPort := uint16(getApiServerPort(cfg))
-	queryServerTargetPort := uint16(getQyeryServerPort(cfg))
-	l7AdmissionControllerTargetPort := uint16(getL7AdmissionControllerPort(cfg))
-
 	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
-	ingressPorts := networkpolicy.Ports(443, apiServerTargetPort, QueryServerPort, queryServerTargetPort, 10443)
+	ingressPorts := networkpolicy.Ports(443, APIServerPort, QueryServerPort, 10443)
 	if cfg.IsSidecarInjectionEnabled() {
 		ingressPorts = append(ingressPorts, numorstring.Port{MinPort: L7AdmissionControllerPort, MaxPort: L7AdmissionControllerPort})
-		if l7AdmissionControllerTargetPort != L7AdmissionControllerPort {
-			ingressPorts = append(ingressPorts, numorstring.Port{MinPort: l7AdmissionControllerTargetPort, MaxPort: l7AdmissionControllerTargetPort})
-		}
 	}
 
 	return &v3.NetworkPolicy{
@@ -971,64 +959,10 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() (client.Object, c
 		}
 }
 
-func getContainerOverridePort(cfg *APIServerConfiguration, containerName string) *int32 {
-	// Try to get the override port
-	if cfg != nil &&
-		cfg.APIServer != nil &&
-		cfg.APIServer.APIServerDeployment != nil &&
-		cfg.APIServer.APIServerDeployment.Spec != nil &&
-		cfg.APIServer.APIServerDeployment.Spec.Template != nil &&
-		cfg.APIServer.APIServerDeployment.Spec.Template.Spec != nil {
-
-		containers := cfg.APIServer.APIServerDeployment.Spec.Template.Spec.Containers
-		if len(containers) > 0 {
-			for _, container := range containers {
-				if container.Name == containerName && len(container.Ports) > 0 {
-					return &container.Ports[0].ContainerPort
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-func getApiServerPort(cfg *APIServerConfiguration) int32 {
-	if port := getContainerOverridePort(cfg, APIServerContainerName); port != nil {
-		return *port
-	}
-
-	return APIServerPort
-}
-
-func getQyeryServerPort(cfg *APIServerConfiguration) int32 {
-	if port := getContainerOverridePort(cfg, TigeraAPIServerQueryServerContainerName); port != nil {
-		return *port
-	}
-
-	if !cfg.UseNewQueryServerPort {
-		return QueryServerPort
-	}
-
-	return QueryServerTargetPort
-}
-
-func getL7AdmissionControllerPort(cfg *APIServerConfiguration) int32 {
-	if port := getContainerOverridePort(cfg, L7AdmissionControllerContainerName); port != nil {
-		return *port
-	}
-
-	return L7AdmissionControllerPort
-}
-
 // apiServerService creates a service backed by the API server and - for enterprise - query server.
 //
 // Both Calico and Calico Enterprise, different namespaces.
 func (c *apiServerComponent) apiServerService() *corev1.Service {
-	var apiServerTargetPort = getApiServerPort(c.cfg)
-	var queryServerTargetPort = getQyeryServerPort(c.cfg)
-	var l7AdmissionControllerTargetPort = getL7AdmissionControllerPort(c.cfg)
-
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1042,7 +976,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 					Name:       "apiserver",
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt32(apiServerTargetPort),
+					TargetPort: intstr.FromInt(APIServerPort),
 				},
 			},
 			Selector: map[string]string{
@@ -1058,7 +992,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 				Name:       "queryserver",
 				Port:       QueryServerPort,
 				Protocol:   corev1.ProtocolTCP,
-				TargetPort: intstr.FromInt32(queryServerTargetPort),
+				TargetPort: intstr.FromInt(QueryServerPort),
 			},
 		)
 	}
@@ -1069,7 +1003,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 				Name:       "l7admctrl",
 				Port:       L7AdmissionControllerPort,
 				Protocol:   corev1.ProtocolTCP,
-				TargetPort: intstr.FromInt32(l7AdmissionControllerTargetPort),
+				TargetPort: intstr.FromInt(L7AdmissionControllerPort),
 			},
 		)
 	}
@@ -1173,7 +1107,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 // apiServer creates a MutatingWebhookConfiguration for sidecars.
 func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConfiguration {
 	var cacert []byte
-	var svcPort int32 = getL7AdmissionControllerPort(c.cfg)
+	var svcPort int32 = L7AdmissionControllerPort
 
 	svcpath := "/sidecar-webhook"
 	svcref := admregv1.ServiceReference{
@@ -1278,8 +1212,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
-	apiServerTargetPort := getApiServerPort(c.cfg)
-
 	apiServer := corev1.Container{
 		Name:            APIServerContainerName,
 		Image:           c.apiServerImage,
@@ -1291,7 +1223,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/readyz",
-					Port:   intstr.FromInt32(apiServerTargetPort),
+					Port:   intstr.FromInt(APIServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
@@ -1312,10 +1244,8 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 }
 
 func (c *apiServerComponent) startUpArgs() []string {
-	apiServerTargetPort := getApiServerPort(c.cfg)
-
 	args := []string{
-		fmt.Sprintf("--secure-port=%d", apiServerTargetPort),
+		fmt.Sprintf("--secure-port=%d", APIServerPort),
 		fmt.Sprintf("--tls-private-key-file=%s", c.cfg.TLSKeyPair.VolumeMountKeyFilePath()),
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
 	}
@@ -1347,11 +1277,9 @@ func (c *apiServerComponent) startUpArgs() []string {
 
 // queryServerContainer creates the query server container.
 func (c *apiServerComponent) queryServerContainer() corev1.Container {
-	queryServerTargetPort := getQyeryServerPort(c.cfg)
-
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", queryServerTargetPort)},
+		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", QueryServerPort)},
 		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
 		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
 	}
@@ -1395,7 +1323,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
-					Port:   intstr.FromInt32(queryServerTargetPort),
+					Port:   intstr.FromInt(QueryServerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
@@ -1464,10 +1392,9 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 // being cut off from the main API server. The enterprise equivalent is currently handled in manifests.
 //
 // Calico only.
-func (c *apiServerComponent) networkPolicy(cfg *APIServerConfiguration) *netv1.NetworkPolicy {
+func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
 	tcp := corev1.ProtocolTCP
-	apiServerPort := getApiServerPort(cfg)
-	p := intstr.FromInt32(apiServerPort)
+	p := intstr.FromInt(5443)
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant)},
@@ -2345,8 +2272,6 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
 
-	l7AdmissionControllerTargetPort := getL7AdmissionControllerPort(c.cfg)
-
 	l7AdmssCtrl := corev1.Container{
 		Name:            L7AdmissionControllerContainerName,
 		Image:           c.l7AdmissionControllerImage,
@@ -2368,17 +2293,13 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 				Name:  "L7ADMCTRL_DIKASTESIMAGE",
 				Value: c.dikastesImage,
 			},
-			{
-				Name:  "L7ADMCTRL_LISTENADDR",
-				Value: fmt.Sprintf(":%d", l7AdmissionControllerTargetPort),
-			},
 		},
 		VolumeMounts: volumeMounts,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/live",
-					Port:   intstr.FromInt32(l7AdmissionControllerTargetPort),
+					Port:   intstr.FromInt(L7AdmissionControllerPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},

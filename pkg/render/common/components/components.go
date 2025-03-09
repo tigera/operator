@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -113,18 +113,11 @@ func valueToContainers(value reflect.Value) []corev1.Container {
 	for _, v := range value.Seq2() {
 		name := v.FieldByName("Name")
 		resources := v.FieldByName("Resources")
-		ports := v.FieldByName("Ports")
-		if !resources.IsNil() || (ports.IsValid() && !ports.IsNil()) {
-			container := corev1.Container{
-				Name: name.String(),
-			}
-			if !resources.IsNil() {
-				container.Resources = *(resources.Interface().(*corev1.ResourceRequirements))
-			}
-			if ports.IsValid() && !ports.IsNil() {
-				container.Ports = ports.Interface().([]corev1.ContainerPort)
-			}
-			cs = append(cs, container)
+		if !resources.IsNil() {
+			cs = append(cs, corev1.Container{
+				Name:      name.String(),
+				Resources: *(resources.Interface().(*corev1.ResourceRequirements)),
+			})
 		}
 	}
 	return cs
@@ -262,15 +255,15 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 
 	// If `overrides` has a Spec.Template.Spec.InitContainers field, and it includes containers
 	// with the same name as those in `r.podTemplateSpec.Spec.InitContainers`, and with non-nil
-	// `Resources` or non-nil `Ports`, those resources attributes those for the corresponding container in
+	// `Resources`, those resources replace those for the corresponding container in
 	// `r.podTemplateSpec.Spec.InitContainers`.
 	if initContainers := GetInitContainers(overrides); initContainers != nil {
 		mergeContainers(r.podTemplateSpec.Spec.InitContainers, initContainers)
 	}
 
 	// If `overrides` has a Spec.Template.Spec.Containers field, and it includes containers with
-	// the same name as those in `r.podTemplateSpec.Spec.Containers`, and with non-nil
-	// `Resources` or non-nil `Ports`, those attributes replace those for the corresponding container in
+	// the same name as those in `r.podTemplateSpec.Spec.InitContainers`, and with non-nil
+	// `Resources`, those resources replace those for the corresponding container in
 	// `r.podTemplateSpec.Spec.Containers`.
 	if containers := GetContainers(overrides); containers != nil {
 		mergeContainers(r.podTemplateSpec.Spec.Containers, containers)
@@ -497,12 +490,7 @@ func mergeContainers(current []corev1.Container, provided []corev1.Container) {
 
 	for i, c := range current {
 		if override, ok := providedMap[c.Name]; ok {
-			if !reflect.DeepEqual(override.Resources, corev1.ResourceRequirements{}) {
-				current[i].Resources = override.Resources
-			}
-			if len(override.Ports) > 0 {
-				current[i].Ports = override.Ports
-			}
+			current[i].Resources = override.Resources
 		} else {
 			log.V(1).Info(fmt.Sprintf("WARNING: the container %q was provided for an override and passed CRD validation but the container does not currently exist", c.Name))
 		}

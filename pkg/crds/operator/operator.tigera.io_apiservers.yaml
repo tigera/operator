@@ -1077,25 +1077,6 @@ spec:
                                       - tigera-queryserver
                                       - calico-l7-admission-controller
                                       type: string
-                                    ports:
-                                      description: |-
-                                        Ports allows customization of container's ports.
-                                        If specified, this overrides the named API server Deployment container's ports.
-                                        If omitted, the API server Deployment will use its default value for this container's port.
-                                      items:
-                                        description: APIServerDeploymentContainer
-                                          is an API server Deployment container.
-                                        properties:
-                                          containerPort:
-                                            description: |-
-                                              Number of port to expose on the pod's IP address.
-                                              This must be a valid port number, 0 < x < 65536.
-                                            format: int32
-                                            type: integer
-                                        required:
-                                        - containerPort
-                                        type: object
-                                      type: array
                                     resources:
                                       description: |-
                                         Resources allows customization of limits and requests for compute resources such as cpu and memory.

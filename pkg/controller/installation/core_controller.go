@@ -720,7 +720,7 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 	}
 
 	if instance.Spec.KubernetesProvider == operator.ProviderAKS && instance.Spec.Azure == nil {
-		defaultPolicyMode := operator.Default
+		defaultPolicyMode := operator.PolicyModeDefault
 		instance.Spec.Azure = &operator.Azure{PolicyMode: &defaultPolicyMode}
 	}
 

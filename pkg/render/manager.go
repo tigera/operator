@@ -569,9 +569,8 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		}
 
 		if c.cfg.Tenant.ManagedClusterIsCalico() {
-			// Voltron uses its own token to authorize with Linseed on behalf of Calico clusters.
-			// TODO: Rename this env.
-			env = append(env, corev1.EnvVar{Name: "GUARDIAN_READ_ONLY", Value: "true"})
+			// Enable access to / from Goldmane in Voltron.
+			env = append(env, corev1.EnvVar{Name: "GOLDMANE_ENABLED", Value: "true"})
 		}
 	}
 	env = append(env, linseedEndpointEnv)
@@ -626,6 +625,9 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 		if c.cfg.Tenant.ManagedClusterIsCalico() {
 			// Calico clusters do not give Guardian impersonation permissions.
 			env = append(env, corev1.EnvVar{Name: "IMPERSONATE", Value: "false"})
+
+			// Calico clusters use Goldmane for policy metrics and stats.
+			env = append(env, corev1.EnvVar{Name: "GOLDMANE_ENABLED", Value: "true"})
 		}
 	}
 

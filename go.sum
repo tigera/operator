@@ -196,8 +196,6 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/projectcalico/api v0.0.0-20240708202104-e3f70b269c2c h1:eFyfeRDV94LA3tgbG2EC5W02dg3QUdltHc2jxhTQMCw=
 github.com/projectcalico/api v0.0.0-20240708202104-e3f70b269c2c/go.mod h1:9EPxrA4rUH306dCpvVsFb7IcEFt4ZSvqmfSowfb6c5U=
-github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.74.0 h1:AHzMWDxNiAVscJL6+4wkvFRTpMnJqiaZFEKA/osaBXE=
-github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.74.0/go.mod h1:wAR5JopumPtAZnu0Cjv2PSqV4p4QB09LMhc6fZZTXuA=
 github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1 h1:DP+PUNVOc+Bkft8a4QunLzaZ0RspWuD3tBbcPHr2PeE=
 github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1/go.mod h1:6x4x0t9BP35g4XcjkHE9EB3RxhyfxpdpmZKd/Qyk8+M=
 github.com/prometheus/client_golang v1.20.5 h1:cxppBPuYhUnsO6yo/aoRol4L7q7UFfdm+bR9r+8l63Y=

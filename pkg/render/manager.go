@@ -174,7 +174,7 @@ type managerComponent struct {
 	tlsSecrets     []*corev1.Secret
 	tlsAnnotations map[string]string
 	managerImage   string
-	proxyImage     string
+	voltronImage   string
 	uiAPIsImage    string
 }
 
@@ -189,7 +189,7 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.proxyImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
+	c.voltronImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -567,6 +567,11 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 			env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
 			linseedEndpointEnv = corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Tenant.Namespace)}
 		}
+
+		if c.cfg.Tenant.ManagedClusterIsCalico() {
+			// Enable access to / from Goldmane in Voltron.
+			env = append(env, corev1.EnvVar{Name: "GOLDMANE_ENABLED", Value: "true"})
+		}
 	}
 	env = append(env, linseedEndpointEnv)
 
@@ -576,7 +581,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            VoltronName,
-		Image:           c.proxyImage,
+		Image:           c.voltronImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Env:             env,
 		VolumeMounts:    mounts,
@@ -615,6 +620,14 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 			// This cluster supports multiple tenants. Point the manager at the correct Linseed instance for this tenant.
 			env = append(env, corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", c.cfg.Namespace)})
 			env = append(env, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: c.cfg.Namespace})
+		}
+
+		if c.cfg.Tenant.ManagedClusterIsCalico() {
+			// Calico clusters do not give Guardian impersonation permissions.
+			env = append(env, corev1.EnvVar{Name: "IMPERSONATE", Value: "false"})
+
+			// Calico clusters use Goldmane for policy metrics and stats.
+			env = append(env, corev1.EnvVar{Name: "GOLDMANE_ENABLED", Value: "true"})
 		}
 	}
 
@@ -845,6 +858,16 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				Verbs:     []string{"create"},
 			},
 		)
+
+		if tenant.ManagedClusterIsCalico() {
+			// Voltron needs permissions to write flow logs.
+			cr.Rules = append(cr.Rules,
+				rbacv1.PolicyRule{
+					APIGroups: []string{"linseed.tigera.io"},
+					Resources: []string{"flowlogs"},
+					Verbs:     []string{"create"},
+				})
+		}
 	}
 
 	if kubernetesProvider.IsOpenShift() {

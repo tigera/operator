@@ -117,7 +117,7 @@ func CreateNamespace(name string, provider operatorv1.Provider, pss PodSecurityS
 }
 
 func applyAzurePolicy(azure *operatorv1.Azure, pss PodSecurityStandard) bool {
-	if azure == nil || azure.PolicyMode == nil || *azure.PolicyMode == operatorv1.Default {
+	if azure == nil || azure.PolicyMode == nil || *azure.PolicyMode == operatorv1.PolicyModeDefault {
 		return PSSPrivileged == pss
 	}
 	return false

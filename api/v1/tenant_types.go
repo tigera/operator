@@ -93,6 +93,10 @@ type TenantSpec struct {
 
 	// DashboardsJob configures the Dashboards job
 	DashboardsJob *DashboardsJob `json:"dashboardsJob,omitempty"`
+
+	// ManagedClusterVariant is the variant of the managed cluster.
+	// +optional
+	ManagedClusterVariant *ProductVariant `json:"managedClusterVariant,omitempty"`
 }
 
 // Index defines how to store a tenant's data
@@ -142,6 +146,10 @@ func (t *Tenant) SingleTenant() bool {
 	// Single-tenant managmenet clusters still use a tenant CR but it is not assigned to a namespace, as
 	// only a single tenant can exist in the management cluster.
 	return t != nil && t.GetNamespace() == ""
+}
+
+func (t *Tenant) ManagedClusterIsCalico() bool {
+	return t != nil && t.Spec.ManagedClusterVariant != nil && *t.Spec.ManagedClusterVariant == Calico
 }
 
 // +kubebuilder:object:root=true

@@ -1583,7 +1583,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			policyMode := operator.Default
+			policyMode := operator.PolicyModeDefault
 			azure := &operator.Azure{
 				PolicyMode: &policyMode,
 			}

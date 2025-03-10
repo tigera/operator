@@ -105,7 +105,7 @@ var _ = Describe("Namespace rendering tests", func() {
 
 	It("should render a namespace for aks with control-plane label when Azure.PolicyMode is Default and PodSecurityStandard is privileged", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderAKS
-		policyMode := operatorv1.Default
+		policyMode := operatorv1.PolicyModeDefault
 		cfg.Installation.Azure = &operatorv1.Azure{
 			PolicyMode: &policyMode,
 		}
@@ -121,7 +121,7 @@ var _ = Describe("Namespace rendering tests", func() {
 
 	It("should render a namespace for aks without control-plane label when Azure.PolicyMode is Manual", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderAKS
-		policyMode := operatorv1.Manual
+		policyMode := operatorv1.PolicyModeManual
 		cfg.Installation.Azure = &operatorv1.Azure{
 			PolicyMode: &policyMode,
 		}

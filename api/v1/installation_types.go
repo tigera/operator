@@ -659,8 +659,8 @@ const NodeSelectorDefault string = "all()"
 type AssignmentMode string
 
 const (
-	AssignmentModeAutomatic = "Automatic"
-	AssignmentModeManual    = "Manual"
+	AssignmentModeAutomatic AssignmentMode = "Automatic"
+	AssignmentModeManual    AssignmentMode = "Manual"
 )
 
 type IPPool struct {

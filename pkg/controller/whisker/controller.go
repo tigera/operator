@@ -223,6 +223,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	// Guardian needs a certificate for mTLS with Goldmane.
+	// TODO: Add this to the trusted bundle. This isn't stritctly needed, since the bundle already includes the operator CA that
+	// signed this certificate. But in order to support custom user-supplied certificates, we will need to do this.
+	guardianCertificateNames := dns.GetServiceDNSNames("guardian", whisker.WhiskerNamespace, r.clusterDomain)
+	whiskerBackendCertificateNames = append(whiskerBackendCertificateNames, "localhost", "127.0.0.1")
+	guardianKeyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.GuardianKeyPairSecret, whisker.WhiskerNamespace, guardianCertificateNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker-backend TLS certificate", err, log)
+		return reconcile.Result{}, err
+	}
+
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:       whisker.WhiskerNamespace,
 		TruthNamespace:  common.OperatorNamespace(),
@@ -230,6 +241,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			rcertificatemanagement.NewKeyPairOption(keyPair, true, true),
 			rcertificatemanagement.NewKeyPairOption(backendKeyPair, true, true),
+			rcertificatemanagement.NewKeyPairOption(guardianKeyPair, true, true),
 		},
 		// TrustedBundle is managed by the core controller.
 		TrustedBundle: nil,
@@ -251,6 +263,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		ManagementClusterConnection: managementClusterConnection,
 		GoldmaneServerKeyPair:       keyPair,
 		WhiskerBackendKeyPair:       backendKeyPair,
+		GuardianClientKeyPair:       guardianKeyPair,
 	}
 
 	components := []render.Component{certComponent, whisker.Whisker(cfg)}

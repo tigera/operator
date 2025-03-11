@@ -37,14 +37,16 @@ import (
 
 // The names of the components related to the Guardian related rendered objects.
 const (
-	WhiskerName                 = "whisker"
-	WhiskerNamespace            = common.CalicoNamespace
-	WhiskerServiceAccountName   = WhiskerName
-	WhiskerDeploymentName       = WhiskerName
-	WhiskerRoleName             = WhiskerName
+	WhiskerName               = "whisker"
+	WhiskerNamespace          = common.CalicoNamespace
+	WhiskerServiceAccountName = WhiskerName
+	WhiskerDeploymentName     = WhiskerName
+	WhiskerRoleName           = WhiskerName
+	GoldmaneServiceName       = "goldmane"
+
 	GoldmaneKeyPairSecret       = "goldmane-key-pair"
 	WhiskerBackendKeyPairSecret = "whisker-backend-key-pair"
-	GoldmaneServiceName         = "goldmane"
+	GuardianKeyPairSecret       = "guardian-key-pair"
 
 	GuardianContainerName              = "guardian"
 	GoldmaneContainerName              = "goldmane"
@@ -69,6 +71,7 @@ type Configuration struct {
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	GoldmaneServerKeyPair       certificatemanagement.KeyPairInterface
 	WhiskerBackendKeyPair       certificatemanagement.KeyPairInterface
+	GuardianClientKeyPair       certificatemanagement.KeyPairInterface
 }
 
 type Component struct {
@@ -279,20 +282,40 @@ func (c *Component) guardianContainer() corev1.Container {
 	tunnelCAType := c.cfg.ManagementClusterConnection.Spec.TLS.CA
 	voltronURL := c.cfg.ManagementClusterConnection.Spec.ManagementClusterAddr
 
+	env := []corev1.EnvVar{
+		{Name: "GUARDIAN_PORT", Value: "9443"},
+		{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
+		{Name: "GUARDIAN_VOLTRON_URL", Value: voltronURL},
+		{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(tunnelCAType)},
+	}
+	env = append(env, c.cfg.Installation.Proxy.EnvVars()...)
+
+	volumeMounts := append(
+		[]corev1.VolumeMount{secretMount("/certs", c.cfg.TunnelSecret)},
+		c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)...,
+	)
+
+	if c.cfg.GuardianClientKeyPair != nil {
+		env = append(env,
+			corev1.EnvVar{
+				Name:  "GOLDMANE_CLIENT_CERT",
+				Value: c.cfg.GuardianClientKeyPair.VolumeMountCertificateFilePath(),
+			},
+			corev1.EnvVar{
+				Name:  "GOLDMANE_CLIENT_KEY",
+				Value: c.cfg.GuardianClientKeyPair.VolumeMountKeyFilePath(),
+			},
+		)
+		volumeMounts = append(volumeMounts, c.cfg.GuardianClientKeyPair.VolumeMount(c.SupportedOSType()))
+	}
+
 	return corev1.Container{
 		Name:            GuardianContainerName,
 		Image:           c.guardianImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
-		Env: append([]corev1.EnvVar{
-			{Name: "GUARDIAN_PORT", Value: "9443"},
-			{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
-			{Name: "GUARDIAN_VOLTRON_URL", Value: voltronURL},
-			{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(tunnelCAType)},
-		}, c.cfg.Installation.Proxy.EnvVars()...),
+		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts: append([]corev1.VolumeMount{
-			secretMount("/certs", c.cfg.TunnelSecret),
-		}, c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)...),
+		VolumeMounts:    volumeMounts,
 	}
 }
 
@@ -311,7 +334,9 @@ func (c *Component) deployment() *appsv1.Deployment {
 	if c.cfg.WhiskerBackendKeyPair != nil {
 		volumes = append(volumes, c.cfg.WhiskerBackendKeyPair.Volume())
 	}
-
+	if c.cfg.GuardianClientKeyPair != nil {
+		volumes = append(volumes, c.cfg.GuardianClientKeyPair.Volume())
+	}
 	if c.cfg.ManagementClusterConnection != nil {
 		ctrs = append(ctrs, c.guardianContainer())
 		volumes = append(volumes, secretVolume(c.cfg.TunnelSecret))

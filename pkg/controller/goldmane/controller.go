@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package whisker
+package goldmane
 
 import (
 	"context"
@@ -34,15 +34,17 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
-	controllerName = "whisker-controller"
-	ResourceName   = "whisker"
+	controllerName = "goldmane-controller"
+	ResourceName   = "goldmane"
 )
 
 var log = logf.Log.WithName(controllerName)
@@ -50,29 +52,17 @@ var log = logf.Log.WithName(controllerName)
 // Add creates a new Reconciler Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	statusManager := status.New(mgr.GetClient(), "whisker", opts.KubernetesVersion)
+	statusManager := status.New(mgr.GetClient(), "goldmane", opts.KubernetesVersion)
 	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts)
 
+	// Create a new controller
 	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
-	err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
-	}
-
-	err = c.WatchObject(&operatorv1.Goldmane{}, &handler.EnqueueRequestForObject{})
-	if err != nil {
-		return fmt.Errorf("%s failed to watch for goldmane resource: %w", controllerName, err)
-	}
-
-	if err = utils.AddInstallationWatch(c); err != nil {
-		return fmt.Errorf("%s failed to watch Installation resource: %w", controllerName, err)
-	}
-
 	for _, secretName := range []string{
+		goldmane.GoldmaneServerSecret,
 		certificatemanagement.CASecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -82,6 +72,20 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("failed to add watch for config map %s/%s: %w", common.OperatorNamespace(), certificatemanagement.TrustedCertConfigMapName, err)
+	}
+
+	err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
+	}
+
+	err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("%s failed to watch management cluster connection resource: %w", controllerName, err)
+	}
+
+	if err = utils.AddInstallationWatch(c); err != nil {
+		return fmt.Errorf("%s failed to watch Installation resource: %w", controllerName, err)
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
@@ -137,31 +141,29 @@ type Reconciler struct {
 // remove the work from the queue.
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling Whisker")
+	reqLogger.Info("Reconciling Goldmane")
 
 	variant, installation, err := utils.GetInstallation(ctx, r.cli)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.cli)
+	goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Whisker CR", err, reqLogger)
 		return reconcile.Result{}, err
-	} else if whiskerCR == nil {
+	} else if goldmaneCR == nil {
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
-	defer r.status.SetMetaData(&whiskerCR.ObjectMeta)
+	defer r.status.SetMetaData(&goldmaneCR.ObjectMeta)
 
-	if goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Goldmane CR", err, reqLogger)
+	mgmtClusterConnectionCR, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Whisker CR", err, reqLogger)
 		return reconcile.Result{}, err
-	} else if goldmaneCR == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, "Goldmane CR not present; Goldmane is pre requisite for Whisker", err, reqLogger)
-		return reconcile.Result{}, nil
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.cli)
@@ -176,21 +178,46 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	trustedCertBundle, err := certificateManager.LoadTrustedBundle(ctx, r.cli, whisker.WhiskerNamespace)
+	trustedCertBundle, err := certificateManager.LoadTrustedBundle(ctx, r.cli, goldmane.GoldmaneNamespace)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error loading trusted cert bundle", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
-	cfg := &whisker.Configuration{
-		PullSecrets:       pullSecrets,
-		OpenShift:         r.provider.IsOpenShift(),
-		Installation:      installation,
-		TrustedCertBundle: trustedCertBundle,
+	// Goldmane needs a server certificate for it's gRPC API.
+	// TODO: Add this to the trusted bundle. This isn't stritctly needed, since the bundle already includes the operator CA that
+	// signed this certificate. But in order to support custom user-supplied certificates, we will need to do this.
+	goldmaneCertificateNames := dns.GetServiceDNSNames(goldmane.GoldmaneServiceName, goldmane.GoldmaneNamespace, r.clusterDomain)
+	goldmaneCertificateNames = append(goldmaneCertificateNames, "localhost", "127.0.0.1")
+	keyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, goldmane.GoldmaneServerSecret, common.OperatorNamespace(), goldmaneCertificateNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+		return reconcile.Result{}, err
 	}
 
-	components := []render.Component{whisker.Whisker(cfg)}
+	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+		Namespace:       goldmane.GoldmaneNamespace,
+		TruthNamespace:  common.OperatorNamespace(),
+		ServiceAccounts: []string{whisker.WhiskerServiceAccountName},
+		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+			rcertificatemanagement.NewKeyPairOption(keyPair, true, true),
+		},
+		// TrustedBundle is managed by the core controller.
+		TrustedBundle: nil,
+	})
+
+	ch := utils.NewComponentHandler(log, r.cli, r.scheme, goldmaneCR)
+	cfg := &goldmane.Configuration{
+		PullSecrets:                 pullSecrets,
+		OpenShift:                   r.provider.IsOpenShift(),
+		Installation:                installation,
+		TrustedCertBundle:           trustedCertBundle,
+		GoldmaneServerKeyPair:       keyPair,
+		ManagementClusterConnection: mgmtClusterConnectionCR,
+		ClusterDomain:               r.clusterDomain,
+	}
+
+	components := []render.Component{certComponent, goldmane.Goldmane(cfg)}
 	if err = imageset.ApplyImageSet(ctx, r.cli, variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err

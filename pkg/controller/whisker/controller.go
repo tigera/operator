@@ -208,15 +208,28 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	goldmaneCertificateNames = append(goldmaneCertificateNames, "localhost", "127.0.0.1")
 	keyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.GoldmaneKeyPairSecret, common.OperatorNamespace(), goldmaneCertificateNames)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating goldmane TLS certificate", err, log)
 		return reconcile.Result{}, err
 	}
+
+	// Whisker-backend needs a certificate for mTLS with Goldmane.
+	// TODO: Add this to the trusted bundle. This isn't stritctly needed, since the bundle already includes the operator CA that
+	// signed this certificate. But in order to support custom user-supplied certificates, we will need to do this.
+	whiskerBackendCertificateNames := dns.GetServiceDNSNames("whisker-backend", whisker.WhiskerNamespace, r.clusterDomain)
+	whiskerBackendCertificateNames = append(whiskerBackendCertificateNames, "localhost", "127.0.0.1")
+	backendKeyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.WhiskerBackendKeyPairSecret, whisker.WhiskerNamespace, whiskerBackendCertificateNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker-backend TLS certificate", err, log)
+		return reconcile.Result{}, err
+	}
+
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:       whisker.WhiskerNamespace,
 		TruthNamespace:  common.OperatorNamespace(),
 		ServiceAccounts: []string{whisker.WhiskerServiceAccountName},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 			rcertificatemanagement.NewKeyPairOption(keyPair, true, true),
+			rcertificatemanagement.NewKeyPairOption(backendKeyPair, true, true),
 		},
 		// TrustedBundle is managed by the core controller.
 		TrustedBundle: nil,
@@ -237,6 +250,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TrustedCertBundle:           trustedCertBundle,
 		ManagementClusterConnection: managementClusterConnection,
 		GoldmaneServerKeyPair:       keyPair,
+		WhiskerBackendKeyPair:       backendKeyPair,
 	}
 
 	components := []render.Component{certComponent, whisker.Whisker(cfg)}

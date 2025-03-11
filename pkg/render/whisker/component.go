@@ -37,13 +37,14 @@ import (
 
 // The names of the components related to the Guardian related rendered objects.
 const (
-	WhiskerName               = "whisker"
-	WhiskerNamespace          = common.CalicoNamespace
-	WhiskerServiceAccountName = WhiskerName
-	WhiskerDeploymentName     = WhiskerName
-	WhiskerRoleName           = WhiskerName
-	GoldmaneKeyPairSecret     = "goldmane-key-pair"
-	GoldmaneServiceName       = "goldmane"
+	WhiskerName                 = "whisker"
+	WhiskerNamespace            = common.CalicoNamespace
+	WhiskerServiceAccountName   = WhiskerName
+	WhiskerDeploymentName       = WhiskerName
+	WhiskerRoleName             = WhiskerName
+	GoldmaneKeyPairSecret       = "goldmane-key-pair"
+	WhiskerBackendKeyPairSecret = "whisker-backend-key-pair"
+	GoldmaneServiceName         = "goldmane"
 
 	GuardianContainerName              = "guardian"
 	GoldmaneContainerName              = "goldmane"
@@ -67,6 +68,7 @@ type Configuration struct {
 	TrustedCertBundle           certificatemanagement.TrustedBundleRO
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	GoldmaneServerKeyPair       certificatemanagement.KeyPairInterface
+	WhiskerBackendKeyPair       certificatemanagement.KeyPairInterface
 }
 
 type Component struct {
@@ -178,17 +180,33 @@ func (c *Component) whiskerService() *corev1.Service {
 }
 
 func (c *Component) whiskerBackendContainer() corev1.Container {
+	env := []corev1.EnvVar{
+		{Name: "LOG_LEVEL", Value: "INFO"},
+		{Name: "PORT", Value: "3002"},
+		{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
+	}
+	volumeMounts := c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)
+	if c.cfg.WhiskerBackendKeyPair != nil {
+		env = append(env,
+			corev1.EnvVar{
+				Name:  "TLS_KEY_PATH",
+				Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath(),
+			},
+			corev1.EnvVar{
+				Name:  "TLS_CERT_PATH",
+				Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath(),
+			},
+		)
+		volumeMounts = append(volumeMounts, c.cfg.WhiskerBackendKeyPair.VolumeMount(c.SupportedOSType()))
+	}
+
 	return corev1.Container{
 		Name:            WhiskerBackendContainerName,
 		Image:           c.whiskerBackendImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
-		Env: []corev1.EnvVar{
-			{Name: "LOG_LEVEL", Value: "INFO"},
-			{Name: "PORT", Value: "3002"},
-			{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
-		},
+		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
+		VolumeMounts:    volumeMounts,
 	}
 }
 
@@ -198,6 +216,16 @@ func (c *Component) goldmaneContainer() corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "INFO"},
 		{Name: "PORT", Value: "7443"},
+	}
+
+	if c.cfg.TrustedCertBundle != nil {
+		env = append(env,
+			corev1.EnvVar{
+				Name:  "CA_CERT_PATH",
+				Value: c.cfg.TrustedCertBundle.MountPath(),
+			},
+		)
+		volumeMounts = append(volumeMounts, c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())...)
 	}
 
 	if c.cfg.GoldmaneServerKeyPair != nil {
@@ -219,12 +247,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 				Name:  "PUSH_URL",
 				Value: "https://localhost:8080/api/v1/flows/bulk",
 			},
-			corev1.EnvVar{
-				Name:  "CA_CERT_PATH",
-				Value: c.cfg.TrustedCertBundle.MountPath(),
-			},
 		)
-		volumeMounts = append(volumeMounts, c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())...)
 	}
 
 	return corev1.Container{
@@ -284,6 +307,9 @@ func (c *Component) deployment() *appsv1.Deployment {
 
 	if c.cfg.GoldmaneServerKeyPair != nil {
 		volumes = append(volumes, c.cfg.GoldmaneServerKeyPair.Volume())
+	}
+	if c.cfg.WhiskerBackendKeyPair != nil {
+		volumes = append(volumes, c.cfg.WhiskerBackendKeyPair.Volume())
 	}
 
 	if c.cfg.ManagementClusterConnection != nil {

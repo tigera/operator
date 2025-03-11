@@ -347,6 +347,21 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(svc.GetObjectMeta().GetLabels()).To(HaveLen(1))
 		Expect(svc.GetObjectMeta().GetLabels()).To(HaveKeyWithValue("k8s-app", "tigera-api"))
 
+		Expect(svc.Spec.Ports).To(HaveLen(2))
+		serviceFound := 0
+		for _, p := range svc.Spec.Ports {
+			if p.Name == "apiserver" {
+				Expect(p.Port).To(Equal(int32(443)))
+				Expect(p.TargetPort.IntValue()).To(Equal(5443))
+				serviceFound++
+			} else if p.Name == "queryserver" {
+				Expect(p.Port).To(Equal(int32(8080)))
+				Expect(p.TargetPort.IntValue()).To(Equal(8080))
+				serviceFound++
+			}
+		}
+		Expect(serviceFound).To(Equal(2))
+
 		apiserverClusterRole := rtest.GetResource(resources,
 			"calico-crds", "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(apiserverClusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
@@ -365,6 +380,41 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Entry("default cluster domain", dns.DefaultClusterDomain),
 		Entry("custom cluster domain", "custom-domain.internal"),
 	)
+
+	It("should render L7 Admission Controller with default config when SidecarInjection is Enabled", func() {
+		sidecarEnabled := operatorv1.SidecarEnabled
+		cfg.ApplicationLayer = &operatorv1.ApplicationLayer{
+			Spec: operatorv1.ApplicationLayerSpec{
+				SidecarInjection: &sidecarEnabled,
+			},
+		}
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		d, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		var container corev1.Container
+		for _, c := range d.Spec.Template.Spec.Containers {
+			if c.Name == "calico-l7-admission-controller" {
+				container = c
+			}
+		}
+		Expect(container.Env[4].Name).To(Equal("L7ADMCTRL_LISTENADDR"))
+		Expect(container.Env[4].Value).To(Equal(":6443"))
+
+		// Check the Service configuration
+		svc := rtest.GetResource(resources, "tigera-api", "tigera-system", "", "v1", "Service").(*corev1.Service)
+		var servicePort corev1.ServicePort
+		for _, p := range svc.Spec.Ports {
+			if p.Name == "l7admctrl" {
+				servicePort = p
+			}
+		}
+		Expect(servicePort.Port).To(Equal(int32(6443)))
+		Expect(servicePort.TargetPort.IntValue()).To(Equal(6443))
+	})
 
 	It("should render log seveirty when provided", func() {
 		errorLog := operatorv1.LogSeverityError
@@ -1072,6 +1122,26 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 				Value:    "bar",
 			}
 
+			apiServerPort := operatorv1.APIServerDeploymentContainerPort{
+				Name:          "apiserver",
+				ContainerPort: 1111,
+			}
+			queryServerPort := operatorv1.APIServerDeploymentContainerPort{
+				Name:          "queryserver",
+				ContainerPort: 2222,
+			}
+			l7AdmCtrlPort := operatorv1.APIServerDeploymentContainerPort{
+				Name:          "l7admctrl",
+				ContainerPort: 3333,
+			}
+
+			sidecarEnabled := operatorv1.SidecarEnabled
+			cfg.ApplicationLayer = &operatorv1.ApplicationLayer{
+				Spec: operatorv1.ApplicationLayerSpec{
+					SidecarInjection: &sidecarEnabled,
+				},
+			}
+
 			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
 				Metadata: &operatorv1.Metadata{
 					Labels:      map[string]string{"top-level": "label1"},
@@ -1089,14 +1159,17 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 								{
 									Name:      "calico-apiserver",
 									Resources: &rr1,
+									Ports:     []operatorv1.APIServerDeploymentContainerPort{apiServerPort},
 								},
 								{
 									Name:      "tigera-queryserver",
 									Resources: &rr2,
+									Ports:     []operatorv1.APIServerDeploymentContainerPort{queryServerPort},
 								},
 								{
 									Name:      "calico-l7-admission-controller",
 									Resources: &rr2,
+									Ports:     []operatorv1.APIServerDeploymentContainerPort{l7AdmCtrlPort},
 								},
 							},
 							InitContainers: []operatorv1.APIServerDeploymentInitContainer{
@@ -1161,11 +1234,35 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(d.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-apiserver-certs"))
 			Expect(d.Spec.Template.Annotations["template-level"]).To(Equal("annot2"))
 
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
-			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
-			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr1))
-			Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
-			Expect(d.Spec.Template.Spec.Containers[1].Resources).To(Equal(rr2))
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+			containersFound := 0
+			for _, c := range d.Spec.Template.Spec.Containers {
+				if c.Name == "calico-apiserver" {
+					Expect(c.Resources).To(Equal(rr1))
+					Expect(c.Ports[0].Name).To(Equal(apiServerPort.Name))
+					Expect(c.Ports[0].ContainerPort).To(Equal(apiServerPort.ContainerPort))
+
+					Expect(c.Args[0]).To(ContainSubstring(fmt.Sprintf("--secure-port=%d", apiServerPort.ContainerPort)))
+					containersFound++
+				} else if c.Name == "tigera-queryserver" {
+					Expect(c.Resources).To(Equal(rr2))
+					Expect(c.Ports[0].Name).To(Equal(queryServerPort.Name))
+					Expect(c.Ports[0].ContainerPort).To(Equal(queryServerPort.ContainerPort))
+
+					Expect(c.Env[1].Name).To(Equal("LISTEN_ADDR"))
+					Expect(c.Env[1].Value).To(Equal(fmt.Sprintf(":%d", queryServerPort.ContainerPort)))
+					containersFound++
+				} else if c.Name == "calico-l7-admission-controller" {
+					Expect(c.Resources).To(Equal(rr2))
+					Expect(c.Ports[0].Name).To(Equal(l7AdmCtrlPort.Name))
+					Expect(c.Ports[0].ContainerPort).To(Equal(l7AdmCtrlPort.ContainerPort))
+
+					Expect(c.Env[4].Name).To(Equal("L7ADMCTRL_LISTENADDR"))
+					Expect(c.Env[4].Value).To(Equal(fmt.Sprintf(":%d", l7AdmCtrlPort.ContainerPort)))
+					containersFound++
+				}
+			}
+			Expect(containersFound).To(Equal(3))
 
 			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.InitContainers[0].Name).To(Equal("calico-apiserver-certs-key-cert-provisioner"))
@@ -1179,6 +1276,27 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+
+			// Check the Service configuration
+			svc := rtest.GetResource(resources, "tigera-api", "tigera-system", "", "v1", "Service").(*corev1.Service)
+			Expect(svc.Spec.Ports).To(HaveLen(3))
+			servicesFound := 0
+			for _, p := range svc.Spec.Ports {
+				if p.Name == "apiserver" {
+					Expect(p.Port).To(Equal(int32(443)))
+					Expect(p.TargetPort.StrVal).To(Equal(apiServerPort.Name))
+					servicesFound++
+				} else if p.Name == "queryserver" {
+					Expect(p.Port).To(Equal(int32(8080)))
+					Expect(p.TargetPort.StrVal).To(Equal(queryServerPort.Name))
+					servicesFound++
+				} else if p.Name == "l7admctrl" {
+					Expect(p.Port).To(Equal(int32(6443)))
+					Expect(p.TargetPort.StrVal).To(Equal(l7AdmCtrlPort.Name))
+					servicesFound++
+				}
+			}
+			Expect(servicesFound).To(Equal(3))
 		})
 
 		It("should override a ControlPlaneNodeSelector when specified", func() {
@@ -1870,6 +1988,12 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		rtest.ExpectResourceTypeAndObjectMetadata(dep, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment")
 		d := dep.(*appsv1.Deployment)
 		Expect(len(d.Spec.Template.Spec.Volumes)).To(Equal(1))
+
+		svc := rtest.GetResource(resources, "calico-api", "calico-apiserver", "", "v1", "Service").(*corev1.Service)
+		Expect(len(svc.Spec.Ports)).To(Equal(1))
+		Expect(svc.Spec.Ports[0].Name).To(Equal("apiserver"))
+		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(443)))
+		Expect(svc.Spec.Ports[0].TargetPort.IntValue()).To(Equal(5443))
 	})
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
@@ -2056,6 +2180,11 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 				Value:    "bar",
 			}
 
+			apiServerPort := operatorv1.APIServerDeploymentContainerPort{
+				Name:          "apiserver",
+				ContainerPort: 1111,
+			}
+
 			priorityclassname := "priority"
 
 			cfg.APIServer.APIServerDeployment = &operatorv1.APIServerDeployment{
@@ -2075,6 +2204,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 								{
 									Name:      "calico-apiserver",
 									Resources: &rr1,
+									Ports:     []operatorv1.APIServerDeploymentContainerPort{apiServerPort},
 								},
 							},
 							InitContainers: []operatorv1.APIServerDeploymentInitContainer{
@@ -2138,6 +2268,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
 			Expect(d.Spec.Template.Spec.Containers[0].Resources).To(Equal(rr1))
+			Expect(d.Spec.Template.Spec.Containers[0].Ports[0].Name).To(Equal(apiServerPort.Name))
+			Expect(d.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(apiServerPort.ContainerPort))
+			Expect(d.Spec.Template.Spec.Containers[0].Args[0]).To(ContainSubstring(fmt.Sprintf("--secure-port=%d", apiServerPort.ContainerPort)))
 
 			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.InitContainers[0].Name).To(Equal("calico-apiserver-certs-key-cert-provisioner"))
@@ -2149,6 +2282,15 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
 			Expect(d.Spec.Template.Spec.PriorityClassName).To(Equal(priorityclassname))
+
+			svc := rtest.GetResource(resources, "calico-api", "calico-apiserver", "", "v1", "Service").(*corev1.Service)
+			Expect(svc).NotTo(BeNil())
+			Expect(svc.Spec.Ports).To(HaveLen(1))
+			Expect(svc.Spec.Ports[0].Name).To(Equal("apiserver"))
+			Expect(svc.Spec.Ports[0].Port).To(Equal(int32(443)))
+			Expect(svc.Spec.Ports[0].TargetPort.StrVal).To(Equal(apiServerPort.Name))
+
+			Expect(ok).To(BeTrue())
 		})
 
 		It("should override a ControlPlaneNodeSelector when specified", func() {

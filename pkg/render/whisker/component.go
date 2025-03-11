@@ -42,7 +42,7 @@ const (
 	WhiskerServiceAccountName = WhiskerName
 	WhiskerDeploymentName     = WhiskerName
 	WhiskerRoleName           = WhiskerName
-	GoldmaneServerSecret      = "goldmane-server-secret"
+	GoldmaneKeyPairSecret     = "goldmane-key-pair"
 	GoldmaneServiceName       = "goldmane"
 
 	GuardianContainerName              = "guardian"

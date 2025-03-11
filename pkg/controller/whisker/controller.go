@@ -206,7 +206,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// signed this certificate. But in order to support custom user-supplied certificates, we will need to do this.
 	goldmaneCertificateNames := dns.GetServiceDNSNames(whisker.GoldmaneServiceName, whisker.WhiskerNamespace, r.clusterDomain)
 	goldmaneCertificateNames = append(goldmaneCertificateNames, "localhost", "127.0.0.1")
-	keyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.GoldmaneServerSecret, common.OperatorNamespace(), goldmaneCertificateNames)
+	keyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.GoldmaneKeyPairSecret, common.OperatorNamespace(), goldmaneCertificateNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
 		return reconcile.Result{}, err

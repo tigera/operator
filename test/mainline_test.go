@@ -318,7 +318,7 @@ func newNonCachingClient(config *rest.Config, options client.Options) (client.Cl
 	return client.New(config, options)
 }
 
-func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist, whiskerCRDExists bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
+func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
@@ -358,7 +358,6 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist, whiske
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
 		MultiTenant:         multiTenant,
-		WhiskerCRDExists:    whiskerCRDExists,
 	})
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), ctx, cancel, mgr

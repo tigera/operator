@@ -27,8 +27,6 @@ import (
 	"strings"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -76,6 +74,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -197,7 +196,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
-		whiskerCRDExists:     opts.WhiskerCRDExists,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -236,7 +234,7 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 		}
 	}
 
-	if r.whiskerCRDExists && !r.enterpriseCRDsExist {
+	if !r.enterpriseCRDsExist {
 		// Whisker is only supported on OSS clusters that have the CRD installed.
 		err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -385,7 +383,6 @@ type ReconcileInstallation struct {
 	clusterDomain        string
 	manageCRDs           bool
 	tierWatchReady       *utils.ReadyFlag
-	whiskerCRDExists     bool
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
@@ -1067,16 +1064,25 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	var secretsToTrust []string
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-		managerInternalTLSSecret, err := certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err, reqLogger)
-			return reconcile.Result{}, nil
-		} else if managerInternalTLSSecret != nil {
-			// It may seem odd to add the manager internal TLS secret to the trusted bundle for Typha / calico-node, but this bundle is also used
-			// for other components in this namespace such as es-kube-controllers, who communicates with Voltron and thus needs to trust this certificate.
-			typhaNodeTLS.TrustedBundle.AddCertificates(managerInternalTLSSecret)
+		secretsToTrust = []string{
+			render.ManagerInternalTLSSecretName, render.NodePrometheusTLSServerSecret, monitor.PrometheusClientTLSSecretName,
+			relasticsearch.PublicCertSecret, render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName,
 		}
+	} else {
+		secretsToTrust = []string{render.VoltronLinseedPublicCert}
+	}
+
+	for _, secretName := range secretsToTrust {
+		secret, err := certificateManager.GetCertificate(r.client, secretName, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if secret == nil {
+			continue
+		}
+		typhaNodeTLS.TrustedBundle.AddCertificates(secret)
 	}
 
 	birdTemplates, err := getBirdTemplates(r.client)
@@ -1155,7 +1161,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	felixPrometheusMetricsPort := defaultFelixMetricsDefaultPort
 
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
-
 		// Determine the port to use for nodeReporter metrics.
 		if felixConfiguration.Spec.PrometheusReporterPort != nil {
 			nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
@@ -1170,45 +1175,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			felixPrometheusMetricsPort = *felixConfiguration.Spec.PrometheusMetricsPort
 		}
 
-		nodePrometheusTLS, err = certificateManager.GetOrCreateKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
-		if err != nil {
-			r.status.SetDegraded(operator.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if nodePrometheusTLS != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(nodePrometheusTLS)
-		}
-		prometheusClientCert, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operator.CertificateError, "Unable to fetch prometheus certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if prometheusClientCert != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
-		}
-
-		// es-kube-controllers needs to trust the ESGW certificate. We'll fetch it here and add it to the trusted bundle.
-		// Note that although we're adding this to the typhaNodeTLS trusted bundle, it will be used by es-kube-controllers. This is because
-		// all components within this namespace share a trusted CA bundle. This is necessary because prior to v3.13 secrets were not signed by
-		// a single CA so we need to include each individually.
-		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if esgwCertificate != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
-		}
-
 		calicoVersion = components.EnterpriseRelease
-	} else {
-		cert, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operator.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", render.VoltronLinseedPublicCert), err, reqLogger)
-			return reconcile.Result{}, err
-		} else if cert != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(cert)
-		}
 	}
 
 	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
@@ -1229,15 +1196,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceReadError, "Error finding or creating TLS certificate kube controllers metric", err, reqLogger)
 			return reconcile.Result{}, err
-		}
-
-		// Add prometheus client certificate to Trusted bundle.
-		kubecontrollerprometheusTLS, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, "Failed to get certificate for kube controllers", err, reqLogger)
-			return reconcile.Result{}, err
-		} else if kubecontrollerprometheusTLS != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(kubeControllerTLS, kubecontrollerprometheusTLS)
 		}
 	}
 
@@ -1382,7 +1340,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var goldmaneRunning bool
 	// Goldmane can only be running if the variant is Calico and the Whisker CRD exists.
-	if instance.Spec.Variant == operator.Calico && r.whiskerCRDExists {
+	if instance.Spec.Variant == operator.Calico {
 		whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.client)
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceReadError, "Unable retrieve Whisker CR", err, reqLogger)

@@ -125,7 +125,7 @@ func newReconciler(
 // blank assignment to verify that ReconcileConnection implements reconcile.Reconciler
 var _ reconcile.Reconciler = &Reconciler{}
 
-// Reconciler reconciles a ManagementClusterConnection object
+// Reconciler reconciles a Goldmane object
 type Reconciler struct {
 	cli           client.Client
 	scheme        *runtime.Scheme
@@ -134,8 +134,8 @@ type Reconciler struct {
 	clusterDomain string
 }
 
-// Reconcile reads that state of the cluster for a Whisker object and makes changes based on the
-// state read and what is in the Whisker.Spec. The Controller will requeue the Request to be
+// Reconcile reads that state of the cluster for a Goldmane object and makes changes based on the
+// state read and what is in the Goldmane.Spec. The Controller will requeue the Request to be
 // processed again if the returned error is non-nil or Result.Requeue is true, otherwise upon completion it will
 // remove the work from the queue.
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -149,7 +149,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Whisker CR", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Goldmane CR", err, reqLogger)
 		return reconcile.Result{}, err
 	} else if goldmaneCR == nil {
 		r.status.OnCRNotFound()
@@ -161,7 +161,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	mgmtClusterConnectionCR, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Whisker CR", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying ManagementClusterConnection CR", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

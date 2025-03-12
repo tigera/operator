@@ -334,6 +334,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 		{Name: "GUARDIAN_LOGLEVEL", Value: "DEBUG"},
 		{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
 		{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(c.cfg.TunnelCAType)},
+		{Name: "GUARDIAN_CA_FILE", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 	}
 	envVars = append(envVars, c.cfg.Installation.Proxy.EnvVars()...)
 
@@ -348,11 +349,15 @@ func (c *GuardianComponent) container() []corev1.Container {
 	if c.cfg.GuardianClientKeyPair != nil {
 		envVars = append(envVars,
 			corev1.EnvVar{
-				Name:  "GOLDMANE_CLIENT_CERT",
+				Name:  "GUARDIAN_GOLDMANE_ENDPOINT",
+				Value: "https://goldmane.calico-system.svc.cluster.local:7443",
+			},
+			corev1.EnvVar{
+				Name:  "GUARDIAN_GOLDMANE_CLIENT_CERT",
 				Value: c.cfg.GuardianClientKeyPair.VolumeMountCertificateFilePath(),
 			},
 			corev1.EnvVar{
-				Name:  "GOLDMANE_CLIENT_KEY",
+				Name:  "GUARDIAN_GOLDMANE_CLIENT_KEY",
 				Value: c.cfg.GuardianClientKeyPair.VolumeMountKeyFilePath(),
 			},
 		)

@@ -119,33 +119,14 @@ func (c *Component) serviceAccount() *corev1.ServiceAccount {
 }
 
 func (c *Component) whiskerContainer() corev1.Container {
-	env := []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "INFO"},
-		{Name: "PORT", Value: "3002"},
-		{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
-	}
-	volumeMounts := c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)
-	if c.cfg.WhiskerBackendKeyPair != nil {
-		env = append(env,
-			corev1.EnvVar{
-				Name:  "TLS_KEY_PATH",
-				Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath(),
-			},
-			corev1.EnvVar{
-				Name:  "TLS_CERT_PATH",
-				Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath(),
-			},
-		)
-		volumeMounts = append(volumeMounts, c.cfg.WhiskerBackendKeyPair.VolumeMount(c.SupportedOSType()))
-	}
-
 	return corev1.Container{
-		Name:            WhiskerBackendContainerName,
-		Image:           c.whiskerBackendImage,
+		Name:            WhiskerContainerName,
+		Image:           c.whiskerImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
-		Env:             env,
+		Env: []corev1.EnvVar{
+			{Name: "LOG_LEVEL", Value: "INFO"},
+		},
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    volumeMounts,
 	}
 }
 
@@ -173,9 +154,13 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "PORT", Value: "3002"},
 			{Name: "GOLDMANE_HOST", Value: "goldmane.calico-system.svc.cluster.local:7443"},
+			{Name: "TLS_CERT_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath()},
+			{Name: "TLS_KEY_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath()},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
+		VolumeMounts: append(
+			c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
+			c.cfg.WhiskerBackendKeyPair.VolumeMount(c.SupportedOSType())),
 	}
 }
 
@@ -186,7 +171,7 @@ func (c *Component) deployment() *appsv1.Deployment {
 	}
 
 	ctrs := []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer()}
-	volumes := []corev1.Volume{c.cfg.TrustedCertBundle.Volume()}
+	volumes := []corev1.Volume{c.cfg.TrustedCertBundle.Volume(), c.cfg.WhiskerBackendKeyPair.Volume()}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},

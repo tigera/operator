@@ -114,7 +114,7 @@ type CertificateManager interface {
 	KeyPair() certificatemanagement.KeyPairInterface
 	// LoadTrustedBundle loads an existing trusted bundle to pass to render.
 	LoadTrustedBundle(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
-	LoadNamedTrustedBundle(context.Context, string, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
+	LoadNamedTrustedBundle(context.Context, client.Client, string, string) (certificatemanagement.TrustedBundleRO, error)
 	// LoadMultiTenantTrustedBundleWithRootCertificates loads an existing trusted bundle with system root certificates to pass to render.
 	LoadMultiTenantTrustedBundleWithRootCertificates(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 	// SignCertificate signs a certificate using the certificate manager's private key. The function is assuming that the
@@ -593,9 +593,7 @@ func (cm *certificateManager) CreateNamedTrustedBundleFromSecrets(name string, c
 	for _, secretName := range secretsToTrust {
 		secret, err := cm.GetCertificate(cli, secretName, namespace)
 		if err != nil {
-			return nil, fmt.Errorf("failed to retreive secret %s: %w", secretName, err)
-		} else if secret == nil {
-			continue
+			return nil, fmt.Errorf("failed to retrieve secret %s: %w", secretName, err)
 		}
 		trustedBundle.AddCertificates(secret)
 	}

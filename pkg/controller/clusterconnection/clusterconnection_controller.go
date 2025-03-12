@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/whisker"
@@ -269,7 +271,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	var guardianKeyPair certificatemanagement.KeyPairInterface
-	if variant == operatorv1.TigeraSecureEnterprise {
+	if variant != operatorv1.TigeraSecureEnterprise {
 		// Guardian needs a certificate for mTLS with Goldmane.
 		// TODO: Add this to the trusted bundle. This isn't stritctly needed, since the bundle already includes the operator CA that
 		// signed this certificate. But in order to support custom user-supplied certificates, we will need to do this.
@@ -417,7 +419,16 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		GuardianClientKeyPair:       guardianKeyPair,
 	}
 
-	components := []render.Component{render.Guardian(guardianCfg)}
+	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+		Namespace:       render.GuardianNamespace,
+		TruthNamespace:  common.OperatorNamespace(),
+		ServiceAccounts: []string{render.GuardianServiceName},
+		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+			rcertificatemanagement.NewKeyPairOption(guardianKeyPair, true, true),
+		},
+		TrustedBundle: trustedBundle,
+	})
+	components := []render.Component{certComponent, render.Guardian(guardianCfg)}
 
 	// v3 NetworkPolicy will fail to reconcile if the Tier is not created, which can only occur once a License is created.
 	// In managed clusters, the clusterconnection controller is a dependency for the License to be created. In case the

@@ -372,6 +372,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		log.Error(err, "failed to check if Whisker CRD exists.")
 		os.Exit(1)
 	}
+	setupLog.WithValues("whiskerCRDExists", whiskerCRDExists).Info("Checking if Whisker CRD exists")
 
 	// Determine if we're running in single or multi-tenant mode.
 	multiTenant, err := utils.MultiTenant(ctx, clientset)
@@ -381,13 +382,13 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
 
-	// Determine if we need to start the TSEE specific controllers.
+	// Determine if we need to start the Enterprise specific controllers.
 	enterpriseCRDExists, err := utils.RequiresTigeraSecure(mgr.GetConfig())
 	if err != nil {
-		setupLog.Error(err, "Failed to determine if TSEE is required")
+		setupLog.Error(err, "Failed to determine if Enterprise controllers are required")
 		os.Exit(1)
 	}
-	setupLog.WithValues("required", enterpriseCRDExists).Info("Checking if TSEE controllers are required")
+	setupLog.WithValues("required", enterpriseCRDExists).Info("Checking if Enterprise controllers are required")
 
 	clusterDomain, err := dns.GetClusterDomain(dns.DefaultResolveConfPath)
 	if err != nil {

@@ -53,7 +53,7 @@ var _ = Describe("ComponentRendering", func() {
 				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
 			},
-			6, 0,
+			5, 0,
 		),
 		Entry("Should return objects to delete when variant is not Calico",
 			&goldmane.Configuration{
@@ -64,7 +64,7 @@ var _ = Describe("ComponentRendering", func() {
 				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
 			},
-			0, 6,
+			0, 5,
 		),
 	)
 

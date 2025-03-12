@@ -32,6 +32,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+var (
+	defaultTLSKeyPair        = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "key-pair"}}, nil, "")
+	defaultTrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
+)
+
 var _ = Describe("ComponentRendering", func() {
 	DescribeTable("Creation and deletion counts", func(cfg *whisker.Configuration, creatObjs, delObjs int) {
 		component := whisker.Whisker(cfg)
@@ -45,7 +50,8 @@ var _ = Describe("ComponentRendering", func() {
 					KubernetesProvider: operatorv1.ProviderGKE,
 					Variant:            operatorv1.Calico,
 				},
-				TrustedCertBundle: certificatemanagement.CreateTrustedBundle(nil),
+				TrustedCertBundle:     defaultTrustedCertBundle,
+				WhiskerBackendKeyPair: defaultTLSKeyPair,
 			},
 			3, 0,
 		),
@@ -55,7 +61,8 @@ var _ = Describe("ComponentRendering", func() {
 					KubernetesProvider: operatorv1.ProviderGKE,
 					Variant:            operatorv1.TigeraSecureEnterprise,
 				},
-				TrustedCertBundle: certificatemanagement.CreateTrustedBundle(nil),
+				TrustedCertBundle:     defaultTrustedCertBundle,
+				WhiskerBackendKeyPair: defaultTLSKeyPair,
 			},
 			0, 3,
 		),
@@ -75,7 +82,8 @@ var _ = Describe("ComponentRendering", func() {
 					KubernetesProvider: operatorv1.ProviderGKE,
 					Variant:            operatorv1.Calico,
 				},
-				TrustedCertBundle: certificatemanagement.CreateTrustedBundle(nil),
+				TrustedCertBundle:     defaultTrustedCertBundle,
+				WhiskerBackendKeyPair: defaultTLSKeyPair,
 			},
 			&appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -113,22 +121,18 @@ var _ = Describe("ComponentRendering", func() {
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "PORT", Value: "3002"},
 										{Name: "GOLDMANE_HOST", Value: "goldmane.calico-system.svc.cluster.local:7443"},
+										{Name: "TLS_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
+										{Name: "TLS_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
-									VolumeMounts: []corev1.VolumeMount{
-										{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
-									},
+									VolumeMounts: append(
+										defaultTrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
+										defaultTLSKeyPair.VolumeMount(rmeta.OSTypeLinux)),
 								},
 							},
 							Volumes: []corev1.Volume{
-								{
-									Name: "tigera-ca-bundle",
-									VolumeSource: corev1.VolumeSource{
-										ConfigMap: &corev1.ConfigMapVolumeSource{
-											LocalObjectReference: corev1.LocalObjectReference{Name: "tigera-ca-bundle"},
-										},
-									},
-								},
+								defaultTrustedCertBundle.Volume(),
+								defaultTLSKeyPair.Volume(),
 							},
 						},
 					},

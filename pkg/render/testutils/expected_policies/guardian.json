@@ -3,7 +3,7 @@
   "kind": "NetworkPolicy",
   "metadata": {
     "name": "allow-tigera.guardian-access",
-    "namespace": "tigera-guardian"
+    "namespace": "calico-system"
   },
   "spec": {
     "selector": "k8s-app == 'tigera-guardian'",

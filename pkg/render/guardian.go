@@ -218,20 +218,38 @@ func (c *GuardianComponent) serviceAccount() *corev1.ServiceAccount {
 }
 
 func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
-	policyRules := []rbacv1.PolicyRule{
-		{
+	var policyRules []rbacv1.PolicyRule
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		policyRules = append(policyRules, rbacv1.PolicyRule{
 			APIGroups: []string{""},
 			Resources: []string{"users", "groups", "serviceaccounts"},
 			Verbs:     []string{"impersonate"},
-		},
-	}
+		})
 
-	if c.cfg.OpenShift {
+		if c.cfg.OpenShift {
+			policyRules = append(policyRules, rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{securitycontextconstraints.NonRootV2},
+			})
+		}
+	} else {
 		policyRules = append(policyRules, rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{securitycontextconstraints.NonRootV2},
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"clusterinformations",
+				"tiers",
+				"stagednetworkpolicies",
+				"tier.stagednetworkpolicies",
+				"networkpolicies",
+				"tier.networkpolicies",
+				"globalnetworkpolicies",
+				"tier.globalnetworkpolicies",
+				"globalnetworksets",
+			},
+			Verbs: []string{"get", "list", "watch"},
 		})
 	}
 

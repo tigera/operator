@@ -358,7 +358,6 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist, whiske
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
 		MultiTenant:         multiTenant,
-		WhiskerCRDExists:    whiskerCRDExists,
 	})
 	Expect(err).NotTo(HaveOccurred())
 	return mgr.GetClient(), ctx, cancel, mgr

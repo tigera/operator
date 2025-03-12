@@ -15,17 +15,13 @@
 package whisker
 
 import (
-	"fmt"
-
-	"github.com/tigera/operator/pkg/components"
-
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -41,15 +37,9 @@ const (
 	WhiskerNamespace          = common.CalicoNamespace
 	WhiskerServiceAccountName = WhiskerName
 	WhiskerDeploymentName     = WhiskerName
-	WhiskerRoleName           = WhiskerName
-	GoldmaneServerSecret      = "goldmane-server-secret"
-	GoldmaneServiceName       = "goldmane"
 
-	GuardianContainerName              = "guardian"
-	GoldmaneContainerName              = "goldmane"
-	WhiskerContainerName               = "whisker"
-	WhiskerBackendContainerName        = "whisker-backend"
-	ManagedClusterConnectionSecretName = "tigera-managed-cluster-connection"
+	WhiskerContainerName        = "whisker"
+	WhiskerBackendContainerName = "whisker-backend"
 )
 
 func Whisker(cfg *Configuration) render.Component {
@@ -60,20 +50,15 @@ func Whisker(cfg *Configuration) render.Component {
 
 // Configuration contains all the config information needed to render the component.
 type Configuration struct {
-	PullSecrets                 []*corev1.Secret
-	OpenShift                   bool
-	Installation                *operatorv1.InstallationSpec
-	TunnelSecret                *corev1.Secret
-	TrustedCertBundle           certificatemanagement.TrustedBundleRO
-	ManagementClusterConnection *operatorv1.ManagementClusterConnection
-	GoldmaneServerKeyPair       certificatemanagement.KeyPairInterface
+	PullSecrets       []*corev1.Secret
+	OpenShift         bool
+	Installation      *operatorv1.InstallationSpec
+	TrustedCertBundle certificatemanagement.TrustedBundleRO
 }
 
 type Component struct {
 	cfg *Configuration
 
-	goldmaneImage       string
-	guardianImage       string
 	whiskerImage        string
 	whiskerBackendImage string
 }
@@ -95,16 +80,6 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 		return err
 	}
 
-	c.goldmaneImage, err = components.GetReference(components.ComponentCalicoGoldmane, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
-
-	c.guardianImage, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -114,21 +89,11 @@ func (c *Component) SupportedOSType() rmeta.OSType {
 
 func (c *Component) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		render.CreateNamespace(WhiskerNamespace, c.cfg.Installation.KubernetesProvider, render.PSSRestricted, c.cfg.Installation.Azure),
-	}
-
-	objs = append(objs,
 		c.serviceAccount(),
-		c.role(),
-		c.roleBinding(),
-		c.goldmaneService(),
-		c.whiskerService())
-
-	if c.cfg.ManagementClusterConnection != nil && c.cfg.TunnelSecret != nil {
-		objs = append(objs, secret.CopyToNamespace(WhiskerNamespace, c.cfg.TunnelSecret)[0])
+		c.deployment(),
+		c.whiskerService(),
 	}
 
-	objs = append(objs, c.deployment())
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(WhiskerNamespace, c.cfg.PullSecrets...)...)...)
 
 	// Whisker needs to be removed if the installation is not Calico, since it's not supported (yet!) for any other variant.
@@ -185,91 +150,10 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "PORT", Value: "3002"},
-			{Name: "GOLDMANE_HOST", Value: "localhost:7443"},
+			{Name: "GOLDMANE_HOST", Value: "goldmane.calico-system.svc.cluster.local:7443"},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
-	}
-}
-
-func (c *Component) goldmaneContainer() corev1.Container {
-	var volumeMounts []corev1.VolumeMount
-
-	env := []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "INFO"},
-		{Name: "PORT", Value: "7443"},
-	}
-
-	if c.cfg.GoldmaneServerKeyPair != nil {
-		env = append(env, corev1.EnvVar{
-			Name:  "SERVER_KEY_PATH",
-			Value: c.cfg.GoldmaneServerKeyPair.VolumeMountKeyFilePath(),
-		})
-		env = append(env, corev1.EnvVar{
-			Name:  "SERVER_CERT_PATH",
-			Value: c.cfg.GoldmaneServerKeyPair.VolumeMountCertificateFilePath(),
-		})
-
-		volumeMounts = append(volumeMounts, c.cfg.GoldmaneServerKeyPair.VolumeMount(c.SupportedOSType()))
-	}
-
-	if c.cfg.ManagementClusterConnection != nil {
-		env = append(env,
-			corev1.EnvVar{
-				Name:  "PUSH_URL",
-				Value: "https://localhost:8080/api/v1/flows/bulk",
-			},
-			corev1.EnvVar{
-				Name:  "CA_CERT_PATH",
-				Value: c.cfg.TrustedCertBundle.MountPath(),
-			},
-		)
-		volumeMounts = append(volumeMounts, c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())...)
-	}
-
-	return corev1.Container{
-		Name:            GoldmaneContainerName,
-		Image:           c.goldmaneImage,
-		ImagePullPolicy: render.ImagePullPolicy(),
-		Env:             env,
-		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    volumeMounts,
-	}
-}
-
-func (c *Component) goldmaneService() *corev1.Service {
-	return &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GoldmaneServiceName,
-			Namespace: WhiskerNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{{Port: 7443}},
-			Selector: map[string]string{
-				"k8s-app": WhiskerDeploymentName,
-			},
-		},
-	}
-}
-
-func (c *Component) guardianContainer() corev1.Container {
-	tunnelCAType := c.cfg.ManagementClusterConnection.Spec.TLS.CA
-	voltronURL := c.cfg.ManagementClusterConnection.Spec.ManagementClusterAddr
-
-	return corev1.Container{
-		Name:            GuardianContainerName,
-		Image:           c.guardianImage,
-		ImagePullPolicy: render.ImagePullPolicy(),
-		Env: append([]corev1.EnvVar{
-			{Name: "GUARDIAN_PORT", Value: "9443"},
-			{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
-			{Name: "GUARDIAN_VOLTRON_URL", Value: voltronURL},
-			{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(tunnelCAType)},
-		}, c.cfg.Installation.Proxy.EnvVars()...),
-		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts: append([]corev1.VolumeMount{
-			secretMount("/certs", c.cfg.TunnelSecret),
-		}, c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)...),
+		VolumeMounts:    c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 	}
 }
 
@@ -279,17 +163,8 @@ func (c *Component) deployment() *appsv1.Deployment {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
-	ctrs := []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer(), c.goldmaneContainer()}
+	ctrs := []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer()}
 	volumes := []corev1.Volume{c.cfg.TrustedCertBundle.Volume()}
-
-	if c.cfg.GoldmaneServerKeyPair != nil {
-		volumes = append(volumes, c.cfg.GoldmaneServerKeyPair.Volume())
-	}
-
-	if c.cfg.ManagementClusterConnection != nil {
-		ctrs = append(ctrs, c.guardianContainer())
-		volumes = append(volumes, secretVolume(c.cfg.TunnelSecret))
-	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -316,60 +191,5 @@ func (c *Component) deployment() *appsv1.Deployment {
 				},
 			},
 		},
-	}
-}
-
-func secretMount(path string, secret *corev1.Secret) corev1.VolumeMount {
-	return corev1.VolumeMount{
-		Name:      fmt.Sprintf("%s-%s", secret.Name, "s"),
-		MountPath: path,
-	}
-}
-
-func secretVolume(secret *corev1.Secret) corev1.Volume {
-	return corev1.Volume{
-		Name:         fmt.Sprintf("%s-%s", secret.Name, "s"),
-		VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{SecretName: secret.Name}},
-	}
-}
-
-func (c *Component) roleBinding() *rbacv1.RoleBinding {
-	return &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      WhiskerRoleName,
-			Namespace: WhiskerNamespace,
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     WhiskerRoleName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      WhiskerRoleName,
-				Namespace: WhiskerNamespace,
-			},
-		},
-	}
-}
-
-func (c *Component) role() *rbacv1.Role {
-	policyRules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
-		},
-	}
-
-	return &rbacv1.Role{
-		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      WhiskerRoleName,
-			Namespace: WhiskerNamespace,
-		},
-		Rules: policyRules,
 	}
 }

@@ -124,8 +124,10 @@ var _ = Describe("ComponentRendering", func() {
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "PORT", Value: "7443"},
+										{Name: "CA_CERT_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
+									VolumeMounts:    certificatemanagement.CreateTrustedBundle(nil).VolumeMounts(rmeta.OSTypeAny),
 								},
 							},
 							Volumes: []corev1.Volume{
@@ -207,8 +209,8 @@ var _ = Describe("ComponentRendering", func() {
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "PORT", Value: "7443"},
-										{Name: "PUSH_URL", Value: "https://localhost:8080/api/v1/flows/bulk"},
 										{Name: "CA_CERT_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+										{Name: "PUSH_URL", Value: "https://localhost:8080/api/v1/flows/bulk"},
 									},
 									VolumeMounts:    []corev1.VolumeMount{{Name: "tigera-ca-bundle", ReadOnly: true, MountPath: "/etc/pki/tls/certs"}},
 									SecurityContext: securitycontext.NewNonRootContext(),

@@ -227,10 +227,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// TODO: Add this to the trusted bundle. This isn't stritctly needed, since the bundle already includes the operator CA that
 	// signed this certificate. But in order to support custom user-supplied certificates, we will need to do this.
 	guardianCertificateNames := dns.GetServiceDNSNames("guardian", whisker.WhiskerNamespace, r.clusterDomain)
-	whiskerBackendCertificateNames = append(whiskerBackendCertificateNames, "localhost", "127.0.0.1")
+	guardianCertificateNames = append(guardianCertificateNames, "localhost", "127.0.0.1")
 	guardianKeyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.GuardianKeyPairSecret, whisker.WhiskerNamespace, guardianCertificateNames)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker-backend TLS certificate", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating guardian TLS certificate", err, log)
 		return reconcile.Result{}, err
 	}
 

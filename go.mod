@@ -35,7 +35,7 @@ require (
 	k8s.io/kube-aggregator v0.28.15
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b // indirect
 	sigs.k8s.io/controller-runtime v0.15.3
-	sigs.k8s.io/kind v0.17.0 // Do not remove, not used by code but used by build
+	sigs.k8s.io/kind v0.17.0 // Do not remove. It is not used by code but used by build
 	sigs.k8s.io/yaml v1.3.0
 )
 

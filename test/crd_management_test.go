@@ -148,7 +148,7 @@ var _ = Describe("CRD management tests", func() {
 		})
 
 		It("Should create CRD if it doesn't exist", func() {
-			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, EnterpriseCRDsExist, WhiskerCRDNotExists)
+			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, EnterpriseCRDsExist)
 			operatorDone = createInstallation(c, mgr, shutdownContext, nil)
 
 			np := npCRD.DeepCopy()
@@ -182,7 +182,7 @@ var _ = Describe("CRD management tests", func() {
 			}, 60*time.Second, 1*time.Second).Should(BeNil())
 		})
 		It("Should add tier to networkpolicy CRD", func() {
-			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, EnterpriseCRDsExist, WhiskerCRDNotExists)
+			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, EnterpriseCRDsExist)
 			operatorDone = createInstallation(c, mgr, shutdownContext, &operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise})
 
 			By("Checking that the networkpolicies CRD is updated with tier")

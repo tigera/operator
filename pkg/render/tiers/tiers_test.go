@@ -71,7 +71,6 @@ var _ = Describe("Tiers rendering tests", func() {
 			DNSEgressCIDRs: getDNSEgressCIDRs(testutils.IPV4),
 			CalicoNamespaces: []string{
 				common.CalicoNamespace,
-				render.GuardianNamespace,
 				render.ComplianceNamespace,
 				render.DexNamespace,
 				render.ElasticsearchNamespace,

@@ -53,7 +53,7 @@ var _ = Describe("ComponentRendering", func() {
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 			},
-			3, 0,
+			4, 0,
 		),
 		Entry("Should return objects to delete when variant is not Calico",
 			&whisker.Configuration{
@@ -64,7 +64,7 @@ var _ = Describe("ComponentRendering", func() {
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 			},
-			0, 3,
+			0, 4,
 		),
 	)
 

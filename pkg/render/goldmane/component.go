@@ -24,8 +24,10 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -46,6 +48,10 @@ const (
 
 	GoldmaneKeyPairSecret = "goldmane-key-pair"
 	GoldmaneServiceName   = "goldmane"
+
+	GuardianTargetPort     = 8080
+	GuardianDeploymentName = "tigera-guardian"
+	GuardianNamespace      = common.CalicoNamespace
 )
 
 func Goldmane(cfg *Configuration) render.Component {
@@ -97,6 +103,7 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 		c.roleBinding(),
 		c.goldmaneService(),
 		c.deployment(),
+		c.networkPolicy(),
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GoldmaneNamespace, c.cfg.PullSecrets...)...)...)
@@ -246,5 +253,68 @@ func (c *Component) role() *rbacv1.Role {
 			Namespace: GoldmaneNamespace,
 		},
 		Rules: policyRules,
+	}
+}
+
+func (c *Component) deploymentSelector() *metav1.LabelSelector {
+	return &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"app.kubernetes.io/name": GoldmaneDeploymentName,
+		},
+	}
+}
+
+func (c *Component) networkPolicy() *netv1.NetworkPolicy {
+	return &netv1.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-goldmane", Namespace: GoldmaneNamespace},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: *c.deploymentSelector(),
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					Ports: []netv1.NetworkPolicyPort{{
+						Protocol: ptr.ToPtr(corev1.ProtocolTCP),
+						Port:     ptr.ToPtr(intstr.FromInt32(GoldmaneServicePort)),
+					}},
+				},
+			},
+			Egress: []netv1.NetworkPolicyEgressRule{
+				{
+					To: []netv1.NetworkPolicyPeer{
+						{
+							PodSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app.kubernetes.io/name": GuardianDeploymentName,
+								},
+							},
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"projectcalico.org/name": GuardianNamespace,
+								},
+							},
+						},
+					},
+					Ports: []netv1.NetworkPolicyPort{
+						{
+							Protocol: ptr.ToPtr(corev1.ProtocolTCP),
+							Port:     ptr.ToPtr(intstr.FromInt32(GuardianTargetPort)),
+						},
+					},
+				},
+				{
+					Ports: []netv1.NetworkPolicyPort{
+						{
+							Protocol: ptr.ToPtr(corev1.ProtocolUDP),
+							Port:     ptr.ToPtr(intstr.FromInt32(53)),
+						},
+						{
+							Protocol: ptr.ToPtr(corev1.ProtocolTCP),
+							Port:     ptr.ToPtr(intstr.FromInt32(6443)),
+						},
+					},
+				},
+			},
+		},
 	}
 }

@@ -22,7 +22,9 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -42,6 +44,9 @@ const (
 	WhiskerBackendContainerName = "whisker-backend"
 
 	WhiskerBackendKeyPairSecret = "whisker-backend-key-pair"
+	GoldmaneDeploymentName      = "goldmane"
+	GoldmaneServicePort         = 7443
+	GoldmaneNamespace           = common.CalicoNamespace
 )
 
 func Whisker(cfg *Configuration) render.Component {
@@ -95,6 +100,7 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 		c.serviceAccount(),
 		c.deployment(),
 		c.whiskerService(),
+		c.networkPolicy(),
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(WhiskerNamespace, c.cfg.PullSecrets...)...)...)
@@ -195,6 +201,55 @@ func (c *Component) deployment() *appsv1.Deployment {
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers:         ctrs,
 					Volumes:            volumes,
+				},
+			},
+		},
+	}
+}
+
+func (c *Component) deploymentSelector() *metav1.LabelSelector {
+	return &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"app.kubernetes.io/name": WhiskerDeploymentName,
+		},
+	}
+}
+
+func (c *Component) networkPolicy() *netv1.NetworkPolicy {
+	return &netv1.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-whisker", Namespace: WhiskerNamespace},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: *c.deploymentSelector(),
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress},
+			Egress: []netv1.NetworkPolicyEgressRule{
+				{
+					To: []netv1.NetworkPolicyPeer{
+						{
+							PodSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app.kubernetes.io/name": GoldmaneDeploymentName,
+								},
+							},
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"projectcalico.org/name": GoldmaneNamespace,
+								},
+							},
+						},
+					},
+					Ports: []netv1.NetworkPolicyPort{{
+						Protocol: ptr.ToPtr(corev1.ProtocolTCP),
+						Port:     ptr.ToPtr(intstr.FromInt32(GoldmaneServicePort)),
+					}},
+				},
+				{
+					Ports: []netv1.NetworkPolicyPort{
+						{
+							Protocol: ptr.ToPtr(corev1.ProtocolUDP),
+							Port:     ptr.ToPtr(intstr.FromInt32(53)),
+						},
+					},
 				},
 			},
 		},

@@ -26,6 +26,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -38,6 +39,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -426,6 +428,58 @@ func (c *GuardianComponent) annotations() map[string]string {
 	annotations := c.cfg.TrustedCertBundle.HashAnnotations()
 	annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
 	return annotations
+}
+
+func (c *GuardianComponent) deploymentSelector() *metav1.LabelSelector {
+	return &metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"app.kubernetes.io/name": GuardianDeploymentName,
+		},
+	}
+}
+
+const (
+	GoldmaneDeploymentName = "goldmane"
+	GoldmaneNamespace      = common.CalicoNamespace
+)
+
+func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
+	return &netv1.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-whisker", Namespace: GuardianNamespace},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: *c.deploymentSelector(),
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					From: []netv1.NetworkPolicyPeer{
+						{
+							PodSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"app.kubernetes.io/name": GoldmaneDeploymentName,
+								},
+							},
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"projectcalico.org/name": GoldmaneNamespace,
+								},
+							},
+						},
+					},
+					Ports: []netv1.NetworkPolicyPort{{
+						Protocol: ptr.ToPtr(corev1.ProtocolTCP),
+						Port:     ptr.ToPtr(intstr.FromInt32(GuardianTargetPort)),
+					}},
+				},
+				{
+					Ports: []netv1.NetworkPolicyPort{{
+						Protocol: ptr.ToPtr(corev1.ProtocolUDP),
+						Port:     ptr.ToPtr(intstr.FromInt32(53)),
+					}},
+				},
+			},
+		},
+	}
 }
 
 func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {

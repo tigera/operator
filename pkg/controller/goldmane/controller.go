@@ -178,15 +178,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	goldmaneCertificateNames := dns.GetServiceDNSNames(goldmane.GoldmaneServiceName, goldmane.GoldmaneNamespace, r.clusterDomain)
-	goldmaneCertificateNames = append(goldmaneCertificateNames, "localhost", "127.0.0.1")
 	keyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, goldmane.GoldmaneKeyPairSecret, common.OperatorNamespace(), goldmaneCertificateNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
 		return reconcile.Result{}, err
 	}
 
-	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets("goldmane-trusted-certs", r.cli,
-		common.OperatorNamespace(),
+	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(goldmane.GoldmaneDeploymentName, r.cli,
+		common.OperatorNamespace(), false,
 		whisker.WhiskerBackendKeyPairSecret, render.VoltronLinseedPublicCert)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)

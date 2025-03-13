@@ -263,8 +263,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets("guardian-trusted-ca", r.cli,
-		common.OperatorNamespace(),
+	includeSystem := false
+	if managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic {
+		includeSystem = true
+	}
+
+	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(render.GuardianDeploymentName, r.cli,
+		common.OperatorNamespace(), includeSystem,
 		render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName, goldmane.GoldmaneKeyPairSecret)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
@@ -272,9 +277,6 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	var guardianKeyPair certificatemanagement.KeyPairInterface
 	if variant != operatorv1.TigeraSecureEnterprise {
-		// Guardian needs a certificate for mTLS with Goldmane.
-		// TODO: Add this to the trusted bundle. This isn't stritctly needed, since the bundle already includes the operator CA that
-		// signed this certificate. But in order to support custom user-supplied certificates, we will need to do this.
 		guardianCertificateNames := dns.GetServiceDNSNames("guardian", render.GuardianNamespace, r.clusterDomain)
 		guardianCertificateNames = append(guardianCertificateNames, "localhost", "127.0.0.1")
 		guardianKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, render.GuardianKeyPairSecret, whisker.WhiskerNamespace, guardianCertificateNames)
@@ -295,7 +297,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	tunnelSecret := &corev1.Secret{}
 	err = r.cli.Get(ctx, types.NamespacedName{Name: render.GuardianSecretName, Namespace: common.OperatorNamespace()}, tunnelSecret)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving secrets from guardian namespace", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving secrets from operator namespace", err, reqLogger)
 		if !k8serrors.IsNotFound(err) {
 			return result, nil
 		}

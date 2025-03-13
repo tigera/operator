@@ -1053,7 +1053,6 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		"tigera-eck-operator",
 		"tigera-elasticsearch",
 		"tigera-fluentd",
-		"tigera-guardian",
 		"tigera-intrusion-detection",
 		"tigera-kibana",
 		"tigera-manager",

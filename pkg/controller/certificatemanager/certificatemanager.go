@@ -99,7 +99,7 @@ type CertificateManager interface {
 	// It will include:
 	// - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 	CreateTrustedBundle(certificates ...certificatemanagement.CertificateInterface) certificatemanagement.TrustedBundle
-	CreateNamedTrustedBundleFromSecrets(name string, cli client.Client, namespace string, secrets ...string) (certificatemanagement.TrustedBundle, error)
+	CreateNamedTrustedBundleFromSecrets(name string, cli client.Client, namespace string, systemRoot bool, secrets ...string) (certificatemanagement.TrustedBundle, error)
 	// CreateTrustedBundleWithSystemRootCertificates creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
 	// It will include:
 	// - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
@@ -588,8 +588,8 @@ func HasExpectedDNSNames(secretName, secretNamespace string, cert *x509.Certific
 // CreateNamedTrustedBundleFromSecrets creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
 // It will include:
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
-func (cm *certificateManager) CreateNamedTrustedBundleFromSecrets(name string, cli client.Client, namespace string, secretsToTrust ...string) (certificatemanagement.TrustedBundle, error) {
-	trustedBundle := certificatemanagement.CreateNamedTrustedBundle(name, cm.keyPair)
+func (cm *certificateManager) CreateNamedTrustedBundleFromSecrets(prefix string, cli client.Client, namespace string, includeSystem bool, secretsToTrust ...string) (certificatemanagement.TrustedBundle, error) {
+	trustedBundle := certificatemanagement.CreateNamedTrustedBundle(prefix, cm.keyPair, includeSystem)
 	for _, secretName := range secretsToTrust {
 		secret, err := cm.GetCertificate(cli, secretName, namespace)
 		if err != nil {

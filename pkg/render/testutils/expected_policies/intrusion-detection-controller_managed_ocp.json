@@ -64,7 +64,7 @@
         "protocol": "TCP",
         "destination": {
           "selector": "k8s-app == 'tigera-guardian'",
-          "namespaceSelector": "projectcalico.org/name == 'tigera-guardian'",
+          "namespaceSelector": "projectcalico.org/name == 'calico-system'",
           "ports": [
             8080
           ]

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -103,6 +103,8 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Namespace: render.GuardianNamespace,
 			},
 		}
+
+		Expect(c.Create(ctx, &v1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianNamespace}}))
 		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
@@ -126,6 +128,9 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		err = c.Create(ctx, queryServerSecret.Secret(common.OperatorNamespace()))
 		Expect(err).NotTo(HaveOccurred())
+
+		trustedBundle := certificateManager.CreateTrustedBundle()
+		Expect(c.Create(ctx, trustedBundle.ConfigMap(render.GuardianNamespace))).NotTo(HaveOccurred())
 
 		By("applying the required prerequisites")
 		// Create a ManagementClusterConnection in the k8s client.
@@ -383,7 +388,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 						// Set the deployment to be unavailable. We need to recreate the deployment otherwise the status update is ignored.
 						gd := appsv1.Deployment{}
-						err = c.Get(ctx, client.ObjectKey{Name: "tigera-guardian", Namespace: "tigera-guardian"}, &gd)
+						err = c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, &gd)
 						Expect(err).NotTo(HaveOccurred())
 						err = c.Delete(ctx, &gd)
 						Expect(err).NotTo(HaveOccurred())
@@ -474,7 +479,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 			// Get the deployment and validate the env vars.
 			gd := appsv1.Deployment{}
-			err = c.Get(ctx, client.ObjectKey{Name: "tigera-guardian", Namespace: "tigera-guardian"}, &gd)
+			err = c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, &gd)
 			Expect(err).NotTo(HaveOccurred())
 
 			var expectedEnvVars []v1.EnvVar
@@ -707,16 +712,16 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 func createPodWithProxy(ctx context.Context, c client.Client, config *test.ProxyConfig, lowercase bool, replicaNum int) {
 	pod := v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-guardian" + strconv.Itoa(replicaNum),
-			Namespace: "tigera-guardian",
+			Name:      render.GuardianDeploymentName + strconv.Itoa(replicaNum),
+			Namespace: render.GuardianNamespace,
 			Labels: map[string]string{
-				"k8s-app":                "tigera-guardian",
-				"app.kubernetes.io/name": "tigera-guardian",
+				"k8s-app":                render.GuardianDeploymentName,
+				"app.kubernetes.io/name": render.GuardianDeploymentName,
 			},
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{{
-				Name: "tigera-guardian",
+				Name: render.GuardianDeploymentName,
 				Env:  []v1.EnvVar{},
 			}},
 		},

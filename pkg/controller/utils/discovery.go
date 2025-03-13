@@ -68,25 +68,6 @@ func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
 	return false, nil
 }
 
-func WhiskerCRDExists(cfg *rest.Config) (bool, error) {
-	c, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return false, err
-	}
-
-	resources, err := c.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
-	if err != nil {
-		return false, err
-	}
-	for _, res := range resources.APIResources {
-		if strings.EqualFold(res.Kind, "Whisker") {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
 func MultiTenant(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	resources, err := c.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
 	if err != nil {

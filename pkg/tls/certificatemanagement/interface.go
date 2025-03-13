@@ -30,7 +30,7 @@ const (
 	TrustedCertBundleMountPathWindows = "c:/etc/pki/tls/certs/tigera-ca-bundle.crt"
 
 	TrustedCertConfigMapSuffix       = "-ca-bundle"
-	TrustedCertConfigMapSuffixPublic = TrustedCertConfigMapSuffix + "-ca-bundle"
+	TrustedCertConfigMapSuffixPublic = TrustedCertConfigMapSuffix + "-system-certs"
 
 	// TrustedCertConfigMapName is the name of the trusted certificate bundle ConfigMap. This value is used
 	// for all single-tenant trusted bundles, as well as multi-tenant trusted bundles that do not include public CAs.

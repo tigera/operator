@@ -298,11 +298,11 @@ func (c *Component) guardianContainer() corev1.Container {
 	if c.cfg.GuardianClientKeyPair != nil {
 		env = append(env,
 			corev1.EnvVar{
-				Name:  "GOLDMANE_CLIENT_CERT",
+				Name:  "GUARDIAN_GOLDMANE_CLIENT_CERT",
 				Value: c.cfg.GuardianClientKeyPair.VolumeMountCertificateFilePath(),
 			},
 			corev1.EnvVar{
-				Name:  "GOLDMANE_CLIENT_KEY",
+				Name:  "GUARDIAN_GOLDMANE_CLIENT_KEY",
 				Value: c.cfg.GuardianClientKeyPair.VolumeMountKeyFilePath(),
 			},
 		)

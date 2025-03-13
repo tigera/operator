@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -120,8 +120,8 @@ var _ = Describe("LogStorageManagedCluster controller", func() {
 					Expect(svc.Spec.ExternalName).Should(Equal(expectedSvcName))
 					Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
 				},
-					Entry("default cluster domain", dns.DefaultClusterDomain, "tigera-guardian.tigera-guardian.svc.cluster.local"),
-					Entry("custom cluster domain", "custom-domain.internal", "tigera-guardian.tigera-guardian.svc.custom-domain.internal"),
+					Entry("default cluster domain", dns.DefaultClusterDomain, "tigera-guardian.calico-system.svc.cluster.local"),
+					Entry("custom cluster domain", "custom-domain.internal", "tigera-guardian.calico-system.svc.custom-domain.internal"),
 				)
 			})
 

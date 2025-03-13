@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,6 +49,7 @@ var _ = Describe("Rendering tests", func() {
 	var resources []client.Object
 
 	createGuardianConfig := func(i operatorv1.InstallationSpec, addr string, openshift bool) *render.GuardianConfiguration {
+		i.Variant = operatorv1.TigeraSecureEnterprise
 		secret := &corev1.Secret{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -99,15 +100,12 @@ var _ = Describe("Rendering tests", func() {
 
 		It("should render all resources for a managed cluster", func() {
 			expectedResources := []client.Object{
-				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "pull-secret", Namespace: render.GuardianNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianServiceAccountName, Namespace: render.GuardianNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianClusterRoleName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianClusterRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianServiceName, Namespace: render.GuardianNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: ""}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianSecretName, Namespace: render.GuardianNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
-				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: render.GuardianNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceAccount, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -116,7 +114,6 @@ var _ = Describe("Rendering tests", func() {
 				&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 				&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsLayerTigera}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
 				&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsViewDefault}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
-				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.GuardianNamespace}},
 			}
 
 			rtest.ExpectResources(resources, expectedResources)
@@ -139,11 +136,6 @@ var _ = Describe("Rendering tests", func() {
 					Drop: []corev1.Capability{"ALL"},
 				},
 			))
-
-			// Check the namespace.
-			ns := rtest.GetResource(resources, "tigera-guardian", "", "", "v1", "Namespace").(*corev1.Namespace)
-			Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
-			Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 			crb := rtest.GetResource(resources, render.ManagerClusterRoleBinding, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 			Expect(crb.Subjects).To(Equal([]rbacv1.Subject{{
@@ -209,7 +201,7 @@ var _ = Describe("Rendering tests", func() {
 		}
 
 		Context("allow-tigera rendering", func() {
-			policyName := types.NamespacedName{Name: "allow-tigera.guardian-access", Namespace: "tigera-guardian"}
+			policyName := types.NamespacedName{Name: "allow-tigera.guardian-access", Namespace: "calico-system"}
 
 			getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 				if name.Name == "allow-tigera.guardian-access" && scenario.ManagedCluster {

@@ -351,7 +351,7 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 func (c *GuardianComponent) container() []corev1.Container {
 	envVars := []corev1.EnvVar{
 		{Name: "GUARDIAN_PORT", Value: "9443"},
-		{Name: "GUARDIAN_LOGLEVEL", Value: "DEBUG"},
+		{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
 		{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
 		{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(c.cfg.TunnelCAType)},
 		{Name: "GUARDIAN_CA_FILE", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
@@ -446,7 +446,7 @@ const (
 func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "allow-whisker", Namespace: GuardianNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: "guardian", Namespace: GuardianNamespace},
 		Spec: netv1.NetworkPolicySpec{
 			PodSelector: *c.deploymentSelector(),
 			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
@@ -457,11 +457,6 @@ func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
 							PodSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{
 									"app.kubernetes.io/name": GoldmaneDeploymentName,
-								},
-							},
-							NamespaceSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{
-									"projectcalico.org/name": GoldmaneNamespace,
 								},
 							},
 						},

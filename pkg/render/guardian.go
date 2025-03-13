@@ -155,7 +155,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		)
 	}
 
-	return objs, nil
+	return objs, deprecatedObjects()
 }
 
 func (c *GuardianComponent) Ready() bool {
@@ -636,4 +636,13 @@ func ProcessPodProxies(podProxies []*httpproxy.Config) []*httpproxy.Config {
 
 func GuardianService(clusterDomain string) string {
 	return fmt.Sprintf("https://%s.%s.svc.%s:%d", GuardianServiceName, GuardianNamespace, clusterDomain, 443)
+}
+
+func deprecatedObjects() []client.Object {
+	return []client.Object{
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
+		},
+	}
 }

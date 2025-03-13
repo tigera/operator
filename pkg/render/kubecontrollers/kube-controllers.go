@@ -392,7 +392,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			// Needs to manage hostendpoints.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"hostendpoints"},
-			Verbs:     []string{"get", "list", "create", "update", "delete"},
+			Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
 		},
 		{
 			// Needs to manipulate kubecontrollersconfiguration, which contains

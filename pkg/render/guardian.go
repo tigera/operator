@@ -591,18 +591,6 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 				Destination: guardianIngressDestinationEntityRule,
 			},
 		}...)
-	} else {
-		ingressRules = append(ingressRules, []v3.Rule{
-			{
-				Action:   v3.Allow,
-				Protocol: &networkpolicy.TCPProtocol,
-				Source: v3.EntityRule{
-					NamespaceSelector: fmt.Sprintf("name == '%s'", common.CalicoNamespace),
-					Selector:          networkpolicy.KubernetesAppSelector("goldmane"),
-				},
-				Destination: guardianIngressDestinationEntityRule,
-			},
-		}...)
 	}
 
 	policy := &v3.NetworkPolicy{

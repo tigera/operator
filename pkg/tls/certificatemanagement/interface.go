@@ -29,13 +29,16 @@ const (
 	TrustedCertBundleMountPath        = "/etc/pki/tls/certs/tigera-ca-bundle.crt"
 	TrustedCertBundleMountPathWindows = "c:/etc/pki/tls/certs/tigera-ca-bundle.crt"
 
+	TrustedCertConfigMapSuffix       = "-ca-bundle"
+	TrustedCertConfigMapSuffixPublic = TrustedCertConfigMapSuffix + "-ca-bundle"
+
 	// TrustedCertConfigMapName is the name of the trusted certificate bundle ConfigMap. This value is used
 	// for all single-tenant trusted bundles, as well as multi-tenant trusted bundles that do not include public CAs.
-	TrustedCertConfigMapName = "tigera-ca-bundle"
+	TrustedCertConfigMapName = "tigera" + TrustedCertConfigMapSuffix
 
 	// TrustedCertConfigMapNamePublic is the name of the trusted certificate bundle ConfigMap that includes public CAs, used
 	// only in multi-tenant environments as a single namespace requires both a trusted bundle with public CAs as well as one without.
-	TrustedCertConfigMapNamePublic = "tigera-ca-bundle-system-certs"
+	TrustedCertConfigMapNamePublic = "tigera" + TrustedCertConfigMapSuffixPublic
 )
 
 // KeyPairInterface wraps a Secret object that contains a private key and a certificate. Whether CertificateManagement is

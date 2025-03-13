@@ -97,7 +97,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
-		return fmt.Errorf("goldmane-controller failed to watch management-cluster-connection Tigerastatus: %w", err)
+		return fmt.Errorf("goldmane-controller failed to watch Tigerastatus: %w", err)
 	}
 
 	return nil

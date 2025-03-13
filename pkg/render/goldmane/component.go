@@ -152,7 +152,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 func (c *Component) goldmaneService() *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "goldmane",
+			Name:      GoldmaneServiceName,
 			Namespace: GoldmaneNamespace,
 		},
 		Spec: corev1.ServiceSpec{
@@ -173,7 +173,7 @@ func (c *Component) deployment() *appsv1.Deployment {
 	ctrs := []corev1.Container{c.goldmaneContainer()}
 	volumes := []corev1.Volume{c.cfg.GoldmaneServerKeyPair.Volume(), c.cfg.TrustedCertBundle.Volume()}
 
-	// Add an annotation for the key pair as it requires a server restart (my as well restart the pod). Don't add an
+	// Add an annotation for the key pair as it requires a server restart (may as well restart the pod). Don't add an
 	// annotation for the mount CA since it's used for a client that can pick up the changes be recreating the client.
 	annotations := map[string]string{
 		c.cfg.GoldmaneServerKeyPair.HashAnnotationKey(): c.cfg.GoldmaneServerKeyPair.HashAnnotationValue(),

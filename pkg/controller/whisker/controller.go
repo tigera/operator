@@ -98,7 +98,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Watch for changes to TigeraStatus.
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
-		return fmt.Errorf("whisker-controller failed to watch management-cluster-connection Tigerastatus: %w", err)
+		return fmt.Errorf("whisker-controller failed to watch Tigerastatus: %w", err)
 	}
 
 	return nil

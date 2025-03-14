@@ -79,9 +79,15 @@ func init() {
 // APIServerDeploymentContainer is an API server Deployment container.
 type APIServerDeploymentContainer struct {
 	// Name is an enum which identifies the API server Deployment container by name.
-	// Supported values are: calico-apiserver, tigera-queryserver
+	// Supported values are: calico-apiserver, tigera-queryserver, calico-l7-admission-controller
 	// +kubebuilder:validation:Enum=calico-apiserver;tigera-queryserver;calico-l7-admission-controller
 	Name string `json:"name"`
+
+	// Ports allows customization of container's ports.
+	// If specified, this overrides the named APIServer Deployment container's ports.
+	// If omitted, the API server Deployment will use its default value for this container's port.
+	// +optional
+	Ports []APIServerDeploymentContainerPort `json:"ports,omitempty"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
 	// If specified, this overrides the named API server Deployment container's resources.
@@ -89,6 +95,17 @@ type APIServerDeploymentContainer struct {
 	// If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+}
+
+type APIServerDeploymentContainerPort struct {
+	// Name is an enum which identifies the API server Deployment Container port by name.
+	// Supported values are: apiserver, queryserver, l7admctrl
+	// +kubebuilder:validation:Enum=apiserver;queryserver;l7admctrl
+	Name string `json:"name"`
+
+	// Number of port to expose on the pod's IP address.
+	// This must be a valid port number, 0 < x < 65536.
+	ContainerPort int32 `json:"containerPort" protobuf:"varint,3,opt,name=containerPort"`
 }
 
 // APIServerDeploymentInitContainer is an API server Deployment init container.

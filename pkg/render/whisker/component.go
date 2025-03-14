@@ -19,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -209,13 +210,26 @@ func (c *Component) deployment() *appsv1.Deployment {
 }
 
 func (c *Component) networkPolicy() *netv1.NetworkPolicy {
+	egressRules := []netv1.NetworkPolicyEgressRule{
+		{
+			To: []netv1.NetworkPolicyPeer{
+				{
+					PodSelector: selector.PodLabelSelector(GoldmaneDeploymentName),
+				},
+			},
+			Ports: []netv1.NetworkPolicyPort{{
+				Protocol: ptr.ToPtr(corev1.ProtocolTCP),
+				Port:     ptr.ToPtr(intstr.FromInt32(GoldmaneServicePort)),
+			}},
+		},
+	}
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: WhiskerName, Namespace: WhiskerNamespace},
 		Spec: netv1.NetworkPolicySpec{
 			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress},
 			PodSelector: *selector.PodLabelSelector(WhiskerDeploymentName),
-			Egress:      networkpolicy.K8sDNSEgressRules(c.cfg.OpenShift),
+			Egress:      append(egressRules, networkpolicy.K8sDNSEgressRules(c.cfg.OpenShift)...),
 		},
 	}
 }

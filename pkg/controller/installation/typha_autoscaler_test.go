@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -86,10 +86,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		ta.start(ctx)
 
 		Eventually(func() error {
-			schedulableNodes, linuxNodes, err := ta.getNodeCounts()
-			if err != nil {
-				return err
-			}
+			schedulableNodes, linuxNodes := ta.getNodeCounts()
 			if schedulableNodes != 2 {
 				return fmt.Errorf("Expected 2 schedulable nodes, got %d", schedulableNodes)
 			}
@@ -104,10 +101,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		Expect(err).To(BeNil())
 
 		Eventually(func() error {
-			schedulableNodes, linuxNodes, err := ta.getNodeCounts()
-			if err != nil {
-				return err
-			}
+			schedulableNodes, linuxNodes := ta.getNodeCounts()
 			if schedulableNodes != 1 {
 				return fmt.Errorf("Expected 2 schedulable nodes, got %d", schedulableNodes)
 			}

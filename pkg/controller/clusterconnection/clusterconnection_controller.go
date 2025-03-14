@@ -265,7 +265,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	includeSystem := false
 	if managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic {
-		if variant == operatorv1.TigeraSecureEnterprise {
+		if variant == operatorv1.Calico {
 			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Guardian CA cannot be public in Calico.", nil, reqLogger)
 			return reconcile.Result{}, nil
 		}

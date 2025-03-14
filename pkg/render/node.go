@@ -1043,6 +1043,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 			corev1.Volume{Name: "var-run", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run"}}},
 			corev1.Volume{Name: "var-lib", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib"}}},
 			corev1.Volume{Name: "var-log", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log"}}},
+			corev1.Volume{Name: "proc-sys", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc/sys"}}},
 		)
 	} else {
 		volumes = append(volumes,
@@ -1316,6 +1317,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			corev1.VolumeMount{MountPath: "/var/run", Name: "var-run"},
 			corev1.VolumeMount{MountPath: "/var/lib", Name: "var-lib"},
 			corev1.VolumeMount{MountPath: "/var/log", Name: "var-log"},
+			corev1.VolumeMount{MountPath: "/nodeproc/sys", Name: "proc-sys"},
 		)
 	} else {
 		nodeVolumeMounts = append(nodeVolumeMounts,

@@ -36,7 +36,7 @@
         },
         "destination": {
           "selector": "k8s-app == 'tigera-guardian'",
-          "namespaceSelector": "projectcalico.org/name == 'tigera-guardian'",
+          "namespaceSelector": "projectcalico.org/name == 'calico-system'",
           "notPorts": [
             8080
           ]

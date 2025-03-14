@@ -49,7 +49,7 @@ var _ = Describe("IPPool FV tests", func() {
 	var operatorDone chan struct{}
 
 	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist, WhiskerCRDNotExists)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist)
 
 		By("Cleaning up resources before the test")
 		cleanupResources(c)

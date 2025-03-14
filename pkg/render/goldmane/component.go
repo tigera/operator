@@ -177,7 +177,7 @@ func (c *Component) deployment() *appsv1.Deployment {
 	volumes := []corev1.Volume{c.cfg.GoldmaneServerKeyPair.Volume(), c.cfg.TrustedCertBundle.Volume()}
 
 	// Add an annotation for the key pair as it requires a server restart (may as well restart the pod). Don't add an
-	// annotation for the mount CA since it's used for a client that can pick up the changes be recreating the client.
+	// annotation for the mount CA since it's used for a client that can pick up the changes without a pod restart.
 	annotations := map[string]string{
 		c.cfg.GoldmaneServerKeyPair.HashAnnotationKey(): c.cfg.GoldmaneServerKeyPair.HashAnnotationValue(),
 	}

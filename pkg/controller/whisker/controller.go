@@ -18,10 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/dns"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	"github.com/tigera/operator/pkg/render/goldmane"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -38,8 +34,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -84,7 +82,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err = utils.AddConfigMapWatch(c, "whisker"+certificatemanagement.TrustedCertConfigMapSuffix, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("failed to add watch for config map %s/%s: %w", common.OperatorNamespace(), certificatemanagement.TrustedCertConfigMapName, err)
 	}
 
@@ -143,11 +141,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Whisker")
 
-	variant, installation, err := utils.GetInstallation(ctx, r.cli)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
 	whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Whisker CR", err, reqLogger)
@@ -159,6 +152,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
 	defer r.status.SetMetaData(&whiskerCR.ObjectMeta)
+
+	variant, installation, err := utils.GetInstallation(ctx, r.cli)
+	if err != nil {
+		return reconcile.Result{}, err
+	} else if installation == nil {
+		return reconcile.Result{}, nil
+	}
 
 	if goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Goldmane CR", err, reqLogger)

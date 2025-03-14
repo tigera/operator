@@ -75,7 +75,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	if err = utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err = utils.AddConfigMapWatch(c, "goldmane"+certificatemanagement.TrustedCertConfigMapSuffix, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("failed to add watch for config map %s/%s: %w", common.OperatorNamespace(), certificatemanagement.TrustedCertConfigMapName, err)
 	}
 
@@ -142,11 +142,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Goldmane")
 
-	variant, installation, err := utils.GetInstallation(ctx, r.cli)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
 	goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Goldmane CR", err, reqLogger)
@@ -158,6 +153,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
 	defer r.status.SetMetaData(&goldmaneCR.ObjectMeta)
+
+	variant, installation, err := utils.GetInstallation(ctx, r.cli)
+	if err != nil {
+		return reconcile.Result{}, err
+	} else if installation == nil {
+		return reconcile.Result{}, nil
+	}
 
 	mgmtClusterConnectionCR, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
 	if err != nil {

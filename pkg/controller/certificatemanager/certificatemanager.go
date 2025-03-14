@@ -619,7 +619,7 @@ func (cm *certificateManager) CreateMultiTenantTrustedBundleWithSystemRootCertif
 	return certificatemanagement.CreateMultiTenantTrustedBundleWithSystemRootCertificates(cm.keyPair, certificates...)
 }
 
-func (cm *certificateManager) LoadNamedTrustedBundle(ctx context.Context, client client.Client, name, ns string) (certificatemanagement.TrustedBundleRO, error) {
+func (cm *certificateManager) LoadNamedTrustedBundle(ctx context.Context, client client.Client, ns, name string) (certificatemanagement.TrustedBundleRO, error) {
 	return cm.loadTrustedBundle(ctx, client, ns, name)
 }
 

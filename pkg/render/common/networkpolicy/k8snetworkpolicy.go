@@ -38,7 +38,7 @@ func K8sDNSEgressRules(openShift bool) []netv1.NetworkPolicyEgressRule {
 						},
 						NamespaceSelector: &metav1.LabelSelector{
 							MatchLabels: map[string]string{
-								selector.CalicoPodNamespaceLabel: "openshift-dns",
+								selector.NameLabel: "openshift-dns",
 							},
 						},
 					},
@@ -55,18 +55,19 @@ func K8sDNSEgressRules(openShift bool) []netv1.NetworkPolicyEgressRule {
 					{
 						PodSelector: &metav1.LabelSelector{
 							MatchLabels: map[string]string{
-								selector.K8sPodNameLabel: "kube-dns",
+								selector.NameLabel: "kube-dns",
 							},
 						},
 						NamespaceSelector: &metav1.LabelSelector{
 							MatchLabels: map[string]string{
-								selector.CalicoPodNamespaceLabel: "kube-system",
+								selector.NameLabel: "kube-system",
 							},
 						},
 					},
 				},
 				Ports: []netv1.NetworkPolicyPort{
 					NewK8sPolicyPort(corev1.ProtocolTCP, 53),
+					NewK8sPolicyPort(corev1.ProtocolUDP, 53),
 				},
 			},
 		)

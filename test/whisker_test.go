@@ -45,7 +45,7 @@ var _ = Describe("Tests for Whisker installation", func() {
 	var operatorDone chan struct{}
 
 	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, EnterpriseCRDsNotExist, WhiskerCRDExists)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, EnterpriseCRDsNotExist)
 
 		By("Cleaning up resources before the test")
 		cleanupResources(c)
@@ -121,18 +121,23 @@ var _ = Describe("Tests for Whisker installation", func() {
 		verifyCalicoHasDeployed(c)
 
 		By("Creating a CRD resource not named default")
-		instance := &operator.Whisker{
+		whiskerCR := &operator.Whisker{
 			TypeMeta:   metav1.TypeMeta{Kind: "Whisker", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 		}
-		err := c.Create(context.Background(), instance)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(context.Background(), whiskerCR)).NotTo(HaveOccurred())
+		goldmaneCR := &operator.Goldmane{
+			TypeMeta:   metav1.TypeMeta{Kind: "Goldmane", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		}
+		Expect(c.Create(context.Background(), goldmaneCR)).NotTo(HaveOccurred())
 		defer func() {
-			Expect(c.Delete(context.Background(), instance)).ShouldNot(HaveOccurred())
+			Expect(c.Delete(shutdownContext, whiskerCR)).ShouldNot(HaveOccurred())
+			Expect(c.Delete(shutdownContext, goldmaneCR)).ShouldNot(HaveOccurred())
 		}()
 
 		By("Verifying resources were created")
-		whisker := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "whisker", Namespace: "calico-system"}}
-		ExpectResourceCreated(c, whisker)
+		ExpectResourceCreated(c, &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "whisker", Namespace: "calico-system"}})
+		ExpectResourceCreated(c, &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "goldmane", Namespace: "calico-system"}})
 	})
 })

@@ -665,6 +665,8 @@ func GuardianService(clusterDomain string) string {
 
 func deprecatedObjects() []client.Object {
 	return []client.Object{
+		// All the Guardian objects were moved to "calico-system" circa Calico v3.30, and so the legacy tigera-guardian
+		// Namespace and everything within it should be removed.
 		&corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},

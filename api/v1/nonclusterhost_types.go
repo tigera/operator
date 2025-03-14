@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 /*
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -24,6 +24,9 @@ type NonClusterHostSpec struct {
 	// Location of the log ingestion point for non-cluster hosts. example: https://1.2.3.4:443
 	// +kubebuilder:validation:Pattern=`^https://.+$`
 	Endpoint string `json:"endpoint"`
+
+	// Location of the Typha endpoint for non-cluster host Felix and Typha communication. example: 5.6.7.8:5473
+	TyphaEndpoint string `json:"typhaEndpoint,omitempty"`
 }
 
 // +kubebuilder:object:root=true

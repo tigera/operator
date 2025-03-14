@@ -138,6 +138,12 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
+			// for non-cluster host to get tigera-ca-bundle config map.
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"get"},
+		},
+		{
 			// For monitoring Calico-specific configuration.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{

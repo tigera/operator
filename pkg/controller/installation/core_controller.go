@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
@@ -56,6 +55,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	calicoclient "github.com/tigera/api/pkg/client/clientset_generated/clientset"
 	operator "github.com/tigera/operator/api/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
@@ -76,6 +76,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -183,23 +184,46 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
 	typhaScaler := newTyphaAutoscaler(cs, nodeIndexInformer, typhaListWatch, statusManager)
 
+	// Create a Typha autoscaler for non-cluster hosts
+	var typhaAutoscalerNonClusterHost *typhaAutoscaler
+	restConfig := mgr.GetConfig()
+	nonclusterhosts, err := utils.GetNonClusterHostDynamic(restConfig)
+	if err == nil && nonclusterhosts != nil {
+		calicoClient, err := calicoclient.NewForConfig(restConfig)
+		if err != nil {
+			return nil, err
+		}
+
+		hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
+		hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
+		go hepIndexInformer.Run(opts.ShutdownContext.Done())
+
+		typhaNonClusterHostWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
+		typhaAutoscalerNonClusterHost = newTyphaAutoscaler(cs, hepIndexInformer, typhaNonClusterHostWatch, statusManager, typhaAutoscalerForNonclusterHost(true))
+	}
+
 	r := &ReconcileInstallation{
-		config:               mgr.GetConfig(),
-		client:               mgr.GetClient(),
-		scheme:               mgr.GetScheme(),
-		watches:              make(map[runtime.Object]struct{}),
-		autoDetectedProvider: opts.DetectedProvider,
-		status:               statusManager,
-		typhaAutoscaler:      typhaScaler,
-		namespaceMigration:   nm,
-		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
-		clusterDomain:        opts.ClusterDomain,
-		manageCRDs:           opts.ManageCRDs,
-		tierWatchReady:       &utils.ReadyFlag{},
-		newComponentHandler:  utils.NewComponentHandler,
+		config:                        mgr.GetConfig(),
+		client:                        mgr.GetClient(),
+		scheme:                        mgr.GetScheme(),
+		watches:                       make(map[runtime.Object]struct{}),
+		autoDetectedProvider:          opts.DetectedProvider,
+		status:                        statusManager,
+		typhaAutoscaler:               typhaScaler,
+		typhaAutoscalerNonClusterHost: typhaAutoscalerNonClusterHost,
+		namespaceMigration:            nm,
+		enterpriseCRDsExist:           opts.EnterpriseCRDExists,
+		clusterDomain:                 opts.ClusterDomain,
+		manageCRDs:                    opts.ManageCRDs,
+		tierWatchReady:                &utils.ReadyFlag{},
+		newComponentHandler:           utils.NewComponentHandler,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
+	if r.typhaAutoscalerNonClusterHost != nil {
+		r.typhaAutoscalerNonClusterHost.start(opts.ShutdownContext)
+	}
+
 	return r, nil
 }
 
@@ -362,20 +386,21 @@ var _ reconcile.Reconciler = &ReconcileInstallation{}
 type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	config               *rest.Config
-	client               client.Client
-	scheme               *runtime.Scheme
-	watches              map[runtime.Object]struct{}
-	autoDetectedProvider operator.Provider
-	status               status.StatusManager
-	typhaAutoscaler      *typhaAutoscaler
-	namespaceMigration   migration.NamespaceMigration
-	enterpriseCRDsExist  bool
-	amazonCRDExists      bool
-	migrationChecked     bool
-	clusterDomain        string
-	manageCRDs           bool
-	tierWatchReady       *utils.ReadyFlag
+	config                        *rest.Config
+	client                        client.Client
+	scheme                        *runtime.Scheme
+	watches                       map[runtime.Object]struct{}
+	autoDetectedProvider          operator.Provider
+	status                        status.StatusManager
+	typhaAutoscaler               *typhaAutoscaler
+	typhaAutoscalerNonClusterHost *typhaAutoscaler
+	namespaceMigration            migration.NamespaceMigration
+	enterpriseCRDsExist           bool
+	amazonCRDExists               bool
+	migrationChecked              bool
+	clusterDomain                 string
+	manageCRDs                    bool
+	tierWatchReady                *utils.ReadyFlag
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
@@ -967,6 +992,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	if r.typhaAutoscalerNonClusterHost != nil && r.typhaAutoscalerNonClusterHost.isDegraded() {
+		if err := r.typhaAutoscalerNonClusterHost.triggerRun(); err != nil {
+			r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha for noncluster hosts", err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+	}
+
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.
 	// If we are switching from this mode to one that enables TSEE, we need to restart the operator to enable the other controllers.
 	if !r.enterpriseCRDsExist && instance.Spec.Variant == operator.TigeraSecureEnterprise {
@@ -1294,6 +1326,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}))
 
+	// Check if non-cluster host feature is enabled.
+	nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
 		K8sServiceEp:      k8sapi.Endpoint,
@@ -1301,6 +1340,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TLS:               typhaNodeTLS,
 		MigrateNamespaces: needNsMigration,
 		ClusterDomain:     r.clusterDomain,
+		NonClusterHost:    nonclusterhost,
 		FelixHealthPort:   *felixConfiguration.Spec.HealthPort,
 	}
 	components = append(components, render.Typha(&typhaCfg))
@@ -1423,6 +1463,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
 	if includeV3NetworkPolicy {
+		if nonclusterhost != nil {
+			components = append(components, render.NewTyphaNonClusterHostPolicy(&typhaCfg))
+		}
 		components = append(components,
 			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg),
 			render.NewPassthrough(networkpolicy.AllowTigeraDefaultDeny(common.CalicoNamespace)),

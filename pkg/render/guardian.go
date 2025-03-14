@@ -46,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
+	"github.com/tigera/operator/pkg/render/common/selector"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -63,6 +64,8 @@ const (
 	GuardianTargetPort             = 8080
 	GuardianPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
 	GuardianKeyPairSecret          = "guardian-key-pair"
+
+	GoldmaneDeploymentName = "goldmane"
 )
 
 var (
@@ -155,6 +158,8 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 			managerClusterWideTigeraLayer(),
 			managerClusterWideDefaultView(),
 		)
+	} else {
+		objs = append(objs, c.networkPolicy())
 	}
 
 	return objs, deprecatedObjects()
@@ -430,35 +435,18 @@ func (c *GuardianComponent) annotations() map[string]string {
 	return annotations
 }
 
-func (c *GuardianComponent) deploymentSelector() *metav1.LabelSelector {
-	return &metav1.LabelSelector{
-		MatchLabels: map[string]string{
-			"app.kubernetes.io/name": GuardianDeploymentName,
-		},
-	}
-}
-
-const (
-	GoldmaneDeploymentName = "goldmane"
-	GoldmaneNamespace      = common.CalicoNamespace
-)
-
 func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "guardian", Namespace: GuardianNamespace},
 		Spec: netv1.NetworkPolicySpec{
-			PodSelector: *c.deploymentSelector(),
+			PodSelector: *selector.PodLabelSelector(GuardianDeploymentName),
 			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
 			Ingress: []netv1.NetworkPolicyIngressRule{
 				{
 					From: []netv1.NetworkPolicyPeer{
 						{
-							PodSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{
-									"app.kubernetes.io/name": GoldmaneDeploymentName,
-								},
-							},
+							PodSelector: selector.PodLabelSelector(GoldmaneDeploymentName),
 						},
 					},
 					Ports: []netv1.NetworkPolicyPort{{

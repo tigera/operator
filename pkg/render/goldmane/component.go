@@ -263,49 +263,16 @@ func (c *Component) deploymentSelector() *metav1.LabelSelector {
 func (c *Component) networkPolicy() *netv1.NetworkPolicy {
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "goldmane", Namespace: GoldmaneNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: GoldmaneName, Namespace: GoldmaneNamespace},
 		Spec: netv1.NetworkPolicySpec{
 			PodSelector: *c.deploymentSelector(),
-			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress},
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
 			Ingress: []netv1.NetworkPolicyIngressRule{
 				{
 					Ports: []netv1.NetworkPolicyPort{{
 						Protocol: ptr.ToPtr(corev1.ProtocolTCP),
 						Port:     ptr.ToPtr(intstr.FromInt32(GoldmaneServicePort)),
 					}},
-				},
-			},
-			Egress: []netv1.NetworkPolicyEgressRule{
-				{
-					To: []netv1.NetworkPolicyPeer{
-						{
-							PodSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{
-									"app.kubernetes.io/name": render.GuardianDeploymentName,
-								},
-							},
-						},
-					},
-					Ports: []netv1.NetworkPolicyPort{
-						{
-							Protocol: ptr.ToPtr(corev1.ProtocolTCP),
-							Port:     ptr.ToPtr(intstr.FromInt32(render.GuardianTargetPort)),
-						},
-					},
-				},
-				{
-					Ports: []netv1.NetworkPolicyPort{
-						{
-							Protocol: ptr.ToPtr(corev1.ProtocolUDP),
-							// DNS lookup port.
-							Port: ptr.ToPtr(intstr.FromInt32(53)),
-						},
-						{
-							Protocol: ptr.ToPtr(corev1.ProtocolTCP),
-							// K8 port (need to get / write to configmaps).
-							Port: ptr.ToPtr(intstr.FromInt32(6443)),
-						},
-					},
 				},
 			},
 		},

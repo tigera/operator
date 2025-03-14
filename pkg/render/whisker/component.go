@@ -15,21 +15,22 @@
 package whisker
 
 import (
-	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
-	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/selector"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -207,47 +208,14 @@ func (c *Component) deployment() *appsv1.Deployment {
 	}
 }
 
-func (c *Component) deploymentSelector() *metav1.LabelSelector {
-	return &metav1.LabelSelector{
-		MatchLabels: map[string]string{
-			"app.kubernetes.io/name": WhiskerDeploymentName,
-		},
-	}
-}
-
 func (c *Component) networkPolicy() *netv1.NetworkPolicy {
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "whisker", Namespace: WhiskerNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: WhiskerName, Namespace: WhiskerNamespace},
 		Spec: netv1.NetworkPolicySpec{
-			PodSelector: *c.deploymentSelector(),
 			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress},
-			Egress: []netv1.NetworkPolicyEgressRule{
-				{
-					To: []netv1.NetworkPolicyPeer{
-						{
-							PodSelector: &metav1.LabelSelector{
-								MatchLabels: map[string]string{
-									"app.kubernetes.io/name": GoldmaneDeploymentName,
-								},
-							},
-						},
-					},
-					Ports: []netv1.NetworkPolicyPort{{
-						Protocol: ptr.ToPtr(corev1.ProtocolTCP),
-						Port:     ptr.ToPtr(intstr.FromInt32(GoldmaneServicePort)),
-					}},
-				},
-				{
-					Ports: []netv1.NetworkPolicyPort{
-						{
-							Protocol: ptr.ToPtr(corev1.ProtocolUDP),
-							// DNS lookup port.
-							Port: ptr.ToPtr(intstr.FromInt32(53)),
-						},
-					},
-				},
-			},
+			PodSelector: *selector.PodLabelSelector(WhiskerDeploymentName),
+			Egress:      networkpolicy.K8sDNSEgressRules(c.cfg.OpenShift),
 		},
 	}
 }

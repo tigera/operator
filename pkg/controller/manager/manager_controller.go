@@ -643,7 +643,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// Check if non-cluster host log ingestion is enabled.
+	// Check if non-cluster host feature is enabled.
 	nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, logc)

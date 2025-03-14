@@ -189,11 +189,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(
-	    whisker.WhiskerDeploymentName, 
-	    r.cli,
-	    common.OperatorNamespace(), 
-	    false,
-	    goldmane.GoldmaneKeyPairSecret,
+		whisker.WhiskerDeploymentName,
+		r.cli,
+		common.OperatorNamespace(),
+		false,
+		goldmane.GoldmaneKeyPairSecret,
 	)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)

@@ -19,6 +19,8 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
+	"github.com/google/go-cmp/cmp"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
@@ -74,7 +76,7 @@ var _ = Describe("ComponentRendering", func() {
 
 		deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, whisker.WhiskerName, whisker.WhiskerNamespace)
 		Expect(err).ShouldNot(HaveOccurred())
-		Expect(deployment).To(Equal(expected))
+		Expect(deployment).To(Equal(expected), cmp.Diff(deployment, expected))
 	},
 		Entry("Should return objects to create when variant is Calico",
 			&whisker.Configuration{

@@ -786,6 +786,8 @@ func (es *elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentV
 
 	if es.cfg.Installation.CertificateManagement != nil {
 		config["xpack.security.http.ssl.certificate_authorities"] = []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"}
+		config["xpack.security.transport.ssl.key"] = "/usr/share/elasticsearch/config/transport-certs/transport.tls.key"
+		config["xpack.security.transport.ssl.certificate"] = "/usr/share/elasticsearch/config/transport-certs/transport.tls.crt"
 	}
 	if operatorv1.IsFIPSModeEnabled(es.cfg.Installation.FIPSMode) {
 		config["xpack.security.fips_mode.enabled"] = "true"

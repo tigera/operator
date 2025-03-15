@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	v1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -359,6 +360,19 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				compareInitContainer(initContainers[4], "key-cert-elastic-transport", []corev1.VolumeMount{
 					{Name: "elastic-internal-transport-certificates", MountPath: certificatemanagement.CSRCMountPath},
 				}, false)
+				Expect(resultES.Spec.NodeSets[0].Config).To(Equal(&v1.Config{Data: map[string]interface{}{
+					"node.roles": []string{
+						"data",
+						"ingest",
+						"master",
+						"remote_cluster_client",
+					},
+					"cluster.max_shards_per_node":                     10000,
+					"ingest.geoip.downloader.enabled":                 false,
+					"xpack.security.http.ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"},
+					"xpack.security.transport.ssl.key":                "/usr/share/elasticsearch/config/transport-certs/transport.tls.key",
+					"xpack.security.transport.ssl.certificate":        "/usr/share/elasticsearch/config/transport-certs/transport.tls.crt",
+				}}))
 			})
 
 			It("should render toleration on GKE", func() {

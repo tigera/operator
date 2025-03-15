@@ -27,6 +27,7 @@ import (
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -35,6 +36,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
+	gwapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 )
 
@@ -78,6 +80,8 @@ const (
 	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
+	EnvoyGatewayNamespace               = "tigera-gateway"
+	FelixSync                           = "felix-sync"
 )
 
 func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
@@ -336,6 +340,7 @@ type gatewayAPIImplementationComponent struct {
 	envoyGatewayImage   string
 	envoyProxyImage     string
 	envoyRatelimitImage string
+	logCollectorImage   string
 }
 
 func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) Component {
@@ -494,6 +499,9 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	objs = append(objs, certgenJob)
 
+	// Provision the log collector deployment and service.
+	objs = append(objs, pr.logCollectorDeploymentAndService()...)
+
 	// Provision a GatewayClass that references the EnvoyProxy config and the controllerName
 	// that the gateway controller expects.
 	objs = append(objs, pr.gatewayClass(envoyGatewayConfig.Gateway.ControllerName, proxyConfig))
@@ -506,9 +514,10 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig() *envoyapi.EnvoyP
 		TypeMeta: metav1.TypeMeta{Kind: "EnvoyProxy", APIVersion: "gateway.envoyproxy.io/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "envoy-proxy-config",
-			Namespace: "tigera-gateway",
+			Namespace: EnvoyGatewayNamespace,
 		},
 		Spec: envoyapi.EnvoyProxySpec{
+			Telemetry: pr.proxyTelemetrySettings(),
 			Provider: &envoyapi.EnvoyProxyProvider{
 				Type: envoyapi.ProviderTypeKubernetes,
 				Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
@@ -530,12 +539,128 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig() *envoyapi.EnvoyP
 	return envoyProxy
 }
 
+func (pr *gatewayAPIImplementationComponent) logCollectorVolumes() []corev1.Volume {
+	return []corev1.Volume{
+		{
+			Name: FelixSync,
+			VolumeSource: corev1.VolumeSource{
+				CSI: &corev1.CSIVolumeSource{
+					Driver: "csi.tigera.io",
+				},
+			},
+		},
+	}
+}
+
+func (pr *gatewayAPIImplementationComponent) logCollectorEnv() []corev1.EnvVar {
+	envs := []corev1.EnvVar{
+		{Name: "LOG_LEVEL", Value: "Info"},
+		{Name: "FELIX_DIAL_TARGET", Value: "/var/run/felix/nodeagent/socket"},
+		// only use ALS gRPC endpoint
+		{Name: "LISTEN_ADDRESS", Value: ":8080"},
+		{Name: "LISTEN_NETWORK", Value: "tcp"},
+	}
+	return envs
+}
+
+func (pr *gatewayAPIImplementationComponent) logCollectorVolMounts() []corev1.VolumeMount {
+	return []corev1.VolumeMount{
+		{Name: FelixSync, MountPath: "/var/run/felix"},
+	}
+}
+
+func (pr *gatewayAPIImplementationComponent) logCollectorDeploymentAndService() []client.Object {
+	var replicas int32 = 2
+
+	return []client.Object{
+		// The log collector deployment.
+		&appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "tigera-l7-log-collector",
+				Namespace: EnvoyGatewayNamespace,
+			},
+			Spec: appsv1.DeploymentSpec{
+				Replicas: &replicas,
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"app": "tigera-l7-log-collector"},
+				},
+				Template: corev1.PodTemplateSpec{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "tigera-l7-log-collector"}},
+					Spec: corev1.PodSpec{
+						Volumes: pr.logCollectorVolumes(),
+						Containers: []corev1.Container{
+							{
+								Name:            "tigera-l7-log-collector",
+								Image:           pr.logCollectorImage,
+								Env:             pr.logCollectorEnv(),
+								SecurityContext: securitycontext.NewRootContext(false),
+								VolumeMounts:    pr.logCollectorVolMounts(),
+							},
+						},
+					},
+				},
+			},
+		},
+		// The log collector service.
+		&corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "tigera-l7-log-collector-service",
+				Namespace: EnvoyGatewayNamespace,
+			},
+			Spec: corev1.ServiceSpec{
+				Selector: map[string]string{"app": "tigera-l7-log-collector"},
+				Ports: []corev1.ServicePort{
+					{
+						Name: "https",
+						Port: 8080,
+					},
+				},
+			},
+		},
+	}
+}
+
+func (pr *gatewayAPIImplementationComponent) proxyTelemetrySettings() *envoyapi.ProxyTelemetry {
+	// The log collector service that the envoy proxy will send logs to.
+	logCollectSvcName := gwapiv1.ObjectName("tigera-l7-log-collector-service")
+	logCollectSvcNamespace := gwapiv1.Namespace(EnvoyGatewayNamespace)
+	logCollectSvcPort := gwapiv1.PortNumber(8080)
+
+	return &envoyapi.ProxyTelemetry{
+		AccessLog: &envoyapi.ProxyAccessLog{
+			Settings: []envoyapi.ProxyAccessLogSetting{
+				{
+					Sinks: []envoyapi.ProxyAccessLogSink{
+						{
+							Type: envoyapi.ProxyAccessLogSinkTypeALS,
+							ALS: &envoyapi.ALSEnvoyProxyAccessLog{
+								Type: envoyapi.ALSEnvoyProxyAccessLogTypeHTTP,
+								BackendCluster: envoyapi.BackendCluster{
+									BackendRefs: []envoyapi.BackendRef{
+										{
+											BackendObjectReference: gwapiv1.BackendObjectReference{
+												Name:      logCollectSvcName,
+												Namespace: &logCollectSvcNamespace,
+												Port:      &logCollectSvcPort,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func (pr *gatewayAPIImplementationComponent) gatewayClass(controllerName string, proxyConfig *envoyapi.EnvoyProxy) *gapi.GatewayClass {
 	return &gapi.GatewayClass{
 		TypeMeta: metav1.TypeMeta{Kind: "GatewayClass", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "tigera-gateway-class",
-			Namespace: "tigera-gateway",
+			Namespace: EnvoyGatewayNamespace,
 		},
 		Spec: gapi.GatewayClassSpec{
 			ControllerName: gapi.GatewayController(controllerName),

@@ -142,16 +142,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
 	if opts.EnterpriseCRDExists {
-		k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-		if err != nil {
-			log.Error(err, "Failed to establish a connection to k8s")
-			return err
-		}
-
 		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, ri.tierWatchReady)
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, ri.tierWatchReady)
 
-		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+		go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
 		},
 		)
@@ -162,27 +156,21 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
-	nm, err := migration.NewCoreNamespaceMigration(mgr.GetConfig())
+	nm, err := migration.NewCoreNamespaceMigration(opts.K8sClientset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Namespace migration: %w", err)
 	}
 
 	statusManager := status.New(mgr.GetClient(), "calico", opts.KubernetesVersion)
 
-	// The typhaAutoscaler needs a clientset.
-	cs, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return nil, err
-	}
-
 	// Create the SharedIndexInformer used by the typhaAutoscaler
-	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
+	nodeListWatch := cache.NewListWatchFromClient(opts.K8sClientset.CoreV1().RESTClient(), "nodes", "", fields.Everything())
 	nodeIndexInformer := cache.NewSharedIndexInformer(nodeListWatch, &corev1.Node{}, 0, cache.Indexers{})
 	go nodeIndexInformer.Run(opts.ShutdownContext.Done())
 
 	// Create a Typha autoscaler.
-	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
-	typhaScaler := newTyphaAutoscaler(cs, nodeIndexInformer, typhaListWatch, statusManager)
+	typhaListWatch := cache.NewListWatchFromClient(opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
+	typhaScaler := newTyphaAutoscaler(opts.K8sClientset, nodeIndexInformer, typhaListWatch, statusManager)
 
 	// Create a Typha autoscaler for non-cluster hosts
 	var typhaAutoscalerNonClusterHost *typhaAutoscaler
@@ -198,13 +186,14 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
 		go hepIndexInformer.Run(opts.ShutdownContext.Done())
 
-		typhaNonClusterHostWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
-		typhaAutoscalerNonClusterHost = newTyphaAutoscaler(cs, hepIndexInformer, typhaNonClusterHostWatch, statusManager, typhaAutoscalerForNonclusterHost(true))
+		typhaNonClusterHostWatch := cache.NewListWatchFromClient(opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
+		typhaAutoscalerNonClusterHost = newTyphaAutoscaler(opts.K8sClientset, hepIndexInformer, typhaNonClusterHostWatch, statusManager, typhaAutoscalerForNonclusterHost(true))
 	}
 
 	r := &ReconcileInstallation{
 		config:                        mgr.GetConfig(),
 		client:                        mgr.GetClient(),
+		clientset:                     opts.K8sClientset,
 		scheme:                        mgr.GetScheme(),
 		watches:                       make(map[runtime.Object]struct{}),
 		autoDetectedProvider:          opts.DetectedProvider,
@@ -388,6 +377,7 @@ type ReconcileInstallation struct {
 	// that reads objects from the cache and writes to the apiserver
 	config                        *rest.Config
 	client                        client.Client
+	clientset                     *kubernetes.Clientset
 	scheme                        *runtime.Scheme
 	watches                       map[runtime.Object]struct{}
 	autoDetectedProvider          operator.Provider
@@ -396,7 +386,6 @@ type ReconcileInstallation struct {
 	typhaAutoscalerNonClusterHost *typhaAutoscaler
 	namespaceMigration            migration.NamespaceMigration
 	enterpriseCRDsExist           bool
-	amazonCRDExists               bool
 	migrationChecked              bool
 	clusterDomain                 string
 	manageCRDs                    bool
@@ -1004,7 +993,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if !r.enterpriseCRDsExist && instance.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into TSEE mode.
 		// if they do not, we need to notify the user that the requested configuration is invalid.
-		b, err := utils.RequiresTigeraSecure(r.config)
+		b, err := utils.RequiresTigeraSecure(r.clientset)
 		if b {
 			log.Info("Rebooting to enable TigeraSecure controllers")
 			os.Exit(0)

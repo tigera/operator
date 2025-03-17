@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -190,7 +190,6 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 	// well-known list of namespaces that contain product code.
 	namespaces := []string{
 		common.CalicoNamespace,
-		render.GuardianNamespace,
 		render.ComplianceNamespace,
 		render.DexNamespace,
 		render.ElasticsearchNamespace,

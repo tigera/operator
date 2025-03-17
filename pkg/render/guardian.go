@@ -172,6 +172,7 @@ func (c *GuardianComponent) Ready() bool {
 func (c *GuardianComponent) service() *corev1.Service {
 	ports := []corev1.ServicePort{
 		{
+			Name: "https",
 			Port: 443,
 			TargetPort: intstr.IntOrString{
 				Type:   intstr.Int,

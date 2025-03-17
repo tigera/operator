@@ -60,6 +60,18 @@ func CreateTrustedBundle(ca CertificateInterface, certificates ...CertificateInt
 	return bundle
 }
 
+// CreateNamedTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
+// It will include:
+// - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
+func CreateNamedTrustedBundle(prefix string, ca CertificateInterface, includeSystem bool, certificates ...CertificateInterface) TrustedBundle {
+	name := TrustedBundleName(prefix, includeSystem)
+	bundle, err := createTrustedBundle(includeSystem, name, ca, certificates...)
+	if err != nil {
+		panic(err) // This should never happen.
+	}
+	return bundle
+}
+
 // CreateTrustedBundleWithSystemRootCertificates creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
 // It will include:
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
@@ -256,4 +268,11 @@ func getSystemCertificates() ([]byte, error) {
 		}
 	}
 	return nil, nil
+}
+
+func TrustedBundleName(prefix string, includeSystem bool) string {
+	if includeSystem {
+		return prefix + TrustedCertConfigMapSuffixPublic
+	}
+	return prefix + TrustedCertConfigMapSuffix
 }

@@ -99,6 +99,7 @@ type CertificateManager interface {
 	// It will include:
 	// - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 	CreateTrustedBundle(certificates ...certificatemanagement.CertificateInterface) certificatemanagement.TrustedBundle
+	CreateNamedTrustedBundleFromSecrets(name string, cli client.Client, namespace string, systemRoot bool, secrets ...string) (certificatemanagement.TrustedBundle, error)
 	// CreateTrustedBundleWithSystemRootCertificates creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
 	// It will include:
 	// - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
@@ -113,6 +114,7 @@ type CertificateManager interface {
 	KeyPair() certificatemanagement.KeyPairInterface
 	// LoadTrustedBundle loads an existing trusted bundle to pass to render.
 	LoadTrustedBundle(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
+	LoadNamedTrustedBundle(context.Context, client.Client, string, string) (certificatemanagement.TrustedBundleRO, error)
 	// LoadMultiTenantTrustedBundleWithRootCertificates loads an existing trusted bundle with system root certificates to pass to render.
 	LoadMultiTenantTrustedBundleWithRootCertificates(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 	// SignCertificate signs a certificate using the certificate manager's private key. The function is assuming that the
@@ -583,6 +585,21 @@ func HasExpectedDNSNames(secretName, secretNamespace string, cert *x509.Certific
 	return ErrInvalidCertDNSNames(secretName, secretNamespace)
 }
 
+// CreateNamedTrustedBundleFromSecrets creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
+// It will include:
+// - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
+func (cm *certificateManager) CreateNamedTrustedBundleFromSecrets(prefix string, cli client.Client, namespace string, includeSystem bool, secretsToTrust ...string) (certificatemanagement.TrustedBundle, error) {
+	trustedBundle := certificatemanagement.CreateNamedTrustedBundle(prefix, cm.keyPair, includeSystem)
+	for _, secretName := range secretsToTrust {
+		secret, err := cm.GetCertificate(cli, secretName, namespace)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve secret %s: %w", secretName, err)
+		}
+		trustedBundle.AddCertificates(secret)
+	}
+	return trustedBundle, nil
+}
+
 // CreateTrustedBundle creates a TrustedBundle, which provides standardized methods for mounting a bundle of certificates to trust.
 // It will include:
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
@@ -600,6 +617,10 @@ func (cm *certificateManager) CreateTrustedBundleWithSystemRootCertificates(cert
 
 func (cm *certificateManager) CreateMultiTenantTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error) {
 	return certificatemanagement.CreateMultiTenantTrustedBundleWithSystemRootCertificates(cm.keyPair, certificates...)
+}
+
+func (cm *certificateManager) LoadNamedTrustedBundle(ctx context.Context, client client.Client, ns, name string) (certificatemanagement.TrustedBundleRO, error) {
+	return cm.loadTrustedBundle(ctx, client, ns, name)
 }
 
 func (cm *certificateManager) LoadTrustedBundle(ctx context.Context, client client.Client, ns string) (certificatemanagement.TrustedBundleRO, error) {

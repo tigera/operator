@@ -64,13 +64,7 @@ func CreateTrustedBundle(ca CertificateInterface, certificates ...CertificateInt
 // It will include:
 // - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 func CreateNamedTrustedBundle(prefix string, ca CertificateInterface, includeSystem bool, certificates ...CertificateInterface) TrustedBundle {
-	var name string
-	if includeSystem {
-		name = prefix + TrustedCertConfigMapSuffixPublic
-	} else {
-		name = prefix + TrustedCertConfigMapSuffix
-	}
-
+	name := TrustedBundleName(prefix, includeSystem)
 	bundle, err := createTrustedBundle(includeSystem, name, ca, certificates...)
 	if err != nil {
 		panic(err) // This should never happen.
@@ -274,4 +268,11 @@ func getSystemCertificates() ([]byte, error) {
 		}
 	}
 	return nil, nil
+}
+
+func TrustedBundleName(prefix string, includeSystem bool) string {
+	if includeSystem {
+		return prefix + TrustedCertConfigMapSuffixPublic
+	}
+	return prefix + TrustedCertConfigMapSuffix
 }

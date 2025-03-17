@@ -51,6 +51,7 @@ type ContainerName string
 
 const (
 	APIServerPort       = 5443
+	APIServerPortName   = "apiserver"
 	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cnx-apiserver-access"
 
 	auditLogsVolumeName   = "tigera-audit-logs"
@@ -59,6 +60,7 @@ const (
 
 const (
 	QueryServerPort        = 8080
+	QueryServerPortName    = "queryserver"
 	QueryserverNamespace   = "tigera-system"
 	QueryserverServiceName = "tigera-api"
 
@@ -73,6 +75,7 @@ const (
 	MultiTenantManagedClustersAccessClusterRoleName               = "tigera-managed-cluster-access"
 	L7AdmissionControllerContainerName              ContainerName = "calico-l7-admission-controller"
 	L7AdmissionControllerPort                                     = 6443
+	L7AdmissionControllerPortName                                 = "l7admctrl"
 )
 
 var TigeraAPIServerEntityRule = v3.EntityRule{
@@ -325,7 +328,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects = append(globalObjects, globalCalicoObjects...)
 
 		// Add in a NetworkPolicy.
-		namespacedObjects = append(namespacedObjects, c.networkPolicy(c.cfg))
+		namespacedObjects = append(namespacedObjects, c.networkPolicy())
 
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
@@ -999,16 +1002,6 @@ func getContainerPort(cfg *APIServerConfiguration, containerName ContainerName) 
 	return nil
 }
 
-// getPortNameOrNumber returns the port name if it exists, otherwise it returns the port number.
-func getPortNameOrNumber(port *operatorv1.APIServerDeploymentContainerPort) intstr.IntOrString {
-	if port.Name != "" {
-		return intstr.FromString(port.Name)
-	} else {
-		return intstr.FromInt32(port.ContainerPort)
-	}
-
-}
-
 // apiServerService creates a service backed by the API server and - for enterprise - query server.
 //
 // Both Calico and Calico Enterprise, different namespaces.
@@ -1027,10 +1020,10 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Name:       "apiserver",
+					Name:       APIServerPortName,
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: getPortNameOrNumber(apiServerTargetPort),
+					TargetPort: intstr.FromInt32(apiServerTargetPort.ContainerPort),
 				},
 			},
 			Selector: map[string]string{
@@ -1043,10 +1036,10 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		// Add port for queryserver if enterprise.
 		s.Spec.Ports = append(s.Spec.Ports,
 			corev1.ServicePort{
-				Name:       "queryserver",
+				Name:       QueryServerPortName,
 				Port:       QueryServerPort,
 				Protocol:   corev1.ProtocolTCP,
-				TargetPort: getPortNameOrNumber(queryServerTargetPort),
+				TargetPort: intstr.FromInt32(queryServerTargetPort.ContainerPort),
 			},
 		)
 	}
@@ -1054,10 +1047,10 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 	if c.cfg.IsSidecarInjectionEnabled() {
 		s.Spec.Ports = append(s.Spec.Ports,
 			corev1.ServicePort{
-				Name:       "l7admctrl",
+				Name:       L7AdmissionControllerPortName,
 				Port:       L7AdmissionControllerPort,
 				Protocol:   corev1.ProtocolTCP,
-				TargetPort: getPortNameOrNumber(l7AdmissionControllerTargetPort),
+				TargetPort: intstr.FromInt32(l7AdmissionControllerTargetPort.ContainerPort),
 			},
 		)
 	}
@@ -1452,9 +1445,9 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 // being cut off from the main API server. The enterprise equivalent is currently handled in manifests.
 //
 // Calico only.
-func (c *apiServerComponent) networkPolicy(cfg *APIServerConfiguration) *netv1.NetworkPolicy {
+func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
 	tcp := corev1.ProtocolTCP
-	apiServerPort := getContainerPort(cfg, APIServerContainerName).ContainerPort
+	apiServerPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
 	p := intstr.FromInt32(apiServerPort)
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},

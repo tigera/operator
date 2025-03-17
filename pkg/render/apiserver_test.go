@@ -350,11 +350,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(svc.Spec.Ports).To(HaveLen(2))
 		serviceFound := 0
 		for _, p := range svc.Spec.Ports {
-			if p.Name == "apiserver" {
+			if p.Name == render.APIServerPortName {
 				Expect(p.Port).To(Equal(int32(443)))
 				Expect(p.TargetPort.IntValue()).To(Equal(5443))
 				serviceFound++
-			} else if p.Name == "queryserver" {
+			} else if p.Name == render.QueryServerPortName {
 				Expect(p.Port).To(Equal(int32(8080)))
 				Expect(p.TargetPort.IntValue()).To(Equal(8080))
 				serviceFound++
@@ -408,7 +408,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		svc := rtest.GetResource(resources, "tigera-api", "tigera-system", "", "v1", "Service").(*corev1.Service)
 		var servicePort corev1.ServicePort
 		for _, p := range svc.Spec.Ports {
-			if p.Name == "l7admctrl" {
+			if p.Name == render.L7AdmissionControllerPortName {
 				servicePort = p
 			}
 		}
@@ -1123,15 +1123,15 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			}
 
 			apiServerPort := operatorv1.APIServerDeploymentContainerPort{
-				Name:          "apiserver",
+				Name:          render.APIServerPortName,
 				ContainerPort: 1111,
 			}
 			queryServerPort := operatorv1.APIServerDeploymentContainerPort{
-				Name:          "queryserver",
+				Name:          render.QueryServerPortName,
 				ContainerPort: 2222,
 			}
 			l7AdmCtrlPort := operatorv1.APIServerDeploymentContainerPort{
-				Name:          "l7admctrl",
+				Name:          render.L7AdmissionControllerPortName,
 				ContainerPort: 3333,
 			}
 
@@ -1282,17 +1282,17 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(svc.Spec.Ports).To(HaveLen(3))
 			servicesFound := 0
 			for _, p := range svc.Spec.Ports {
-				if p.Name == "apiserver" {
+				if p.Name == render.APIServerPortName {
 					Expect(p.Port).To(Equal(int32(443)))
-					Expect(p.TargetPort.StrVal).To(Equal(apiServerPort.Name))
+					Expect(p.TargetPort.IntVal).To(Equal(apiServerPort.ContainerPort))
 					servicesFound++
-				} else if p.Name == "queryserver" {
+				} else if p.Name == render.QueryServerPortName {
 					Expect(p.Port).To(Equal(int32(8080)))
-					Expect(p.TargetPort.StrVal).To(Equal(queryServerPort.Name))
+					Expect(p.TargetPort.IntVal).To(Equal(queryServerPort.ContainerPort))
 					servicesFound++
-				} else if p.Name == "l7admctrl" {
+				} else if p.Name == render.L7AdmissionControllerPortName {
 					Expect(p.Port).To(Equal(int32(6443)))
-					Expect(p.TargetPort.StrVal).To(Equal(l7AdmCtrlPort.Name))
+					Expect(p.TargetPort.IntVal).To(Equal(l7AdmCtrlPort.ContainerPort))
 					servicesFound++
 				}
 			}
@@ -1991,7 +1991,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		svc := rtest.GetResource(resources, "calico-api", "calico-apiserver", "", "v1", "Service").(*corev1.Service)
 		Expect(len(svc.Spec.Ports)).To(Equal(1))
-		Expect(svc.Spec.Ports[0].Name).To(Equal("apiserver"))
+		Expect(svc.Spec.Ports[0].Name).To(Equal(render.APIServerPortName))
 		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(443)))
 		Expect(svc.Spec.Ports[0].TargetPort.IntValue()).To(Equal(5443))
 	})
@@ -2181,7 +2181,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			}
 
 			apiServerPort := operatorv1.APIServerDeploymentContainerPort{
-				Name:          "apiserver",
+				Name:          render.APIServerPortName,
 				ContainerPort: 1111,
 			}
 
@@ -2286,9 +2286,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			svc := rtest.GetResource(resources, "calico-api", "calico-apiserver", "", "v1", "Service").(*corev1.Service)
 			Expect(svc).NotTo(BeNil())
 			Expect(svc.Spec.Ports).To(HaveLen(1))
-			Expect(svc.Spec.Ports[0].Name).To(Equal("apiserver"))
+			Expect(svc.Spec.Ports[0].Name).To(Equal(render.APIServerPortName))
 			Expect(svc.Spec.Ports[0].Port).To(Equal(int32(443)))
-			Expect(svc.Spec.Ports[0].TargetPort.StrVal).To(Equal(apiServerPort.Name))
+			Expect(svc.Spec.Ports[0].TargetPort.IntVal).To(Equal(apiServerPort.ContainerPort))
 
 			Expect(ok).To(BeTrue())
 		})

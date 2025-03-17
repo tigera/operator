@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package whisker_test
+package goldmane_test
 
 import (
 	. "github.com/onsi/ginkgo"
@@ -27,7 +27,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
-	"github.com/tigera/operator/pkg/render/whisker"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -40,58 +40,59 @@ var (
 )
 
 var _ = Describe("ComponentRendering", func() {
-	DescribeTable("Creation and deletion counts", func(cfg *whisker.Configuration, creatObjs, delObjs int) {
-		component := whisker.Whisker(cfg)
+	DescribeTable("Creation and deletion counts", func(cfg *goldmane.Configuration, creatObjs, delObjs int) {
+		component := goldmane.Goldmane(cfg)
 		objsToCreate, objsToDelete := component.Objects()
 		Expect(objsToCreate).To(HaveLen(creatObjs))
 		Expect(objsToDelete).To(HaveLen(delObjs))
 	},
 		Entry("Should return objects to create when variant is Calico",
-			&whisker.Configuration{
+			&goldmane.Configuration{
 				Installation: &operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderGKE,
 					Variant:            operatorv1.Calico,
 				},
-				TrustedCertBundle:     defaultTrustedCertBundle,
-				WhiskerBackendKeyPair: defaultTLSKeyPair,
+				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
+				GoldmaneServerKeyPair: defaultTLSKeyPair,
 			},
-			4, 0,
+			6, 0,
 		),
 		Entry("Should return objects to delete when variant is not Calico",
-			&whisker.Configuration{
+			&goldmane.Configuration{
 				Installation: &operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderGKE,
 					Variant:            operatorv1.TigeraSecureEnterprise,
 				},
-				TrustedCertBundle:     defaultTrustedCertBundle,
-				WhiskerBackendKeyPair: defaultTLSKeyPair,
+				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
+				GoldmaneServerKeyPair: defaultTLSKeyPair,
 			},
-			0, 4,
+			0, 6,
 		),
 	)
 
-	DescribeTable("Whisker Deployment", func(cfg *whisker.Configuration, expected *appsv1.Deployment) {
-		component := whisker.Whisker(cfg)
+	DescribeTable("Goldmane Deployment", func(cfg *goldmane.Configuration, expected *appsv1.Deployment) {
+		component := goldmane.Goldmane(cfg)
 		objsToCreate, _ := component.Objects()
 
-		deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, whisker.WhiskerName, whisker.WhiskerNamespace)
+		deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, goldmane.GoldmaneName, goldmane.GoldmaneNamespace)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(deployment).To(Equal(expected), cmp.Diff(deployment, expected))
 	},
 		Entry("Should return objects to create when variant is Calico",
-			&whisker.Configuration{
+			&goldmane.Configuration{
 				Installation: &operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderGKE,
 					Variant:            operatorv1.Calico,
 				},
-				TrustedCertBundle:     defaultTrustedCertBundle,
-				WhiskerBackendKeyPair: defaultTLSKeyPair,
+				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
+				GoldmaneServerKeyPair: defaultTLSKeyPair,
 			},
 			&appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      whisker.WhiskerDeploymentName,
-					Namespace: whisker.WhiskerNamespace,
+					Name:        goldmane.GoldmaneDeploymentName,
+					Namespace:   goldmane.GoldmaneNamespace,
+					Annotations: map[string]string{"hash.operator.tigera.io/key-pair": "e9e6e60e8b6007cbf14a325c3fa1f1692412315a"},
 				},
 				Spec: appsv1.DeploymentSpec{
 					Replicas: ptr.ToPtr(int32(1)),
@@ -100,41 +101,32 @@ var _ = Describe("ComponentRendering", func() {
 					},
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
-							Name: whisker.WhiskerDeploymentName,
+							Name: goldmane.GoldmaneDeploymentName,
 						},
 						Spec: corev1.PodSpec{
-							ServiceAccountName: whisker.WhiskerServiceAccountName,
+							ServiceAccountName: goldmane.GoldmaneServiceAccountName,
 							Tolerations:        append(rmeta.TolerateCriticalAddonsAndControlPlane, rmeta.TolerateGKEARM64NoSchedule),
 							Containers: []corev1.Container{
 								{
-									Name:            whisker.WhiskerContainerName,
+									Name:            goldmane.GoldmaneContainerName,
 									Image:           "",
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
-									},
-									SecurityContext: securitycontext.NewNonRootContext(),
-								},
-								{
-									Name:            whisker.WhiskerBackendContainerName,
-									Image:           "",
-									ImagePullPolicy: render.ImagePullPolicy(),
-									Env: []corev1.EnvVar{
-										{Name: "LOG_LEVEL", Value: "INFO"},
-										{Name: "PORT", Value: "3002"},
-										{Name: "GOLDMANE_HOST", Value: "goldmane.calico-system.svc.cluster.local:7443"},
-										{Name: "TLS_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
-										{Name: "TLS_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
+										{Name: "PORT", Value: "7443"},
+										{Name: "SERVER_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
+										{Name: "SERVER_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
+										{Name: "CA_CERT_PATH", Value: defaultTrustedCertBundle.MountPath()},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 									VolumeMounts: append(
-										defaultTrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
-										defaultTLSKeyPair.VolumeMount(rmeta.OSTypeLinux)),
+										[]corev1.VolumeMount{defaultTLSKeyPair.VolumeMount(rmeta.OSTypeLinux)},
+										defaultTrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)...),
 								},
 							},
 							Volumes: []corev1.Volume{
-								defaultTrustedCertBundle.Volume(),
 								defaultTLSKeyPair.Volume(),
+								defaultTrustedCertBundle.Volume(),
 							},
 						},
 					},

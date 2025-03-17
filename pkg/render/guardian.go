@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 package render
 
 import (
+	"fmt"
 	"net"
 	"net/url"
 
@@ -25,6 +26,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -35,20 +37,23 @@ import (
 	"github.com/tigera/api/pkg/lib/numorstring"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
+	"github.com/tigera/operator/pkg/render/common/selector"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // The names of the components related to the Guardian related rendered objects.
 const (
 	GuardianName                   = "tigera-guardian"
-	GuardianNamespace              = GuardianName
+	GuardianNamespace              = common.CalicoNamespace
 	GuardianServiceAccountName     = GuardianName
 	GuardianClusterRoleName        = GuardianName
 	GuardianClusterRoleBindingName = GuardianName
@@ -58,6 +63,9 @@ const (
 	GuardianSecretName             = "tigera-managed-cluster-connection"
 	GuardianTargetPort             = 8080
 	GuardianPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
+	GuardianKeyPairSecret          = "guardian-key-pair"
+
+	GoldmaneDeploymentName = "goldmane"
 )
 
 var (
@@ -91,7 +99,7 @@ type GuardianConfiguration struct {
 	OpenShift                   bool
 	Installation                *operatorv1.InstallationSpec
 	TunnelSecret                *corev1.Secret
-	TrustedCertBundle           certificatemanagement.TrustedBundle
+	TrustedCertBundle           certificatemanagement.TrustedBundleRO
 	TunnelCAType                operatorv1.CAType
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 
@@ -99,6 +107,8 @@ type GuardianConfiguration struct {
 	// If this slice is empty, then resolution has not yet occurred. Pods with no proxy
 	// configured are represented with a nil value.
 	PodProxies []*httpproxy.Config
+
+	GuardianClientKeyPair certificatemanagement.KeyPairInterface
 }
 
 type GuardianComponent struct {
@@ -111,7 +121,11 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
+	} else {
+		c.image, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
+	}
 	return err
 }
 
@@ -121,35 +135,34 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
-		CreateNamespace(GuardianNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
-	}
-
-	objs = append(objs, CreateOperatorSecretsRoleBinding(GuardianNamespace))
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GuardianNamespace, c.cfg.PullSecrets...)...)...)
-	objs = append(objs,
 		c.serviceAccount(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.deployment(),
 		c.service(),
 		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
-		c.cfg.TrustedCertBundle.ConfigMap(GuardianNamespace),
+	}
 
-		// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
-		// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
-		CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
-		managerServiceAccount(ManagerNamespace),
-		managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil),
-		managerClusterRoleBinding([]string{ManagerNamespace}),
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		objs = append(objs,
+			// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
+			// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
+			CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
+			managerServiceAccount(ManagerNamespace),
+			managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil),
+			managerClusterRoleBinding([]string{ManagerNamespace}),
 
-		// Install default UI settings for this managed cluster.
-		managerClusterWideSettingsGroup(),
-		managerUserSpecificSettingsGroup(),
-		managerClusterWideTigeraLayer(),
-		managerClusterWideDefaultView(),
-	)
+			// Install default UI settings for this managed cluster.
+			managerClusterWideSettingsGroup(),
+			managerUserSpecificSettingsGroup(),
+			managerClusterWideTigeraLayer(),
+			managerClusterWideDefaultView(),
+		)
+	} else {
+		objs = append(objs, c.networkPolicy())
+	}
 
-	return objs, nil
+	return objs, deprecatedObjects()
 }
 
 func (c *GuardianComponent) Ready() bool {
@@ -157,6 +170,40 @@ func (c *GuardianComponent) Ready() bool {
 }
 
 func (c *GuardianComponent) service() *corev1.Service {
+	ports := []corev1.ServicePort{
+		{
+			Name: "https",
+			Port: 443,
+			TargetPort: intstr.IntOrString{
+				Type:   intstr.Int,
+				IntVal: 8080,
+			},
+			Protocol: corev1.ProtocolTCP,
+		},
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		ports = append(ports,
+			corev1.ServicePort{
+				Name: "elasticsearch",
+				Port: 9200,
+				TargetPort: intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: 8080,
+				},
+				Protocol: corev1.ProtocolTCP,
+			},
+			corev1.ServicePort{
+				Name: "kibana",
+				Port: 5601,
+				TargetPort: intstr.IntOrString{
+					Type:   intstr.Int,
+					IntVal: 8080,
+				},
+				Protocol: corev1.ProtocolTCP,
+			},
+		)
+	}
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      GuardianServiceName,
@@ -166,35 +213,7 @@ func (c *GuardianComponent) service() *corev1.Service {
 			Selector: map[string]string{
 				"k8s-app": GuardianName,
 			},
-			Ports: []corev1.ServicePort{
-				{
-					Name: "linseed",
-					Port: 443,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: 8080,
-					},
-					Protocol: corev1.ProtocolTCP,
-				},
-				{
-					Name: "elasticsearch",
-					Port: 9200,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: 8080,
-					},
-					Protocol: corev1.ProtocolTCP,
-				},
-				{
-					Name: "kibana",
-					Port: 5601,
-					TargetPort: intstr.IntOrString{
-						Type:   intstr.Int,
-						IntVal: 8080,
-					},
-					Protocol: corev1.ProtocolTCP,
-				},
-			},
+			Ports: ports,
 		},
 	}
 }
@@ -207,20 +226,38 @@ func (c *GuardianComponent) serviceAccount() *corev1.ServiceAccount {
 }
 
 func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
-	policyRules := []rbacv1.PolicyRule{
-		{
+	var policyRules []rbacv1.PolicyRule
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		policyRules = append(policyRules, rbacv1.PolicyRule{
 			APIGroups: []string{""},
 			Resources: []string{"users", "groups", "serviceaccounts"},
 			Verbs:     []string{"impersonate"},
-		},
-	}
+		})
 
-	if c.cfg.OpenShift {
+		if c.cfg.OpenShift {
+			policyRules = append(policyRules, rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{securitycontextconstraints.NonRootV2},
+			})
+		}
+	} else {
 		policyRules = append(policyRules, rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{securitycontextconstraints.NonRootV2},
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"clusterinformations",
+				"tiers",
+				"stagednetworkpolicies",
+				"tier.stagednetworkpolicies",
+				"networkpolicies",
+				"tier.networkpolicies",
+				"globalnetworkpolicies",
+				"tier.globalnetworkpolicies",
+				"globalnetworksets",
+			},
+			Verbs: []string{"get", "list", "watch"},
 		})
 	}
 
@@ -300,7 +337,7 @@ func (c *GuardianComponent) deployment() *appsv1.Deployment {
 }
 
 func (c *GuardianComponent) volumes() []corev1.Volume {
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		c.cfg.TrustedCertBundle.Volume(),
 		{
 			Name: GuardianVolumeName,
@@ -311,6 +348,10 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 			},
 		},
 	}
+	if c.cfg.GuardianClientKeyPair != nil {
+		volumes = append(volumes, c.cfg.GuardianClientKeyPair.Volume())
+	}
+	return volumes
 }
 
 func (c *GuardianComponent) container() []corev1.Container {
@@ -319,11 +360,34 @@ func (c *GuardianComponent) container() []corev1.Container {
 		{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
 		{Name: "GUARDIAN_VOLTRON_URL", Value: c.cfg.URL},
 		{Name: "GUARDIAN_VOLTRON_CA_TYPE", Value: string(c.cfg.TunnelCAType)},
-		{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "GUARDIAN_CA_FILE", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 	}
 	envVars = append(envVars, c.cfg.Installation.Proxy.EnvVars()...)
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		envVars = append(envVars,
+			corev1.EnvVar{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+			corev1.EnvVar{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+			corev1.EnvVar{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		)
+	}
+
+	if c.cfg.GuardianClientKeyPair != nil {
+		envVars = append(envVars,
+			corev1.EnvVar{
+				Name:  "GUARDIAN_GOLDMANE_ENDPOINT",
+				Value: "https://goldmane.calico-system.svc.cluster.local:7443",
+			},
+			corev1.EnvVar{
+				Name:  "GUARDIAN_GOLDMANE_CLIENT_CERT",
+				Value: c.cfg.GuardianClientKeyPair.VolumeMountCertificateFilePath(),
+			},
+			corev1.EnvVar{
+				Name:  "GUARDIAN_GOLDMANE_CLIENT_KEY",
+				Value: c.cfg.GuardianClientKeyPair.VolumeMountKeyFilePath(),
+			},
+		)
+	}
 
 	return []corev1.Container{
 		{
@@ -356,16 +420,50 @@ func (c *GuardianComponent) container() []corev1.Container {
 }
 
 func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
-	return append(
+	volumeMounts := append(
 		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 		corev1.VolumeMount{Name: GuardianVolumeName, MountPath: "/certs/", ReadOnly: true},
 	)
+	if c.cfg.GuardianClientKeyPair != nil {
+		volumeMounts = append(volumeMounts, c.cfg.GuardianClientKeyPair.VolumeMount(c.SupportedOSType()))
+	}
+	return volumeMounts
 }
 
 func (c *GuardianComponent) annotations() map[string]string {
 	annotations := c.cfg.TrustedCertBundle.HashAnnotations()
 	annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
 	return annotations
+}
+
+func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
+	return &netv1.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "guardian", Namespace: GuardianNamespace},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: *selector.PodLabelSelector(GuardianDeploymentName),
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					From: []netv1.NetworkPolicyPeer{
+						{
+							PodSelector: selector.PodLabelSelector(GoldmaneDeploymentName),
+						},
+					},
+					Ports: []netv1.NetworkPolicyPort{{
+						Protocol: ptr.ToPtr(corev1.ProtocolTCP),
+						Port:     ptr.ToPtr(intstr.FromInt32(GuardianTargetPort)),
+					}},
+				},
+				{
+					Ports: []netv1.NetworkPolicyPort{{
+						Protocol: ptr.ToPtr(corev1.ProtocolUDP),
+						Port:     ptr.ToPtr(intstr.FromInt32(53)),
+					}},
+				},
+			},
+		},
+	}
 }
 
 func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
@@ -480,54 +578,57 @@ func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, e
 
 	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(8080)}
 	networkpolicyHelper := networkpolicy.DefaultHelper()
-	ingressRules := []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      FluentdSourceEntityRule,
-			Destination: guardianIngressDestinationEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicyHelper.ComplianceBenchmarkerSourceEntityRule(),
-			Destination: guardianIngressDestinationEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicyHelper.ComplianceReporterSourceEntityRule(),
-			Destination: guardianIngressDestinationEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicyHelper.ComplianceSnapshotterSourceEntityRule(),
-			Destination: guardianIngressDestinationEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      networkpolicyHelper.ComplianceControllerSourceEntityRule(),
-			Destination: guardianIngressDestinationEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      IntrusionDetectionSourceEntityRule,
-			Destination: guardianIngressDestinationEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Source:      IntrusionDetectionInstallerSourceEntityRule,
-			Destination: guardianIngressDestinationEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: guardianIngressDestinationEntityRule,
-		},
+	var ingressRules []v3.Rule
+	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		ingressRules = append(ingressRules, []v3.Rule{
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      FluentdSourceEntityRule,
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkpolicyHelper.ComplianceBenchmarkerSourceEntityRule(),
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkpolicyHelper.ComplianceReporterSourceEntityRule(),
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkpolicyHelper.ComplianceSnapshotterSourceEntityRule(),
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkpolicyHelper.ComplianceControllerSourceEntityRule(),
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      IntrusionDetectionSourceEntityRule,
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      IntrusionDetectionInstallerSourceEntityRule,
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: guardianIngressDestinationEntityRule,
+			},
+		}...)
 	}
 
 	policy := &v3.NetworkPolicy{
@@ -557,4 +658,19 @@ func ProcessPodProxies(podProxies []*httpproxy.Config) []*httpproxy.Config {
 	}
 
 	return podProxies
+}
+
+func GuardianService(clusterDomain string) string {
+	return fmt.Sprintf("https://%s.%s.svc.%s:%d", GuardianServiceName, GuardianNamespace, clusterDomain, 443)
+}
+
+func deprecatedObjects() []client.Object {
+	return []client.Object{
+		// All the Guardian objects were moved to "calico-system" circa Calico v3.30, and so the legacy tigera-guardian
+		// Namespace and everything within it should be removed.
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
+		},
+	}
 }

@@ -24,7 +24,7 @@ require (
 	github.com/tigera/api v0.0.0-20230406222214-ca74195900cb
 	go.uber.org/zap v1.26.0
 	golang.org/x/crypto v0.36.0
-	golang.org/x/net v0.34.0
+	golang.org/x/net v0.37.0
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/api v0.28.15

@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/render/whisker"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -135,3 +136,16 @@ var _ = Describe("ComponentRendering", func() {
 		),
 	)
 })
+
+func GetOverriddenGoldmaneDeployment(overrides *operatorv1.GoldmaneDeployment) (*appsv1.Deployment, error) {
+	component := goldmane.Goldmane(&goldmane.Configuration{
+		Installation: &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderGKE,
+			Variant:            operatorv1.Calico,
+		},
+		TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
+		GoldmaneServerKeyPair: defaultTLSKeyPair,
+	})
+	objsToCreate, _ := component.Objects()
+	return rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, goldmane.GoldmaneName, whisker.GoldmaneNamespace)
+}

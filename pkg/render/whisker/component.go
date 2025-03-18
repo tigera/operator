@@ -15,6 +15,7 @@
 package whisker
 
 import (
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -24,7 +25,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -64,6 +64,7 @@ type Configuration struct {
 	Installation          *operatorv1.InstallationSpec
 	TrustedCertBundle     certificatemanagement.TrustedBundleRO
 	WhiskerBackendKeyPair certificatemanagement.KeyPairInterface
+	Whisker               *operatorv1.Whisker
 }
 
 type Component struct {
@@ -74,21 +75,25 @@ type Component struct {
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.cfg.Installation.Registry
-	path := c.cfg.Installation.ImagePath
-	prefix := c.cfg.Installation.ImagePrefix
+	//reg := c.cfg.Installation.Registry
+	//path := c.cfg.Installation.ImagePath
+	//prefix := c.cfg.Installation.ImagePrefix
+	//
+	//var err error
 
-	var err error
+	c.whiskerImage = "gcr.io/unique-caldron-775/brianmcmahon/calico/whisker:bmv1.11"
 
-	c.whiskerImage, err = components.GetReference(components.ComponentCalicoWhisker, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
+	//c.whiskerImage, err = components.GetReference(components.ComponentCalicoWhisker, reg, path, prefix, is)
+	//if err != nil {
+	//	return err
+	//}
 
-	c.whiskerBackendImage, err = components.GetReference(components.ComponentCalicoWhiskerBackend, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
+	c.whiskerBackendImage = "gcr.io/unique-caldron-775/brianmcmahon/calico/whisker-backend:bmv1.11"
+
+	//c.whiskerBackendImage, err = components.GetReference(components.ComponentCalicoWhiskerBackend, reg, path, prefix, is)
+	//if err != nil {
+	//	return err
+	//}
 
 	return nil
 }
@@ -98,9 +103,14 @@ func (c *Component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *Component) Objects() ([]client.Object, []client.Object) {
+	deployment := c.deployment()
+	if overrides := c.cfg.Whisker.Spec.WhiskerDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(deployment, overrides)
+	}
+
 	objs := []client.Object{
 		c.serviceAccount(),
-		c.deployment(),
+		deployment,
 		c.whiskerService(),
 		c.networkPolicy(),
 	}

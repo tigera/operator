@@ -18,6 +18,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -64,6 +66,7 @@ type Configuration struct {
 	Installation          *operatorv1.InstallationSpec
 	TrustedCertBundle     certificatemanagement.TrustedBundleRO
 	WhiskerBackendKeyPair certificatemanagement.KeyPairInterface
+	Whisker               *operatorv1.Whisker
 }
 
 type Component struct {
@@ -98,9 +101,14 @@ func (c *Component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *Component) Objects() ([]client.Object, []client.Object) {
+	deployment := c.deployment()
+	if overrides := c.cfg.Whisker.Spec.WhiskerDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(deployment, overrides)
+	}
+
 	objs := []client.Object{
 		c.serviceAccount(),
-		c.deployment(),
+		deployment,
 		c.whiskerService(),
 		c.networkPolicy(),
 	}

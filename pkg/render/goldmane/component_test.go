@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/goldmane"
+	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -54,6 +55,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
+				Goldmane:              &operatorv1.Goldmane{},
 			},
 			6, 0,
 		),
@@ -65,6 +67,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
+				Goldmane:              &operatorv1.Goldmane{},
 			},
 			0, 6,
 		),
@@ -86,6 +89,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
+				Goldmane:              &operatorv1.Goldmane{},
 			},
 			&appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -135,3 +139,21 @@ var _ = Describe("ComponentRendering", func() {
 		),
 	)
 })
+
+func GetOverriddenGoldmaneDeployment(overrides *operatorv1.GoldmaneDeployment) (*appsv1.Deployment, error) {
+	component := goldmane.Goldmane(&goldmane.Configuration{
+		Installation: &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderGKE,
+			Variant:            operatorv1.Calico,
+		},
+		TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
+		GoldmaneServerKeyPair: defaultTLSKeyPair,
+		Goldmane: &operatorv1.Goldmane{
+			Spec: operatorv1.GoldmaneSpec{
+				GoldmaneDeployment: overrides,
+			},
+		},
+	})
+	objsToCreate, _ := component.Objects()
+	return rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, goldmane.GoldmaneName, whisker.GoldmaneNamespace)
+}

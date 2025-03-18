@@ -21,6 +21,10 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
@@ -29,9 +33,6 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 var (
@@ -143,3 +144,22 @@ var _ = Describe("ComponentRendering", func() {
 		),
 	)
 })
+
+func GetOverriddenWhiskerDeployment(overrides *operatorv1.WhiskerDeployment) (*appsv1.Deployment, error) {
+	component := whisker.Whisker(&whisker.Configuration{
+		Installation: &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderGKE,
+			Variant:            operatorv1.Calico,
+		},
+		TrustedCertBundle:     defaultTrustedCertBundle,
+		WhiskerBackendKeyPair: defaultTLSKeyPair,
+		Whisker: &operatorv1.Whisker{
+			Spec: operatorv1.WhiskerSpec{
+				WhiskerDeployment: overrides,
+			},
+		},
+	})
+
+	objsToCreate, _ := component.Objects()
+	return rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, whisker.WhiskerName, whisker.WhiskerNamespace)
+}

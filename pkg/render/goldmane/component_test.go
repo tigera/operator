@@ -117,6 +117,8 @@ var _ = Describe("ComponentRendering", func() {
 										{Name: "SERVER_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
 										{Name: "SERVER_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
 										{Name: "CA_CERT_PATH", Value: defaultTrustedCertBundle.MountPath()},
+										{Name: "PUSH_URL", Value: "https://tigera-guardian.calico-system.svc.cluster.local:9443"},
+										{Name: "FILE_CONFIG_PATH", Value: "/config/config.json"},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 									VolumeMounts: append(

@@ -171,9 +171,6 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		MountPath: GoldmaneConfigFilePath,
 	})
 
-	if c.cfg.ManagementClusterConnection != nil {
-	}
-
 	return corev1.Container{
 		Name:            GoldmaneContainerName,
 		Image:           c.goldmaneImage,

@@ -15,7 +15,9 @@
 package goldmane
 
 import (
+	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -48,6 +50,10 @@ const (
 
 	GoldmaneKeyPairSecret = "goldmane-key-pair"
 	GoldmaneServiceName   = "goldmane"
+
+	GoldmaneConfigVolumeName = "config"
+	GoldmaneConfigFilePath   = "/config"
+	GoldmaneConfigFileName   = "config.json"
 )
 
 func Goldmane(cfg *Configuration) render.Component {
@@ -97,6 +103,7 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 		c.serviceAccount(),
 		c.role(),
 		c.roleBinding(),
+		c.hotReloadConfigMap(),
 		c.goldmaneService(),
 		c.deployment(),
 		c.networkPolicy(),
@@ -123,24 +130,46 @@ func (c *Component) serviceAccount() *corev1.ServiceAccount {
 	}
 }
 
+// hotReloadConfigMap returns a ConfigMap containing configuration for Goldmane that does not require a restart of the pod.
+// This is mounted as a file within the Pod, which can be dynamically reloaded when changed.
+func (c *Component) hotReloadConfigMap() *corev1.ConfigMap {
+	type configMapData struct {
+		EmitFlows bool `json:"emitFlows"`
+	}
+
+	d, err := json.Marshal(configMapData{EmitFlows: c.cfg.ManagementClusterConnection != nil})
+	if err != nil {
+		panic(fmt.Sprintf("BUG: failed to marshal config map data: %s", err))
+	}
+
+	return &corev1.ConfigMap{
+		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: GoldmaneName, Namespace: GoldmaneNamespace},
+		Data: map[string]string{
+			GoldmaneConfigFileName: string(d),
+		},
+	}
+}
+
 func (c *Component) goldmaneContainer() corev1.Container {
+	guardianSvc := render.GuardianService(c.cfg.ClusterDomain)
 	env := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "INFO"},
 		{Name: "PORT", Value: fmt.Sprintf("%d", GoldmaneServicePort)},
 		{Name: "SERVER_CERT_PATH", Value: c.cfg.GoldmaneServerKeyPair.VolumeMountCertificateFilePath()},
 		{Name: "SERVER_KEY_PATH", Value: c.cfg.GoldmaneServerKeyPair.VolumeMountKeyFilePath()},
 		{Name: "CA_CERT_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		{Name: "PUSH_URL", Value: fmt.Sprintf("%s/api/v1/flows/bulk", guardianSvc)},
+		{Name: "FILE_CONFIG_PATH", Value: filepath.Join(GoldmaneConfigFilePath, GoldmaneConfigFileName)},
 	}
-	guardianSvc := render.GuardianService(c.cfg.ClusterDomain)
 
 	volumeMounts := []corev1.VolumeMount{c.cfg.GoldmaneServerKeyPair.VolumeMount(c.SupportedOSType())}
 	volumeMounts = append(volumeMounts, c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())...)
-
-	if c.cfg.ManagementClusterConnection != nil {
-		env = append(env,
-			corev1.EnvVar{Name: "PUSH_URL", Value: fmt.Sprintf("%s/api/v1/flows/bulk", guardianSvc)},
-		)
-	}
+	volumeMounts = append(volumeMounts, corev1.VolumeMount{
+		Name:      GoldmaneConfigVolumeName,
+		ReadOnly:  true,
+		MountPath: GoldmaneConfigFilePath,
+	})
 
 	return corev1.Container{
 		Name:            GoldmaneContainerName,
@@ -174,7 +203,18 @@ func (c *Component) deployment() *appsv1.Deployment {
 	}
 
 	ctrs := []corev1.Container{c.goldmaneContainer()}
-	volumes := []corev1.Volume{c.cfg.GoldmaneServerKeyPair.Volume(), c.cfg.TrustedCertBundle.Volume()}
+	volumes := []corev1.Volume{
+		c.cfg.GoldmaneServerKeyPair.Volume(),
+		c.cfg.TrustedCertBundle.Volume(),
+		{
+			Name: GoldmaneConfigVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: GoldmaneName},
+				},
+			},
+		},
+	}
 
 	// Add an annotation for the key pair as it requires a server restart (may as well restart the pod). Don't add an
 	// annotation for the mount CA since it's used for a client that can pick up the changes without a pod restart.

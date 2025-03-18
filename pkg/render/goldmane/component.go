@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -65,6 +66,7 @@ type Configuration struct {
 	GoldmaneServerKeyPair       certificatemanagement.KeyPairInterface
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	ClusterDomain               string
+	Goldmane                    *operatorv1.Goldmane
 }
 
 type Component struct {
@@ -93,12 +95,17 @@ func (c *Component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *Component) Objects() ([]client.Object, []client.Object) {
+	deployment := c.deployment()
+	if overrides := c.cfg.Goldmane.Spec.GoldmaneDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(deployment, overrides)
+	}
+
 	objs := []client.Object{
 		c.serviceAccount(),
 		c.role(),
 		c.roleBinding(),
 		c.goldmaneService(),
-		c.deployment(),
+		deployment,
 		c.networkPolicy(),
 	}
 

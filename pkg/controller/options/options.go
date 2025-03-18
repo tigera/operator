@@ -34,6 +34,7 @@ type AddOptions struct {
 	ManageCRDs          bool
 	ShutdownContext     context.Context
 
+	// Kubernetes clientset used by controllers to create watchers and informers.
 	K8sClientset *kubernetes.Clientset
 
 	// Whether or not the operator is running in multi-tenant mode.

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"reflect"
 	"strings"
 	"time"
 
@@ -166,7 +167,7 @@ var _ reconcile.Reconciler = &reconcileCSR{}
 // these CSRs. It will only sign requests that are pre-defined and reject others in order to avoid malicious requests.
 type reconcileCSR struct {
 	client              client.Client
-	calicoClient        *calicoclient.Clientset
+	calicoClient        calicoclient.Interface
 	scheme              *runtime.Scheme
 	provider            operatorv1.Provider
 	clusterDomain       string
@@ -306,6 +307,11 @@ type PodOrHostEndpoint interface {
 }
 
 func validate[T PodOrHostEndpoint](csr *certificatesv1.CertificateSigningRequest, obj T, allowedTLSAssets map[string]tlsAsset) (*x509.Certificate, error) {
+	iv := reflect.ValueOf(obj)
+	if !iv.IsValid() || iv.IsNil() {
+		return nil, fmt.Errorf("invalid: no object can be associated with CSR %s", csr.Name)
+	}
+
 	var expectedName, expectedIP string
 	switch o := any(obj).(type) {
 	case *corev1.Pod:
@@ -313,8 +319,6 @@ func validate[T PodOrHostEndpoint](csr *certificatesv1.CertificateSigningRequest
 		expectedIP = o.Status.PodIP
 	case *v3.HostEndpoint:
 		expectedName = o.Spec.Node
-	case nil:
-		return nil, fmt.Errorf("invalid: no object can be associated with CSR %s", csr.Name)
 	default:
 		return nil, fmt.Errorf("invalid: unexpected type %T", obj)
 	}
@@ -445,10 +449,13 @@ func (r *reconcileCSR) getPod(ctx context.Context, csr *certificatesv1.Certifica
 func (r *reconcileCSR) getHostEndpoint(ctx context.Context, hostname string) (*v3.HostEndpoint, error) {
 	hepList, err := r.calicoClient.ProjectcalicoV3().HostEndpoints().List(ctx, metav1.ListOptions{FieldSelector: fmt.Sprintf("spec.node=%s", hostname)})
 	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	if len(hepList.Items) == 0 {
-		return nil, fmt.Errorf("no host endpoint found for hostname %s", hostname)
+		return nil, nil
 	}
 	return &hepList.Items[0], nil
 }

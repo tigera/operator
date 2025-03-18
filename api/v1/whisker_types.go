@@ -28,7 +28,12 @@ type Whisker struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	Spec   WhiskerSpec   `json:"spec,omitempty"`
 	Status WhiskerStatus `json:"status,omitempty"`
+}
+
+type WhiskerSpec struct {
+	WhiskerDeployment *WhiskerDeployment `json:"template,omitempty"`
 }
 
 // +kubebuilder:object:root=true

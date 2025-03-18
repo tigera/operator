@@ -18,6 +18,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -142,4 +143,123 @@ var _ = Describe("ComponentRendering", func() {
 			},
 		),
 	)
+
+	FIt("Should apply overrides", func() {
+		affinity := &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+					NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+						MatchExpressions: []corev1.NodeSelectorRequirement{{
+							Key:      "custom-affinity-key",
+							Operator: corev1.NodeSelectorOpExists,
+						}},
+					}},
+				},
+			},
+		}
+		resources1 := &corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"storage": resource.MustParse("10Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+		resources2 := &corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"storage": resource.MustParse("11Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"storage": resource.MustParse("11Gi"),
+			},
+		}
+
+		nodeSelector := map[string]string{
+			"not-zero": "an override of a default nodeSelector key",
+		}
+
+		labels := map[string]string{
+			"foo": "bar",
+		}
+
+		annotations := map[string]string{
+			"baz": "qux",
+		}
+
+		tolerations := []corev1.Toleration{{
+			Key:      "foo",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "bar",
+		}}
+
+		topologyConstraints := []corev1.TopologySpreadConstraint{
+			{
+				MaxSkew:           1,
+				TopologyKey:       "topology.kubernetes.io/zone",
+				WhenUnsatisfiable: corev1.ScheduleAnyway,
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"foo": "bar",
+					},
+				},
+			},
+		}
+
+		overrides := &operatorv1.WhiskerDeployment{
+			Spec: &operatorv1.WhiskerDeploymentSpec{
+				Template: &operatorv1.WhiskerDeploymentPodTemplateSpec{
+					Metadata: &operatorv1.Metadata{
+						Labels:      labels,
+						Annotations: annotations,
+					},
+					Spec: &operatorv1.WhiskerDeploymentPodSpec{
+						Affinity: affinity,
+						Containers: []operatorv1.WhiskerDeploymentContainer{
+							{
+								Name:      "whisker",
+								Resources: resources1,
+							},
+							{
+								Name:      "whisker-backend",
+								Resources: resources2,
+							},
+						},
+						NodeSelector:              nodeSelector,
+						TopologySpreadConstraints: topologyConstraints,
+						Tolerations:               tolerations,
+					},
+				},
+			},
+		}
+
+		deployment, err := GetOverriddenWhiskerDeployment(overrides)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		Expect(deployment.Spec.Template.ObjectMeta.Labels).To(Equal(labels))
+		Expect(deployment.Spec.Template.ObjectMeta.Annotations).To(Equal(annotations))
+		Expect(deployment.Spec.Template.Spec.Affinity).To(Equal(affinity))
+		Expect(deployment.Spec.Template.Spec.TopologySpreadConstraints).To(Equal(topologyConstraints))
+		Expect(deployment.Spec.Template.Spec.NodeSelector).To(Equal(nodeSelector))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Resources).To(Equal(*resources1))
+		Expect(deployment.Spec.Template.Spec.Containers[1].Resources).To(Equal(*resources2))
+	})
 })
+
+func GetOverriddenWhiskerDeployment(overrides *operatorv1.WhiskerDeployment) (*appsv1.Deployment, error) {
+	component := whisker.Whisker(&whisker.Configuration{
+		Installation: &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderGKE,
+			Variant:            operatorv1.Calico,
+		},
+		TrustedCertBundle:     defaultTrustedCertBundle,
+		WhiskerBackendKeyPair: defaultTLSKeyPair,
+		Whisker: &operatorv1.Whisker{
+			Spec: operatorv1.WhiskerSpec{
+				WhiskerDeployment: overrides,
+			},
+		},
+	})
+
+	objsToCreate, _ := component.Objects()
+	return rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, whisker.WhiskerName, whisker.WhiskerNamespace)
+}

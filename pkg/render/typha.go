@@ -461,13 +461,8 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 		// Remove the affinity and use pod network
 		deployNonClusterHost.Spec.Template.Spec.Affinity = nil
 		deployNonClusterHost.Spec.Template.Spec.HostNetwork = false
-		// Tell the health aggregator to listen on all interfaces.
-		container := c.typhaContainer()
-		container.Env = append(container.Env, corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"})
-		// Use pod IP instead of localhost for health checks.
-		container.LivenessProbe.ProbeHandler.HTTPGet.Host = ""
-		container.ReadinessProbe.ProbeHandler.HTTPGet.Host = ""
-		deployNonClusterHost.Spec.Template.Spec.Containers = []corev1.Container{container}
+		// Tune Typha container for NonClusterHost deployment.
+		deployNonClusterHost.Spec.Template.Spec.Containers = []corev1.Container{c.typhaContainerNonClusterHost()}
 		return []client.Object{deploy, deployNonClusterHost}
 	}
 
@@ -532,13 +527,29 @@ func (c *typhaComponent) typhaPorts() []corev1.ContainerPort {
 
 // typhaContainer creates the main typha container.
 func (c *typhaComponent) typhaContainer() corev1.Container {
-	lp, rp := c.livenessReadinessProbes()
+	lp, rp := c.livenessReadinessProbes("localhost")
 	return corev1.Container{
 		Name:            TyphaContainerName,
 		Image:           c.typhaImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Resources:       c.typhaResources(),
 		Env:             c.typhaEnvVars(),
+		VolumeMounts:    c.typhaVolumeMounts(),
+		Ports:           c.typhaPorts(),
+		LivenessProbe:   lp,
+		ReadinessProbe:  rp,
+		SecurityContext: securitycontext.NewNonRootContext(),
+	}
+}
+
+func (c *typhaComponent) typhaContainerNonClusterHost() corev1.Container {
+	lp, rp := c.livenessReadinessProbes("")
+	return corev1.Container{
+		Name:            TyphaContainerName,
+		Image:           c.typhaImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Resources:       c.typhaResources(),
+		Env:             c.typhaEnvVarsNonClusterHost(),
 		VolumeMounts:    c.typhaVolumeMounts(),
 		Ports:           c.typhaPorts(),
 		LivenessProbe:   lp,
@@ -617,6 +628,13 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 	return typhaEnv
 }
 
+func (c *typhaComponent) typhaEnvVarsNonClusterHost() []corev1.EnvVar {
+	envVars := c.typhaEnvVars()
+	// Tell the health aggregator to listen on all interfaces.
+	envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"})
+	return envVars
+}
+
 // typhaHealthPort returns the liveness and readiness port to use for typha.
 func typhaHealthPort(cfg *TyphaConfiguration) int {
 	// We use the felix health port, minus one, to determine the port to use for Typha.
@@ -625,12 +643,12 @@ func typhaHealthPort(cfg *TyphaConfiguration) int {
 }
 
 // livenessReadinessProbes creates the typha's liveness and readiness probes.
-func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
+func (c *typhaComponent) livenessReadinessProbes(host string) (*corev1.Probe, *corev1.Probe) {
 	port := intstr.FromInt(typhaHealthPort(c.cfg))
 	lp := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
-				Host: "localhost",
+				Host: host,
 				Path: "/liveness",
 				Port: port,
 			},
@@ -640,7 +658,7 @@ func (c *typhaComponent) livenessReadinessProbes() (*corev1.Probe, *corev1.Probe
 	rp := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
-				Host: "localhost",
+				Host: host,
 				Path: "/readiness",
 				Port: port,
 			},

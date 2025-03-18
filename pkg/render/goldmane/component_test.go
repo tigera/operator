@@ -55,7 +55,7 @@ var _ = Describe("ComponentRendering", func() {
 				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
 			},
-			6, 0,
+			7, 0,
 		),
 		Entry("Should return objects to delete when variant is not Calico",
 			&goldmane.Configuration{
@@ -66,7 +66,7 @@ var _ = Describe("ComponentRendering", func() {
 				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
 			},
-			0, 6,
+			0, 7,
 		),
 	)
 
@@ -76,10 +76,18 @@ var _ = Describe("ComponentRendering", func() {
 
 		deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, goldmane.GoldmaneName, goldmane.GoldmaneNamespace)
 		Expect(err).ShouldNot(HaveOccurred())
+
+		// Check commonly changed fields explicitly for ease of diagnosis.
+		Expect(deployment.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expected.Spec.Template.Spec.Containers[0].Env))
+		Expect(deployment.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expected.Spec.Template.Spec.Containers[0].VolumeMounts))
+		Expect(deployment.Spec.Template.Spec.Volumes).To(ConsistOf(expected.Spec.Template.Spec.Volumes))
+
+		// Catch-all for the rest of the fields.
 		Expect(deployment).To(Equal(expected), cmp.Diff(deployment, expected))
 	},
 		Entry("Should return objects to create when variant is Calico",
 			&goldmane.Configuration{
+				ClusterDomain: "cluster.local",
 				Installation: &operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderGKE,
 					Variant:            operatorv1.Calico,
@@ -117,18 +125,32 @@ var _ = Describe("ComponentRendering", func() {
 										{Name: "SERVER_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
 										{Name: "SERVER_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
 										{Name: "CA_CERT_PATH", Value: defaultTrustedCertBundle.MountPath()},
-										{Name: "PUSH_URL", Value: "https://tigera-guardian.calico-system.svc.cluster.local:9443"},
+										{Name: "PUSH_URL", Value: "https://tigera-guardian.calico-system.svc.cluster.local:443/api/v1/flows/bulk"},
 										{Name: "FILE_CONFIG_PATH", Value: "/config/config.json"},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 									VolumeMounts: append(
 										[]corev1.VolumeMount{defaultTLSKeyPair.VolumeMount(rmeta.OSTypeLinux)},
-										defaultTrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)...),
+										defaultTrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)[0],
+										corev1.VolumeMount{
+											Name:      "config",
+											ReadOnly:  true,
+											MountPath: "/config",
+										},
+									),
 								},
 							},
 							Volumes: []corev1.Volume{
 								defaultTLSKeyPair.Volume(),
 								defaultTrustedCertBundle.Volume(),
+								{
+									Name: "config",
+									VolumeSource: corev1.VolumeSource{
+										ConfigMap: &corev1.ConfigMapVolumeSource{
+											LocalObjectReference: corev1.LocalObjectReference{Name: "goldmane"},
+										},
+									},
+								},
 							},
 						},
 					},

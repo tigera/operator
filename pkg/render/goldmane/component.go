@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/sirupsen/logrus"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
@@ -104,7 +103,7 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 		c.serviceAccount(),
 		c.role(),
 		c.roleBinding(),
-		c.configMap(),
+		c.hotReloadConfigMap(),
 		c.goldmaneService(),
 		c.deployment(),
 		c.networkPolicy(),
@@ -131,16 +130,16 @@ func (c *Component) serviceAccount() *corev1.ServiceAccount {
 	}
 }
 
-// configMap returns a ConfigMap containing configuration for Goldmane that does not require a restart of the pod.
+// hotReloadConfigMap returns a ConfigMap containing configuration for Goldmane that does not require a restart of the pod.
 // This is mounted as a file within the Pod, which can be dynamically reloaded when changed.
-func (c *Component) configMap() *corev1.ConfigMap {
+func (c *Component) hotReloadConfigMap() *corev1.ConfigMap {
 	type configMapData struct {
 		EmitFlows bool `json:"emitFlows"`
 	}
 
 	d, err := json.Marshal(configMapData{EmitFlows: c.cfg.ManagementClusterConnection != nil})
 	if err != nil {
-		logrus.WithError(err).Fatal("BUG: Failed to marshal config map data")
+		panic(fmt.Sprintf("BUG: failed to marshal config map data: %s", err))
 	}
 
 	return &corev1.ConfigMap{

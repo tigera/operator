@@ -193,6 +193,11 @@ var _ = Describe("Common components render tests", func() {
 		Entry("PacketCaptureAPIDeployment", &v1.PacketCaptureAPIDeployment{}, false),
 		Entry("PolicyRecommendationDeployment", &v1.PolicyRecommendationDeployment{}, false),
 		Entry("TyphaDeployment", &v1.TyphaDeployment{}, false),
+		Entry("Whisker", &v1.Whisker{}, false,
+			"TypeMeta",
+			"ObjectMeta",
+			"Status",
+		),
 
 		// This last entry checks that the code above really does identify when a
 		// structure has unhandled fields.  To do this we can use any available structure

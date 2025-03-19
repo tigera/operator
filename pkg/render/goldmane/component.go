@@ -161,6 +161,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		{Name: "CA_CERT_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "PUSH_URL", Value: fmt.Sprintf("%s/api/v1/flows/bulk", guardianSvc)},
 		{Name: "FILE_CONFIG_PATH", Value: filepath.Join(GoldmaneConfigFilePath, GoldmaneConfigFileName)},
+		{Name: "HEALTH_ENABLED", Value: "true"},
 	}
 
 	volumeMounts := []corev1.VolumeMount{c.cfg.GoldmaneServerKeyPair.VolumeMount(c.SupportedOSType())}
@@ -177,7 +178,19 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),
-		VolumeMounts:    volumeMounts,
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+				Command: []string{"/health", "-ready"},
+			}},
+		},
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/health", "-live"},
+				},
+			},
+		},
+		VolumeMounts: volumeMounts,
 	}
 }
 

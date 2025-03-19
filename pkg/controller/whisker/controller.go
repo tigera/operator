@@ -206,6 +206,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		Installation:          installation,
 		TrustedCertBundle:     trustedBundle,
 		WhiskerBackendKeyPair: backendKeyPair,
+		Whisker:               whiskerCR,
 	}
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

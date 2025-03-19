@@ -213,6 +213,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		GoldmaneServerKeyPair:       keyPair,
 		ManagementClusterConnection: mgmtClusterConnectionCR,
 		ClusterDomain:               r.clusterDomain,
+		Goldmane:                    goldmaneCR,
 	}
 
 	components := []render.Component{certComponent, goldmane.Goldmane(cfg)}

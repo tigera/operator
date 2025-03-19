@@ -28,7 +28,13 @@ type Goldmane struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	Spec GoldmaneSpec `json:"spec,omitempty"`
+
 	Status GoldmaneStatus `json:"status,omitempty"`
+}
+
+type GoldmaneSpec struct {
+	GoldmaneDeployment *GoldmaneDeployment `json:"goldmaneDeployment,omitempty"`
 }
 
 // +kubebuilder:object:root=true

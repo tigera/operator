@@ -63,15 +63,15 @@ type typhaAutoscaler struct {
 
 type typhaAutoscalerOption func(*typhaAutoscaler)
 
-// typhaAutoscalerPeriod is an option that sets a custom sync period for the Typha autoscaler.
-func typhaAutoscalerPeriod(syncPeriod time.Duration) typhaAutoscalerOption {
+// typhaAutoscalerOptionPeriod is an option that sets a custom sync period for the Typha autoscaler.
+func typhaAutoscalerOptionPeriod(syncPeriod time.Duration) typhaAutoscalerOption {
 	return func(t *typhaAutoscaler) {
 		t.syncPeriod = syncPeriod
 	}
 }
 
-// typhaAutoScalerForNonclusterHost is an option that sets the Typha autoscaler to for non-cluster host.
-func typhaAutoscalerForNonclusterHost(nonClusterHost bool) typhaAutoscalerOption {
+// typhaAutoScalerOptionNonclusterHost is an option that sets the Typha autoscaler to for non-cluster host.
+func typhaAutoscalerOptionNonclusterHost(nonClusterHost bool) typhaAutoscalerOption {
 	return func(t *typhaAutoscaler) {
 		t.nonClusterHost = nonClusterHost
 	}

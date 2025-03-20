@@ -150,11 +150,11 @@ func allowedAssets(clusterDomain string) map[string]tlsAsset {
 			serviceaccountNamespace: rmonitor.TigeraPrometheusObjectName,
 			validDNSNames:           monitor.PrometheusTLSServerDNSNames(clusterDomain),
 		},
-		// The node-certs signing request originates from non-cluster hosts.
+		// The node-certs-noncluster-host signing request originates from non-cluster hosts.
 		// To accommodate our customers' use of different non-cluster service accounts,
 		// we don't enforce checks on service account name and namespace.
-		render.NodeTLSSecretName: {
-			validDNSNames: []string{render.FelixCommonName},
+		render.NodeTLSSecretNameNonClusterHost: {
+			validDNSNames: []string{render.FelixCommonName + render.TyphaNonClusterHostSuffix},
 		},
 	}
 }
@@ -382,6 +382,9 @@ func validate[T PodOrHostEndpoint](csr *certificatesv1.CertificateSigningRequest
 		} else if len(certificateRequest.IPAddresses) > 1 {
 			return nil, fmt.Errorf("invalid: cannot request more than 1 IP for CSR with name %s", csr.Name)
 		}
+	} else if len(certificateRequest.IPAddresses) > 0 {
+		// We don't expected IP Address in the CSR so we reject a CSR with IP addresses.
+		return nil, fmt.Errorf("invalid: cannot request IP for CSR with name %s", csr.Name)
 	}
 
 	bigint, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))

@@ -36,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -461,8 +462,9 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 		// Remove the affinity and use pod network
 		deployNonClusterHost.Spec.Template.Spec.Affinity = nil
 		deployNonClusterHost.Spec.Template.Spec.HostNetwork = false
-		// Tune Typha container for NonClusterHost deployment.
+		// Tune Typha container and volumes for NonClusterHost deployment.
 		deployNonClusterHost.Spec.Template.Spec.Containers = []corev1.Container{c.typhaContainerNonClusterHost()}
+		deployNonClusterHost.Spec.Template.Spec.Volumes = c.volumeNonClusterHost()
 		return []client.Object{deploy, deployNonClusterHost}
 	}
 
@@ -507,11 +509,25 @@ func (c *typhaComponent) volumes() []corev1.Volume {
 	}
 }
 
+func (c *typhaComponent) volumeNonClusterHost() []corev1.Volume {
+	return []corev1.Volume{
+		c.cfg.TLS.TrustedBundle.Volume(),
+		c.cfg.TLS.TyphaSecretNonClusterHost.Volume(),
+	}
+}
+
 // typhaVolumeMounts creates the typha's volume mounts.
 func (c *typhaComponent) typhaVolumeMounts() []corev1.VolumeMount {
 	return append(
 		c.cfg.TLS.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 		c.cfg.TLS.TyphaSecret.VolumeMount(c.SupportedOSType()),
+	)
+}
+
+func (c *typhaComponent) typhaVolumeMountsNonClusterHost() []corev1.VolumeMount {
+	return append(
+		c.cfg.TLS.TrustedBundle.VolumeMounts(c.SupportedOSType()),
+		c.cfg.TLS.TyphaSecretNonClusterHost.VolumeMount(c.SupportedOSType()),
 	)
 }
 
@@ -533,7 +549,7 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 		Image:           c.typhaImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Resources:       c.typhaResources(),
-		Env:             c.typhaEnvVars(),
+		Env:             c.typhaEnvVars(c.cfg.TLS.TyphaSecret),
 		VolumeMounts:    c.typhaVolumeMounts(),
 		Ports:           c.typhaPorts(),
 		LivenessProbe:   lp,
@@ -543,19 +559,11 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 }
 
 func (c *typhaComponent) typhaContainerNonClusterHost() corev1.Container {
-	lp, rp := c.livenessReadinessProbes("")
-	return corev1.Container{
-		Name:            TyphaContainerName,
-		Image:           c.typhaImage,
-		ImagePullPolicy: ImagePullPolicy(),
-		Resources:       c.typhaResources(),
-		Env:             c.typhaEnvVarsNonClusterHost(),
-		VolumeMounts:    c.typhaVolumeMounts(),
-		Ports:           c.typhaPorts(),
-		LivenessProbe:   lp,
-		ReadinessProbe:  rp,
-		SecurityContext: securitycontext.NewNonRootContext(),
-	}
+	container := c.typhaContainer()
+	container.Env = c.typhaEnvVarsNonClusterHost()
+	container.VolumeMounts = c.typhaVolumeMountsNonClusterHost()
+	container.LivenessProbe, container.ReadinessProbe = c.livenessReadinessProbes("")
+	return container
 }
 
 // typhaResources creates the typha's resource requirements.
@@ -564,7 +572,7 @@ func (c *typhaComponent) typhaResources() corev1.ResourceRequirements {
 }
 
 // typhaEnvVars creates the typha's envvars.
-func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
+func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairInterface) []corev1.EnvVar {
 	typhaEnv := []corev1.EnvVar{
 		{Name: "TYPHA_LOGSEVERITYSCREEN", Value: "info"},
 		{Name: "TYPHA_LOGFILEPATH", Value: "none"},
@@ -575,8 +583,8 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 		{Name: "TYPHA_HEALTHPORT", Value: fmt.Sprintf("%d", typhaHealthPort(c.cfg))},
 		{Name: "TYPHA_K8SNAMESPACE", Value: common.CalicoNamespace},
 		{Name: "TYPHA_CAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
-		{Name: "TYPHA_SERVERCERTFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountCertificateFilePath()},
-		{Name: "TYPHA_SERVERKEYFILE", Value: c.cfg.TLS.TyphaSecret.VolumeMountKeyFilePath()},
+		{Name: "TYPHA_SERVERCERTFILE", Value: typhaSecret.VolumeMountCertificateFilePath()},
+		{Name: "TYPHA_SERVERKEYFILE", Value: typhaSecret.VolumeMountKeyFilePath()},
 		{Name: shutdownTimeoutEnvVar, Value: fmt.Sprint(defaultTyphaTerminationGracePeriod)}, // May get overridden later.
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
@@ -629,7 +637,20 @@ func (c *typhaComponent) typhaEnvVars() []corev1.EnvVar {
 }
 
 func (c *typhaComponent) typhaEnvVarsNonClusterHost() []corev1.EnvVar {
-	envVars := c.typhaEnvVars()
+	envVars := c.typhaEnvVars(c.cfg.TLS.TyphaSecretNonClusterHost)
+	// Update Typha client common name for non-cluster host.
+	typhaClientCommonName := c.cfg.TLS.NodeCommonName + TyphaNonClusterHostSuffix
+	found := false
+	for i, envVar := range envVars {
+		if envVar.Name == "TYPHA_CLIENTCN" {
+			envVars[i].Value = typhaClientCommonName
+			found = true
+			break
+		}
+	}
+	if !found {
+		envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: typhaClientCommonName})
+	}
 	// Tell the health aggregator to listen on all interfaces.
 	envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"})
 	return envVars
@@ -776,11 +797,9 @@ func typhaNonClusterHostAllowTigeraPolicy(cfg *TyphaConfiguration) *v3.NetworkPo
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Installation.KubernetesProvider.IsOpenShift())
 	egressRules = append(egressRules, []v3.Rule{
 		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(443, 6443, 12388),
-			},
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 	}...)
 

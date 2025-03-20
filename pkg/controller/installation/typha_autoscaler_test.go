@@ -134,7 +134,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// For clusters smaller than 3 nodes we only expect 1 replica.
@@ -184,7 +184,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "pre-operator"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		verifyTyphaReplicas(c, 3)
@@ -215,7 +215,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "linux", "kubernetes.azure.com/cluster": "foo", "type": "virtual-kubelet"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// normally we'd expect to see three replicas for five nodes, but since one node is a virtual-kubelet,
@@ -251,7 +251,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "windows"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// This blocks until the first run is done.

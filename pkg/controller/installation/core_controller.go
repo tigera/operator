@@ -187,7 +187,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		go hepIndexInformer.Run(opts.ShutdownContext.Done())
 
 		typhaNonClusterHostWatch := cache.NewListWatchFromClient(opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
-		typhaAutoscalerNonClusterHost = newTyphaAutoscaler(opts.K8sClientset, hepIndexInformer, typhaNonClusterHostWatch, statusManager, typhaAutoscalerForNonclusterHost(true))
+		typhaAutoscalerNonClusterHost = newTyphaAutoscaler(opts.K8sClientset, hepIndexInformer, typhaNonClusterHostWatch, statusManager, typhaAutoscalerOptionNonclusterHost(true))
 	}
 
 	r := &ReconcileInstallation{
@@ -1310,6 +1310,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
 				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
@@ -1675,6 +1676,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 	}
 	node, nodeCommonName, nodeURISAN := getOrCreateKeyPair(render.NodeTLSSecretName, render.FelixCommonName)
 	typha, typhaCommonName, typhaURISAN := getOrCreateKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName)
+	typhaNonClusterHost, _, _ := getOrCreateKeyPair(render.TyphaTLSSecretName+render.TyphaNonClusterHostSuffix, render.TyphaCommonName+render.TyphaNonClusterHostSuffix)
 	var trustedBundle certificatemanagement.TrustedBundle
 	configMap, err := getConfigMap(cli, render.TyphaCAConfigMapName)
 	if err != nil {
@@ -1699,13 +1701,14 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		return nil, fmt.Errorf("%s", strings.Join(errMsgs, ";"))
 	}
 	return &render.TyphaNodeTLS{
-		TrustedBundle:   trustedBundle,
-		TyphaSecret:     typha,
-		TyphaCommonName: typhaCommonName,
-		TyphaURISAN:     typhaURISAN,
-		NodeSecret:      node,
-		NodeCommonName:  nodeCommonName,
-		NodeURISAN:      nodeURISAN,
+		TrustedBundle:             trustedBundle,
+		TyphaSecret:               typha,
+		TyphaSecretNonClusterHost: typhaNonClusterHost,
+		TyphaCommonName:           typhaCommonName,
+		TyphaURISAN:               typhaURISAN,
+		NodeSecret:                node,
+		NodeCommonName:            nodeCommonName,
+		NodeURISAN:                nodeURISAN,
 	}, nil
 }
 

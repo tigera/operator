@@ -180,7 +180,12 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Affinity).To(BeNil())
 		Expect(d.Spec.Template.Spec.HostNetwork).To(BeFalse())
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"}))
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: "typha-client-noncluster-host"},
+			corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"},
+			corev1.EnvVar{Name: "TYPHA_SERVERCERTFILE", Value: "/typha-certs-noncluster-host/tls.crt"},
+			corev1.EnvVar{Name: "TYPHA_SERVERKEYFILE", Value: "/typha-certs-noncluster-host/tls.key"},
+		))
 		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
 		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
 	})

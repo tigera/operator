@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -72,7 +72,15 @@ var _ = Describe("NonClusterHost controller tests", func() {
 		nonclusterhost = &operatorv1.NonClusterHost{
 			TypeMeta:   metav1.TypeMeta{Kind: "NonClusterHost", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operatorv1.NonClusterHostSpec{
+				Endpoint:      "https://some-host:443",
+				TyphaEndpoint: "1.2.3.4:5473",
+			},
 		}
+	})
+
+	AfterEach(func() {
+		Expect(cli.Delete(ctx, nonclusterhost)).NotTo(HaveOccurred())
 	})
 
 	Context("controller reconciliation", func() {
@@ -98,6 +106,26 @@ var _ = Describe("NonClusterHost controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			err = cli.Get(ctx, client.ObjectKey{Name: "tigera-noncluster-host"}, crb)
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should set degraded status if endpoint is invalid", func() {
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Invalid endpoint", mock.Anything, mock.Anything).Return()
+
+			nonclusterhost.Spec.Endpoint = "invalid"
+			Expect(cli.Create(ctx, nonclusterhost)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should set degraded status if Typha endpoint is invalid", func() {
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Invalid Typha endpoint", mock.Anything, mock.Anything).Return()
+
+			nonclusterhost.Spec.TyphaEndpoint = "invalid"
+			Expect(cli.Create(ctx, nonclusterhost)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).To(HaveOccurred())
 		})
 	})
 })

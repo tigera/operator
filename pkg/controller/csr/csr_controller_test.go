@@ -203,7 +203,8 @@ var _ = Describe("CSR controller tests", func() {
 			Expect(relevantCSR(csr)).To(BeTrue())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(certificate.ExtKeyUsage).To(Equal(extKeyUsage))
-			Expect(certificate.Subject.CommonName).To(Equal("typha-client"))
+			Expect(certificate.DNSNames).To(Equal([]string{"typha-client-noncluster-host"}))
+			Expect(certificate.Subject.CommonName).To(Equal("typha-client-noncluster-host"))
 			Expect(certificate.IsCA).To(BeFalse())
 		} else {
 			Expect(relevantCSR(csr)).To(BeFalse())
@@ -211,10 +212,13 @@ var _ = Describe("CSR controller tests", func() {
 	},
 		table.Entry("valid CSR / happy flow", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), validHostEndpoint(), false, true),
 		table.Entry("valid CSR / no flow", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), nil, true, true),
-		table.Entry("unrecognized csr name", invalidNonClusterHostCSR(validPodX509CR(), validHostEndpoint(), invalidName), validHostEndpoint(), true, true),
-		table.Entry("invalid certificate request", invalidNonClusterHostCSR(validPodX509CR(), validHostEndpoint(), invalidRequest), validHostEndpoint(), true, true),
-		table.Entry("previously denied csr", invalidNonClusterHostCSR(validPodX509CR(), validHostEndpoint(), invalidDenied), validHostEndpoint(), false, false),
-		table.Entry("previously failed csr", invalidNonClusterHostCSR(validPodX509CR(), validHostEndpoint(), invalidFailed), validHostEndpoint(), false, false),
+		table.Entry("unrecognized csr name", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidName), validHostEndpoint(), true, true),
+		table.Entry("invalid certificate request", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidRequest), validHostEndpoint(), true, true),
+		table.Entry("previously denied csr", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidDenied), validHostEndpoint(), false, false),
+		table.Entry("previously failed csr", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidFailed), validHostEndpoint(), false, false),
+		table.Entry("bad DNS names in x509 certificate request", invalidNonClusterHostCSR(invalidX509CR(invalidDNSNames), validHostEndpoint()), validHostEndpoint(), true, true),
+		table.Entry("bad CN in x509 certificate request", invalidNonClusterHostCSR(invalidX509CR(invalidCN), validHostEndpoint()), validHostEndpoint(), true, true),
+		table.Entry("bad IP in x509 certificate request", invalidNonClusterHostCSR(invalidX509CR(invalidIP), validHostEndpoint()), validHostEndpoint(), true, true),
 		table.Entry("irrelevant signer name", invalidNonClusterHostCSR(invalidX509CR(), validHostEndpoint(), invalidSignername), validHostEndpoint(), false, false),
 	)
 
@@ -306,7 +310,7 @@ func validPodX509CR() *x509.CertificateRequest {
 
 func validNonClusterHostX509CR() *x509.CertificateRequest {
 	subj := pkix.Name{
-		CommonName: "typha-client",
+		CommonName: "typha-client-noncluster-host",
 	}
 	extKeyUsages := []asn1.ObjectIdentifier{
 		// ExtKeyUsageServerAuth
@@ -319,7 +323,7 @@ func validNonClusterHostX509CR() *x509.CertificateRequest {
 	Expect(err).NotTo(HaveOccurred())
 	return &x509.CertificateRequest{
 		Subject:            subj,
-		DNSNames:           []string{"typha-client"},
+		DNSNames:           []string{"typha-client-noncluster-host"},
 		SignatureAlgorithm: x509.SHA256WithRSA,
 		ExtraExtensions: []pkix.Extension{
 			{
@@ -371,7 +375,7 @@ func validNonClusterHostCSR(cr *x509.CertificateRequest, hep *v3.HostEndpoint) *
 	Expect(err).NotTo(HaveOccurred())
 	return &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "node-certs:" + hep.Spec.Node,
+			Name: "node-certs-noncluster-host:" + hep.Spec.Node,
 			Labels: map[string]string{
 				"k8s-app":                           "calico-node",
 				"nonclusterhost.tigera.io/hostname": hep.Spec.Node,

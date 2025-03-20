@@ -35,12 +35,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -506,26 +503,6 @@ func GetNonClusterHost(ctx context.Context, cli client.Client) (*operatorv1.NonC
 		return nil, err
 	}
 
-	return nonclusterhost, nil
-}
-
-// GetNonClusterHostDynamic finds the NonClusterHost CR in your cluster using the dynamic client.
-// It is used in controller Add functions before controller manager is started.
-func GetNonClusterHostDynamic(restConfig *rest.Config) (*unstructured.Unstructured, error) {
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	gvr := schema.GroupVersionResource{
-		Group:    "operator.tigera.io",
-		Version:  "v1",
-		Resource: "nonclusterhosts",
-	}
-	nonclusterhost, err := dynamicClient.Resource(gvr).Namespace(corev1.NamespaceAll).Get(context.Background(), DefaultTSEEInstanceKey.Name, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
 	return nonclusterhost, nil
 }
 

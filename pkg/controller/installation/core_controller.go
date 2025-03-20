@@ -174,10 +174,8 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 
 	// Create a Typha autoscaler for non-cluster hosts
 	var typhaAutoscalerNonClusterHost *typhaAutoscaler
-	restConfig := mgr.GetConfig()
-	nonclusterhosts, err := utils.GetNonClusterHostDynamic(restConfig)
-	if err == nil && nonclusterhosts != nil {
-		calicoClient, err := calicoclient.NewForConfig(restConfig)
+	if opts.EnterpriseCRDExists {
+		calicoClient, err := calicoclient.NewForConfig(mgr.GetConfig())
 		if err != nil {
 			return nil, err
 		}
@@ -1317,10 +1315,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}))
 
 	// Check if non-cluster host feature is enabled.
-	nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
-		return reconcile.Result{}, err
+	var nonclusterhost *operatorv1.NonClusterHost
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		nonclusterhost, err = utils.GetNonClusterHost(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Build a configuration for rendering calico/typha.

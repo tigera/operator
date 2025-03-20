@@ -21,11 +21,11 @@ import (
 
 // NonClusterHostSpec enables non-cluster hosts to connect to a cluster.
 type NonClusterHostSpec struct {
-	// Location of the log ingestion point for non-cluster hosts. example: https://1.2.3.4:443
+	// Location of the log ingestion point for non-cluster hosts. For example: https://1.2.3.4:443
 	// +kubebuilder:validation:Pattern=`^https://.+$`
 	Endpoint string `json:"endpoint"`
 
-	// Location of the Typha endpoint for non-cluster host Felix and Typha communication. example: 5.6.7.8:5473
+	// Location of the Typha endpoint for non-cluster host Felix and Typha communication. For example: 5.6.7.8:5473
 	TyphaEndpoint string `json:"typhaEndpoint,omitempty"`
 }
 

@@ -99,6 +99,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	for _, secretName := range []string{
 		render.PacketCaptureServerCert,
 		monitor.PrometheusServerTLSSecretName,
+		goldmane.GoldmaneKeyPairSecret,
 		certificatemanagement.TrustedBundleName("guardian", false),
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
 		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),

@@ -76,6 +76,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	for _, secretName := range []string{
 		certificatemanagement.CASecretName,
+		goldmane.GoldmaneKeyPairSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)

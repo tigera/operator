@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1083,7 +1083,7 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
 					voltron := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-voltron")
 					Expect(voltron).NotTo(BeNil())
-					Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST_LOG_INGESTION", Value: "true"}))
+					Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST", Value: "true"}))
 				})
 
 				It("should return error when endpoint is invalid", func() {

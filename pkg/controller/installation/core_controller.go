@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
@@ -56,6 +55,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	calicoclient "github.com/tigera/api/pkg/client/clientset_generated/clientset"
 	operator "github.com/tigera/operator/api/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
@@ -76,6 +76,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -141,16 +142,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
 	if opts.EnterpriseCRDExists {
-		k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-		if err != nil {
-			log.Error(err, "Failed to establish a connection to k8s")
-			return err
-		}
-
 		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, ri.tierWatchReady)
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, ri.tierWatchReady)
 
-		go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+		go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
 		},
 		)
@@ -161,32 +156,28 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
-	nm, err := migration.NewCoreNamespaceMigration(mgr.GetConfig())
+	nm, err := migration.NewCoreNamespaceMigration(opts.K8sClientset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Namespace migration: %w", err)
 	}
 
 	statusManager := status.New(mgr.GetClient(), "calico", opts.KubernetesVersion)
 
-	// The typhaAutoscaler needs a clientset.
-	cs, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return nil, err
-	}
-
 	// Create the SharedIndexInformer used by the typhaAutoscaler
-	nodeListWatch := cache.NewListWatchFromClient(cs.CoreV1().RESTClient(), "nodes", "", fields.Everything())
+	nodeListWatch := cache.NewListWatchFromClient(opts.K8sClientset.CoreV1().RESTClient(), "nodes", "", fields.Everything())
 	nodeIndexInformer := cache.NewSharedIndexInformer(nodeListWatch, &corev1.Node{}, 0, cache.Indexers{})
 	go nodeIndexInformer.Run(opts.ShutdownContext.Done())
 
 	// Create a Typha autoscaler.
-	typhaListWatch := cache.NewListWatchFromClient(cs.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
-	typhaScaler := newTyphaAutoscaler(cs, nodeIndexInformer, typhaListWatch, statusManager)
+	typhaListWatch := cache.NewListWatchFromClient(opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
+	typhaScaler := newTyphaAutoscaler(opts.K8sClientset, nodeIndexInformer, typhaListWatch, statusManager)
 
 	r := &ReconcileInstallation{
 		config:               mgr.GetConfig(),
 		client:               mgr.GetClient(),
+		clientset:            opts.K8sClientset,
 		scheme:               mgr.GetScheme(),
+		shutdownContext:      opts.ShutdownContext,
 		watches:              make(map[runtime.Object]struct{}),
 		autoDetectedProvider: opts.DetectedProvider,
 		status:               statusManager,
@@ -200,6 +191,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
+
 	return r, nil
 }
 
@@ -362,20 +354,22 @@ var _ reconcile.Reconciler = &ReconcileInstallation{}
 type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	config               *rest.Config
-	client               client.Client
-	scheme               *runtime.Scheme
-	watches              map[runtime.Object]struct{}
-	autoDetectedProvider operator.Provider
-	status               status.StatusManager
-	typhaAutoscaler      *typhaAutoscaler
-	namespaceMigration   migration.NamespaceMigration
-	enterpriseCRDsExist  bool
-	amazonCRDExists      bool
-	migrationChecked     bool
-	clusterDomain        string
-	manageCRDs           bool
-	tierWatchReady       *utils.ReadyFlag
+	config                        *rest.Config
+	client                        client.Client
+	clientset                     *kubernetes.Clientset
+	scheme                        *runtime.Scheme
+	shutdownContext               context.Context
+	watches                       map[runtime.Object]struct{}
+	autoDetectedProvider          operator.Provider
+	status                        status.StatusManager
+	typhaAutoscaler               *typhaAutoscaler
+	typhaAutoscalerNonClusterHost *typhaAutoscaler
+	namespaceMigration            migration.NamespaceMigration
+	enterpriseCRDsExist           bool
+	migrationChecked              bool
+	clusterDomain                 string
+	manageCRDs                    bool
+	tierWatchReady                *utils.ReadyFlag
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
@@ -967,12 +961,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	if r.typhaAutoscalerNonClusterHost != nil && r.typhaAutoscalerNonClusterHost.isDegraded() {
+		if err := r.typhaAutoscalerNonClusterHost.triggerRun(); err != nil {
+			r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha for noncluster hosts", err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+	}
+
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.
 	// If we are switching from this mode to one that enables TSEE, we need to restart the operator to enable the other controllers.
 	if !r.enterpriseCRDsExist && instance.Spec.Variant == operator.TigeraSecureEnterprise {
 		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into TSEE mode.
 		// if they do not, we need to notify the user that the requested configuration is invalid.
-		b, err := utils.RequiresTigeraSecure(r.config)
+		b, err := utils.RequiresTigeraSecure(r.clientset)
 		if b {
 			log.Info("Rebooting to enable TigeraSecure controllers")
 			os.Exit(0)
@@ -1289,10 +1290,36 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
 				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}))
+
+	// Check if non-cluster host feature is enabled.
+	var nonclusterhost *operatorv1.NonClusterHost
+	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
+		nonclusterhost, err = utils.GetNonClusterHost(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if nonclusterhost != nil && r.typhaAutoscalerNonClusterHost == nil {
+			calicoClient, err := calicoclient.NewForConfig(r.config)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to initialize Calico client", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+
+			hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
+			hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
+			go hepIndexInformer.Run(r.shutdownContext.Done())
+
+			typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.clientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
+			typhaAutoscalerNonClusterHost := newTyphaAutoscaler(r.clientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
+			r.typhaAutoscalerNonClusterHost = typhaAutoscalerNonClusterHost
+			r.typhaAutoscalerNonClusterHost.start(r.shutdownContext)
+		}
+	}
 
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
@@ -1301,6 +1328,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TLS:               typhaNodeTLS,
 		MigrateNamespaces: needNsMigration,
 		ClusterDomain:     r.clusterDomain,
+		NonClusterHost:    nonclusterhost,
 		FelixHealthPort:   *felixConfiguration.Spec.HealthPort,
 	}
 	components = append(components, render.Typha(&typhaCfg))
@@ -1423,6 +1451,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
 	if includeV3NetworkPolicy {
+		if nonclusterhost != nil {
+			components = append(components, render.NewTyphaNonClusterHostPolicy(&typhaCfg))
+		}
 		components = append(components,
 			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg),
 			render.NewPassthrough(networkpolicy.AllowTigeraDefaultDeny(common.CalicoNamespace)),
@@ -1643,6 +1674,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 	}
 	node, nodeCommonName, nodeURISAN := getOrCreateKeyPair(render.NodeTLSSecretName, render.FelixCommonName)
 	typha, typhaCommonName, typhaURISAN := getOrCreateKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName)
+	typhaNonClusterHost, _, _ := getOrCreateKeyPair(render.TyphaTLSSecretName+render.TyphaNonClusterHostSuffix, render.TyphaCommonName+render.TyphaNonClusterHostSuffix)
 	var trustedBundle certificatemanagement.TrustedBundle
 	configMap, err := getConfigMap(cli, render.TyphaCAConfigMapName)
 	if err != nil {
@@ -1667,13 +1699,14 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		return nil, fmt.Errorf("%s", strings.Join(errMsgs, ";"))
 	}
 	return &render.TyphaNodeTLS{
-		TrustedBundle:   trustedBundle,
-		TyphaSecret:     typha,
-		TyphaCommonName: typhaCommonName,
-		TyphaURISAN:     typhaURISAN,
-		NodeSecret:      node,
-		NodeCommonName:  nodeCommonName,
-		NodeURISAN:      nodeURISAN,
+		TrustedBundle:             trustedBundle,
+		TyphaSecret:               typha,
+		TyphaSecretNonClusterHost: typhaNonClusterHost,
+		TyphaCommonName:           typhaCommonName,
+		TyphaURISAN:               typhaURISAN,
+		NodeSecret:                node,
+		NodeCommonName:            nodeCommonName,
+		NodeURISAN:                nodeURISAN,
 	}, nil
 }
 

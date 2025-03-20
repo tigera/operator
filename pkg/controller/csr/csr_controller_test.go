@@ -203,7 +203,8 @@ var _ = Describe("CSR controller tests", func() {
 			Expect(relevantCSR(csr)).To(BeTrue())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(certificate.ExtKeyUsage).To(Equal(extKeyUsage))
-			Expect(certificate.Subject.CommonName).To(Equal("typha-client"))
+			Expect(certificate.DNSNames).To(Equal([]string{"typha-client-noncluster-host"}))
+			Expect(certificate.Subject.CommonName).To(Equal("typha-client-noncluster-host"))
 			Expect(certificate.IsCA).To(BeFalse())
 		} else {
 			Expect(relevantCSR(csr)).To(BeFalse())
@@ -306,7 +307,7 @@ func validPodX509CR() *x509.CertificateRequest {
 
 func validNonClusterHostX509CR() *x509.CertificateRequest {
 	subj := pkix.Name{
-		CommonName: "typha-client",
+		CommonName: "typha-client-noncluster-host",
 	}
 	extKeyUsages := []asn1.ObjectIdentifier{
 		// ExtKeyUsageServerAuth
@@ -319,7 +320,7 @@ func validNonClusterHostX509CR() *x509.CertificateRequest {
 	Expect(err).NotTo(HaveOccurred())
 	return &x509.CertificateRequest{
 		Subject:            subj,
-		DNSNames:           []string{"typha-client"},
+		DNSNames:           []string{"typha-client-noncluster-host"},
 		SignatureAlgorithm: x509.SHA256WithRSA,
 		ExtraExtensions: []pkix.Extension{
 			{
@@ -371,7 +372,7 @@ func validNonClusterHostCSR(cr *x509.CertificateRequest, hep *v3.HostEndpoint) *
 	Expect(err).NotTo(HaveOccurred())
 	return &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "node-certs:" + hep.Spec.Node,
+			Name: "node-certs-noncluster-host:" + hep.Spec.Node,
 			Labels: map[string]string{
 				"k8s-app":                           "calico-node",
 				"nonclusterhost.tigera.io/hostname": hep.Spec.Node,

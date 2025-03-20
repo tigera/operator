@@ -40,6 +40,7 @@ import (
 	rmonitor "github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	authv1 "k8s.io/api/authorization/v1"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -48,6 +49,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -126,6 +128,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (reconcile.Reco
 
 	return &reconcileCSR{
 		client:              mgr.GetClient(),
+		clientset:           opts.K8sClientset,
 		calicoClient:        calicoClient,
 		scheme:              mgr.GetScheme(),
 		provider:            opts.DetectedProvider,
@@ -167,6 +170,7 @@ var _ reconcile.Reconciler = &reconcileCSR{}
 // these CSRs. It will only sign requests that are pre-defined and reject others in order to avoid malicious requests.
 type reconcileCSR struct {
 	client              client.Client
+	clientset           kubernetes.Interface
 	calicoClient        calicoclient.Interface
 	scheme              *runtime.Scheme
 	provider            operatorv1.Provider
@@ -241,12 +245,12 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		if v, ok := csr.Labels["nonclusterhost.tigera.io/hostname"]; ok {
 			var hep *v3.HostEndpoint
 			if hep, err = r.getHostEndpoint(ctx, v); err == nil {
-				certificateTemplate, err = validate(&csr, hep, r.allowedTLSAssets)
+				certificateTemplate, err = validate(ctx, r.clientset, &csr, hep, r.allowedTLSAssets)
 			}
 		} else {
 			var pod *corev1.Pod
 			if pod, err = r.getPod(ctx, &csr); err == nil {
-				certificateTemplate, err = validate(&csr, pod, r.allowedTLSAssets)
+				certificateTemplate, err = validate(ctx, r.clientset, &csr, pod, r.allowedTLSAssets)
 			}
 		}
 
@@ -306,7 +310,13 @@ type PodOrHostEndpoint interface {
 	*corev1.Pod | *v3.HostEndpoint
 }
 
-func validate[T PodOrHostEndpoint](csr *certificatesv1.CertificateSigningRequest, obj T, allowedTLSAssets map[string]tlsAsset) (*x509.Certificate, error) {
+func validate[T PodOrHostEndpoint](
+	ctx context.Context,
+	clientset kubernetes.Interface,
+	csr *certificatesv1.CertificateSigningRequest,
+	obj T,
+	allowedTLSAssets map[string]tlsAsset,
+) (*x509.Certificate, error) {
 	iv := reflect.ValueOf(obj)
 	if !iv.IsValid() || iv.IsNil() {
 		return nil, fmt.Errorf("invalid: no object can be associated with CSR %s", csr.Name)
@@ -358,6 +368,31 @@ func validate[T PodOrHostEndpoint](csr *certificatesv1.CertificateSigningRequest
 		if fmt.Sprintf("system:serviceaccount:%s:%s", asset.serviceaccountNamespace, asset.serviceaccountName) != csr.Spec.Username {
 			return nil, fmt.Errorf("invalid requestor %s for CSR with name %s", csr.Spec.Username, csr.Name)
 		}
+	} else {
+		// This CSR originals from non-cluster hosts. We allow multiple service accounts for different groups
+		// of non-cluster hosts. To ensure proper access control, we need to validate the requestor's permission.
+		review := &authv1.SubjectAccessReview{
+			Spec: authv1.SubjectAccessReviewSpec{
+				User:   csr.Spec.Username,
+				Groups: csr.Spec.Groups,
+				UID:    csr.Spec.UID,
+				Extra:  convertExtraValue(csr.Spec.Extra),
+				ResourceAttributes: &authv1.ResourceAttributes{
+					Group:       "certificates.tigera.io",
+					Resource:    "certificatesigningrequests",
+					Subresource: render.TyphaCommonName + render.TyphaNonClusterHostSuffix,
+					Verb:        "create",
+					Name:        secretName,
+				},
+			},
+		}
+
+		result, err := clientset.AuthorizationV1().SubjectAccessReviews().Create(ctx, review, metav1.CreateOptions{})
+		if err != nil {
+			return nil, err
+		} else if !result.Status.Allowed {
+			return nil, fmt.Errorf("invalid requestor %s for CSR with name %s", csr.Spec.Username, csr.Name)
+		}
 	}
 
 	// Validate whether the DNS names are permitted for the request.
@@ -404,6 +439,14 @@ func validate[T PodOrHostEndpoint](csr *certificatesv1.CertificateSigningRequest
 		DNSNames:    certificateRequest.DNSNames,
 		IPAddresses: certificateRequest.IPAddresses,
 	}, nil
+}
+
+func convertExtraValue(extra map[string]certificatesv1.ExtraValue) map[string]authv1.ExtraValue {
+	res := make(map[string]authv1.ExtraValue)
+	for k, v := range extra {
+		res[k] = authv1.ExtraValue(v)
+	}
+	return res
 }
 
 // getPod fetches the pod that issued a CSR based on the information in the CSR.

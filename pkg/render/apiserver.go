@@ -1897,7 +1897,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},
-			Verbs: []string{"get", "watch", "list"},
+			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},

@@ -15,6 +15,8 @@
 package nonclusterhost
 
 import (
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -144,12 +146,6 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"get"},
 		},
 		{
-			// For non-cluster host to request a operator signed certificate.
-			APIGroups: []string{"certificates.k8s.io"},
-			Resources: []string{"certificatesigningrequests"},
-			Verbs:     []string{"create", "list", "watch"},
-		},
-		{
 			// For monitoring Calico-specific configuration.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{
@@ -197,6 +193,21 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{"linseed.tigera.io"},
 			Resources: []string{"flowlogs"},
 			Verbs:     []string{"create"},
+		},
+	}...)
+
+	// For non-cluster host to request a operator signed certificate.
+	rules = append(rules, []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"certificates.k8s.io"},
+			Resources: []string{"certificatesigningrequests"},
+			Verbs:     []string{"create", "list", "watch"},
+		},
+		{
+			APIGroups:     []string{"certificates.tigera.io"},
+			Resources:     []string{fmt.Sprintf("certificatesigningrequests/%s%s", render.TyphaCommonName, render.TyphaNonClusterHostSuffix)},
+			Verbs:         []string{"create"},
+			ResourceNames: []string{render.NodeTLSSecretNameNonClusterHost},
 		},
 	}...)
 

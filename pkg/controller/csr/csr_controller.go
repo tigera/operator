@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,9 +23,12 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"reflect"
 	"strings"
 	"time"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	calicoclient "github.com/tigera/api/pkg/client/clientset_generated/clientset"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -40,6 +43,7 @@ import (
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/selection"
@@ -85,7 +89,12 @@ func relevantCSR(csr *certificatesv1.CertificateSigningRequest) bool {
 // Add creates a new CSR Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: newReconciler(mgr, opts)})
+	reconciler, err := newReconciler(mgr, opts)
+	if err != nil {
+		return err
+	}
+
+	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: reconciler})
 	if err != nil {
 		return err
 	}
@@ -109,16 +118,21 @@ type tlsAsset struct {
 	validDNSNames           []string
 }
 
-func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
-	r := &reconcileCSR{
+func newReconciler(mgr manager.Manager, opts options.AddOptions) (reconcile.Reconciler, error) {
+	calicoClient, err := calicoclient.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, err
+	}
+
+	return &reconcileCSR{
 		client:              mgr.GetClient(),
+		calicoClient:        calicoClient,
 		scheme:              mgr.GetScheme(),
 		provider:            opts.DetectedProvider,
 		clusterDomain:       opts.ClusterDomain,
 		allowedTLSAssets:    allowedAssets(opts.ClusterDomain),
 		enterpriseCRDExists: opts.EnterpriseCRDExists,
-	}
-	return r
+	}, nil
 }
 
 // allowedAssets To prevent any abuse of this controller for obtaining a fraudulent certificate, this controller
@@ -136,6 +150,12 @@ func allowedAssets(clusterDomain string) map[string]tlsAsset {
 			serviceaccountNamespace: rmonitor.TigeraPrometheusObjectName,
 			validDNSNames:           monitor.PrometheusTLSServerDNSNames(clusterDomain),
 		},
+		// The node-certs-noncluster-host signing request originates from non-cluster hosts.
+		// To accommodate our customers' use of different non-cluster service accounts,
+		// we don't enforce checks on service account name and namespace.
+		render.NodeTLSSecretNameNonClusterHost: {
+			validDNSNames: []string{render.FelixCommonName + render.TyphaNonClusterHostSuffix},
+		},
 	}
 }
 
@@ -147,6 +167,7 @@ var _ reconcile.Reconciler = &reconcileCSR{}
 // these CSRs. It will only sign requests that are pre-defined and reject others in order to avoid malicious requests.
 type reconcileCSR struct {
 	client              client.Client
+	calicoClient        calicoclient.Interface
 	scheme              *runtime.Scheme
 	provider            operatorv1.Provider
 	clusterDomain       string
@@ -213,12 +234,22 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 			// Not for us, or already signed.
 			continue
 		}
+
 		reqLogger.V(5).Info("Inspecting CSR with name : %v.", csr.Name)
-		pod, err := r.getPod(ctx, &csr)
-		if err != nil {
-			return reconcile.Result{}, err
+		var certificateTemplate *x509.Certificate
+		var err error
+		if v, ok := csr.Labels["nonclusterhost.tigera.io/hostname"]; ok {
+			var hep *v3.HostEndpoint
+			if hep, err = r.getHostEndpoint(ctx, v); err == nil {
+				certificateTemplate, err = validate(&csr, hep, r.allowedTLSAssets)
+			}
+		} else {
+			var pod *corev1.Pod
+			if pod, err = r.getPod(ctx, &csr); err == nil {
+				certificateTemplate, err = validate(&csr, pod, r.allowedTLSAssets)
+			}
 		}
-		certificateTemplate, err := r.validate(&csr, pod)
+
 		if err != nil {
 			csr.Status.Conditions = []certificatesv1.CertificateSigningRequestCondition{
 				{
@@ -271,9 +302,25 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 // - Verify that the CSR was not previously denied or failed.
 // - Verify that the public key matches the signature on the CSR for the provider algorithm.
 // - Key usages are fixed, so the CSR won't be able to affect these settings.
-func (r *reconcileCSR) validate(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod) (*x509.Certificate, error) {
-	if pod == nil {
-		return nil, fmt.Errorf("invalid: no pod can be associated with CSR %s", csr.Name)
+type PodOrHostEndpoint interface {
+	*corev1.Pod | *v3.HostEndpoint
+}
+
+func validate[T PodOrHostEndpoint](csr *certificatesv1.CertificateSigningRequest, obj T, allowedTLSAssets map[string]tlsAsset) (*x509.Certificate, error) {
+	iv := reflect.ValueOf(obj)
+	if !iv.IsValid() || iv.IsNil() {
+		return nil, fmt.Errorf("invalid: no object can be associated with CSR %s", csr.Name)
+	}
+
+	var expectedName, expectedIP string
+	switch o := any(obj).(type) {
+	case *corev1.Pod:
+		expectedName = o.Name
+		expectedIP = o.Status.PodIP
+	case *v3.HostEndpoint:
+		expectedName = o.Spec.Node
+	default:
+		return nil, fmt.Errorf("invalid: unexpected type %T", obj)
 	}
 
 	firstBlock, restBlocks := pem.Decode(csr.Spec.Request)
@@ -292,21 +339,25 @@ func (r *reconcileCSR) validate(csr *certificatesv1.CertificateSigningRequest, p
 		return nil, err
 	}
 
-	// The CSRName is formatted as "<secretName>:<podName>".
+	// The CSRName is formatted as follows:
+	// - Pod: "<secretName>:<podName>"
+	// - HostEndpoint: "<secretName>:<hostname>"
 	nameChunks := strings.Split(csr.Name, ":")
-	if len(nameChunks) != 2 || nameChunks[1] != pod.Name {
+	if len(nameChunks) != 2 || nameChunks[1] != expectedName {
 		return nil, fmt.Errorf("invalid: CSR name does not match expected format: %s", csr.Name)
 	}
 	secretName := nameChunks[0]
 	// Validate whether this is a CSR we monitor at all.
-	asset, ok := r.allowedTLSAssets[secretName]
+	asset, ok := allowedTLSAssets[secretName]
 	if !ok {
 		return nil, fmt.Errorf("invalid: this controller is not configured to sign secretName: %s", secretName)
 	}
 
 	// Validate whether the requestor of the CSR is registered for the given CSR
-	if fmt.Sprintf("system:serviceaccount:%s:%s", asset.serviceaccountNamespace, asset.serviceaccountName) != csr.Spec.Username {
-		return nil, fmt.Errorf("invalid requestor %s for CSR with name %s", csr.Spec.Username, csr.Name)
+	if asset.serviceaccountNamespace != "" && asset.serviceaccountName != "" {
+		if fmt.Sprintf("system:serviceaccount:%s:%s", asset.serviceaccountNamespace, asset.serviceaccountName) != csr.Spec.Username {
+			return nil, fmt.Errorf("invalid requestor %s for CSR with name %s", csr.Spec.Username, csr.Name)
+		}
 	}
 
 	// Validate whether the DNS names are permitted for the request.
@@ -323,16 +374,21 @@ func (r *reconcileCSR) validate(csr *certificatesv1.CertificateSigningRequest, p
 		}
 	}
 
-	if len(certificateRequest.IPAddresses) == 1 {
-		if pod.Status.PodIP != certificateRequest.IPAddresses[0].String() {
-			return nil, fmt.Errorf("invalid pod IP for CSR with name %s", csr.Name)
+	if expectedIP != "" {
+		if len(certificateRequest.IPAddresses) == 1 {
+			if certificateRequest.IPAddresses[0].String() != expectedIP {
+				return nil, fmt.Errorf("invalid pod IP for CSR with name %s", csr.Name)
+			}
+		} else if len(certificateRequest.IPAddresses) > 1 {
+			return nil, fmt.Errorf("invalid: cannot request more than 1 IP for CSR with name %s", csr.Name)
 		}
-	} else if len(certificateRequest.IPAddresses) > 1 {
-		return nil, fmt.Errorf("invalid: cannot request more than 1 IP for CSR with name %s", csr.Name)
+	} else if len(certificateRequest.IPAddresses) > 0 {
+		// We don't expected IP Address in the CSR so we reject a CSR with IP addresses.
+		return nil, fmt.Errorf("invalid: cannot request IP for CSR with name %s", csr.Name)
 	}
 
 	bigint, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
-	certTemplate := &x509.Certificate{
+	return &x509.Certificate{
 		// We don't rely on any other part of the subject. Common name is validated already.
 		Subject:            pkix.Name{CommonName: certificateRequest.Subject.CommonName},
 		SerialNumber:       bigint,
@@ -347,8 +403,7 @@ func (r *reconcileCSR) validate(csr *certificatesv1.CertificateSigningRequest, p
 		ExtKeyUsage: extKeyUsage,
 		DNSNames:    certificateRequest.DNSNames,
 		IPAddresses: certificateRequest.IPAddresses,
-	}
-	return certTemplate, nil
+	}, nil
 }
 
 // getPod fetches the pod that issued a CSR based on the information in the CSR.
@@ -392,4 +447,18 @@ func (r *reconcileCSR) getPod(ctx context.Context, csr *certificatesv1.Certifica
 	}
 
 	return nil, nil
+}
+
+func (r *reconcileCSR) getHostEndpoint(ctx context.Context, hostname string) (*v3.HostEndpoint, error) {
+	hepList, err := r.calicoClient.ProjectcalicoV3().HostEndpoints().List(ctx, metav1.ListOptions{FieldSelector: fmt.Sprintf("spec.node=%s", hostname)})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if len(hepList.Items) == 0 {
+		return nil, nil
+	}
+	return &hepList.Items[0], nil
 }

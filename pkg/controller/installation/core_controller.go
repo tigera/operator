@@ -1315,8 +1315,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			go hepIndexInformer.Run(r.shutdownContext.Done())
 
 			typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.clientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
-			typhaAutoscalerNonClusterHost := newTyphaAutoscaler(r.clientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
-			r.typhaAutoscalerNonClusterHost = typhaAutoscalerNonClusterHost
+			r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.clientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
 			r.typhaAutoscalerNonClusterHost.start(r.shutdownContext)
 		}
 	}

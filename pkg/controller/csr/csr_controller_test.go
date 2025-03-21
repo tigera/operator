@@ -173,7 +173,7 @@ var _ = Describe("CSR controller tests", func() {
 	})
 
 	table.DescribeTable("csr validation for pods", func(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod, expectError, expectRelevant bool) {
-		certificate, err := validate(ctx, clientset, csr, pod, allowedAssets(dns.DefaultClusterDomain))
+		certificate, err := validate(clientset, csr, pod, allowedAssets(dns.DefaultClusterDomain))
 		if expectError {
 			Expect(err).To(HaveOccurred())
 		} else if expectRelevant {
@@ -209,7 +209,7 @@ var _ = Describe("CSR controller tests", func() {
 				},
 			}, nil
 		})
-		certificate, err := validate(ctx, clientset, csr, hep, allowedAssets(dns.DefaultClusterDomain))
+		certificate, err := validate(clientset, csr, hep, allowedAssets(dns.DefaultClusterDomain))
 		if expectError {
 			Expect(err).To(HaveOccurred())
 		} else if expectRelevant {

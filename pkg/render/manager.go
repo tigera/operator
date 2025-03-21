@@ -570,8 +570,8 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 
 		if c.cfg.Tenant.ManagedClusterIsCalico() {
 			// Enable access to / from Goldmane in Voltron.
-			env = append(env, corev1.EnvVar{Name: "GOLDMANE_ENABLED", Value: "true"})
-			env = append(env, corev1.EnvVar{Name: "MANAGED_CLUSTER_SUPPORTS_IMPERSONATION", Value: "false"})
+			env = append(env, corev1.EnvVar{Name: "VOLTRON_GOLDMANE_ENABLED", Value: "true"})
+			env = append(env, corev1.EnvVar{Name: "VOLTRON_MANAGED_CLUSTER_SUPPORTS_IMPERSONATION", Value: "false"})
 		}
 	}
 	env = append(env, linseedEndpointEnv)

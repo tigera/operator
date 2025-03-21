@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -743,6 +743,8 @@ func (es *elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentV
 
 	if es.cfg.Installation.CertificateManagement != nil {
 		config["xpack.security.http.ssl.certificate_authorities"] = []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"}
+		config["xpack.security.transport.ssl.key"] = "/usr/share/elasticsearch/config/transport-certs/transport.tls.key"
+		config["xpack.security.transport.ssl.certificate"] = "/usr/share/elasticsearch/config/transport-certs/transport.tls.crt"
 	}
 
 	return esv1.NodeSet{

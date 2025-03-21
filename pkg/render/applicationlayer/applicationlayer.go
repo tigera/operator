@@ -62,6 +62,13 @@ const (
 	WAFConfigHashAnnotation       = "hash.operator.tigera.io/tigera-waf-config"
 	CalicoLogsVolumeName          = "var-log-calico"
 	CalicologsVolumePath          = "/var/log/calico"
+
+	L7CollectorTCPListenPort = 8080
+	DikastesTCPListenPort    = 8081
+)
+
+var (
+	DefaultDeploymentReplicas int32 = 1
 )
 
 func ApplicationLayer(
@@ -98,6 +105,8 @@ type Config struct {
 
 	// Optional config for SidecarInjection
 	SidecarInjectionEnabled bool
+	DeploymentMode          *operatorv1.ApplicationLayerDeploymentModeType
+	DeploymentReplicas      *int32
 
 	// Calculated internal fields.
 	proxyImage            string
@@ -113,6 +122,30 @@ type Config struct {
 	NumTrustedHopsXFF   int32
 
 	ApplicationLayer *operatorv1.ApplicationLayer
+}
+
+func (cfg *Config) isDeploymentAndService() bool {
+	if cfg.DeploymentMode == nil {
+		return false
+	}
+	return *cfg.DeploymentMode == operatorv1.ApplicationLayerDeploymentModeServiceDeployment
+}
+
+func (cfg *Config) serviceDeploymentReplicas() *int32 {
+	if cfg.DeploymentReplicas != nil {
+		return cfg.DeploymentReplicas
+	}
+	return &DefaultDeploymentReplicas
+}
+
+func (cfg *Config) dikastesListenFlagValues() []string {
+	if cfg.isDeploymentAndService() {
+		return []string{
+			"--listen-network", "tcp",
+			"--listen", fmt.Sprintf("0.0.0.0:%d", DikastesTCPListenPort),
+		}
+	}
+	return []string{"--listen", "/var/run/dikastes/dikastes.sock"}
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -182,13 +215,17 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.config.envoyConfigMap)
 	}
 
-	// Envoy, Dikastes & L7 log collector Daemonset
+	// Envoy, Dikastes & L7 log collector Daemonset or Deployment+Service
 	// It always installed, even with sidecars enabled, the sidecars contain
 	// only envoy proxy inside them, and if only sidcar is enabled the
 	// daemonset will contain only Dikastes and L7 log collector to be
 	// prepared to do some action depending on the envoy inside application
 	// pod configuration.
-	objs = append(objs, c.daemonset())
+	if c.config.isDeploymentAndService() {
+		objs = append(objs, c.deploymentAndService()...)
+	} else {
+		objs = append(objs, c.daemonset())
+	}
 
 	if c.config.Installation.KubernetesProvider.IsDockerEE() {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
@@ -203,6 +240,85 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 
 func (c *component) Ready() bool {
 	return true
+}
+
+func (c *component) deploymentAndService() []client.Object {
+	maxUnavailable := intstr.FromInt(1)
+
+	annots := map[string]string{}
+
+	if c.config.envoyConfigMap != nil {
+		annots[EnvoyConfigMapName] = rmeta.AnnotationHash(c.config.envoyConfigMap)
+	}
+
+	if c.config.WAFRulesetConfigMap != nil {
+		annots[WAFConfigHashAnnotation] = rmeta.AnnotationHash(c.config.WAFRulesetConfigMap.Data)
+	}
+
+	podTemplate := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{
+			Annotations: annots,
+		},
+		Spec: corev1.PodSpec{
+			HostIPC:            true,
+			HostNetwork:        true,
+			ServiceAccountName: APLName,
+			DNSPolicy:          corev1.DNSClusterFirstWithHostNet,
+			Tolerations:        rmeta.TolerateAll,
+			ImagePullSecrets:   secret.GetReferenceList(c.config.PullSecrets),
+			Containers:         c.containers(),
+			Volumes:            c.volumes(),
+		},
+	}
+
+	service := &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ApplicationLayerDaemonsetName,
+			Namespace: common.CalicoNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{
+				"app": ApplicationLayerDaemonsetName,
+			},
+			Ports: []corev1.ServicePort{
+				{
+					Name:       "http-dikastes",
+					Port:       DikastesTCPListenPort,
+					TargetPort: intstr.FromInt(8080),
+				},
+				{
+					Name:       "http-l7-collector",
+					Port:       L7CollectorTCPListenPort,
+					TargetPort: intstr.FromInt(8080),
+				},
+			},
+		},
+	}
+
+	deployment := &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ApplicationLayerDaemonsetName,
+			Namespace: common.CalicoNamespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: c.config.serviceDeploymentReplicas(),
+			Template: podTemplate,
+			Strategy: appsv1.DeploymentStrategy{
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxUnavailable: &maxUnavailable,
+				},
+			},
+		},
+	}
+
+	if c.config.ApplicationLayer != nil {
+		if overrides := c.config.ApplicationLayer.Spec.L7LogCollectorDaemonSet; overrides != nil {
+			rcomponents.ApplyDeploymentOverrides(deployment, overrides)
+		}
+	}
+	return []client.Object{deployment, service}
 }
 
 // daemonset creates a daemonset for the L7 log collector component.
@@ -305,8 +421,9 @@ func (c *component) containers() []corev1.Container {
 			"/dikastes",
 			"server",
 			"--dial", "/var/run/felix/nodeagent/socket",
-			"--listen", "/var/run/dikastes/dikastes.sock",
 		}
+
+		commandArgs = append(commandArgs, c.config.dikastesListenFlagValues()...)
 
 		volMounts := []corev1.VolumeMount{
 			{Name: FelixSync, MountPath: "/var/run/felix"},
@@ -393,6 +510,19 @@ func (c *component) collectorEnv() []corev1.EnvVar {
 			Name:  "ENVOY_LOG_INTERVAL_SECONDS",
 			Value: strconv.FormatInt(*c.config.LogIntervalSeconds, 10),
 		})
+	}
+
+	if c.config.isDeploymentAndService() {
+		envs = append(envs,
+			corev1.EnvVar{
+				Name:  "LISTEN_NETWORK",
+				Value: "tcp",
+			},
+			corev1.EnvVar{
+				Name:  "LISTEN_ADDRESS",
+				Value: fmt.Sprintf("0.0.0.0:%d", L7CollectorTCPListenPort),
+			},
+		)
 	}
 
 	return envs

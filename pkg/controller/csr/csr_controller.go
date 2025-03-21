@@ -20,6 +20,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -245,12 +246,12 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		if v, ok := csr.Labels["nonclusterhost.tigera.io/hostname"]; ok {
 			var hep *v3.HostEndpoint
 			if hep, err = r.getHostEndpoint(ctx, v); err == nil {
-				certificateTemplate, err = validate(ctx, r.clientset, &csr, hep, r.allowedTLSAssets)
+				certificateTemplate, err = validate(r.clientset, &csr, hep, r.allowedTLSAssets)
 			}
 		} else {
 			var pod *corev1.Pod
 			if pod, err = r.getPod(ctx, &csr); err == nil {
-				certificateTemplate, err = validate(ctx, r.clientset, &csr, pod, r.allowedTLSAssets)
+				certificateTemplate, err = validate(r.clientset, &csr, pod, r.allowedTLSAssets)
 			}
 		}
 
@@ -298,6 +299,10 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 	return reconcile.Result{}, nil
 }
 
+type PodOrHostEndpoint interface {
+	*corev1.Pod | *v3.HostEndpoint
+}
+
 // validate Criteria include:
 // - Verify that the x509 request can be parsed and contains one request block.
 // - Verify that the request name matches the deterministic name format that we expect. (More for practical reasons, than for security reasons.)
@@ -306,12 +311,7 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 // - Verify that the CSR was not previously denied or failed.
 // - Verify that the public key matches the signature on the CSR for the provider algorithm.
 // - Key usages are fixed, so the CSR won't be able to affect these settings.
-type PodOrHostEndpoint interface {
-	*corev1.Pod | *v3.HostEndpoint
-}
-
 func validate[T PodOrHostEndpoint](
-	ctx context.Context,
 	clientset kubernetes.Interface,
 	csr *certificatesv1.CertificateSigningRequest,
 	obj T,
@@ -369,7 +369,7 @@ func validate[T PodOrHostEndpoint](
 			return nil, fmt.Errorf("invalid requestor %s for CSR with name %s", csr.Spec.Username, csr.Name)
 		}
 	} else {
-		// This CSR originals from non-cluster hosts. We allow multiple service accounts for different groups
+		// This CSR originates from non-cluster hosts. We allow multiple service accounts for different groups
 		// of non-cluster hosts. To ensure proper access control, we need to validate the requestor's permission.
 		review := &authv1.SubjectAccessReview{
 			Spec: authv1.SubjectAccessReviewSpec{
@@ -387,11 +387,10 @@ func validate[T PodOrHostEndpoint](
 			},
 		}
 
-		result, err := clientset.AuthorizationV1().SubjectAccessReviews().Create(ctx, review, metav1.CreateOptions{})
-		if err != nil {
+		if allowed, err := performSubjectAccessReview(clientset, review); err != nil {
 			return nil, err
-		} else if !result.Status.Allowed {
-			return nil, fmt.Errorf("invalid requestor %s for CSR with name %s", csr.Spec.Username, csr.Name)
+		} else if !allowed {
+			return nil, fmt.Errorf("authorization failed: user %s is not allowed to create CSR %s", csr.Spec.Username, csr.Name)
 		}
 	}
 
@@ -449,6 +448,16 @@ func convertExtraValue(extra map[string]certificatesv1.ExtraValue) map[string]au
 	return res
 }
 
+func performSubjectAccessReview(clientset kubernetes.Interface, review *authv1.SubjectAccessReview) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
+	defer cancel()
+	result, err := clientset.AuthorizationV1().SubjectAccessReviews().Create(ctx, review, metav1.CreateOptions{})
+	if err != nil {
+		return false, err
+	}
+	return result.Status.Allowed, nil
+}
+
 // getPod fetches the pod that issued a CSR based on the information in the CSR.
 // A CSR will contain immutable identity info set by k8s such as:
 //
@@ -493,6 +502,10 @@ func (r *reconcileCSR) getPod(ctx context.Context, csr *certificatesv1.Certifica
 }
 
 func (r *reconcileCSR) getHostEndpoint(ctx context.Context, hostname string) (*v3.HostEndpoint, error) {
+	if hostname == "" {
+		return nil, errors.New("hostname can not be empty")
+	}
+
 	hepList, err := r.calicoClient.ProjectcalicoV3().HostEndpoints().List(ctx, metav1.ListOptions{FieldSelector: fmt.Sprintf("spec.node=%s", hostname)})
 	if err != nil {
 		if apierrors.IsNotFound(err) {

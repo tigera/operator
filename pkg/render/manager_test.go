@@ -167,7 +167,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// voltron container
 		Expect(voltron.Env).To(ContainElements([]corev1.EnvVar{
 			{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"},
-			{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST_LOG_INGESTION", Value: "true"},
+			{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST", Value: "true"},
 			{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: "https://tigera-api.tigera-system.svc:8080"},
 			{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: "/api/v1/namespaces/tigera-system/services/https:tigera-api:8080/proxy/"},
 			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -82,12 +81,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to create intrusiondetection-controller: %v", err)
 	}
 
-	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		log.Error(err, "Failed to establish a connection to k8s")
-		return err
-	}
-
 	installNS, truthNS, _ := tenancy.GetWatchNamespaces(opts.MultiTenant, render.IntrusionDetectionNamespace)
 
 	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
@@ -103,13 +96,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	if !opts.MultiTenant {
 		// DPI is only supported in single-tenant mode.
-		go utils.WaitToAddResourceWatch(c, k8sClient, log, dpiAPIReady,
+		go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, dpiAPIReady,
 			[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 		policiesToWatch = append(policiesToWatch, types.NamespacedName{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace})
 	}
-	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, policiesToWatch)
-	go utils.WaitToAddLicenseKeyWatch(c, k8sClient, log, licenseAPIReady)
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, policiesToWatch)
+	go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, licenseAPIReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, tierWatchReady)
 
 	// Watch for changes to operator.tigera.io APIs.
 	if err = c.WatchObject(&operatorv1.IntrusionDetection{}, &handler.EnqueueRequestForObject{}); err != nil {

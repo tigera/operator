@@ -22,34 +22,40 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var typhaLog = logf.Log.WithName("typha_autoscaler")
 
 const (
 	defaultTyphaAutoscalerSyncPeriod = 10 * time.Second
+
+	hepCreatedLabelKey   = "projectcalico.org/created-by"
+	hepCreatedLabelValue = "calico-kube-controllers"
 )
 
 // typhaAutoscaler periodically lists the nodes and, if needed, scales the Typha deployment up/down.
 // Number of replicas should be at least (1 typha for every 200 nodes) + 1 but the number of typhas
 // cannot exceed the number of nodes+masters.
 type typhaAutoscaler struct {
-	client            kubernetes.Interface
-	syncPeriod        time.Duration
-	statusManager     status.StatusManager
-	triggerRunChan    chan chan error
-	isDegradedChan    chan chan bool
-	nodeIndexInformer cache.SharedIndexInformer
-	typhaInformer     cache.Controller
-	typhaIndexer      cache.Store
+	client         kubernetes.Interface
+	syncPeriod     time.Duration
+	statusManager  status.StatusManager
+	triggerRunChan chan chan error
+	isDegradedChan chan chan bool
+	indexInformer  cache.SharedIndexInformer
+	typhaInformer  cache.Controller
+	typhaIndexer   cache.Store
+	nonClusterHost bool
 
 	// Number of currently running replicas.
 	activeReplicas int32
@@ -57,23 +63,30 @@ type typhaAutoscaler struct {
 
 type typhaAutoscalerOption func(*typhaAutoscaler)
 
-// typhaAutoscalerPeriod is an option that sets a custom sync period for the Typha autoscaler.
-func typhaAutoscalerPeriod(syncPeriod time.Duration) typhaAutoscalerOption {
+// typhaAutoscalerOptionPeriod is an option that sets a custom sync period for the Typha autoscaler.
+func typhaAutoscalerOptionPeriod(syncPeriod time.Duration) typhaAutoscalerOption {
 	return func(t *typhaAutoscaler) {
 		t.syncPeriod = syncPeriod
 	}
 }
 
+// typhaAutoScalerOptionNonclusterHost is an option that sets the Typha autoscaler to for non-cluster host.
+func typhaAutoscalerOptionNonclusterHost(nonClusterHost bool) typhaAutoscalerOption {
+	return func(t *typhaAutoscaler) {
+		t.nonClusterHost = nonClusterHost
+	}
+}
+
 // newTyphaAutoscaler creates a new Typha autoscaler, optionally applying any options to the default autoscaler instance.
 // The default sync period is 10 seconds.
-func newTyphaAutoscaler(cs kubernetes.Interface, nodeIndexInformer cache.SharedIndexInformer, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
+func newTyphaAutoscaler(cs kubernetes.Interface, indexInformer cache.SharedIndexInformer, typhaListWatch cache.ListerWatcher, statusManager status.StatusManager, options ...typhaAutoscalerOption) *typhaAutoscaler {
 	ta := &typhaAutoscaler{
-		client:            cs,
-		statusManager:     statusManager,
-		syncPeriod:        defaultTyphaAutoscalerSyncPeriod,
-		triggerRunChan:    make(chan chan error),
-		isDegradedChan:    make(chan chan bool),
-		nodeIndexInformer: nodeIndexInformer,
+		client:         cs,
+		statusManager:  statusManager,
+		syncPeriod:     defaultTyphaAutoscalerSyncPeriod,
+		triggerRunChan: make(chan chan error),
+		isDegradedChan: make(chan chan bool),
+		indexInformer:  indexInformer,
 	}
 
 	// Configure an informer to monitor the active replicas.
@@ -120,7 +133,7 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 		// Start the informer.
 		go t.typhaInformer.Run(ctx.Done())
 		// Wait for the informers to sync.
-		for !t.nodeIndexInformer.HasSynced() || !t.typhaInformer.HasSynced() {
+		for !t.indexInformer.HasSynced() || !t.typhaInformer.HasSynced() {
 			time.Sleep(100 * time.Millisecond)
 		}
 
@@ -185,19 +198,22 @@ func (t *typhaAutoscaler) isDegraded() bool {
 
 // autoscaleReplicas calculates the number of typha pods that should be running and scales the typha deployment accordingly
 func (t *typhaAutoscaler) autoscaleReplicas() error {
-	allSchedulableNodes, linuxNodes, err := t.getNodeCounts()
-	if err != nil {
-		return fmt.Errorf("could not get number of nodes: %w", err)
-	}
-	typhaLog.V(5).Info("Number of nodes to consider for typha autoscaling", "all", allSchedulableNodes, "linux", linuxNodes)
-	expectedReplicas := common.GetExpectedTyphaScale(allSchedulableNodes)
-	if linuxNodes < expectedReplicas {
-		return fmt.Errorf("not enough linux nodes to schedule typha pods on, require %d and have %d", expectedReplicas, linuxNodes)
+	var expectedReplicas int
+	if t.nonClusterHost {
+		heps := t.getHostEndpointCounts()
+		expectedReplicas = common.GetExpectedTyphaScale(heps)
+	} else {
+		allSchedulableNodes, linuxNodes := t.getNodeCounts()
+		typhaLog.V(5).Info("Number of nodes to consider for typha autoscaling", "all", allSchedulableNodes, "linux", linuxNodes)
+		expectedReplicas = common.GetExpectedTyphaScale(allSchedulableNodes)
+		if linuxNodes < expectedReplicas {
+			return fmt.Errorf("not enough linux nodes to schedule typha pods on, require %d and have %d", expectedReplicas, linuxNodes)
+		}
 	}
 
 	typhaLog.V(5).Info("Checking if we need to scale typha", "expectedReplicas", expectedReplicas, "currentReplicas", t.activeReplicas)
 	if int32(expectedReplicas) != t.activeReplicas {
-		err = t.updateReplicas(int32(expectedReplicas))
+		err := t.updateReplicas(int32(expectedReplicas))
 		if err != nil && !apierrors.IsNotFound(err) {
 			return fmt.Errorf("could not scale Typha deployment: %w", err)
 		}
@@ -208,7 +224,11 @@ func (t *typhaAutoscaler) autoscaleReplicas() error {
 
 // updateReplicas updates the Typha deployment to the expected replicas if the current replica count differs.
 func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
-	typha, err := t.client.AppsV1().Deployments(common.CalicoNamespace).Get(context.Background(), common.TyphaDeploymentName, metav1.GetOptions{})
+	name := common.TyphaDeploymentName
+	if t.nonClusterHost {
+		name += render.TyphaNonClusterHostSuffix
+	}
+	typha, err := t.client.AppsV1().Deployments(common.CalicoNamespace).Get(context.Background(), name, metav1.GetOptions{})
 	if err != nil {
 		return err
 	}
@@ -233,10 +253,10 @@ func (t *typhaAutoscaler) updateReplicas(expectedReplicas int32) error {
 // getNodeCounts returns the number of all the schedulable nodes and the number of the schedulable linux nodes. The linux
 // node count is needed because typha pods can only be scheduled on linux nodes, however, nodes of other os types (i.e. windows)
 // still need to use typha.
-func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
+func (t *typhaAutoscaler) getNodeCounts() (int, int) {
 	linuxNodes := 0
 	schedulable := 0
-	for _, obj := range t.nodeIndexInformer.GetIndexer().List() {
+	for _, obj := range t.indexInformer.GetIndexer().List() {
 		n := obj.(*v1.Node)
 		if n.Spec.Unschedulable {
 			continue
@@ -257,5 +277,20 @@ func (t *typhaAutoscaler) getNodeCounts() (int, int, error) {
 			linuxNodes++
 		}
 	}
-	return schedulable, linuxNodes, nil
+	return schedulable, linuxNodes
+}
+
+// getHostEndpointCounts returns the number of host endpoints in the cluster that are not created by the kube-controllers.
+func (t *typhaAutoscaler) getHostEndpointCounts() int {
+	heps := 0
+	for _, obj := range t.indexInformer.GetIndexer().List() {
+		// Exclude auto host endpoints that are created by calico-kube-controllers.
+		hep := obj.(*v3.HostEndpoint)
+		if _, ok := hep.Labels[hepCreatedLabelKey]; ok && hep.Labels[hepCreatedLabelKey] == hepCreatedLabelValue {
+			continue
+		}
+
+		heps++
+	}
+	return heps
 }

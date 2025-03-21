@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -62,6 +62,12 @@ var _ = Describe("Typha rendering tests", func() {
 				Type: operatorv1.PluginCalico,
 			},
 		}
+		nonclusterhost := &operatorv1.NonClusterHost{
+			Spec: operatorv1.NonClusterHostSpec{
+				Endpoint:      "https://127.0.0.1:9443",
+				TyphaEndpoint: "127.0.0.1:5473",
+			},
+		}
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -74,6 +80,7 @@ var _ = Describe("Typha rendering tests", func() {
 			Installation:    installation,
 			ClusterDomain:   defaultClusterDomain,
 			FelixHealthPort: 9099,
+			NonClusterHost:  nonclusterhost,
 		}
 	})
 
@@ -121,9 +128,11 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
+			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
+			{name: "calico-typha-noncluster-host", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "calico-typha-noncluster-host", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
 
 		component := render.Typha(&cfg)
@@ -162,6 +171,23 @@ var _ = Describe("Typha rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
+
+		// Validate the non-cluster host typha deployment
+		dResource = rtest.GetResource(resources, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d = dResource.(*appsv1.Deployment)
+
+		Expect(d.Spec.Template.Spec.Affinity).To(BeNil())
+		Expect(d.Spec.Template.Spec.HostNetwork).To(BeFalse())
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: "typha-client-noncluster-host"},
+			corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"},
+			corev1.EnvVar{Name: "TYPHA_SERVERCERTFILE", Value: "/typha-certs-noncluster-host/tls.crt"},
+			corev1.EnvVar{Name: "TYPHA_SERVERKEYFILE", Value: "/typha-certs-noncluster-host/tls.key"},
+		))
+		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
+		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
 	})
 
 	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
@@ -193,9 +219,11 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
+			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
+			{name: "calico-typha-noncluster-host", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "calico-typha-noncluster-host", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
 
 		cfg.MigrateNamespaces = true
@@ -385,9 +413,11 @@ var _ = Describe("Typha rendering tests", func() {
 			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "ServiceAccount"},
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: "calico-typha", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "policy", version: "v1", kind: "PodDisruptionBudget"},
+			{name: "calico-typha", ns: "calico-system", group: "", version: "v1", kind: "Service"},
+			{name: "calico-typha-noncluster-host", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "calico-typha", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
+			{name: "calico-typha-noncluster-host", ns: "calico-system", group: "apps", version: "v1", kind: "Deployment"},
 		}
 
 		component := render.Typha(&cfg)

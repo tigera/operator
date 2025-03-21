@@ -19,6 +19,7 @@ import (
 
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"k8s.io/client-go/kubernetes"
 )
 
 // AddOptions are passed to controllers when added to the controller manager. They
@@ -32,6 +33,9 @@ type AddOptions struct {
 	KubernetesVersion   *common.VersionInfo
 	ManageCRDs          bool
 	ShutdownContext     context.Context
+
+	// Kubernetes clientset used by controllers to create watchers and informers.
+	K8sClientset *kubernetes.Clientset
 
 	// Whether or not the operator is running in multi-tenant mode.
 	// When true, this means some CRDs are installed as namespace scoped

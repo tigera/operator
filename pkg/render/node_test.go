@@ -331,6 +331,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
@@ -570,6 +571,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
@@ -810,6 +812,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 					// Tigera-specific envvars
 					{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
@@ -1150,6 +1153,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
@@ -1313,6 +1317,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 					{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 					{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
@@ -1566,6 +1571,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
@@ -1726,6 +1732,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 					{Name: "FELIX_INTERFACEPREFIX", Value: "eni"},
 					{Name: "FELIX_IPTABLESMANGLEALLOWACTION", Value: "Return"},
@@ -1904,6 +1911,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}
@@ -1998,6 +2006,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 					// Tigera-specific envvars
 					{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
@@ -2092,6 +2101,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 					// Tigera-specific envvars
@@ -3143,6 +3153,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 					{Name: "NO_DEFAULT_POOLS", Value: "true"},
 				}

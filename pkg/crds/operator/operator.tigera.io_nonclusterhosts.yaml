@@ -43,8 +43,12 @@ spec:
             properties:
               endpoint:
                 description: 'Location of the log ingestion point for non-cluster
-                  hosts. example: https://1.2.3.4:443'
+                  hosts. For example: https://1.2.3.4:443'
                 pattern: ^https://.+$
+                type: string
+              typhaEndpoint:
+                description: 'Location of the Typha endpoint for non-cluster host
+                  Felix and Typha communication. For example: 5.6.7.8:5473'
                 type: string
             required:
             - endpoint

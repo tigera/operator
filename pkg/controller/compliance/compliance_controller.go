@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -81,18 +80,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		log.Error(err, "Failed to establish a connection to k8s")
-		return err
-	}
-
 	installNS, _, watchNamespaces := tenancy.GetWatchNamespaces(opts.MultiTenant, render.PolicyRecommendationNamespace)
 
-	go utils.WaitToAddLicenseKeyWatch(complianceController, k8sClient, log, licenseAPIReady)
+	go utils.WaitToAddLicenseKeyWatch(complianceController, opts.K8sClientset, log, licenseAPIReady)
 
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, complianceController, k8sClient, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(complianceController, k8sClient, log, []types.NamespacedName{
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, complianceController, opts.K8sClientset, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(complianceController, opts.K8sClientset, log, []types.NamespacedName{
 		{Name: render.ComplianceAccessPolicyName, Namespace: installNS},
 		{Name: render.ComplianceServerPolicyName, Namespace: installNS},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: installNS},

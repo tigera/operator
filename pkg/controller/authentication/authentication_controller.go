@@ -21,7 +21,6 @@ import (
 	"golang.org/x/net/http/httpproxy"
 	v1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
@@ -82,13 +81,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
-	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return fmt.Errorf("%s failed to establish a connection to k8s: %w", controllerName, err)
-	}
-
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, k8sClient, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(c, k8sClient, log, []types.NamespacedName{
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 		{Name: render.DexPolicyName, Namespace: render.DexNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.DexNamespace},
 	})

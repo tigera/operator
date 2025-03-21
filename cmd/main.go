@@ -355,7 +355,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 
 	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
-		log.Error(err, "Failed to get client for auto provider discovery")
+		log.Error(err, "Failed to get Kubernetes clientset")
 		os.Exit(1)
 	}
 
@@ -376,7 +376,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
 
 	// Determine if we need to start the Enterprise specific controllers.
-	enterpriseCRDExists, err := utils.RequiresTigeraSecure(mgr.GetConfig())
+	enterpriseCRDExists, err := utils.RequiresTigeraSecure(clientset)
 	if err != nil {
 		setupLog.Error(err, "Failed to determine if Enterprise controllers are required")
 		os.Exit(1)
@@ -439,6 +439,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		KubernetesVersion:   kubernetesVersion,
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
+		K8sClientset:        clientset,
 		MultiTenant:         multiTenant,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
 	}

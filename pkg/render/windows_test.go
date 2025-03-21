@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -413,6 +413,7 @@ var _ = Describe("Windows rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 					{Name: "VXLAN_VNI", Value: "4096"},
@@ -878,6 +879,7 @@ var _ = Describe("Windows rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 					{Name: "VXLAN_VNI", Value: "4096"},
@@ -1203,6 +1205,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 			{Name: "VXLAN_VNI", Value: "4096"},
@@ -1401,6 +1404,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
 			{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"},
@@ -1645,6 +1649,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 			// Calico Windows specific envvars
@@ -1786,6 +1791,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"},
@@ -1940,6 +1946,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:kube-system/rke2-coredns-rke2-coredns"},
@@ -2463,6 +2470,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 			{Name: "VXLAN_VNI", Value: "4096"},

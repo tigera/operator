@@ -24,7 +24,6 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -34,12 +33,7 @@ var log = logf.Log.WithName("discovery")
 
 // RequiresTigeraSecure determines if the configuration requires we start the tigera secure
 // controllers.
-func RequiresTigeraSecure(cfg *rest.Config) (bool, error) {
-	clientset, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return false, err
-	}
-
+func RequiresTigeraSecure(clientset *kubernetes.Clientset) (bool, error) {
 	// Use the discovery client to determine if the tigera secure specific APIs exist.
 	resources, err := clientset.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
 	if err != nil {

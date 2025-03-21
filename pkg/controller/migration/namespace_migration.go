@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/tigera/operator/pkg/common"
@@ -120,13 +119,8 @@ func (m *CoreNamespaceMigration) NeedsCoreNamespaceMigration(ctx context.Context
 }
 
 // NewCoreNamespaceMigration initializes a CoreNamespaceMigration and returns a handle to it.
-func NewCoreNamespaceMigration(cfg *rest.Config) (NamespaceMigration, error) {
-	migration := &CoreNamespaceMigration{migrationComplete: false}
-	var err error
-	migration.client, err = kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("unable to get kubernetes client: %s", err)
-	}
+func NewCoreNamespaceMigration(clientset *kubernetes.Clientset) (NamespaceMigration, error) {
+	migration := &CoreNamespaceMigration{migrationComplete: false, client: clientset}
 
 	// Create a Node watcher.
 	listWatcher := cache.NewListWatchFromClient(migration.client.CoreV1().RESTClient(), "nodes", "", fields.Everything())

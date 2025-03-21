@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -86,10 +86,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		ta.start(ctx)
 
 		Eventually(func() error {
-			schedulableNodes, linuxNodes, err := ta.getNodeCounts()
-			if err != nil {
-				return err
-			}
+			schedulableNodes, linuxNodes := ta.getNodeCounts()
 			if schedulableNodes != 2 {
 				return fmt.Errorf("Expected 2 schedulable nodes, got %d", schedulableNodes)
 			}
@@ -104,10 +101,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		Expect(err).To(BeNil())
 
 		Eventually(func() error {
-			schedulableNodes, linuxNodes, err := ta.getNodeCounts()
-			if err != nil {
-				return err
-			}
+			schedulableNodes, linuxNodes := ta.getNodeCounts()
 			if schedulableNodes != 1 {
 				return fmt.Errorf("Expected 2 schedulable nodes, got %d", schedulableNodes)
 			}
@@ -140,7 +134,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// For clusters smaller than 3 nodes we only expect 1 replica.
@@ -190,7 +184,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "pre-operator"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		verifyTyphaReplicas(c, 3)
@@ -221,7 +215,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "linux", "kubernetes.azure.com/cluster": "foo", "type": "virtual-kubelet"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// normally we'd expect to see three replicas for five nodes, but since one node is a virtual-kubelet,
@@ -257,7 +251,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		_ = CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "windows"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerPeriod(10*time.Millisecond))
+		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// This blocks until the first run is done.

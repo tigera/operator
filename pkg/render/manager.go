@@ -516,7 +516,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_INTERNAL_HTTPS_KEY", Value: intKeyPath},
 		{Name: "VOLTRON_INTERNAL_HTTPS_CERT", Value: intCertPath},
 		{Name: "VOLTRON_ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
-		{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST_LOG_INGESTION", Value: strconv.FormatBool(c.cfg.NonClusterHost != nil)},
+		{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST", Value: strconv.FormatBool(c.cfg.NonClusterHost != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: defaultForwardServer},
 		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.ComplianceLicenseActive)},

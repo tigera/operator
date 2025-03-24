@@ -244,21 +244,34 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 			})
 		}
 	} else {
-		policyRules = append(policyRules, rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{
-				"clusterinformations",
-				"tiers",
-				"stagednetworkpolicies",
-				"tier.stagednetworkpolicies",
-				"networkpolicies",
-				"tier.networkpolicies",
-				"globalnetworkpolicies",
-				"tier.globalnetworkpolicies",
-				"globalnetworksets",
+		policyRules = append(policyRules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"namespaces", "services", "pods"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
-			Verbs: []string{"get", "list", "watch"},
-		})
+			rbacv1.PolicyRule{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments", "replicasets", "statefulsets", "daemonsets"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"clusterinformations",
+					"tiers",
+					"stagednetworkpolicies",
+					"tier.stagednetworkpolicies",
+					"networkpolicies",
+					"tier.networkpolicies",
+					"globalnetworkpolicies",
+					"tier.globalnetworkpolicies",
+					"globalnetworksets",
+					"networksets",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+		)
 	}
 
 	return &rbacv1.ClusterRole{

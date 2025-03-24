@@ -341,7 +341,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# Wait for controller manager to be running and healthy.
 	while ! KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
-FV_IMAGE_REGISTRY := docker.io
+FV_IMAGE_REGISTRY := quay.io
 VERSION_TAG := master
 NODE_IMAGE := calico/node
 APISERVER_IMAGE := calico/apiserver

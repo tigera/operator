@@ -245,7 +245,7 @@ var _ = Describe("Node rendering tests", func() {
 
 				// Node image override results in correct image.
 				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
+				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
 				Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 				Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeTrue())
@@ -268,7 +268,7 @@ var _ = Describe("Node rendering tests", func() {
 				// CNI container uses image override.
 				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
-				Expect(cniContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
+				Expect(cniContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
 
 				Expect(*cniContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 				Expect(*cniContainer.SecurityContext.Privileged).To(BeTrue())
@@ -287,7 +287,7 @@ var _ = Describe("Node rendering tests", func() {
 
 				// Verify the Flex volume container image.
 				flexvolContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
-				Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
+				Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
 
 				Expect(*flexvolContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 				Expect(*flexvolContainer.SecurityContext.Privileged).To(BeTrue())
@@ -511,17 +511,17 @@ var _ = Describe("Node rendering tests", func() {
 				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 				// Node image override results in correct image.
-				calicoNodeImage := fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
+				calicoNodeImage := fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(calicoNodeImage))
 
 				// Validate correct number of init containers.
 				Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(3))
 
 				// CNI container uses image override.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
 
 				// Verify the Flex volume container image.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
 
 				// Verify the mount-bpffs image and command.
 				mountBpffs := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
@@ -950,17 +950,17 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(hostPathContainer.VolumeMounts).To(ConsistOf(expectedHostPathInitVolumeMounts))
 
 				// Node image override results in correct image.
-				calicoNodeImage := fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
+				calicoNodeImage := fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(calicoNodeImage))
 
 				// Validate correct number of init containers.
 				Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(3))
 
 				// CNI container uses image override.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
 
 				// Verify the Flex volume container image.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
 
 				// Verify the mount-bpffs image and command.
 				mountBpffs := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
@@ -1112,16 +1112,16 @@ var _ = Describe("Node rendering tests", func() {
 				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 				// Node image override results in correct image.
-				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
+				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
 				// Validate correct number of init containers.
 				Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
 
 				// CNI container uses image override.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
 
 				// Verify the Flex volume container image.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
 
 				// Verify env
 				expectedNodeEnv := []corev1.EnvVar{
@@ -1280,7 +1280,7 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(1))
 
 				// Verify the Flex volume container image.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
 
 				// Verify env
 				expectedNodeEnv := []corev1.EnvVar{
@@ -1528,16 +1528,16 @@ var _ = Describe("Node rendering tests", func() {
 				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 				// Node image override results in correct image.
-				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
+				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
 				// Validate correct number of init containers.
 				Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
 
 				// CNI container uses image override.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
 
 				// Verify the Flex volume container image.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
 
 				// Verify env
 				expectedNodeEnv := []corev1.EnvVar{
@@ -1693,7 +1693,7 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(1))
 
 				// Verify the Flex volume container image.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
 
 				// Verify env
 				expectedNodeEnv := []corev1.EnvVar{
@@ -1834,7 +1834,7 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
+				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
 				// The pod template should have node critical priority
 				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
@@ -3104,16 +3104,16 @@ var _ = Describe("Node rendering tests", func() {
 				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 				// Node image override results in correct image.
-				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
+				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
 				// Validate correct number of init containers.
 				Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
 
 				// CNI container uses image override.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)))
 
 				// Verify the Flex volume container image.
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
 
 				// Verify env
 				expectedNodeEnv := []corev1.EnvVar{

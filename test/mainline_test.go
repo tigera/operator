@@ -323,6 +323,9 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
 
+	clientset, err := kubernetes.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred())
+
 	// Create a manager to use in the tests.
 	skipNameValidation := true
 	mgr, err := manager.New(cfg, manager.Options{
@@ -357,6 +360,7 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 		EnterpriseCRDExists: enterpriseCRDsExist,
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
+		K8sClientset:        clientset,
 		MultiTenant:         multiTenant,
 	})
 	Expect(err).NotTo(HaveOccurred())

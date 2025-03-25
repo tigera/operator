@@ -1,27 +1,27 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/calico.go.tpl
-title: v3.29.2
+title: v3.29.3
 components:
   libcalico-go:
-    version: v3.29.2
+    version: v3.29.3
   typha:
-    version: v3.29.2
+    version: v3.29.3
   calico/node:
-    version: v3.29.2
+    version: v3.29.3
   calico/cni:
-    version: v3.29.2
+    version: v3.29.3
   calico/node-windows:
-    version: v3.29.2
+    version: v3.29.3
   calico/cni-windows:
-    version: v3.29.2
+    version: v3.29.3
   calico/kube-controllers:
-    version: v3.29.2
+    version: v3.29.3
   flexvol:
-    version: v3.29.2
+    version: v3.29.3
   calico/apiserver:
-    version: v3.29.2
+    version: v3.29.3
   calico/csi:
-    version: v3.29.2
+    version: v3.29.3
   csi-node-driver-registrar:
-    version: v3.29.2
+    version: v3.29.3
   key-cert-provisioner:
-    version: v3.29.2
+    version: v3.29.3

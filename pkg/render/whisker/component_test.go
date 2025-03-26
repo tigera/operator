@@ -90,7 +90,9 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
-				Whisker:               &operatorv1.Whisker{},
+				Whisker:               &operatorv1.Whisker{ObjectMeta: metav1.ObjectMeta{UID: "test-whisker-id"}},
+				CalicoVersion:         "test-calico-version",
+				ClusterType:           "test-cluster-type",
 			},
 			&appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -117,6 +119,9 @@ var _ = Describe("ComponentRendering", func() {
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
+										{Name: "CALICO_VERSION", Value: "test-calico-version"},
+										{Name: "WHISKER_ID", Value: "test-whisker-id"},
+										{Name: "CLUSTER_TYPE", Value: "test-cluster-type"},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 								},

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -26,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -200,6 +202,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
 	}
 
+	clusterInfo := &v3.ClusterInformation{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+	err = r.cli.Get(ctx, client.ObjectKeyFromObject(clusterInfo), clusterInfo)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get ClusterInformation: ", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
 	cfg := &whisker.Configuration{
 		PullSecrets:           pullSecrets,
@@ -208,6 +217,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TrustedCertBundle:     trustedBundle,
 		WhiskerBackendKeyPair: backendKeyPair,
 		Whisker:               whiskerCR,
+		ClusterType:           clusterInfo.Spec.ClusterType,
+		CalicoVersion:         clusterInfo.Spec.CalicoVersion,
 	}
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

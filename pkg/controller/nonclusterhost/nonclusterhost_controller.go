@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package nonclusterhost
 import (
 	"context"
 	"fmt"
+	"net"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -32,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render/nonclusterhost"
+	"github.com/tigera/operator/pkg/url"
 )
 
 const controllerName = "nonclusterhost-controller"
@@ -96,8 +98,20 @@ func (r *ReconcileNonClusterHost) Reconcile(ctx context.Context, request reconci
 
 	logc.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()
-
 	defer r.status.SetMetaData(&instance.ObjectMeta)
+
+	// Validate endpoint fields
+	_, _, _, err = url.ParseEndpoint(instance.Spec.Endpoint)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid endpoint", err, logc)
+		return reconcile.Result{}, err
+	}
+
+	_, _, err = net.SplitHostPort(instance.Spec.TyphaEndpoint)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid Typha endpoint", err, logc)
+		return reconcile.Result{}, err
+	}
 
 	config := &nonclusterhost.Config{
 		NonClusterHost: instance.Spec,

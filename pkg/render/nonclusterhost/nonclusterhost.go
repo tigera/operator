@@ -138,6 +138,12 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
+			// For non-cluster host to get tigera-ca-bundle config map.
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"get"},
+		},
+		{
 			// For monitoring Calico-specific configuration.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{
@@ -185,6 +191,21 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{"linseed.tigera.io"},
 			Resources: []string{"flowlogs"},
 			Verbs:     []string{"create"},
+		},
+	}...)
+
+	// For non-cluster host to request a operator signed certificate.
+	rules = append(rules, []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"certificates.k8s.io"},
+			Resources: []string{"certificatesigningrequests"},
+			Verbs:     []string{"create", "list", "watch"},
+		},
+		{
+			APIGroups:     []string{"certificates.tigera.io"},
+			Resources:     []string{"certificatesigningrequests/common-name"},
+			Verbs:         []string{"create"},
+			ResourceNames: []string{render.TyphaCommonName + render.TyphaNonClusterHostSuffix},
 		},
 	}...)
 

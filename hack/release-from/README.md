@@ -43,14 +43,14 @@ release-from --base-version <previous operator version> --version <version to re
 
     ```sh
     release-from --base-version v1.36.0-1.dev-259-g25c811f78fbd-v3.30.0-0.dev-338-gca80474016a5 --version v1.36.0-mod-typha \
-    --except-calico typha:v3.30.0-0.dev-353-ge0bc56c0d646 --registry docker.io --image my-namespace/tigera-operator
+    --except-calico typha:v3.30.0-0.dev-353-ge0bc56c0d646 --registry quay.io --image my-namespace/tigera-operator
     ```
 
 1. To create a new operator with an updated `typha` for Calico to a custom registry
 
     ```sh
     release-from --base-version v1.36.0-1.dev-259-g25c811f78fbd-v3.30.0-0.dev-338-gca80474016a5 --version v1.36.0-mod-typha \
-    --except-calico typha:v3.30.0-0.dev-353-ge0bc56c0d646 --registry docker.io --image my-namespace/tigera-operator --publish
+    --except-calico typha:v3.30.0-0.dev-353-ge0bc56c0d646 --registry quay.io --image my-namespace/tigera-operator --publish
     ```
 
 1. To create a new operator release `v1.36.3` that has almost all the same images as `v1.36.2`

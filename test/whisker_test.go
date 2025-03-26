@@ -136,6 +136,10 @@ var _ = Describe("Tests for Whisker installation", func() {
 			Expect(c.Delete(shutdownContext, goldmaneCR)).ShouldNot(HaveOccurred())
 		}()
 
+		// Now, install the API server.
+		createAPIServer(c, mgr, shutdownContext, nil)
+		verifyAPIServerHasDeployed(c)
+
 		By("Verifying resources were created")
 		ExpectResourceCreated(c, &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "whisker", Namespace: "calico-system"}})
 		ExpectResourceCreated(c, &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "goldmane", Namespace: "calico-system"}})

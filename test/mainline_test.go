@@ -30,8 +30,10 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -40,7 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/apis"
@@ -323,6 +324,15 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
 
+	scheme := runtime.NewScheme()
+	// Setup Scheme for all resources
+	err = apis.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = apiextensionsv1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = clientgoscheme.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+
 	// Create a manager to use in the tests.
 	skipNameValidation := true
 	mgr, err := manager.New(cfg, manager.Options{
@@ -340,15 +350,8 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 		Controller: rconfig.Controller{
 			SkipNameValidation: &skipNameValidation,
 		},
+		Scheme: scheme,
 	})
-	Expect(err).NotTo(HaveOccurred())
-
-	// Setup Scheme for all resources
-	err = apis.AddToScheme(mgr.GetScheme())
-	Expect(err).NotTo(HaveOccurred())
-	err = apiextensionsv1.AddToScheme(mgr.GetScheme())
-	Expect(err).NotTo(HaveOccurred())
-	err = v3.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 
 	ctx, cancel := context.WithCancel(context.TODO())

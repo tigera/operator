@@ -200,7 +200,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
-		return reconcile.Result{}, err
 	}
 
 	clusterInfo := &v3.ClusterInformation{ObjectMeta: metav1.ObjectMeta{Name: "default"}}

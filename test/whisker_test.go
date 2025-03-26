@@ -136,7 +136,7 @@ var _ = Describe("Tests for Whisker installation", func() {
 			Expect(c.Delete(shutdownContext, goldmaneCR)).ShouldNot(HaveOccurred())
 		}()
 
-		// Now, install the API server.
+		// API server needs to be installed to use the v3 api
 		createAPIServer(c, mgr, shutdownContext, nil)
 		verifyAPIServerHasDeployed(c)
 

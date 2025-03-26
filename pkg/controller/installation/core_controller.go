@@ -1365,12 +1365,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var goldmaneRunning bool
 	// Goldmane can only be running if the variant is Calico and the Whisker CRD exists.
 	if instance.Spec.Variant == operator.Calico {
-		whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.client)
+		goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.client)
 		if err != nil {
-			r.status.SetDegraded(operator.ResourceReadError, "Unable retrieve Whisker CR", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceReadError, "Unable retrieve Goldmane CR", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		goldmaneRunning = whiskerCR != nil
+		goldmaneRunning = goldmaneCR != nil
 	}
 
 	// Build a configuration for rendering calico/node.

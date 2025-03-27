@@ -67,6 +67,9 @@ type Configuration struct {
 	TrustedCertBundle     certificatemanagement.TrustedBundleRO
 	WhiskerBackendKeyPair certificatemanagement.KeyPairInterface
 	Whisker               *operatorv1.Whisker
+	ClusterID             string
+	CalicoVersion         string
+	ClusterType           string
 }
 
 type Component struct {
@@ -141,6 +144,9 @@ func (c *Component) whiskerContainer() corev1.Container {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
+			{Name: "CALICO_VERSION", Value: c.cfg.CalicoVersion},
+			{Name: "CLUSTER_ID", Value: c.cfg.ClusterID},
+			{Name: "CLUSTER_TYPE", Value: c.cfg.ClusterType},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}

@@ -201,17 +201,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
 	}
 
-	var calicoVersion string
-	var clusterType string
-	clusterInfo := &crdv1.ClusterInformation{}
-	err = r.cli.Get(ctx, utils.DefaultInstanceKey, clusterInfo)
-	if err != nil {
-		reqLogger.Info("Unable to retrieve cluster context to Whisker. Proceeding without adding cluster context to Whisker.", err)
-	} else {
-		calicoVersion = clusterInfo.Spec.CalicoVersion
-		clusterType = clusterInfo.Spec.ClusterType
-	}
-
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
 	cfg := &whisker.Configuration{
 		PullSecrets:           pullSecrets,
@@ -220,8 +209,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TrustedCertBundle:     trustedBundle,
 		WhiskerBackendKeyPair: backendKeyPair,
 		Whisker:               whiskerCR,
-		ClusterType:           clusterType,
-		CalicoVersion:         calicoVersion,
+	}
+
+	clusterInfo := &crdv1.ClusterInformation{}
+	err = r.cli.Get(ctx, utils.DefaultInstanceKey, clusterInfo)
+	if err != nil {
+		reqLogger.Info("Unable to retrieve cluster context to Whisker. Proceeding without adding cluster context to Whisker.", err)
+	} else {
+		cfg.CalicoVersion = clusterInfo.Spec.CalicoVersion
+		cfg.ClusterType = clusterInfo.Spec.ClusterType
+		cfg.ClusterID = clusterInfo.Spec.ClusterGUID
 	}
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

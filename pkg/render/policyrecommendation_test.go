@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -370,6 +371,57 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		Expect(deployment).NotTo(BeNil())
 		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "CLUSTER_CONNECTION_TYPE", Value: "management"}))
+	})
+
+	It("should render a deployment with the MANAGED_CLUSTER_TYPE set to calico for a management cluster for calico tenant", func() {
+		// Test for cluster connection type
+		cfg.ManagedCluster = false
+		cfg.ManagementCluster = true
+		cfg.Tenant = &operatorv1.Tenant{
+			Spec: operatorv1.TenantSpec{
+				ManagedClusterVariant: ptr.ToPtr(operatorv1.Calico),
+			},
+		}
+		component := render.PolicyRecommendation(cfg)
+
+		resources, _ := component.Objects()
+		deployment := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deployment).NotTo(BeNil())
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "MANAGED_CLUSTER_TYPE", Value: "calico"}))
+	})
+
+	It("should render a deployment without the MANAGED_CLUSTER_TYPE for a management cluster for enterprise tenant", func() {
+		// Test for cluster connection type
+		cfg.ManagedCluster = false
+		cfg.ManagementCluster = true
+		cfg.Tenant = &operatorv1.Tenant{
+			Spec: operatorv1.TenantSpec{
+				ManagedClusterVariant: ptr.ToPtr(operatorv1.TigeraSecureEnterprise),
+			},
+		}
+		component := render.PolicyRecommendation(cfg)
+
+		resources, _ := component.Objects()
+		deployment := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deployment).NotTo(BeNil())
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Env).ToNot(ContainElement(WithTransform(
+			func(envVar corev1.EnvVar) string { return envVar.Name }, Equal("MANAGED_CLUSTER_TYPE"))))
+	})
+
+	It("should render a deployment without the MANAGED_CLUSTER_TYPE for a management cluster without tenant info", func() {
+		// Test for cluster connection type
+		cfg.ManagedCluster = false
+		cfg.ManagementCluster = true
+		component := render.PolicyRecommendation(cfg)
+
+		resources, _ := component.Objects()
+		deployment := rtest.GetResource(resources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deployment).NotTo(BeNil())
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(deployment.Spec.Template.Spec.Containers[0].Env).ToNot(ContainElement(WithTransform(
+			func(envVar corev1.EnvVar) string { return envVar.Name }, Equal("MANAGED_CLUSTER_TYPE"))))
 	})
 
 	Context("allow-tigera rendering", func() {

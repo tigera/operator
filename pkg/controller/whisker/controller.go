@@ -207,9 +207,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	err = r.cli.Get(ctx, utils.DefaultInstanceKey, clusterInfo)
 	if err != nil {
 		reqLogger.Info("Unable to retrieve cluster context to Whisker. Proceeding without adding cluster context to Whisker.", err)
+	} else {
+		calicoVersion = clusterInfo.Spec.CalicoVersion
+		clusterType = clusterInfo.Spec.ClusterType
 	}
-	calicoVersion = clusterInfo.Spec.CalicoVersion
-	clusterType = clusterInfo.Spec.ClusterType
 
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
 	cfg := &whisker.Configuration{

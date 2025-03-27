@@ -67,6 +67,7 @@ type Configuration struct {
 	TrustedCertBundle     certificatemanagement.TrustedBundleRO
 	WhiskerBackendKeyPair certificatemanagement.KeyPairInterface
 	Whisker               *operatorv1.Whisker
+	ClusterID             string
 	CalicoVersion         string
 	ClusterType           string
 }
@@ -144,8 +145,8 @@ func (c *Component) whiskerContainer() corev1.Container {
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "CALICO_VERSION", Value: c.cfg.CalicoVersion},
-			{Name: "WHISKER_ID", Value: string(c.cfg.Whisker.UID)},
-			{Name: "CLUSTER_TYPE", Value: string(c.cfg.ClusterType)},
+			{Name: "CLUSTER_ID", Value: c.cfg.ClusterID},
+			{Name: "CLUSTER_TYPE", Value: c.cfg.ClusterType},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}

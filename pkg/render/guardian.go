@@ -52,18 +52,22 @@ import (
 
 // The names of the components related to the Guardian related rendered objects.
 const (
-	GuardianName                   = "tigera-guardian"
+	GuardianName                   = "guardian"
 	GuardianNamespace              = common.CalicoNamespace
 	GuardianServiceAccountName     = GuardianName
 	GuardianClusterRoleName        = GuardianName
 	GuardianClusterRoleBindingName = GuardianName
 	GuardianDeploymentName         = GuardianName
-	GuardianServiceName            = "tigera-guardian"
-	GuardianVolumeName             = "tigera-guardian-certs"
-	GuardianSecretName             = "tigera-managed-cluster-connection"
-	GuardianTargetPort             = 8080
-	GuardianPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
-	GuardianKeyPairSecret          = "guardian-key-pair"
+
+	// GuardianContainerName name is the name of the container running guardian. It's named `tigera-guardian`, instead
+	// of `guardian` so that the API for the container overrides don't have to change (`tigera-guardian` is a legacy name).
+	GuardianContainerName = "tigera-guardian"
+	GuardianServiceName   = "guardian"
+	GuardianVolumeName    = "guardian-certs"
+	GuardianSecretName    = "tigera-managed-cluster-connection"
+	GuardianTargetPort    = 8080
+	GuardianPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
+	GuardianKeyPairSecret = "guardian-key-pair"
 
 	GoldmaneDeploymentName = "goldmane"
 )
@@ -404,7 +408,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 
 	return []corev1.Container{
 		{
-			Name:            GuardianDeploymentName,
+			Name:            GuardianContainerName,
 			Image:           c.image,
 			ImagePullPolicy: ImagePullPolicy(),
 			Env:             envVars,
@@ -452,7 +456,7 @@ func (c *GuardianComponent) annotations() map[string]string {
 func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "guardian", Namespace: GuardianNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: GuardianName, Namespace: GuardianNamespace},
 		Spec: netv1.NetworkPolicySpec{
 			PodSelector: *selector.PodLabelSelector(GuardianDeploymentName),
 			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},

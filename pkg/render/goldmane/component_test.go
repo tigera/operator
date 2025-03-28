@@ -131,7 +131,7 @@ var _ = Describe("ComponentRendering", func() {
 										{Name: "SERVER_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
 										{Name: "SERVER_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
 										{Name: "CA_CERT_PATH", Value: defaultTrustedCertBundle.MountPath()},
-										{Name: "PUSH_URL", Value: "https://tigera-guardian.calico-system.svc.cluster.local:443/api/v1/flows/bulk"},
+										{Name: "PUSH_URL", Value: "https://guardian.calico-system.svc.cluster.local:443/api/v1/flows/bulk"},
 										{Name: "FILE_CONFIG_PATH", Value: "/config/config.json"},
 										{Name: "HEALTH_ENABLED", Value: "true"},
 									},

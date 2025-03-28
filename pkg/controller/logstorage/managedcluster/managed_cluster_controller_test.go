@@ -120,8 +120,8 @@ var _ = Describe("LogStorageManagedCluster controller", func() {
 					Expect(svc.Spec.ExternalName).Should(Equal(expectedSvcName))
 					Expect(svc.Spec.Type).Should(Equal(corev1.ServiceTypeExternalName))
 				},
-					Entry("default cluster domain", dns.DefaultClusterDomain, "tigera-guardian.calico-system.svc.cluster.local"),
-					Entry("custom cluster domain", "custom-domain.internal", "tigera-guardian.calico-system.svc.custom-domain.internal"),
+					Entry("default cluster domain", dns.DefaultClusterDomain, "guardian.calico-system.svc.cluster.local"),
+					Entry("custom cluster domain", "custom-domain.internal", "guardian.calico-system.svc.custom-domain.internal"),
 				)
 			})
 

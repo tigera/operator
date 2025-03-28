@@ -191,7 +191,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianDeploymentName)
+			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianContainerName)
 			Expect(dexC).ToNot(BeNil())
 			Expect(dexC.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -222,7 +222,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			}
 			Expect(test.GetResource(c, &d)).To(BeNil())
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianDeploymentName)
+			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianContainerName)
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",

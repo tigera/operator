@@ -55,8 +55,8 @@ const (
 	GuardianName                   = "guardian"
 	GuardianNamespace              = common.CalicoNamespace
 	GuardianServiceAccountName     = GuardianName
-	GuardianClusterRoleName        = GuardianName
-	GuardianClusterRoleBindingName = GuardianName
+	GuardianClusterRoleName        = "calico-guardian"
+	GuardianClusterRoleBindingName = "calico-guardian"
 	GuardianDeploymentName         = GuardianName
 
 	// GuardianContainerName name is the name of the container running guardian. It's named `tigera-guardian`, instead
@@ -687,6 +687,16 @@ func deprecatedObjects() []client.Object {
 		// Namespace and everything within it should be removed.
 		&corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
+		},
+		// All the Guardian objects were moved to "calico-system" circa Calico v3.30, and so the legacy `tigera-`
+		// prefix is replaced with `calico-` for consistency, which means removing the old global resources.
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
 		},
 	}

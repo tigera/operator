@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -208,6 +209,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TrustedCertBundle:     trustedBundle,
 		WhiskerBackendKeyPair: backendKeyPair,
 		Whisker:               whiskerCR,
+	}
+
+	clusterInfo := &crdv1.ClusterInformation{}
+	err = r.cli.Get(ctx, utils.DefaultInstanceKey, clusterInfo)
+	if err != nil {
+		reqLogger.Info("Unable to retrieve cluster context to Whisker. Proceeding without adding cluster context to Whisker.", err)
+	} else {
+		cfg.CalicoVersion = clusterInfo.Spec.CalicoVersion
+		cfg.ClusterType = clusterInfo.Spec.ClusterType
+		cfg.ClusterID = clusterInfo.Spec.ClusterGUID
 	}
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

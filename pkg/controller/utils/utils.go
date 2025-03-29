@@ -24,6 +24,7 @@ import (
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
+	csiv1 "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
 	"github.com/go-logr/logr"
 
@@ -134,6 +135,18 @@ func AddSecretsWatch(c ctrlruntime.Controller, name, namespace string) error {
 func AddSecretsWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
 	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	return AddNamespacedWatch(c, s, h)
+}
+
+func AddSecretProviderClassWatch(c ctrlruntime.Controller, name, namespace string) error {
+	return AddSecretProviderClassWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{})
+}
+
+func AddSecretProviderClassWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
+	s := &csiv1.SecretProviderClass{
+		TypeMeta:   metav1.TypeMeta{Kind: "SecretProviderClass", APIVersion: "secrets-store.csi.x-k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
 	return AddNamespacedWatch(c, s, h)

@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rauth "github.com/tigera/operator/pkg/render/common/authentication"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
+	csisecret "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,7 +40,7 @@ import (
 func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticationCR *operatorv1.Authentication, clusterDomain string) (rauth.KeyValidatorConfig, error) {
 	var keyValidatorConfig rauth.KeyValidatorConfig
 	if authenticationCR != nil {
-		idpSecret, err := GetIDPSecret(ctx, cli, authenticationCR)
+		secretProviderClass, idpSecret, err := GetSecrets(ctx, cli, authenticationCR)
 		if err != nil {
 			return nil, err
 		}
@@ -69,16 +70,33 @@ func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticatio
 				return nil, err
 			}
 		} else {
-			keyValidatorConfig = render.NewDexKeyValidatorConfig(authenticationCR, idpSecret, clusterDomain)
+			keyValidatorConfig = render.NewDexKeyValidatorConfig(authenticationCR, idpSecret, secretProviderClass, clusterDomain)
 		}
 	}
 
 	return keyValidatorConfig, nil
 }
 
-// GetIDPSecret retrieves the Secret containing sensitive information for the configuration IdP specified in the given
-// operatorv1.Authentication CR.
-func GetIDPSecret(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*corev1.Secret, error) {
+func GetSecrets(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*csisecret.SecretProviderClass, *corev1.Secret, error) {
+	secretProviderClass, err := GetSecretProviderClass(ctx, client, authentication)
+	if err == nil {
+		return secretProviderClass, nil, nil
+	}
+
+	idpSecret, err := GetIDPSecret(ctx, client, authentication)
+	return nil, idpSecret, err
+}
+
+func GetSecretProviderClass(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*csisecret.SecretProviderClass, error) {
+	var secretName, _ = GetSecretNameAndRequiredFields(authentication)
+	secretProviderClass := &csisecret.SecretProviderClass{}
+	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: common.OperatorNamespace()}, secretProviderClass); err != nil {
+		return nil, fmt.Errorf("missing secret provider class %s/%s: %w", common.OperatorNamespace(), secretName, err)
+	}
+	return secretProviderClass, nil
+}
+
+func GetSecretNameAndRequiredFields(authentication *operatorv1.Authentication) (string, []string) {
 	var secretName string
 	var requiredFields []string
 	if authentication.Spec.OIDC != nil {
@@ -91,6 +109,13 @@ func GetIDPSecret(ctx context.Context, client client.Client, authentication *ope
 		secretName = render.LDAPSecretName
 		requiredFields = append(requiredFields, render.BindDNSecretField, render.BindPWSecretField, render.RootCASecretField)
 	}
+	return secretName, requiredFields
+}
+
+// GetIDPSecret retrieves the Secret containing sensitive information for the configuration IdP specified in the given
+// operatorv1.Authentication CR.
+func GetIDPSecret(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*corev1.Secret, error) {
+	var secretName, requiredFields = GetSecretNameAndRequiredFields(authentication)
 
 	secret := &corev1.Secret{}
 	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: common.OperatorNamespace()}, secret); err != nil {

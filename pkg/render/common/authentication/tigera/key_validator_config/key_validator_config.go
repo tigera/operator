@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@ package tigerakvc
 import (
 	"fmt"
 	"strconv"
+
+	csisecret "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
@@ -103,6 +105,10 @@ func (kvc *KeyValidatorConfig) RequiredAnnotations() map[string]string {
 }
 
 func (kvc *KeyValidatorConfig) RequiredSecrets(namespace string) []*corev1.Secret {
+	return nil
+}
+
+func (kvc *KeyValidatorConfig) RequiredSecretProviderClass(namespace string) []*csisecret.SecretProviderClass {
 	return nil
 }
 

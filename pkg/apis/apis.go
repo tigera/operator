@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	aggregator "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme"
 	gateway "sigs.k8s.io/gateway-api/apis/v1"
+	csisecret "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 )
 
 // AddToSchemes may be used to add all resources defined in the project to a Scheme
@@ -53,4 +54,5 @@ func init() {
 	AddToSchemes = append(AddToSchemes, crdv1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, gateway.Install)
 	AddToSchemes = append(AddToSchemes, envoy.AddToScheme)
+	AddToSchemes = append(AddToSchemes, csisecret.AddToScheme)
 }

@@ -146,6 +146,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 
 		// The Dex namespace exists only for non-Tigera OIDC types to create secrets within the namespace.
 		objs = append(objs, secret.ToRuntimeObjects(c.cfg.DexConfig.RequiredSecrets(DexNamespace)...)...)
+		objs = append(objs, secret.ToSecretProviderClassRuntimeObjects(c.cfg.DexConfig.RequiredSecretProviderClass(DexNamespace)...)...)
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.cfg.PullSecrets...)...)...)
 	}
 
@@ -247,6 +248,9 @@ func (c *dexComponent) deployment() client.Object {
 
 	envVars := c.cfg.DexConfig.RequiredEnv("")
 	envVars = append(envVars, c.cfg.Installation.Proxy.EnvVars()...)
+	if c.cfg.DexConfig.RequiredSecretProviderClass(DexNamespace) != nil {
+		envVars = append(envVars, corev1.EnvVar{Name: "WATCH_DIR", Value: "/mnt/secrets-store"})
+	}
 
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -279,8 +283,6 @@ func (c *dexComponent) deployment() client.Object {
 							Env:             envVars,
 							LivenessProbe:   c.probe(),
 							SecurityContext: sc,
-
-							Command: []string{"/usr/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"},
 
 							Ports: []corev1.ContainerPort{
 								{

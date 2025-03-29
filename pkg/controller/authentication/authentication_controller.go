@@ -38,6 +38,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	csiv1 "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -86,6 +87,15 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: render.DexPolicyName, Namespace: render.DexNamespace},
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.DexNamespace},
 	})
+
+	var secretProviderClasses []client.Object
+	for _, namespace := range []string{render.DexNamespace, common.OperatorNamespace()} {
+		secretProviderClasses = append(secretProviderClasses, &csiv1.SecretProviderClass{
+			TypeMeta:   metav1.TypeMeta{Kind: "SecretProviderClass", APIVersion: "secrets-store.csi.x-k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: render.OIDCSecretProviderClassName, Namespace: namespace},
+		})
+	}
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, nil, secretProviderClasses)
 
 	// Watch for changes to the dex namespace.
 	if err = c.WatchObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName}}, &handler.EnqueueRequestForObject{}); err != nil {
@@ -283,7 +293,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
-	idpSecret, err := utils.GetIDPSecret(ctx, r.client, authentication)
+	secretProviderClass, idpSecret, err := utils.GetSecretOrProviderClass(ctx, r.client, authentication)
 	if err != nil {
 		r.status.SetDegraded(oprv1.ResourceValidationError, "Invalid or missing identity provider secret", err, reqLogger)
 		return reconcile.Result{}, err
@@ -370,7 +380,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	enableDex := utils.DexEnabled(authentication)
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, idpSecret, r.clusterDomain)
+	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, idpSecret, secretProviderClass, r.clusterDomain)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)

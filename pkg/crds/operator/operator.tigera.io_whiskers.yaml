@@ -36,6 +36,12 @@ spec:
             type: object
           spec:
             properties:
+              notifications:
+                description: |-
+                  Default: Enabled
+                  This setting enables or disables the notifications from Calico Cloud.
+                  Allowed values are Enabled or Disabled. Defaults to Enabled.
+                type: string
               whiskerDeployment:
                 description: WhiskerDeployment is the configuration for the whisker
                   Deployment.

@@ -20,10 +20,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type WhiskerNotificationStatus string
+
+const (
+	Disabled WhiskerNotificationStatus = "Disabled"
+	Enabled  WhiskerNotificationStatus = "Enabled"
+)
+
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
-
 type Whisker struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -34,6 +40,12 @@ type Whisker struct {
 
 type WhiskerSpec struct {
 	WhiskerDeployment *WhiskerDeployment `json:"whiskerDeployment,omitempty"`
+
+	// Default: Enabled
+	// This setting enables or disables the notifications from Calico Cloud.
+	// Allowed values are Enabled or Disabled. Defaults to Enabled.
+	// +optional
+	Notifications WhiskerNotificationStatus `json:"notifications,omitempty"`
 }
 
 // +kubebuilder:object:root=true

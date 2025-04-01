@@ -147,7 +147,7 @@ func (c *Component) whiskerContainer() corev1.Container {
 			{Name: "CALICO_VERSION", Value: c.cfg.CalicoVersion},
 			{Name: "CLUSTER_ID", Value: c.cfg.ClusterID},
 			{Name: "CLUSTER_TYPE", Value: c.cfg.ClusterType},
-			{Name: "NOTIFICATIONS", Value: string(c.cfg.Whisker.Spec.Notifications)},
+			{Name: "NOTIFICATIONS", Value: string(*c.cfg.Whisker.Spec.Notifications)},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}

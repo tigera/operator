@@ -39,7 +39,8 @@ spec:
               notifications:
                 description: |-
                   Default: Enabled
-                  This setting enables or disables the notifications from Calico Cloud.
+                  This setting enables or disables notifications.
+                  Enabling this feature also provides anonymous data collection on whisker usage.
                   Allowed values are Enabled or Disabled. Defaults to Enabled.
                 type: string
               whiskerDeployment:

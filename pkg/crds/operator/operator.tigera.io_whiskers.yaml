@@ -36,6 +36,13 @@ spec:
             type: object
           spec:
             properties:
+              notifications:
+                description: |-
+                  Default: Enabled
+                  This setting enables or disables notifications.
+                  Enabling this feature also provides anonymous data collection on whisker usage.
+                  Allowed values are Enabled or Disabled. Defaults to Enabled.
+                type: string
               whiskerDeployment:
                 description: WhiskerDeployment is the configuration for the whisker
                   Deployment.

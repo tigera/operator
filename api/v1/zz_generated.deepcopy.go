@@ -8746,7 +8746,7 @@ func (in *WhiskerSpec) DeepCopyInto(out *WhiskerSpec) {
 	}
 	if in.Notifications != nil {
 		in, out := &in.Notifications, &out.Notifications
-		*out = new(NotificationStatus)
+		*out = new(NotificationMode)
 		**out = **in
 	}
 }

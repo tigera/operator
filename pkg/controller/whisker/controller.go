@@ -205,7 +205,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	preDefaultPatchFrom := client.MergeFrom(whiskerCR.DeepCopy())
 
 	// update Installation with defaults
-	updateInstallationWithDefaults(whiskerCR)
+	updateWhiskerWithDefaults(whiskerCR)
 
 	// Write the whisker CR configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
@@ -263,7 +263,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-func updateInstallationWithDefaults(instance *operatorv1.Whisker) {
+func updateWhiskerWithDefaults(instance *operatorv1.Whisker) {
 	if instance.Spec.Notifications == nil {
 		instance.Spec.Notifications = ptr.ToPtr(operatorv1.Enabled)
 	}

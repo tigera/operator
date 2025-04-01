@@ -20,11 +20,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type NotificationStatus string
+type NotificationMode string
 
 const (
-	Disabled NotificationStatus = "Disabled"
-	Enabled  NotificationStatus = "Enabled"
+	Disabled NotificationMode = "Disabled"
+	Enabled  NotificationMode = "Enabled"
 )
 
 // +kubebuilder:object:root=true
@@ -46,7 +46,7 @@ type WhiskerSpec struct {
 	// Enabling this feature also provides anonymous data collection on whisker usage.
 	// Allowed values are Enabled or Disabled. Defaults to Enabled.
 	// +optional
-	Notifications *NotificationStatus `json:"notifications,omitempty"`
+	Notifications *NotificationMode `json:"notifications,omitempty"`
 }
 
 // +kubebuilder:object:root=true

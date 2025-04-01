@@ -42,8 +42,7 @@ type WhiskerSpec struct {
 	WhiskerDeployment *WhiskerDeployment `json:"whiskerDeployment,omitempty"`
 
 	// Default: Enabled
-	// This setting enables or disables notifications.
-	// Enabling this feature also provides anonymous data collection on whisker usage.
+	// This setting enables calls to an external API to retrieve notification banner text in the Whisker UI.
 	// Allowed values are Enabled or Disabled. Defaults to Enabled.
 	// +optional
 	Notifications *NotificationMode `json:"notifications,omitempty"`

@@ -396,7 +396,7 @@ func generateDexWrapperScriptWithExportEnvVar() string {
 	scriptBuilder.WriteString("#!/bin/sh\n")
 	exportEnvVariable := func(fieldName, envName string) {
 		secretFilePath := "/mnt/secrets-store/" + fieldName
-		scriptBuilder.WriteString(fmt.Sprintf("export %s=\"%s\"\n", envName, secretFilePath))
+		scriptBuilder.WriteString(fmt.Sprintf("export %s=\"$(cat %s)\"\n", envName, secretFilePath))
 	}
 	exportEnvVariable(ClientIDSecretField, clientIDEnv)
 	exportEnvVariable(ClientSecretSecretField, clientSecretEnv)

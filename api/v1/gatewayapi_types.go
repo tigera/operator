@@ -20,10 +20,17 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	gapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // GatewayAPISpec has fields that can be used to customize our GatewayAPI support.
 type GatewayAPISpec struct {
+	// Allow optional customization of the GatewayClasses that will be available; please see
+	// GatewayClassSpec for more detail.  If GatewayClasses is nil, the Tigera operator
+	// configures a single GatewayClass named "tigera-gateway-class" with none of the
+	// customizations that are allowed by GatewayClassSpec.
+	GatewayClasses []GatewayClassSpec
+
 	// Allow optional customization of the gateway controller deployment.
 	GatewayControllerDeployment *GatewayControllerDeployment `json:"gatewayControllerDeployment,omitempty"`
 
@@ -46,6 +53,26 @@ type GatewayAPISpec struct {
 	// cluster's Gateway API CRDs aligned with those that it would install on a cluster that
 	// does not yet have any version of those CRDs.
 	CRDManagement *CRDManagement `json:"crdManagement,omitempty"`
+}
+
+type GatewayClassSpec struct {
+	// The name of this GatewayClass.
+	Name string
+
+	// The name of an EnvoyProxyConfig resource to use for this GatewayClass.  If non-nil, this
+	// provides an "escape valve" for any customizations that are needed but not supported more
+	// specifically by the following fields.
+	EnvoyProxyConfigName *string
+
+	// Annotations to place on the Service for each Gateway that is configured with this
+	// GatewayClass.  These can be used, in particular, to specify annotations that cloud
+	// providers honour to configure the external load balancer that routes traffic to this
+	// Gateway.
+	ServiceAnnotations map[string]string
+
+	// The client certificate that Gateways of this GatewayClass should use when establishing a
+	// TLS connection to a backend.
+	ClientCertificateRef *gapi.SecretObjectReference
 }
 
 //+kubebuilder:object:root=true

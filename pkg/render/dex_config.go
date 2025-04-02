@@ -304,16 +304,6 @@ func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
 		addIfPresent(adminEmailSecretField, googleAdminEmailEnv)
 		addIfPresent(BindDNSecretField, bindDNEnv)
 		addIfPresent(BindPWSecretField, bindPWEnv)
-	} else if d.secretProviderClass != nil {
-		addEnvVariable := func(fieldName, envName string) {
-			secretFilePath := "/mnt/secrets-store/" + fieldName
-			env = append(env, corev1.EnvVar{Name: envName, Value: secretFilePath})
-		}
-		addEnvVariable(ClientIDSecretField, clientIDEnv)
-		addEnvVariable(ClientSecretSecretField, clientSecretEnv)
-		addEnvVariable(adminEmailSecretField, googleAdminEmailEnv)
-		addEnvVariable(BindDNSecretField, bindDNEnv)
-		addEnvVariable(BindPWSecretField, bindPWEnv)
 	}
 
 	return env
@@ -363,15 +353,6 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 				},
 			},
 		)
-
-		volumes = append(volumes,
-			corev1.Volume{
-				Name: "export-env-script",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-		)
 	}
 	return volumes
 }
@@ -408,20 +389,6 @@ func (d *dexConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 		})
 	}
 	return volumeMounts
-}
-
-func createEnvVarInitContainer() corev1.Container {
-	return corev1.Container{
-		Name:    "dex-config",
-		Image:   "busybox",
-		Command: []string{"/bin/sh", "-c", fmt.Sprintf("echo '%s > /mnt/scripts/dex-wrapper.sh && chmod +x /mnt/scripts/dex-wrapper.sh'", generateDexWrapperScriptWithExportEnvVar())},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "export-env-script",
-				MountPath: "/mnt/scripts",
-			},
-		},
-	}
 }
 
 func generateDexWrapperScriptWithExportEnvVar() string {

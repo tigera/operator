@@ -228,8 +228,7 @@ func (c *dexComponent) deployment() client.Object {
 
 	var command = []string{"/usr/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"}
 	if c.cfg.DexConfig.RequiredSecretProviderClass(DexNamespace) != nil {
-		initContainers = append(initContainers, createEnvVarInitContainer())
-		command = []string{"busybox/sh", "/mnt/scripts/dex-wrapper.sh"}
+		command = []string{generateDexWrapperScriptWithExportEnvVar()}
 	}
 
 	annotations := c.cfg.DexConfig.RequiredAnnotations()

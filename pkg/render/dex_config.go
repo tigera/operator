@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	csisecret "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render/common/authentication"
@@ -90,18 +92,14 @@ type DexConfig interface {
 func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
 	idpSecret *corev1.Secret,
+	secretProviderClass *csisecret.SecretProviderClass,
 	clusterDomain string) authentication.KeyValidatorConfig {
-	return &DexKeyValidatorConfig{baseCfg(nil, authentication, nil, idpSecret, clusterDomain)}
+	return &DexKeyValidatorConfig{baseCfg(nil, authentication, nil, idpSecret, secretProviderClass, clusterDomain)}
 }
 
 // Create a new DexConfig.
-func NewDexConfig(
-	certificateManagement *oprv1.CertificateManagement,
-	authentication *oprv1.Authentication,
-	dexSecret *corev1.Secret,
-	idpSecret *corev1.Secret,
-	clusterDomain string) DexConfig {
-	return &dexConfig{baseCfg(certificateManagement, authentication, dexSecret, idpSecret, clusterDomain)}
+func NewDexConfig(certificateManagement *oprv1.CertificateManagement, authentication *oprv1.Authentication, dexSecret *corev1.Secret, idpSecret *corev1.Secret, secretProviderClass *csisecret.SecretProviderClass, clusterDomain string) DexConfig {
+	return &dexConfig{baseCfg(certificateManagement, authentication, dexSecret, idpSecret, secretProviderClass, clusterDomain)}
 }
 
 type DexKeyValidatorConfig struct {
@@ -126,6 +124,7 @@ func baseCfg(
 	authentication *oprv1.Authentication,
 	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
+	secretProviderClass *csisecret.SecretProviderClass,
 	clusterDomain string) *dexBaseCfg {
 
 	// If the manager domain is not a URL, prepend https://.
@@ -151,6 +150,7 @@ func baseCfg(
 		certificateManagement: certificateManagement,
 		authentication:        authentication,
 		idpSecret:             idpSecret,
+		secretProviderClass:   secretProviderClass,
 		dexSecret:             dexSecret,
 		connectorType:         connType,
 		baseURL:               baseUrl,
@@ -163,6 +163,7 @@ type dexBaseCfg struct {
 	authentication        *oprv1.Authentication
 	tlsSecret             certificatemanagement.KeyPairInterface
 	idpSecret             *corev1.Secret
+	secretProviderClass   *csisecret.SecretProviderClass
 	dexSecret             *corev1.Secret
 	baseURL               string
 	connectorType         string
@@ -232,6 +233,14 @@ func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
 	}
 	if d.idpSecret != nil {
 		secrets = append(secrets, secret.CopyToNamespace(namespace, d.idpSecret)...)
+	}
+	return secrets
+}
+
+func (d *dexBaseCfg) RequiredSecretProviderClass(namespace string) []*csisecret.SecretProviderClass {
+	var secrets []*csisecret.SecretProviderClass
+	if d.secretProviderClass != nil {
+		secrets = append(secrets, secret.CopySecretProviderClassToNamespace(namespace, d.secretProviderClass)...)
 	}
 	return secrets
 }
@@ -327,6 +336,24 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 			},
 		)
 	}
+
+	if d.secretProviderClass != nil {
+		isReadOnly := true
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: "secrets-store",
+				VolumeSource: corev1.VolumeSource{
+					CSI: &corev1.CSIVolumeSource{
+						Driver:   "secrets-store.csi.k8s.io",
+						ReadOnly: &isReadOnly,
+						VolumeAttributes: map[string]string{
+							"secretProviderClass": d.secretProviderClass.Name,
+						},
+					},
+				},
+			},
+		)
+	}
 	return volumes
 }
 
@@ -339,21 +366,46 @@ func (d *dexConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 			ReadOnly:  true,
 		},
 	}
-	if d.idpSecret.Data[serviceAccountSecretField] != nil {
+	if d.idpSecret != nil && d.idpSecret.Data[serviceAccountSecretField] != nil {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "secrets",
 			MountPath: "/etc/dex/secrets",
 			ReadOnly:  true,
 		})
 	}
-	if d.idpSecret.Data[RootCASecretField] != nil {
+	if d.idpSecret != nil && d.idpSecret.Data[RootCASecretField] != nil {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "secrets",
 			MountPath: "/etc/ssl/certs/",
 			ReadOnly:  true,
 		})
 	}
+
+	if d.secretProviderClass != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "secrets-store",
+			MountPath: "/mnt/secrets-store",
+			ReadOnly:  true,
+		})
+	}
 	return volumeMounts
+}
+
+func generateDexWrapperScriptWithExportEnvVar() string {
+	var scriptBuilder strings.Builder
+	scriptBuilder.WriteString("#!/bin/sh\n")
+	exportEnvVariable := func(fieldName, envName string) {
+		secretFilePath := "/mnt/secrets-store/" + fieldName
+		scriptBuilder.WriteString(fmt.Sprintf("export %s=\"$(cat %s)\"\n", envName, secretFilePath))
+	}
+	exportEnvVariable(ClientIDSecretField, clientIDEnv)
+	exportEnvVariable(ClientSecretSecretField, clientSecretEnv)
+	exportEnvVariable(adminEmailSecretField, googleAdminEmailEnv)
+	exportEnvVariable(BindDNSecretField, bindDNEnv)
+	exportEnvVariable(BindPWSecretField, bindPWEnv)
+
+	scriptBuilder.WriteString("exec /usr/bin/dex serve /etc/dex/baseCfg/config.yaml\n")
+	return scriptBuilder.String()
 }
 
 // This func prepares the configuration and objects that will be rendered related to the connector and its secrets.
@@ -412,7 +464,7 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.BaseURL()),
 			"scopes":       d.RequestedScopes(),
 		}
-		if d.idpSecret.Data[serviceAccountSecretField] != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
+		if d.idpSecret != nil && d.idpSecret.Data[serviceAccountSecretField] != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
 			config[serviceAccountFilePathField] = serviceAccountSecretLocation
 			config[adminEmailSecretField] = fmt.Sprintf("$%s", googleAdminEmailEnv)
 		}

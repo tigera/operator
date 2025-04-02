@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -141,6 +141,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 
 		// The Dex namespace exists only for non-Tigera OIDC types to create secrets within the namespace.
 		objs = append(objs, secret.ToRuntimeObjects(c.cfg.DexConfig.RequiredSecrets(DexNamespace)...)...)
+		objs = append(objs, secret.ToSecretProviderClassRuntimeObjects(c.cfg.DexConfig.RequiredSecretProviderClass(DexNamespace)...)...)
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(DexNamespace, c.cfg.PullSecrets...)...)...)
 	}
 
@@ -225,6 +226,11 @@ func (c *dexComponent) deployment() client.Object {
 		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(DexNamespace))
 	}
 
+	var command = []string{"/usr/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"}
+	if c.cfg.DexConfig.RequiredSecretProviderClass(DexNamespace) != nil {
+		command = []string{generateDexWrapperScriptWithExportEnvVar()}
+	}
+
 	annotations := c.cfg.DexConfig.RequiredAnnotations()
 	for k, v := range c.cfg.TrustedBundle.HashAnnotations() {
 		annotations[k] = v
@@ -275,7 +281,7 @@ func (c *dexComponent) deployment() client.Object {
 							LivenessProbe:   c.probe(),
 							SecurityContext: securitycontext.NewNonRootContext(),
 
-							Command: []string{"/usr/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"},
+							Command: command,
 
 							Ports: []corev1.ContainerPort{
 								{

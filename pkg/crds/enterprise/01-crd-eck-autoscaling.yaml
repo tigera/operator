@@ -5,9 +5,9 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.16.5
     helm.sh/resource-policy: keep
   labels:
-    app.kubernetes.io/instance: 'elastic-operator'
-    app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '2.16.0'
+    app.kubernetes.io/instance: "elastic-operator"
+    app.kubernetes.io/name: "eck-operator-crds"
+    app.kubernetes.io/version: "2.16.0"
   name: elasticsearchautoscalers.autoscaling.k8s.elastic.co
 spec:
   group: autoscaling.k8s.elastic.co

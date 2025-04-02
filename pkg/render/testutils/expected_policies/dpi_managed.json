@@ -39,7 +39,7 @@
         "destination": {
           "services": {
             "namespace": "calico-system",
-            "name": "tigera-guardian"
+            "name": "guardian"
           }
         }
       }

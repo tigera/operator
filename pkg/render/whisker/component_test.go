@@ -56,7 +56,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
-				Whisker:               &operatorv1.Whisker{},
+				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
 			},
 			4, 0,
 		),
@@ -68,7 +68,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
-				Whisker:               &operatorv1.Whisker{},
+				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
 			},
 			0, 4,
 		),
@@ -90,7 +90,10 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
-				Whisker:               &operatorv1.Whisker{},
+				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
+				ClusterID:             "test-cluster-id",
+				CalicoVersion:         "test-calico-version",
+				ClusterType:           "test-cluster-type",
 			},
 			&appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -117,6 +120,10 @@ var _ = Describe("ComponentRendering", func() {
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
+										{Name: "CALICO_VERSION", Value: "test-calico-version"},
+										{Name: "CLUSTER_ID", Value: "test-cluster-id"},
+										{Name: "CLUSTER_TYPE", Value: "test-cluster-type"},
+										{Name: "NOTIFICATIONS", Value: "Enabled"},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 								},
@@ -265,6 +272,7 @@ func GetOverriddenWhiskerDeployment(overrides *operatorv1.WhiskerDeployment) (*a
 		Whisker: &operatorv1.Whisker{
 			Spec: operatorv1.WhiskerSpec{
 				WhiskerDeployment: overrides,
+				Notifications:     ptr.ToPtr(operatorv1.Enabled),
 			},
 		},
 	})

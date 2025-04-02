@@ -5,9 +5,9 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.16.5
     helm.sh/resource-policy: keep
   labels:
-    app.kubernetes.io/instance: 'elastic-operator'
-    app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '2.16.0'
+    app.kubernetes.io/instance: "elastic-operator"
+    app.kubernetes.io/name: "eck-operator-crds"
+    app.kubernetes.io/version: "2.16.0"
   name: beats.beat.k8s.elastic.co
 spec:
   group: beat.k8s.elastic.co
@@ -400,7 +400,7 @@ spec:
                     Any string can be used, but well-known types will have the image field defaulted and have the appropriate
                     Elasticsearch roles created automatically. It also allows for dashboard setup when combined with a `KibanaRef`.
                   maxLength: 20
-                  pattern: '[a-zA-Z0-9-]+'
+                  pattern: "[a-zA-Z0-9-]+"
                   type: string
                 version:
                   description: Version of the Beat.

@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -35,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -200,6 +202,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
 	}
 
+	preDefaultPatchFrom := client.MergeFrom(whiskerCR.DeepCopy())
+
+	// update Installation with defaults
+	updateWhiskerWithDefaults(whiskerCR)
+
+	// Write the whisker CR configuration back to the API. This is essentially a poor-man's defaulting, and
+	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	if err := r.cli.Patch(ctx, whiskerCR, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
 	cfg := &whisker.Configuration{
 		PullSecrets:           pullSecrets,
@@ -208,6 +222,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TrustedCertBundle:     trustedBundle,
 		WhiskerBackendKeyPair: backendKeyPair,
 		Whisker:               whiskerCR,
+	}
+
+	clusterInfo := &crdv1.ClusterInformation{}
+	err = r.cli.Get(ctx, utils.DefaultInstanceKey, clusterInfo)
+	if err != nil {
+		reqLogger.Info("Unable to retrieve cluster context to Whisker. Proceeding without adding cluster context to Whisker.", err)
+	} else {
+		cfg.CalicoVersion = clusterInfo.Spec.CalicoVersion
+		cfg.ClusterType = clusterInfo.Spec.ClusterType
+		cfg.ClusterID = clusterInfo.Spec.ClusterGUID
 	}
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -237,4 +261,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.ClearDegraded()
 
 	return reconcile.Result{}, nil
+}
+
+func updateWhiskerWithDefaults(instance *operatorv1.Whisker) {
+	if instance.Spec.Notifications == nil {
+		instance.Spec.Notifications = ptr.ToPtr(operatorv1.Enabled)
+	}
 }

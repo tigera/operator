@@ -391,12 +391,12 @@ func (d *dexConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 	return volumeMounts
 }
 
-func generateDexWrapperScriptWithExportEnvVar() string {
-	var scriptBuilder strings.Builder
-	scriptBuilder.WriteString("#!/bin/sh\n")
+func generateDexCommand() []string {
+	var cmd strings.Builder
+
 	exportEnvVariable := func(fieldName, envName string) {
-		secretFilePath := "/mnt/secrets-store/" + fieldName
-		scriptBuilder.WriteString(fmt.Sprintf("export %s=\"$(cat %s)\"\n", envName, secretFilePath))
+		secretPath := "/mnt/secrets-store/" + fieldName
+		cmd.WriteString(fmt.Sprintf("export %s=\"$(cat %s)\" && ", envName, secretPath))
 	}
 	exportEnvVariable(ClientIDSecretField, clientIDEnv)
 	exportEnvVariable(ClientSecretSecretField, clientSecretEnv)
@@ -404,8 +404,8 @@ func generateDexWrapperScriptWithExportEnvVar() string {
 	exportEnvVariable(BindDNSecretField, bindDNEnv)
 	exportEnvVariable(BindPWSecretField, bindPWEnv)
 
-	scriptBuilder.WriteString("exec /usr/bin/dex serve /etc/dex/baseCfg/config.yaml\n")
-	return scriptBuilder.String()
+	cmd.WriteString("exec /usr/bin/dex serve /etc/dex/baseCfg/config.yaml")
+	return []string{"/bin/sh", "-c", cmd.String()}
 }
 
 // This func prepares the configuration and objects that will be rendered related to the connector and its secrets.

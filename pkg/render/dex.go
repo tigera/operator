@@ -228,7 +228,7 @@ func (c *dexComponent) deployment() client.Object {
 
 	var command = []string{"/usr/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"}
 	if c.cfg.DexConfig.RequiredSecretProviderClass(DexNamespace) != nil {
-		command = []string{generateDexWrapperScriptWithExportEnvVar()}
+		command = generateDexCommand()
 	}
 
 	annotations := c.cfg.DexConfig.RequiredAnnotations()

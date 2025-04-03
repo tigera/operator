@@ -90,6 +90,10 @@ const (
 
 	bearerTokenFile       = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	KubeControllerMetrics = "calico-kube-controllers-metrics"
+
+	TigeraGatewayPodMonitor            = "tigera-gateway-pod-monitor"
+	TigeraGatewayComponentsMetricsPort = 19001
+	TigeraGatewayNamespace             = "tigera-gateway"
 )
 
 var alertManagerSelector = fmt.Sprintf(
@@ -223,6 +227,8 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.serviceMonitorFluentd(),
 		mc.serviceMonitorQueryServer(),
 		mc.serviceMonitorCalicoKubeControllers(),
+		mc.podMonitorTigeraGatewayAPIController(),
+		mc.podMonitorTigeraGatewayGateways(),
 	)
 
 	if mc.cfg.KeyValidatorConfig != nil {
@@ -817,6 +823,71 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 	}
 }
 
+func (mc *monitorComponent) podMonitorTigeraGatewayAPIController() *monitoringv1.PodMonitor {
+	return &monitoringv1.PodMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PodMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraGatewayPodMonitor,
+			Namespace: common.TigeraPrometheusNamespace,
+			Labels: map[string]string{
+				"team": "network-operators",
+			},
+		},
+		Spec: monitoringv1.PodMonitorSpec{
+			Selector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": "gateway-api-controller",
+				},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{TigeraGatewayNamespace},
+			},
+			PodMetricsEndpoints: []monitoringv1.PodMetricsEndpoint{
+				{
+					Port:          "metrics",
+					ScrapeTimeout: "5s",
+					Interval:      "5s",
+					Scheme:        "http",
+					HonorLabels:   true,
+				},
+			},
+		},
+	}
+}
+
+func (mc *monitorComponent) podMonitorTigeraGatewayGateways() *monitoringv1.PodMonitor {
+	return &monitoringv1.PodMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PodMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraGatewayPodMonitor,
+			Namespace: common.TigeraPrometheusNamespace,
+			Labels: map[string]string{
+				"team": "network-operators",
+			},
+		},
+		Spec: monitoringv1.PodMonitorSpec{
+			Selector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app.kubernetes.io/component":  "proxy",
+					"app.kubernetes.io/managed-by": "envoy-gateway",
+				},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{TigeraGatewayNamespace},
+			},
+			PodMetricsEndpoints: []monitoringv1.PodMetricsEndpoint{
+				{
+					Port:          "metrics",
+					ScrapeTimeout: "5s",
+					Interval:      "5s",
+					Scheme:        "http",
+					HonorLabels:   true,
+				},
+			},
+		},
+	}
+}
+
 func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMonitor {
 	endpoints := []monitoringv1.Endpoint{
 		{
@@ -1202,6 +1273,14 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Destination: v3.EntityRule{
 				Selector: alertManagerSelector,
 				Ports:    networkpolicy.Ports(AlertmanagerPort),
+			},
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				// Egress access for Gateway Prometheus metrics
+				Ports: networkpolicy.Ports(TigeraGatewayComponentsMetricsPort),
 			},
 		},
 		{

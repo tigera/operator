@@ -952,19 +952,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
-	// the run the reset the degraded status and requeue the request.
-	if r.typhaAutoscaler.isDegraded() {
-		if err := r.typhaAutoscaler.triggerRun(); err != nil {
-			r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha", err, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	if !installationMarkedForDeletion {
+		// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
+		// the run the reset the degraded status and requeue the request.
+		if r.typhaAutoscaler.isDegraded() {
+			if err := r.typhaAutoscaler.triggerRun(); err != nil {
+				r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha", err, reqLogger)
+				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			}
 		}
-	}
 
-	if r.typhaAutoscalerNonClusterHost != nil && r.typhaAutoscalerNonClusterHost.isDegraded() {
-		if err := r.typhaAutoscalerNonClusterHost.triggerRun(); err != nil {
-			r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha for noncluster hosts", err, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		if r.typhaAutoscalerNonClusterHost != nil && r.typhaAutoscalerNonClusterHost.isDegraded() {
+			if err := r.typhaAutoscalerNonClusterHost.triggerRun(); err != nil {
+				r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha for noncluster hosts", err, reqLogger)
+				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			}
 		}
 	}
 

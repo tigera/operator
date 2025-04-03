@@ -315,6 +315,9 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 
 	if pr.cfg.ManagementCluster {
 		envs = append(envs, corev1.EnvVar{Name: "CLUSTER_CONNECTION_TYPE", Value: "management"})
+		if pr.cfg.Tenant != nil && pr.cfg.Tenant.ManagedClusterIsCalico() {
+			envs = append(envs, corev1.EnvVar{Name: "MANAGED_CLUSTER_IS_CALICO", Value: "true"})
+		}
 	} else {
 		envs = append(envs, corev1.EnvVar{Name: "CLUSTER_CONNECTION_TYPE", Value: "standalone"})
 	}

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -188,7 +188,7 @@ var _ = Describe("dex rendering tests", func() {
 
 			replicas = 2
 
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, dexSecret, idpSecret, clusterName)
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, dexSecret, idpSecret, nil, clusterName)
 			trustedCaBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
 			Expect(err).NotTo(HaveOccurred())
 
@@ -290,7 +290,7 @@ var _ = Describe("dex rendering tests", func() {
 		})
 
 		DescribeTable("should render the cluster name properly in the validator", func(clusterDomain string) {
-			validatorConfig := render.NewDexKeyValidatorConfig(authentication, idpSecret, clusterDomain)
+			validatorConfig := render.NewDexKeyValidatorConfig(authentication, idpSecret, nil, clusterDomain)
 			validatorEnv := validatorConfig.RequiredEnv("")
 
 			expectedUrl := fmt.Sprintf("https://tigera-dex.tigera-dex.svc.%s:5556", clusterDomain)
@@ -333,7 +333,7 @@ var _ = Describe("dex rendering tests", func() {
 
 		It("should render all resources for a certificate management", func() {
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{}
-			cfg.DexConfig = render.NewDexConfig(cfg.Installation.CertificateManagement, authentication, dexSecret, idpSecret, clusterName)
+			cfg.DexConfig = render.NewDexConfig(cfg.Installation.CertificateManagement, authentication, dexSecret, idpSecret, nil, clusterName)
 
 			component := render.Dex(cfg)
 			resources, _ := component.Objects()

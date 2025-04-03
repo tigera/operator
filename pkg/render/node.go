@@ -1440,7 +1440,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv,
 			corev1.EnvVar{
 				Name:  "FELIX_FLOWLOGSGOLDMANESERVER",
-				Value: "goldmane.calico-system.svc.cluster.local:7443",
+				Value: "goldmane.calico-system.svc:7443",
 			},
 			corev1.EnvVar{
 				Name:  "FELIX_FLOWLOGSFLUSHINTERVAL",

@@ -260,12 +260,19 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			rbacv1.PolicyRule{
+				APIGroups: []string{"networking.k8s.io"},
+				Resources: []string{"networkpolicies"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"clusterinformations",
 					"tiers",
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
+					"stagedglobalnetworkpolicies",
+					"tier.stagedglobalnetworkpolicies",
 					"networkpolicies",
 					"tier.networkpolicies",
 					"globalnetworkpolicies",

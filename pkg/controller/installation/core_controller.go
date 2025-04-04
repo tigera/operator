@@ -185,6 +185,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		namespaceMigration:   nm,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
+		nameservers:          opts.Nameservers,
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
@@ -368,6 +369,7 @@ type ReconcileInstallation struct {
 	enterpriseCRDsExist           bool
 	migrationChecked              bool
 	clusterDomain                 string
+	nameservers                   []string
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
@@ -1412,6 +1414,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BirdTemplates:                 birdTemplates,
 		TLS:                           typhaNodeTLS,
 		ClusterDomain:                 r.clusterDomain,
+		Nameservers:                   r.nameservers,
 		NodeReporterMetricsPort:       nodeReporterMetricsPort,
 		BGPLayouts:                    bgpLayout,
 		NodeAppArmorProfile:           nodeAppArmorProfile,

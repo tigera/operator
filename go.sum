@@ -43,8 +43,8 @@ github.com/elastic/go-windows v1.0.1 h1:AlYZOldA+UJ0/2nBuqWdo90GFCgG9xuyw9SYzGUt
 github.com/elastic/go-windows v1.0.1/go.mod h1:FoVvqWSun28vaDQPbj2Elfc0JahhPB7WQEGa3c814Ss=
 github.com/emicklei/go-restful/v3 v3.12.1 h1:PJMDIM/ak7btuL8Ex0iYET9hxM3CI2sjZtzpL63nKAU=
 github.com/emicklei/go-restful/v3 v3.12.1/go.mod h1:6n3XBCmQQb25CM2LCACGz8ukIrRry+4bhvbpWn3mrbc=
-github.com/envoyproxy/gateway v1.2.6 h1:QxHBcJUdF2Rvof1Om6GQnSGKnq+l57zp60AGfFuql1Q=
-github.com/envoyproxy/gateway v1.2.6/go.mod h1:lDELg4TDh0CdlGHnWR4XJL1+O36KxSm68tT6zD2gTDQ=
+github.com/envoyproxy/gateway v1.2.8 h1:p/YkLz0xVfTJPE7Gdj1+EgEC60/RzOAz0aEp5pP6Oo4=
+github.com/envoyproxy/gateway v1.2.8/go.mod h1:Z7d3qn/ZErpQ5yZelsdFLSXHuvgIQdsfkA708aU7FV8=
 github.com/evanphx/json-patch v5.9.0+incompatible h1:fBXyNpNMuTTDdquAq/uisOr2lShz4oaXpDTX2bLe7ls=
 github.com/evanphx/json-patch v5.9.0+incompatible/go.mod h1:50XU6AFN0ol/bzJsmQLiYLvXMP4fmwYFNcr97nuDLSk=
 github.com/evanphx/json-patch/v5 v5.9.0 h1:kcBlZQbplgElYIlo/n1hJbls2z/1awpXxpRi0/FOJfg=

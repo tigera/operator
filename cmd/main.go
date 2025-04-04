@@ -393,6 +393,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	if err != nil {
 		log.Error(err, "Couldn't find the nameservers from the resolv.conf")
 	}
+	log.Infof("Found nameservers: %v", nameservers)
 
 	kubernetesVersion, err := common.GetKubernetesVersion(clientset)
 	if err != nil {

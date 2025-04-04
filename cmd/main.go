@@ -389,6 +389,11 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		log.Error(err, fmt.Sprintf("Couldn't find the cluster domain from the resolv.conf, defaulting to %s", clusterDomain))
 	}
 
+	nameservers, err := dns.Nameservers(dns.DefaultResolveConfPath)
+	if err != nil {
+		log.Error(err, fmt.Sprintf("Couldn't find the nameservers from the resolv.conf, defaulting to %s", nameservers))
+	}
+
 	kubernetesVersion, err := common.GetKubernetesVersion(clientset)
 	if err != nil {
 		log.Error(err, "Unable to resolve Kubernetes version, defaulting to v1.18")
@@ -436,6 +441,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
 		ClusterDomain:       clusterDomain,
+		Nameservers:         nameservers,
 		KubernetesVersion:   kubernetesVersion,
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,

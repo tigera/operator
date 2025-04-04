@@ -60,7 +60,7 @@ func GetClusterDomain(resolvConfPath string) (string, error) {
 	return clusterDomain, nil
 }
 
-// IsDomainName checks if the given name is a domain name and returns truee if it is.
+// IsDomainName checks if the given name is a domain name and returns true if it is.
 func IsDomainName(name string) bool {
 	// Attempt to parse it as an IP.
 	if net.ParseIP(name) != nil {

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package dns
 import (
 	"bufio"
 	"fmt"
+	"net"
 	"os"
 	"regexp"
 )
@@ -57,6 +58,38 @@ func GetClusterDomain(resolvConfPath string) (string, error) {
 	}
 
 	return clusterDomain, nil
+}
+
+// IsDomainName checks if the given name is a domain name and returns true if it is.
+func IsDomainName(name string) bool {
+	// Attempt to parse it as an IP.
+	return net.ParseIP(name) == nil
+}
+
+// Nameservers returns the list of nameservers from the resolv.conf file.
+func Nameservers(resolvConfPath string) ([]string, error) {
+	var nameservers []string
+	file, err := os.Open(resolvConfPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	reg := regexp.MustCompile(`^nameserver\s+([^\s]+)`)
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		match := reg.FindStringSubmatch(scanner.Text())
+		if len(match) > 0 {
+			nameservers = append(nameservers, match[1])
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+
+	return nameservers, nil
 }
 
 // GetServiceDNSNames returns a list of a service's DNS names.

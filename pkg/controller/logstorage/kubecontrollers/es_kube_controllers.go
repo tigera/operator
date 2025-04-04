@@ -281,17 +281,6 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		}
 	}
 
-	// Get secrets needed for kube-controllers to talk to elastic. This is needed for zero-tenants and single-tenants
-	// that deploy es-kube-controllers and need to talk to es-gateway
-	var kubeControllersUserSecret *core.Secret
-	if !r.multiTenant {
-		kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
 	// Collect the certificates we need to provision es-kube-controllers. These will have been provisioned already by the ES secrets controller.
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
@@ -354,6 +343,15 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// Determine the namespaces to which we must bind the cluster role.
 	namespaces, err := helper.TenantNamespaces(r.client)
 	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Get secrets needed for kube-controllers to talk to elastic. This is needed for zero-tenants and single-tenants
+	// that deploy es-kube-controllers and need to talk to es-gateway
+	var kubeControllersUserSecret *core.Secret
+	kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

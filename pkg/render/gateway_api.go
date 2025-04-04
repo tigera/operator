@@ -560,7 +560,7 @@ func (pr *gatewayAPIImplementationComponent) logCollectorVolumes() []corev1.Volu
 
 func (pr *gatewayAPIImplementationComponent) logCollectorEnv() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "Info"},
+		{Name: "LOG_LEVEL", Value: "Debug"},
 		{Name: "FELIX_DIAL_TARGET", Value: "/var/run/felix/nodeagent/socket"},
 		// only use ALS gRPC endpoint
 		{Name: "LISTEN_ADDRESS", Value: ":8080"},

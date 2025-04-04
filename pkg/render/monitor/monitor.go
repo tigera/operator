@@ -91,7 +91,8 @@ const (
 	bearerTokenFile       = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	KubeControllerMetrics = "calico-kube-controllers-metrics"
 
-	TigeraGatewayPodMonitor            = "tigera-gateway-pod-monitor"
+	TigeraGatewayServiceMonitor        = "tigera-gateway-service-monitor"
+	TigeraGatewayPodsProxiesMonitor    = "tigera-gateway-pod-proxies-monitor"
 	TigeraGatewayComponentsMetricsPort = 19001
 	TigeraGatewayNamespace             = "tigera-gateway"
 )
@@ -227,7 +228,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.serviceMonitorFluentd(),
 		mc.serviceMonitorQueryServer(),
 		mc.serviceMonitorCalicoKubeControllers(),
-		mc.podMonitorTigeraGatewayAPIController(),
+		mc.serviceMonitorTigeraGatewayAPIController(),
 		mc.podMonitorTigeraGatewayGateways(),
 	)
 
@@ -823,26 +824,26 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 	}
 }
 
-func (mc *monitorComponent) podMonitorTigeraGatewayAPIController() *monitoringv1.PodMonitor {
-	return &monitoringv1.PodMonitor{
-		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PodMonitorsKind, APIVersion: MonitoringAPIVersion},
+func (mc *monitorComponent) serviceMonitorTigeraGatewayAPIController() *monitoringv1.ServiceMonitor {
+	return &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      TigeraGatewayPodMonitor,
+			Name:      TigeraGatewayServiceMonitor,
 			Namespace: common.TigeraPrometheusNamespace,
 			Labels: map[string]string{
 				"team": "network-operators",
 			},
 		},
-		Spec: monitoringv1.PodMonitorSpec{
+		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": "gateway-api-controller",
+					"app.kubernetes.io/instance": "tigera-gateway-api",
 				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{
 				MatchNames: []string{TigeraGatewayNamespace},
 			},
-			PodMetricsEndpoints: []monitoringv1.PodMetricsEndpoint{
+			Endpoints: []monitoringv1.Endpoint{
 				{
 					Port:          "metrics",
 					ScrapeTimeout: "5s",
@@ -859,7 +860,7 @@ func (mc *monitorComponent) podMonitorTigeraGatewayGateways() *monitoringv1.PodM
 	return &monitoringv1.PodMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PodMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      TigeraGatewayPodMonitor,
+			Name:      TigeraGatewayPodsProxiesMonitor,
 			Namespace: common.TigeraPrometheusNamespace,
 			Labels: map[string]string{
 				"team": "network-operators",
@@ -868,8 +869,7 @@ func (mc *monitorComponent) podMonitorTigeraGatewayGateways() *monitoringv1.PodM
 		Spec: monitoringv1.PodMonitorSpec{
 			Selector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app.kubernetes.io/component":  "proxy",
-					"app.kubernetes.io/managed-by": "envoy-gateway",
+					"app.kubernetes.io/component": "proxy",
 				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{
@@ -882,6 +882,7 @@ func (mc *monitorComponent) podMonitorTigeraGatewayGateways() *monitoringv1.PodM
 					Interval:      "5s",
 					Scheme:        "http",
 					HonorLabels:   true,
+					Path:          "/stats/prometheus",
 				},
 			},
 		},

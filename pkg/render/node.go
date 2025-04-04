@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
@@ -98,6 +99,7 @@ type NodeConfiguration struct {
 	IPPools         []operatorv1.IPPool
 	TLS             *TyphaNodeTLS
 	ClusterDomain   string
+	Nameservers     []string
 
 	// Optional fields.
 	LogCollector            *operatorv1.LogCollector
@@ -985,6 +987,14 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 			},
 			UpdateStrategy: c.cfg.Installation.NodeUpdateStrategy,
 		},
+	}
+
+	if len(c.cfg.Nameservers) > 0 && dns.IsDomainName(c.cfg.K8sServiceEp.Host) {
+		// If the configured k8s service endpoint is a domain name rather than an IP address, calico/node
+		// will need explicit nameservers to resolve it.
+		ds.Spec.Template.Spec.DNSConfig = &corev1.PodDNSConfig{
+			Nameservers: c.cfg.Nameservers,
+		}
 	}
 
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {

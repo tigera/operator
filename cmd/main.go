@@ -391,7 +391,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 
 	nameservers, err := dns.Nameservers(dns.DefaultResolveConfPath)
 	if err != nil {
-		log.Error(err, fmt.Sprintf("Couldn't find the nameservers from the resolv.conf, defaulting to %s", nameservers))
+		log.Error(err, "Couldn't find the nameservers from the resolv.conf")
 	}
 
 	kubernetesVersion, err := common.GetKubernetesVersion(clientset)

@@ -63,10 +63,7 @@ func GetClusterDomain(resolvConfPath string) (string, error) {
 // IsDomainName checks if the given name is a domain name and returns true if it is.
 func IsDomainName(name string) bool {
 	// Attempt to parse it as an IP.
-	if net.ParseIP(name) != nil {
-		return false
-	}
-	return true
+	return net.ParseIP(name) != nil
 }
 
 // Nameservers returns the list of nameservers from the resolv.conf file.

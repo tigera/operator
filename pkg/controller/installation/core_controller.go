@@ -1414,6 +1414,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BirdTemplates:                 birdTemplates,
 		TLS:                           typhaNodeTLS,
 		ClusterDomain:                 r.clusterDomain,
+		Nameservers:                   r.nameservers,
 		NodeReporterMetricsPort:       nodeReporterMetricsPort,
 		BGPLayouts:                    bgpLayout,
 		NodeAppArmorProfile:           nodeAppArmorProfile,

@@ -134,6 +134,10 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 				return fmt.Errorf("%s failed to watch the secret '%s' in '%s' namespace: %w", controllerName, secretName, namespace, err)
 			}
+
+			if err = utils.AddSecretProviderClassWatch(c, secretName, namespace); err != nil {
+				return fmt.Errorf("%s failed to watch the secret provider class '%s' in '%s' namespace: %w", controllerName, secretName, namespace, err)
+			}
 		}
 	}
 
@@ -283,7 +287,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
-	idpSecret, err := utils.GetIDPSecret(ctx, r.client, authentication)
+	secretProviderClass, idpSecret, err := utils.GetSecrets(ctx, r.client, authentication)
 	if err != nil {
 		r.status.SetDegraded(oprv1.ResourceValidationError, "Invalid or missing identity provider secret", err, reqLogger)
 		return reconcile.Result{}, err
@@ -381,7 +385,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	enableDex := utils.DexEnabled(authentication)
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, dexSecret, idpSecret, r.clusterDomain)
+	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, dexSecret, idpSecret, secretProviderClass, r.clusterDomain)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)

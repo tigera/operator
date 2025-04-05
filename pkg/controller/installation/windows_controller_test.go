@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -279,6 +279,27 @@ var _ = Describe("windows-controller installation tests", func() {
 				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
 				Expect(degradedMsg).To(ConsistOf([]string{"Installation.Spec.WindowsNodes is nil"}))
 				Expect(degradedErr).To(ConsistOf([]string{"Installation.Spec.WindowsNodes is nil"}))
+			})
+
+			It("should not render the Windows daemonset when core_controller hasn't still initialized the defaults", func() {
+				// Create the installation resource with no WindowsNodes
+				hns := operator.WindowsDataplaneHNS
+				cr.Spec.CalicoNetwork.WindowsDataplane = &hns
+
+				// this isn't set until default runs
+				// and will cause a panic during validation if we don't wait.
+				cr.Spec.CNI.IPAM = nil
+				cr.Status = operator.InstallationStatus{}
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err.Error()).To(Equal("InstallationStatus is empty"))
+
+				// The calico-node-windows daemonset should not be rendered
+				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
+				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
+				Expect(degradedMsg).To(ConsistOf([]string{"InstallationStatus is empty"}))
+				Expect(degradedErr).To(ConsistOf([]string{"InstallationStatus is empty"}))
 			})
 
 			It("should render the Windows daemonset when configuration is complete and valid", func() {

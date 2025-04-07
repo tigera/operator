@@ -66,7 +66,6 @@ def issues_in_milestone() -> list:
             del(m)
             break
     # milestone = [m for m in milestones if m.title == VERSION]
-    print("Gopt milestones")
     if not milestone:
         raise ReleaseNoteError(f"milestone {VERSION} not found")
     # Ensure the milestone is closed before generating release notes.
@@ -74,7 +73,6 @@ def issues_in_milestone() -> list:
         raise ReleaseNoteError(
             f"milestone {milestone.title} is not closed, please close it before generating release notes"
         )
-    print(f"  found milestone {milestone.title}")
     milestone_issues = repo.get_issues(
         milestone=milestone, state="closed", labels=["release-note-required"]
     )

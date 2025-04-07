@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pygithub",
+#     "pyyaml",
+# ]
+# ///
+
 """Generate release notes for a milestone.
 
 Raises:
@@ -48,24 +57,28 @@ def issues_in_milestone() -> list:
     repo = g.get_repo("tigera/operator")
 
     # Find the milestone to get the id.
-    milestones = repo.get_milestones(state="all")
+    milestones = repo.get_milestones(state="all", direction='desc')
     # Filter for the milestone we're interested in.
-    milestone = [m for m in milestones if m.title == VERSION]
-    m = milestone[0] if milestone else None
-    if not m:
+    milestone = None
+    for m in milestones:
+        if m.title == VERSION:
+            milestone = m
+            del(m)
+            break
+    # milestone = [m for m in milestones if m.title == VERSION]
+    if not milestone:
         raise ReleaseNoteError(f"milestone {VERSION} not found")
     # Ensure the milestone is closed before generating release notes.
-    if m.state != "closed":
+    if milestone.state != "closed":
         raise ReleaseNoteError(
-            f"milestone {m.title} is not closed, please close it before generating release notes"
+            f"milestone {milestone.title} is not closed, please close it before generating release notes"
         )
-    print(f"  found milestone {m.title}")
     milestone_issues = repo.get_issues(
-        milestone=m, state="closed", labels=["release-note-required"]
+        milestone=milestone, state="closed", labels=["release-note-required"]
     )
     # If there are no issues in the milestone, raise an error.
     if milestone_issues.totalCount == 0:
-        raise ReleaseNoteError(f"no issues found for milestone {m.title}")
+        raise ReleaseNoteError(f"no issues found for milestone {milestone.title}")
     open_issues = [
         issue for issue in milestone_issues if issue.as_pull_request().state == "open"
     ]

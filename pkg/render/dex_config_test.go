@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -75,7 +75,7 @@ var _ = Describe("dex config tests", func() {
 
 	Context("OIDC connector config options", func() {
 		It("should configure insecureSkipEmailVerified ", func() {
-			connector := render.NewDexConfig(nil, authentication, dexSecret, idpSecret, dns.DefaultClusterDomain).Connector()
+			connector := render.NewDexConfig(nil, authentication, dexSecret, idpSecret, nil, dns.DefaultClusterDomain).Connector()
 			cfg := connector["config"].(map[string]interface{})
 			Expect(cfg["insecureSkipEmailVerified"]).To(Equal(true))
 		})
@@ -83,9 +83,9 @@ var _ = Describe("dex config tests", func() {
 
 	Context("Hashes should be consistent and not be affected by fields with pointers", func() {
 		It("should produce consistent hashes for dex config", func() {
-			hashes1 := render.NewDexConfig(nil, authentication, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes2 := render.NewDexConfig(nil, authentication.DeepCopy(), dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes3 := render.NewDexConfig(nil, authenticationDiff, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes1 := render.NewDexConfig(nil, authentication, dexSecret, idpSecret, nil, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes2 := render.NewDexConfig(nil, authentication.DeepCopy(), dexSecret, idpSecret, nil, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes3 := render.NewDexConfig(nil, authenticationDiff, dexSecret, idpSecret, nil, dns.DefaultClusterDomain).RequiredAnnotations()
 			Expect(hashes1).To(HaveLen(3))
 			Expect(hashes2).To(HaveLen(3))
 			Expect(hashes3).To(HaveLen(3))
@@ -94,9 +94,9 @@ var _ = Describe("dex config tests", func() {
 		})
 
 		It("should produce consistent hashes for verifiers", func() {
-			hashes1 := render.NewDexKeyValidatorConfig(authentication, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes2 := render.NewDexKeyValidatorConfig(authentication.DeepCopy(), idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes3 := render.NewDexKeyValidatorConfig(authenticationDiff, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes1 := render.NewDexKeyValidatorConfig(authentication, idpSecret, nil, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes2 := render.NewDexKeyValidatorConfig(authentication.DeepCopy(), idpSecret, nil, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes3 := render.NewDexKeyValidatorConfig(authenticationDiff, idpSecret, nil, dns.DefaultClusterDomain).RequiredAnnotations()
 			Expect(hashes1).To(HaveLen(1))
 			Expect(hashes2).To(HaveLen(1))
 			Expect(hashes3).To(HaveLen(1))
@@ -127,7 +127,7 @@ var _ = Describe("dex config tests", func() {
 	)
 
 	DescribeTable("Test DexConfig methods for various connectors ", func(auth *operatorv1.Authentication, expectedConnector map[string]interface{}, expectedVolumes []corev1.Volume, expectedEnv []corev1.EnvVar, secret *corev1.Secret) {
-		dexConfig := render.NewDexConfig(nil, auth, dexSecret, secret, dns.DefaultClusterDomain)
+		dexConfig := render.NewDexConfig(nil, auth, dexSecret, secret, nil, dns.DefaultClusterDomain)
 		Expect(dexConfig.Connector()).To(BeEquivalentTo(expectedConnector))
 		annotations := dexConfig.RequiredAnnotations()
 
@@ -261,7 +261,7 @@ var _ = Describe("dex config tests", func() {
 	)
 
 	DescribeTable("Test DexKVConfig methods for various connectors ", func(auth *operatorv1.Authentication) {
-		dexConfig := render.NewDexKeyValidatorConfig(auth, idpSecret, dns.DefaultClusterDomain)
+		dexConfig := render.NewDexKeyValidatorConfig(auth, idpSecret, nil, dns.DefaultClusterDomain)
 
 		Expect(dexConfig.Issuer()).To(Equal(fmt.Sprintf("%s/dex", domain)))
 		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(idpSecret))
@@ -280,7 +280,7 @@ var _ = Describe("dex config tests", func() {
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			Data:     secretData,
 		}
-		dexConfig := render.NewDexConfig(nil, google, dexSecret, secret, dns.DefaultClusterDomain)
+		dexConfig := render.NewDexConfig(nil, google, dexSecret, secret, nil, dns.DefaultClusterDomain)
 		connector := dexConfig.Connector()["config"].(map[string]interface{})
 
 		email, emailFound := connector["adminEmail"]
@@ -319,7 +319,7 @@ var _ = Describe("dex config tests", func() {
 	DescribeTable("Test values for promptTypes ", func(in []operatorv1.PromptType, result string) {
 		auth := oidc.DeepCopy()
 		auth.Spec.OIDC.PromptTypes = in
-		dexConfig := render.NewDexConfig(nil, auth, dexSecret, idpSecret, dns.DefaultClusterDomain)
+		dexConfig := render.NewDexConfig(nil, auth, dexSecret, idpSecret, nil, dns.DefaultClusterDomain)
 		config, ok := dexConfig.Connector()["config"].(map[string]interface{})
 		Expect(ok).To(BeTrue())
 		if result == "" {

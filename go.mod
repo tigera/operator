@@ -44,6 +44,7 @@ require (
 	sigs.k8s.io/controller-runtime v0.19.1
 	sigs.k8s.io/gateway-api v1.2.1
 	sigs.k8s.io/kind v0.24.0 // Do not remove, not used by code but used by build
+	sigs.k8s.io/secrets-store-csi-driver v1.4.8
 	sigs.k8s.io/yaml v1.4.0
 )
 

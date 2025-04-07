@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ import (
 	"net/http"
 	"strings"
 
+	csisecret "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -37,6 +39,8 @@ type KeyValidatorConfig interface {
 	RequiredAnnotations() map[string]string
 	// RequiredSecrets returns secrets that the KeyValidatorConfig implementation requires.
 	RequiredSecrets(namespace string) []*corev1.Secret
+	// RequiredSecretProviderClass returns secretProviderClass that the KeyValidatorConfig implementation requires.
+	RequiredSecretProviderClass(namespace string) []*csisecret.SecretProviderClass
 	// RequiredVolumeMounts returns volume mounts that the KeyValidatorConfig implementation requires.
 	RequiredVolumeMounts() []corev1.VolumeMount
 	// RequiredVolumes returns volumes that the KeyValidatorConfig implementation requires.

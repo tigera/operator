@@ -138,6 +138,18 @@ func AddSecretsWatchWithHandler(c ctrlruntime.Controller, name, namespace string
 	return AddNamespacedWatch(c, s, h, metaMatches...)
 }
 
+func AddSecretProviderClassWatch(c ctrlruntime.Controller, name, namespace string, metaMatches ...MetaMatch) error {
+	return AddSecretProviderClassWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{}, metaMatches...)
+}
+
+func AddSecretProviderClassWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler, metaMatches ...MetaMatch) error {
+	s := &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "SecretProviderClass", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	return AddNamespacedWatch(c, s, h, metaMatches...)
+}
+
 func AddConfigMapWatch(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
 	cm := &corev1.ConfigMap{
 		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "V1"},

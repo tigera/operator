@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -665,6 +665,7 @@ var _ = Describe("monitor rendering tests", func() {
 		}
 
 		dexCfg := render.NewDexKeyValidatorConfig(authentication,
+			nil,
 			nil,
 			dns.DefaultClusterDomain)
 		cfg.KeyValidatorConfig = dexCfg

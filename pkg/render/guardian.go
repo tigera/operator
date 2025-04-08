@@ -273,6 +273,8 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 					"tier.stagednetworkpolicies",
 					"stagedglobalnetworkpolicies",
 					"tier.stagedglobalnetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
+					"tier.stagedkubernetesnetworkpolicies",
 					"networkpolicies",
 					"tier.networkpolicies",
 					"globalnetworkpolicies",

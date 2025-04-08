@@ -630,10 +630,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	routeConfig, err := getVoltronRouteConfig(ctx, r.client, helper.InstallNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.InternalServerError, "Failed to create Voltron Route Configuration", err, logc)
-		return reconcile.Result{}, err
+	routeConfig, routeConfigErr := getVoltronRouteConfig(ctx, r.client, helper.InstallNamespace())
+	if routeConfigErr != nil {
+		log.Error(routeConfigErr, "error with voltron route config, route configuration will not be added to voltron")
 	}
 
 	// Check if non-cluster host feature is enabled.
@@ -716,6 +715,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
 			return reconcile.Result{}, err
 		}
+	}
+
+	// Don't block creating manager resources if there is a route error (so we are waiting until after CreateOrUpdateOrDelete)
+	// but do go degraded after creating the resources if there is a route error.
+	if routeConfigErr != nil {
+		r.status.SetDegraded(operatorv1.InternalServerError, "Failed to create Voltron Route Configuration", routeConfigErr, logc)
+		return reconcile.Result{}, routeConfigErr
 	}
 
 	// Clear the degraded bit if we've reached this far.

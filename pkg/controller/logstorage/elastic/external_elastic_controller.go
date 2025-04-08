@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -48,6 +48,7 @@ type ExternalESController struct {
 	status        status.StatusManager
 	provider      operatorv1.Provider
 	clusterDomain string
+	multiTenant   bool
 }
 
 func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
@@ -65,6 +66,7 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 		status:        status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
 		clusterDomain: opts.ClusterDomain,
 		provider:      opts.DetectedProvider,
+		multiTenant:   opts.MultiTenant,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -140,7 +142,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	clusterConfig := relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
-	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets)
+	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets, r.multiTenant)
 	if err := hdler.CreateOrUpdateOrDelete(ctx, externalElasticsearch, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err

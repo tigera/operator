@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -64,6 +64,7 @@ type PolicyRecommendationConfiguration struct {
 	ClusterDomain                  string
 	Installation                   *operatorv1.InstallationSpec
 	ManagedCluster                 bool
+	ManagementCluster              bool
 	OpenShift                      bool
 	PullSecrets                    []*corev1.Secret
 	TrustedBundle                  certificatemanagement.TrustedBundleRO
@@ -310,6 +311,15 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		if pr.cfg.Tenant.MultiTenant() {
 			envs = append(envs, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: pr.cfg.Tenant.Namespace})
 		}
+	}
+
+	if pr.cfg.ManagementCluster {
+		envs = append(envs, corev1.EnvVar{Name: "CLUSTER_CONNECTION_TYPE", Value: "management"})
+		if pr.cfg.Tenant != nil && pr.cfg.Tenant.ManagedClusterIsCalico() {
+			envs = append(envs, corev1.EnvVar{Name: "MANAGED_CLUSTER_TYPE", Value: "calico"})
+		}
+	} else {
+		envs = append(envs, corev1.EnvVar{Name: "CLUSTER_CONNECTION_TYPE", Value: "standalone"})
 	}
 
 	volumeMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1629,7 +1629,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		}
 	}
 	if len(errMsgs) != 0 {
-		return nil, fmt.Errorf(strings.Join(errMsgs, ";"))
+		return nil, fmt.Errorf("%s", strings.Join(errMsgs, ";"))
 	}
 	return &render.TyphaNodeTLS{
 		TrustedBundle:   trustedBundle,

@@ -264,7 +264,7 @@ func (es *elasticsearchComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -815,7 +815,7 @@ func (es elasticsearchComponent) nodeSets() []esv1.NodeSet {
 	}
 
 	var nodeSets []esv1.NodeSet
-	if nodeConfig.NodeSets == nil || len(nodeConfig.NodeSets) < 1 {
+	if len(nodeConfig.NodeSets) == 0 {
 		nodeSet := es.nodeSetTemplate(pvcTemplate)
 		nodeSet.Name = nodeSetName(pvcTemplate)
 		nodeSet.Count = int32(nodeConfig.Count)

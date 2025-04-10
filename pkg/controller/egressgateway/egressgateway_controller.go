@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -335,7 +335,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		}
 	}
 	if len(errMsgs) != 0 {
-		return reconcile.Result{}, fmt.Errorf(strings.Join(errMsgs, ";"))
+		return reconcile.Result{}, fmt.Errorf("%s", strings.Join(errMsgs, ";"))
 	}
 
 	if unreadyEGW != nil {

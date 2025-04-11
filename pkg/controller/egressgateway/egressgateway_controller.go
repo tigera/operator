@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -92,7 +92,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady
 		status:          status.New(mgr.GetClient(), "egressgateway", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
-		usePSP:          opts.UsePSP,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -142,7 +141,6 @@ type ReconcileEgressGateway struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
-	usePSP          bool
 }
 
 // Reconcile reads that state of the cluster for an EgressGateway object and makes changes
@@ -165,9 +163,6 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		var objects []client.Object
 		if r.provider.IsOpenShift() {
 			objects = append(objects, egressgateway.SecurityContextConstraints())
-		}
-		if r.usePSP {
-			objects = append(objects, egressgateway.PodSecurityPolicy())
 		}
 		err := ch.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(objects...), r.status)
 		if err != nil {
@@ -335,7 +330,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		}
 	}
 	if len(errMsgs) != 0 {
-		return reconcile.Result{}, fmt.Errorf(strings.Join(errMsgs, ";"))
+		return reconcile.Result{}, fmt.Errorf("%s", strings.Join(errMsgs, ";"))
 	}
 
 	if unreadyEGW != nil {
@@ -403,7 +398,6 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 		VXLANPort:         egwVXLANPort,
 		VXLANVNI:          egwVXLANVNI,
 		IptablesBackend:   ipTablesBackend,
-		UsePSP:            r.usePSP,
 		OpenShift:         r.provider.IsOpenShift(),
 		NamespaceAndNames: namespaceAndNames,
 	}

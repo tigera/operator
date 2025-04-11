@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import (
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,7 +35,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/podsecuritypolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -75,9 +73,6 @@ type Config struct {
 
 	// Whether this is a managed cluster
 	IsManaged bool
-
-	// Whether the cluster supports pod security policies.
-	UsePSP bool
 
 	// Namespace to install into.
 	Namespace string
@@ -118,7 +113,7 @@ func (d *dashboards) ResolveImages(is *operatorv1.ImageSet) error {
 		}
 	}
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -138,11 +133,8 @@ func (d *dashboards) resources() []client.Object {
 		d.Job(),
 	}
 
-	if d.cfg.UsePSP || d.cfg.Installation.KubernetesProvider.IsOpenShift() {
+	if d.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		resources = append(resources, d.ClusterRole(), d.ClusterRoleBinding())
-		if d.cfg.UsePSP {
-			resources = append(resources, d.PodSecurityPolicy())
-		}
 	}
 	return resources
 }
@@ -342,32 +334,19 @@ func (d *dashboards) ServiceAccount() *corev1.ServiceAccount {
 }
 
 func (d *dashboards) ClusterRole() *rbacv1.ClusterRole {
-	var rules []rbacv1.PolicyRule
-	if d.cfg.UsePSP {
-		rules = append(rules, rbacv1.PolicyRule{
-			// Allow access to the pod security policy in case this is enforced on the cluster
-			APIGroups:     []string{"policy"},
-			Resources:     []string{"podsecuritypolicies"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{Name},
-		})
-	}
-
-	if d.cfg.Installation.KubernetesProvider.IsOpenShift() {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{securitycontextconstraints.NonRootV2},
-		})
-	}
-
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: Name,
 		},
-		Rules: rules,
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{securitycontextconstraints.NonRootV2},
+			},
+		},
 	}
 }
 
@@ -390,10 +369,6 @@ func (d *dashboards) ClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 			},
 		},
 	}
-}
-
-func (d *dashboards) PodSecurityPolicy() *policyv1beta1.PodSecurityPolicy {
-	return podsecuritypolicy.NewBasePolicy(Name)
 }
 
 func (d *dashboards) Ready() bool {

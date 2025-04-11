@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -52,7 +52,6 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			Installation: installation,
 			OsType:       rmeta.OSTypeLinux,
 			LogsEnabled:  true,
-			UsePSP:       true,
 		}
 	})
 
@@ -69,9 +68,9 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 			{name: applicationlayer.ApplicationLayerDaemonsetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
 			{name: "application-layer", ns: "calico-system", group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: "application-layer", ns: "", group: "policy", version: "v1beta1", kind: "PodSecurityPolicy"},
 		}
 		// Should render the correct resources.
+		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 		component := applicationlayer.ApplicationLayer(cfg)
 		resources, _ := component.Objects()
 		Expect(resources).To(HaveLen(len(expectedResources)))
@@ -278,18 +277,6 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		Expect(container).NotTo(BeNil())
 		Expect(container.Resources).To(Equal(l7LogCollectorResources))
 
-	})
-
-	It("should render properly when PSP is not supported by the cluster", func() {
-		cfg.UsePSP = false
-		component := applicationlayer.ApplicationLayer(cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
-
-		// Should not contain any PodSecurityPolicies
-		for _, r := range resources {
-			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("PodSecurityPolicy"))
-		}
 	})
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {

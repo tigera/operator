@@ -140,7 +140,7 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 	}
 
 	if len(errMsgs) != 0 {
-		return fmt.Errorf(strings.Join(errMsgs, ","))
+		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
 	return nil
 }
@@ -171,7 +171,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	)
 
 	objsToDelete := []client.Object{
-		// PSPs have been removed from the Kubenretes API since v1.25, so we can delete
+		// PSPs have been removed from the Kubernetes API since v1.25, so we can delete
 		// any resources related to them that might still exist.
 		c.intrusionDetectionPSPClusterRole(),
 		c.intrusionDetectionPSPClusterRoleBinding(),

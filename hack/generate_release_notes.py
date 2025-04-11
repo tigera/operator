@@ -57,17 +57,19 @@ def issues_in_milestone() -> list:
     repo = g.get_repo("tigera/operator")
 
     # Find the milestone to get the id.
-    milestones = repo.get_milestones(state="all", direction='desc')
-    # Filter for the milestone we're interested in.
+    milestones = repo.get_milestones(state="all", direction="desc")
+
+    # Filter for the milestone we're interested in. Break out when we find it.
     milestone = None
     for m in milestones:
         if m.title == VERSION:
             milestone = m
-            del(m)
+            del m
             break
-    # milestone = [m for m in milestones if m.title == VERSION]
+
     if not milestone:
         raise ReleaseNoteError(f"milestone {VERSION} not found")
+
     # Ensure the milestone is closed before generating release notes.
     if milestone.state != "closed":
         raise ReleaseNoteError(
@@ -76,12 +78,14 @@ def issues_in_milestone() -> list:
     milestone_issues = repo.get_issues(
         milestone=milestone, state="closed", labels=["release-note-required"]
     )
+
     # If there are no issues in the milestone, raise an error.
     if milestone_issues.totalCount == 0:
         raise ReleaseNoteError(f"no issues found for milestone {milestone.title}")
     open_issues = [
         issue for issue in milestone_issues if issue.as_pull_request().state == "open"
     ]
+
     # If there are open issues in the milestone, raise an error.
     if len(open_issues) > 0:
         raise ReleaseNoteError(

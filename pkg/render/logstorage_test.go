@@ -1229,7 +1229,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 					createResources, _ := component.Objects()
 					pvcResource := getElasticsearch(createResources).Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.Resources
-					Expect(pvcResource).Should(Equal(res))
+					Expect(pvcResource.Limits).Should(Equal(res.Limits))
+					Expect(pvcResource.Requests).Should(Equal(res.Requests))
 				})
 
 				It("sets storage value of Requests to user's Limits when user's Requests is not set and default Requests is greater than Limits in pvc template", func() {
@@ -1255,7 +1256,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 					createResources, _ := component.Objects()
 					pvcResource := getElasticsearch(createResources).Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.Resources
-					Expect(pvcResource).Should(Equal(expected))
+					Expect(pvcResource.Limits).Should(Equal(expected.Limits))
+					Expect(pvcResource.Requests).Should(Equal(expected.Requests))
 				})
 			})
 		})

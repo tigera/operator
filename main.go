@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -384,21 +384,6 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
 
-	// Determine if PodSecurityPolicies are supported. PSPs were removed in
-	// Kubernetes v1.25. We can remove this check once the operator not longer
-	// supports Kubernetes < v1.25.0.
-	// Skip installation of PSPs in OpenShift since we use Security Context
-	// Constraints (SCC) instead.
-	usePSP := false
-	if provider != operatorv1.ProviderOpenShift {
-		usePSP, err = utils.SupportsPodSecurityPolicies(clientset)
-		if err != nil {
-			setupLog.Error(err, "Failed to discover PodSecurityPolicy availability")
-			os.Exit(1)
-		}
-	}
-	setupLog.WithValues("supported", usePSP).Info("Checking if PodSecurityPolicies are supported by the cluster")
-
 	// Determine if we need to start the TSEE specific controllers.
 	enterpriseCRDExists, err := utils.RequiresTigeraSecure(mgr.GetConfig())
 	if err != nil {
@@ -459,7 +444,6 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	options := options.AddOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
-		UsePSP:              usePSP,
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
 		ManageCRDs:          manageCRDs,

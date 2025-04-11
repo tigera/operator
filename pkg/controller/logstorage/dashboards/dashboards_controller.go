@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,7 +63,6 @@ type DashboardsSubController struct {
 	status          status.StatusManager
 	provider        operatorv1.Provider
 	clusterDomain   string
-	usePSP          bool
 	multiTenant     bool
 	elasticExternal bool
 	tierWatchReady  *utils.ReadyFlag
@@ -349,7 +348,6 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		PullSecrets:                pullSecrets,
 		Namespace:                  helper.InstallNamespace(),
 		TrustedBundle:              trustedBundle,
-		UsePSP:                     d.usePSP,
 		IsManaged:                  managementClusterConnection != nil,
 		Tenant:                     tenant,
 		KibanaHost:                 kibanaHost,
@@ -389,7 +387,7 @@ func parsePort(port string) (uint16, error) {
 		return 0, err
 	}
 	if kibanaPort > math.MaxInt16 {
-		return 0, fmt.Errorf(fmt.Sprintf("Kibana port is larger them max %d", math.MaxInt16))
+		return 0, fmt.Errorf("%s", fmt.Sprintf("Kibana port is larger them max %d", math.MaxInt16))
 	}
 	return uint16(kibanaPort), nil
 }

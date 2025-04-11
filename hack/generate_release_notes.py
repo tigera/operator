@@ -128,10 +128,10 @@ def kind(issue: Issue) -> str:
     Returns:
         str: enhancement, bug, or other
     """
-    for l in issue.labels:
-        if l.name == "kind/enhancement":
+    for label in issue.labels:
+        if label.name == "kind/enhancement":
             return "enhancement"
-        if l.name == "kind/bug":
+        if label.name == "kind/bug":
             return "bug"
     return "other"
 

@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pygithub",
+#     "pyyaml",
+# ]
+# ///
+
 """Generate release notes for a milestone.
 
 Raises:
@@ -48,27 +57,36 @@ def issues_in_milestone() -> list:
     repo = g.get_repo("tigera/operator")
 
     # Find the milestone to get the id.
-    milestones = repo.get_milestones(state="all")
-    # Filter for the milestone we're interested in.
-    milestone = [m for m in milestones if m.title == VERSION]
-    m = milestone[0] if milestone else None
-    if not m:
+    milestones = repo.get_milestones(state="all", direction="desc")
+
+    # Filter for the milestone we're interested in. Break out when we find it.
+    milestone = None
+    for m in milestones:
+        if m.title == VERSION:
+            milestone = m
+            del m
+            break
+
+    if not milestone:
         raise ReleaseNoteError(f"milestone {VERSION} not found")
+
     # Ensure the milestone is closed before generating release notes.
-    if m.state != "closed":
+    if milestone.state != "closed":
         raise ReleaseNoteError(
-            f"milestone {m.title} is not closed, please close it before generating release notes"
+            f"milestone {milestone.title} is not closed, please close it before generating release notes"
         )
-    print(f"  found milestone {m.title}")
     milestone_issues = repo.get_issues(
-        milestone=m, state="closed", labels=["release-note-required"]
+        milestone=milestone, state="closed", labels=["release-note-required"]
     )
+
     # If there are no issues in the milestone, raise an error.
     if milestone_issues.totalCount == 0:
-        raise ReleaseNoteError(f"no issues found for milestone {m.title}")
+        raise ReleaseNoteError(
+            f"no issues found for milestone {milestone.title}")
     open_issues = [
         issue for issue in milestone_issues if issue.as_pull_request().state == "open"
     ]
+
     # If there are open issues in the milestone, raise an error.
     if len(open_issues) > 0:
         raise ReleaseNoteError(
@@ -91,7 +109,8 @@ def extract_release_notes(issue: Issue) -> list:
     # Look for a release note section in the body.
     matches = None
     if issue.body:
-        matches = re.findall(r"```release-note(.*?)```", str(issue.body), re.DOTALL)
+        matches = re.findall(r"```release-note(.*?)```",
+                             str(issue.body), re.DOTALL)
 
     if matches:
         return [m.strip() for m in matches]
@@ -109,10 +128,10 @@ def kind(issue: Issue) -> str:
     Returns:
         str: enhancement, bug, or other
     """
-    for l in issue.labels:
-        if l.name == "kind/enhancement":
+    for label in issue.labels:
+        if label.name == "kind/enhancement":
             return "enhancement"
-        if l.name == "kind/bug":
+        if label.name == "kind/bug":
             return "bug"
     return "other"
 
@@ -158,7 +177,8 @@ def calico_version() -> str:
     Returns:
         str: calico version
     """
-    v = yaml.safe_load(open("config/calico_versions.yml", "r", encoding="utf-8"))
+    v = yaml.safe_load(
+        open("config/calico_versions.yml", "r", encoding="utf-8"))
     return v["title"]
 
 
@@ -168,7 +188,8 @@ def enterprise_version() -> str:
     Returns:
         str: calico enterprise version
     """
-    v = yaml.safe_load(open("config/enterprise_versions.yml", "r", encoding="utf-8"))
+    v = yaml.safe_load(
+        open("config/enterprise_versions.yml", "r", encoding="utf-8"))
     return v["title"]
 
 

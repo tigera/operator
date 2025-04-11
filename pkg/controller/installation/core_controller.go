@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -192,7 +192,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
-		usePSP:               opts.UsePSP,
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
 	}
@@ -373,7 +372,6 @@ type ReconcileInstallation struct {
 	migrationChecked     bool
 	clusterDomain        string
 	manageCRDs           bool
-	usePSP               bool
 	tierWatchReady       *utils.ReadyFlag
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
@@ -1280,7 +1278,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		MigrateNamespaces: needNsMigration,
 		ClusterDomain:     r.clusterDomain,
 		FelixHealthPort:   *felixConfiguration.Spec.HealthPort,
-		UsePSP:            r.usePSP,
 	}
 	components = append(components, render.Typha(&typhaCfg))
 
@@ -1355,14 +1352,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		PrometheusServerTLS:     nodePrometheusTLS,
 		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
 		BindMode:                bgpConfiguration.Spec.BindMode,
-		UsePSP:                  r.usePSP,
 	}
 	components = append(components, render.Node(&nodeCfg))
 
 	csiCfg := render.CSIConfiguration{
 		Installation: &instance.Spec,
 		Terminating:  installationMarkedForDeletion,
-		UsePSP:       r.usePSP,
 		OpenShift:    instance.Spec.KubernetesProvider.IsOpenShift(),
 	}
 	components = append(components, render.CSI(&csiCfg))
@@ -1376,7 +1371,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ClusterDomain:               r.clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
 		Terminating:                 installationMarkedForDeletion,
-		UsePSP:                      r.usePSP,
 		MetricsServerTLS:            kubeControllerTLS,
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 		Namespace:                   common.CalicoNamespace,
@@ -1629,7 +1623,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		}
 	}
 	if len(errMsgs) != 0 {
-		return nil, fmt.Errorf(strings.Join(errMsgs, ";"))
+		return nil, fmt.Errorf("%s", strings.Join(errMsgs, ";"))
 	}
 	return &render.TyphaNodeTLS{
 		TrustedBundle:   trustedBundle,

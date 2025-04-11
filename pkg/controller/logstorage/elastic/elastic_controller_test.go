@@ -98,7 +98,6 @@ func NewReconcilerWithShims(
 		esCliCreator:   esCliCreator,
 		tierWatchReady: tierWatchReady,
 		status:         status,
-		usePSP:         opts.UsePSP,
 		clusterDomain:  opts.ClusterDomain,
 		provider:       opts.DetectedProvider,
 		multiTenant:    opts.MultiTenant,

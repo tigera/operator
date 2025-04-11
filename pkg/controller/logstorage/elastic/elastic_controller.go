@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -79,7 +79,6 @@ type ElasticSubController struct {
 	esCliCreator   utils.ElasticsearchClientCreator
 	clusterDomain  string
 	tierWatchReady *utils.ReadyFlag
-	usePSP         bool
 	multiTenant    bool
 }
 
@@ -100,7 +99,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		esCliCreator:   utils.NewElasticClient,
 		tierWatchReady: &utils.ReadyFlag{},
 		status:         status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
-		usePSP:         opts.UsePSP,
 		clusterDomain:  opts.ClusterDomain,
 		provider:       opts.DetectedProvider,
 		multiTenant:    opts.MultiTenant,
@@ -539,7 +537,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		ElasticLicenseType:      esLicenseType,
 		TrustedBundle:           trustedBundle,
 		UnusedTLSSecret:         unusedTLSSecret,
-		UsePSP:                  r.usePSP,
 		ApplyTrial:              applyTrial,
 		KeyStoreSecret:          keyStoreSecret,
 		KibanaEnabled:           kibanaEnabled,

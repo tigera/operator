@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
 
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#     "pygithub",
-#     "pyyaml",
-# ]
-# ///
-
 """Generate release notes for a milestone.
 
 Raises:

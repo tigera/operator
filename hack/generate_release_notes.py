@@ -57,19 +57,17 @@ def issues_in_milestone() -> list:
     repo = g.get_repo("tigera/operator")
 
     # Find the milestone to get the id.
-    milestones = repo.get_milestones(state="all", direction="desc")
-
-    # Filter for the milestone we're interested in. Break out when we find it.
+    milestones = repo.get_milestones(state="all", direction='desc')
+    # Filter for the milestone we're interested in.
     milestone = None
     for m in milestones:
         if m.title == VERSION:
             milestone = m
-            del m
+            del(m)
             break
-
+    # milestone = [m for m in milestones if m.title == VERSION]
     if not milestone:
         raise ReleaseNoteError(f"milestone {VERSION} not found")
-
     # Ensure the milestone is closed before generating release notes.
     if milestone.state != "closed":
         raise ReleaseNoteError(
@@ -78,15 +76,12 @@ def issues_in_milestone() -> list:
     milestone_issues = repo.get_issues(
         milestone=milestone, state="closed", labels=["release-note-required"]
     )
-
     # If there are no issues in the milestone, raise an error.
     if milestone_issues.totalCount == 0:
-        raise ReleaseNoteError(
-            f"no issues found for milestone {milestone.title}")
+        raise ReleaseNoteError(f"no issues found for milestone {milestone.title}")
     open_issues = [
         issue for issue in milestone_issues if issue.as_pull_request().state == "open"
     ]
-
     # If there are open issues in the milestone, raise an error.
     if len(open_issues) > 0:
         raise ReleaseNoteError(
@@ -109,8 +104,7 @@ def extract_release_notes(issue: Issue) -> list:
     # Look for a release note section in the body.
     matches = None
     if issue.body:
-        matches = re.findall(r"```release-note(.*?)```",
-                             str(issue.body), re.DOTALL)
+        matches = re.findall(r"```release-note(.*?)```", str(issue.body), re.DOTALL)
 
     if matches:
         return [m.strip() for m in matches]
@@ -128,10 +122,10 @@ def kind(issue: Issue) -> str:
     Returns:
         str: enhancement, bug, or other
     """
-    for label in issue.labels:
-        if label.name == "kind/enhancement":
+    for l in issue.labels:
+        if l.name == "kind/enhancement":
             return "enhancement"
-        if label.name == "kind/bug":
+        if l.name == "kind/bug":
             return "bug"
     return "other"
 
@@ -177,8 +171,7 @@ def calico_version() -> str:
     Returns:
         str: calico version
     """
-    v = yaml.safe_load(
-        open("config/calico_versions.yml", "r", encoding="utf-8"))
+    v = yaml.safe_load(open("config/calico_versions.yml", "r", encoding="utf-8"))
     return v["title"]
 
 
@@ -188,8 +181,7 @@ def enterprise_version() -> str:
     Returns:
         str: calico enterprise version
     """
-    v = yaml.safe_load(
-        open("config/enterprise_versions.yml", "r", encoding="utf-8"))
+    v = yaml.safe_load(open("config/enterprise_versions.yml", "r", encoding="utf-8"))
     return v["title"]
 
 

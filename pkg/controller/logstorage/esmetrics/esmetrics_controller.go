@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,7 +58,6 @@ type ESMetricsSubController struct {
 	status         status.StatusManager
 	provider       operatorv1.Provider
 	clusterDomain  string
-	usePSP         bool
 	multiTenant    bool
 	tierWatchReady *utils.ReadyFlag
 }
@@ -243,7 +242,6 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 		ClusterDomain:        r.clusterDomain,
 		ServerTLS:            serverKeyPair,
 		TrustedBundle:        trustedBundle,
-		UsePSP:               r.usePSP,
 		LogStorage:           logStorage,
 	}
 	esMetricsComponent := esmetrics.ElasticsearchMetrics(esMetricsCfg)

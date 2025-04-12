@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -66,7 +66,6 @@ type LinseedSubController struct {
 	clusterDomain   string
 	tierWatchReady  *utils.ReadyFlag
 	dpiAPIReady     *utils.ReadyFlag
-	usePSP          bool
 	multiTenant     bool
 	elasticExternal bool
 }
@@ -439,7 +438,6 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		ClusterDomain:                  r.clusterDomain,
 		KeyPair:                        linseedKeyPair,
 		TokenKeyPair:                   tokenKeyPair,
-		UsePSP:                         r.usePSP,
 		ESClusterConfig:                esClusterConfig,
 		HasDPIResource:                 hasDPIResource,
 		ManagementCluster:              managementCluster != nil,

@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -48,7 +48,6 @@ type ExternalESController struct {
 	status        status.StatusManager
 	provider      operatorv1.Provider
 	clusterDomain string
-	usePSP        bool
 }
 
 func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
@@ -64,7 +63,6 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),
 		status:        status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
-		usePSP:        opts.UsePSP,
 		clusterDomain: opts.ClusterDomain,
 		provider:      opts.DetectedProvider,
 	}

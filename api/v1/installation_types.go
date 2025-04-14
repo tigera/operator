@@ -926,6 +926,24 @@ type CNISpec struct {
 	// Calico Enterprise installation.
 	// +optional
 	IPAM *IPAMSpec `json:"ipam"`
+
+	// BinDir is the path to the CNI binaries directory.
+	// If you have changed the installation directory for CNI binaries in the container runtime configuration,
+	// please ensure that this field points to the same directory as specified in the container runtime settings.
+	// Default: /opt/cni/bin
+	// +optional
+	// +kubebuilder:default:="/opt/cni/bin"
+	// +kubebuilder:validation:Type=string
+	BinDir string `json:"binDir,omitempty"`
+
+	// ConfDir is the path to the CNI config directory.
+	// If you have changed the installation directory for CNI configuration in the container runtime configuration,
+	// please ensure that this field points to the same directory as specified in the container runtime settings.
+	// Default: /etc/cni/net.d
+	// +optional
+	// +kubebuilder:default:="/etc/cni/net.d"
+	// +kubebuilder:validation:Type=string
+	ConfDir string `json:"confDir,omitempty"`
 }
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.

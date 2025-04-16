@@ -1,4 +1,4 @@
-// Copyright (c) 2020, 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -252,6 +252,16 @@ func mergeCNISpecs(cfg, override *operatorv1.CNISpec) *operatorv1.CNISpec {
 	switch compareFields(out.IPAM, override.IPAM) {
 	case BOnlySet, Different:
 		out.IPAM = override.IPAM.DeepCopy()
+	}
+
+	switch compareFields(out.BinDir, override.BinDir) {
+	case BOnlySet, Different:
+		out.BinDir = override.BinDir
+	}
+
+	switch compareFields(out.ConfDir, override.ConfDir) {
+	case BOnlySet, Different:
+		out.ConfDir = override.ConfDir
 	}
 
 	return out

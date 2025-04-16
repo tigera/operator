@@ -1382,6 +1382,32 @@ var _ = Describe("Node rendering tests", func() {
 				verifyProbesAndLifecycle(ds, false, true)
 			})
 
+			It("should return customized CNI directories when specified", func() {
+				cfg.Installation.CNI.BinDir = "/custom/cni/bin"
+				cfg.Installation.CNI.ConfDir = "/custom/cni/net.d"
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+				dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+				Expect(dsResource).ToNot(BeNil())
+
+				// The DaemonSet should have the correct configuration.
+				ds := dsResource.(*appsv1.DaemonSet)
+
+				dirOrCreate := corev1.HostPathDirectoryOrCreate
+				expectedVols := []corev1.Volume{
+					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/custom/cni/bin", Type: &dirOrCreate}}},
+					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/custom/cni/net.d"}}},
+					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+				}
+				Expect(ds.Spec.Template.Spec.Volumes).To(ContainElements(expectedVols))
+				expectedCNIVolumeMounts := []corev1.VolumeMount{
+					{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+					{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+				}
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
+			})
+
 			DescribeTable("should properly render configuration using non-Calico CNI plugin",
 				func(cni operatorv1.CNIPluginType, ipam operatorv1.IPAMPluginType, expectedEnvs []corev1.EnvVar) {
 					installlation := &operatorv1.InstallationSpec{

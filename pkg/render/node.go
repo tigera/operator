@@ -1017,7 +1017,20 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 }
 
 // cniDirectories returns the binary and network config directories for the configured platform.
+// If the user has specified a custom bin or conf dir, those will be used instead.
 func (c *nodeComponent) cniDirectories() (string, string, string) {
+	cniNetDir, cniBinDir, cniLogDir := c.cniDirectoriesForProvider()
+	if c.cfg.Installation.CNI.BinDir != "" {
+		cniBinDir = c.cfg.Installation.CNI.BinDir
+	}
+	if c.cfg.Installation.CNI.ConfDir != "" {
+		cniNetDir = c.cfg.Installation.CNI.ConfDir
+	}
+	return cniNetDir, cniBinDir, cniLogDir
+}
+
+// cniDirectoriesForProvider returns the binary and network config directories for the configured platform.
+func (c *nodeComponent) cniDirectoriesForProvider() (string, string, string) {
 	var cniBinDir, cniNetDir, cniLogDir string
 	switch c.cfg.Installation.KubernetesProvider {
 	case operatorv1.ProviderOpenShift:

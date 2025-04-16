@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -105,7 +105,7 @@ var _ = Describe("Namespace rendering tests", func() {
 
 	It("should render a namespace for aks with control-plane label when Azure.PolicyMode is Default and PodSecurityStandard is privileged", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderAKS
-		policyMode := operatorv1.Default
+		policyMode := operatorv1.PolicyModeDefault
 		cfg.Installation.Azure = &operatorv1.Azure{
 			PolicyMode: &policyMode,
 		}
@@ -121,7 +121,7 @@ var _ = Describe("Namespace rendering tests", func() {
 
 	It("should render a namespace for aks without control-plane label when Azure.PolicyMode is Manual", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderAKS
-		policyMode := operatorv1.Manual
+		policyMode := operatorv1.PolicyModeManual
 		cfg.Installation.Azure = &operatorv1.Azure{
 			PolicyMode: &policyMode,
 		}

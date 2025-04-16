@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -117,7 +117,7 @@ func CreateNamespace(name string, provider operatorv1.Provider, pss PodSecurityS
 }
 
 func applyAzurePolicy(azure *operatorv1.Azure, pss PodSecurityStandard) bool {
-	if azure == nil || azure.PolicyMode == nil || *azure.PolicyMode == operatorv1.Default {
+	if azure == nil || azure.PolicyMode == nil || *azure.PolicyMode == operatorv1.PolicyModeDefault {
 		return PSSPrivileged == pss
 	}
 	return false

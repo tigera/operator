@@ -18,7 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -150,7 +153,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	} else if goldmaneCR == nil {
 		r.status.OnCRNotFound()
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, maintainInstallationFinalizer(ctx, r.cli, nil)
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -206,6 +209,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TrustedBundle: trustedBundle,
 	})
 
+	if err := maintainInstallationFinalizer(ctx, r.cli, goldmaneCR); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, goldmaneCR)
 	cfg := &goldmane.Configuration{
 		PullSecrets:                 pullSecrets,
@@ -235,4 +243,46 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.ClearDegraded()
 
 	return reconcile.Result{}, nil
+}
+
+// maintainInstallationFinalizer manages this controller's finalizer on the Installation resource.
+// We add a finalizer to the Installation when Goldmane has been installed, and only remove that finalizer when
+// the Goldmane has been deleted and its pods have stopped running. This allows for a graceful cleanup of Goldmane resources
+// prior to the CNI plugin being removed.
+func maintainInstallationFinalizer(ctx context.Context, c client.Client, goldmaneCr *operatorv1.Goldmane) error {
+	// Get the Installation.
+	installation := &operatorv1.Installation{}
+	if err := c.Get(ctx, utils.DefaultInstanceKey, installation); err != nil {
+		if errors.IsNotFound(err) {
+			log.V(1).Info("Installation config not found")
+			return nil
+		}
+		log.Error(err, "An error occurred when querying the Installation resource")
+		return err
+	}
+	patchFrom := client.MergeFrom(installation.DeepCopy())
+
+	// Determine the correct finalizers to apply to the Installation. If the Whisker exists, we should apply
+	// a finalizer. Otherwise, if the Whisker namespace doesn't exist we should remove it. This ensures the finalizer
+	// is always present so long as the resources managed by this controller exist in the cluster.
+	if goldmaneCr != nil {
+		// Add a finalizer indicating that the Goldmane is still running.
+		utils.SetInstallationFinalizer(installation, render.GoldmaneFinalizer)
+	} else {
+		// Check if the Goldmane namespace exists, and remove the finalizer if not. Gating this on Namespace removal
+		// in the best way to approximate that all Goldmane related resources have been removed.
+		l := &corev1.Namespace{}
+		err := c.Get(ctx, types.NamespacedName{Name: goldmane.GoldmaneNamespace}, l)
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		} else if errors.IsNotFound(err) {
+			log.Info("Goldmane Namespace does not exist, removing finalizer", "finalizer", render.GoldmaneFinalizer)
+			utils.RemoveInstallationFinalizer(installation, render.GoldmaneFinalizer)
+		} else {
+			log.Info("Goldmane Namespace is still present, waiting for termination")
+		}
+	}
+
+	// Update the installation with any finalizer changes.
+	return c.Patch(ctx, installation, patchFrom)
 }

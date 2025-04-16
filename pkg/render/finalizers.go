@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,4 +27,10 @@ const (
 	// InstallationControllerFinalizer is added to the Installation by the core Installation controller when installing Calico
 	// so that Calico CNI resources are not removed until calico-kube-controllers has had time to properly be torn down.
 	InstallationControllerFinalizer = "operator.tigera.io/installation-controller"
+
+	WhiskerFinalizer = "operator.tigera.io/whisker-controller"
+
+	GuardianFinalizer = "operator.tigera.io/guardian-controller"
+
+	GoldmaneFinalizer = "operator.tigera.io/cluster-connection-controller"
 )

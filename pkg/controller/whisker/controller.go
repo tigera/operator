@@ -18,7 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -150,7 +153,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	} else if whiskerCR == nil {
 		r.status.OnCRNotFound()
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, maintainInstallationFinalizer(ctx, r.cli, nil)
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -214,6 +217,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	if err := maintainInstallationFinalizer(ctx, r.cli, whiskerCR); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
 	cfg := &whisker.Configuration{
 		PullSecrets:           pullSecrets,
@@ -267,4 +275,46 @@ func updateWhiskerWithDefaults(instance *operatorv1.Whisker) {
 	if instance.Spec.Notifications == nil {
 		instance.Spec.Notifications = ptr.ToPtr(operatorv1.Enabled)
 	}
+}
+
+// maintainInstallationFinalizer manages this controller's finalizer on the Installation resource.
+// We add a finalizer to the Installation when Whisker has been installed, and only remove that finalizer when
+// the Whisker has been deleted and its pods have stopped running. This allows for a graceful cleanup of Whisker resources
+// prior to the CNI plugin being removed.
+func maintainInstallationFinalizer(ctx context.Context, c client.Client, whiskerCr *operatorv1.Whisker) error {
+	// Get the Installation.
+	installation := &operatorv1.Installation{}
+	if err := c.Get(ctx, utils.DefaultInstanceKey, installation); err != nil {
+		if errors.IsNotFound(err) {
+			log.V(1).Info("Installation config not found")
+			return nil
+		}
+		log.Error(err, "An error occurred when querying the Installation resource")
+		return err
+	}
+	patchFrom := client.MergeFrom(installation.DeepCopy())
+
+	// Determine the correct finalizers to apply to the Installation. If the Whisker exists, we should apply
+	// a finalizer. Otherwise, if the Whisker namespace doesn't exist we should remove it. This ensures the finalizer
+	// is always present so long as the resources managed by this controller exist in the cluster.
+	if whiskerCr != nil {
+		// Add a finalizer indicating that the Whisker is still running.
+		utils.SetInstallationFinalizer(installation, render.WhiskerFinalizer)
+	} else {
+		// Check if the Whisker namespace exists, and remove the finalizer if not. Gating this on Namespace removal
+		// in the best way to approximate that all Whisker related resources have been removed.
+		l := &corev1.Namespace{}
+		err := c.Get(ctx, types.NamespacedName{Name: whisker.WhiskerNamespace}, l)
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		} else if errors.IsNotFound(err) {
+			log.Info("Whisker Namespace does not exist, removing finalizer", "finalizer", render.WhiskerFinalizer)
+			utils.RemoveInstallationFinalizer(installation, render.WhiskerFinalizer)
+		} else {
+			log.Info("Whisker Namespace is still present, waiting for termination")
+		}
+	}
+
+	// Update the installation with any finalizer changes.
+	return c.Patch(ctx, installation, patchFrom)
 }

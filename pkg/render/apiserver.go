@@ -78,12 +78,27 @@ const (
 	L7AdmissionControllerPortName                                 = "l7admctrl"
 )
 
-var TigeraAPIServerEntityRule = v3.EntityRule{
-	Services: &v3.ServiceMatch{
-		Namespace: QueryserverNamespace,
-		Name:      QueryserverServiceName,
-	},
-}
+var (
+	TigeraAPIServerEntityRule = v3.EntityRule{
+		Services: &v3.ServiceMatch{
+			Namespace: QueryserverNamespace,
+			Name:      QueryserverServiceName,
+		},
+	}
+
+	// allVerbs is a list of all verbs that are supported by the API server, used
+	// for tiered policy passthrough.
+	allVerbs = []string{
+		"get",
+		"list",
+		"watch",
+		"create",
+		"update",
+		"patch",
+		"delete",
+		"deletecollection",
+	}
+)
 
 // The following functions are helpers for determining resource names based on
 // the configured product variant.
@@ -1006,9 +1021,9 @@ func getContainerPort(cfg *APIServerConfiguration, containerName ContainerName) 
 //
 // Both Calico and Calico Enterprise, different namespaces.
 func (c *apiServerComponent) apiServerService() *corev1.Service {
-	var apiServerTargetPort = getContainerPort(c.cfg, APIServerContainerName)
-	var queryServerTargetPort = getContainerPort(c.cfg, TigeraAPIServerQueryServerContainerName)
-	var l7AdmissionControllerTargetPort = getContainerPort(c.cfg, L7AdmissionControllerContainerName)
+	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName)
+	queryServerTargetPort := getContainerPort(c.cfg, TigeraAPIServerQueryServerContainerName)
+	l7AdmissionControllerTargetPort := getContainerPort(c.cfg, L7AdmissionControllerContainerName)
 
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
@@ -2085,13 +2100,13 @@ func (c *apiServerComponent) calicoPolicyPassthruClusterRole() *rbacv1.ClusterRo
 			Name: "calico-tiered-policy-passthrough",
 		},
 		// If tiered policy is enabled we allow all authenticated users to access the main tier resource, instead
-		// restricting access using the tier.xxx resource type. Kubernetes NetworkPolicy and the
-		// StagedKubernetesNetworkPolicy are handled using normal (non-tiered) RBAC.
+		// restricting access using the tier.xxx resource type. Kubernetes NetworkPolicy and
+		// StagedKubernetesNetworkPolicy objects are handled using normal (non-tiered) RBAC.
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"networkpolicies", "globalnetworkpolicies"},
-				Verbs:     []string{"*"},
+				Verbs:     allVerbs,
 			},
 		},
 	}
@@ -2136,7 +2151,7 @@ func (c *apiServerComponent) tieredPolicyPassthruClusterRole() *rbacv1.ClusterRo
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"stagednetworkpolicies", "stagedglobalnetworkpolicies"},
-				Verbs:     []string{"*"},
+				Verbs:     allVerbs,
 			},
 		},
 	}

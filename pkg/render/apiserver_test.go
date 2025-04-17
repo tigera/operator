@@ -1214,8 +1214,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 					Expect(c.Ports[0].Name).To(Equal(queryServerPort.Name))
 					Expect(c.Ports[0].ContainerPort).To(Equal(queryServerPort.ContainerPort))
 
-					Expect(c.Env[1].Name).To(Equal("LISTEN_ADDR"))
-					Expect(c.Env[1].Value).To(Equal(fmt.Sprintf(":%d", queryServerPort.ContainerPort)))
+					Expect(c.Env[2].Name).To(Equal("LISTEN_ADDR"))
+					Expect(c.Env[2].Value).To(Equal(fmt.Sprintf(":%d", queryServerPort.ContainerPort)))
 					containersFound++
 				} else if c.Name == "calico-l7-admission-controller" {
 					Expect(c.Resources).To(Equal(rr2))

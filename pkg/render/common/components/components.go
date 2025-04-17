@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ package components
 
 import (
 	"fmt"
+	"reflect"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -273,7 +274,12 @@ func mergeContainers(current []corev1.Container, provided []corev1.Container) {
 
 	for i, c := range current {
 		if override, ok := providedMap[c.Name]; ok {
-			current[i].Resources = override.Resources
+			if !reflect.DeepEqual(override.Resources, corev1.ResourceRequirements{}) {
+				current[i].Resources = override.Resources
+			}
+			if len(override.Ports) > 0 {
+				current[i].Ports = override.Ports
+			}
 		} else {
 			log.V(1).Info(fmt.Sprintf("WARNING: the container %q was provided for an override and passed CRD validation but the container does not currently exist", c.Name))
 		}

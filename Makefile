@@ -220,6 +220,8 @@ else
   GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)
 endif
 
+# To update the Envoy Gateway version, see "Updating the bundled version of
+# Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
 ENVOY_GATEWAY_VERSION ?= v1.3.2
 ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api

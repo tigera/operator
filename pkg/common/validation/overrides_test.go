@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	apiserver "github.com/tigera/operator/pkg/common/validation/apiserver"
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
+	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -262,4 +264,100 @@ var _ = Describe("Test overrides validation (TyphaDeployment)", func() {
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).Should(HavePrefix("spec.Template.Spec.TopologySpreadConstraints is invalid: spec.template.spec.topologySpreadConstraints[0].topologyKey: Required value: can not be empty"))
 	})
+})
+
+var _ = Describe("Test overrides validation (APIServerDeployment - Container.Ports)", func() {
+	var overrides *opv1.APIServerDeployment
+
+	BeforeEach(func() {
+		overrides = &opv1.APIServerDeployment{
+			Spec: &opv1.APIServerDeploymentSpec{
+				Template: &opv1.APIServerDeploymentPodTemplateSpec{
+					Spec: &opv1.APIServerDeploymentPodSpec{
+						Containers: []opv1.APIServerDeploymentContainer{},
+					},
+				},
+			},
+		}
+	})
+
+	It("should accept custom valid ContainerPorts", func() {
+		overrides.Spec.Template.Spec.Containers = []opv1.APIServerDeploymentContainer{
+			{
+				Name: string(render.APIServerContainerName),
+				Ports: []opv1.APIServerDeploymentContainerPort{
+					{
+						Name:          render.APIServerPortName,
+						ContainerPort: 1111,
+					},
+				},
+			},
+			{
+				Name: string(render.TigeraAPIServerQueryServerContainerName),
+				Ports: []opv1.APIServerDeploymentContainerPort{
+					{
+						Name:          render.QueryServerPortName,
+						ContainerPort: 2222,
+					},
+				},
+			},
+			{
+				Name: string(render.L7AdmissionControllerContainerName),
+				Ports: []opv1.APIServerDeploymentContainerPort{
+					{
+						Name:          render.L7AdmissionControllerPortName,
+						ContainerPort: 3333,
+					},
+				},
+			},
+		}
+		err := ValidateReplicatedPodResourceOverrides(overrides, apiserver.ValidateAPIServerDeploymentContainer, apiserver.ValidateAPIServerDeploymentContainer)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	DescribeTable(
+		"should reject valid PortName in the wrong container",
+		func(c opv1.APIServerDeploymentContainer, expectedErr string) {
+			overrides.Spec.Template.Spec.Containers = []opv1.APIServerDeploymentContainer{c}
+			err := ValidateReplicatedPodResourceOverrides(overrides, apiserver.ValidateAPIServerDeploymentContainer, apiserver.ValidateAPIServerDeploymentContainer)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring(expectedErr))
+		},
+		Entry("apiserver PortName specified in the wrong container",
+			opv1.APIServerDeploymentContainer{
+				Name: string(render.QueryServerPortName),
+				Ports: []opv1.APIServerDeploymentContainerPort{
+					{
+						Name:          render.APIServerPortName,
+						ContainerPort: 1111,
+					},
+				},
+			},
+			`spec.Template.Spec.Containers["queryserver"] is invalid: spec.template.spec.containers.ports.name: Invalid value: "apiserver": port name apiserver is not valid for container queryserver`,
+		),
+		Entry("queryserver PortName specified in the wrong container",
+			opv1.APIServerDeploymentContainer{
+				Name: string(render.APIServerContainerName),
+				Ports: []opv1.APIServerDeploymentContainerPort{
+					{
+						Name:          render.QueryServerPortName,
+						ContainerPort: 1111,
+					},
+				},
+			},
+			`spec.Template.Spec.Containers["calico-apiserver"] is invalid: spec.template.spec.containers.ports.name: Invalid value: "queryserver": port name queryserver is not valid for container calico-apiserver`,
+		),
+		Entry("l7admctrl PortName specified in the wrong container",
+			opv1.APIServerDeploymentContainer{
+				Name: string(render.APIServerContainerName),
+				Ports: []opv1.APIServerDeploymentContainerPort{
+					{
+						Name:          render.L7AdmissionControllerPortName,
+						ContainerPort: 1111,
+					},
+				},
+			},
+			`spec.Template.Spec.Containers["calico-apiserver"] is invalid: spec.template.spec.containers.ports.name: Invalid value: "l7admctrl": port name l7admctrl is not valid for container calico-apiserver`,
+		),
+	)
 })

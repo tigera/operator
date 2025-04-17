@@ -49,7 +49,7 @@ type yamlKind struct {
 }
 
 // This struct defines all of the resources that we expect to read from the rendered Envoy Gateway
-// helm chart (as of v1.2.6).
+// helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
 	namespace                 *corev1.Namespace
 	k8sCRDs                   []*apiextenv1.CustomResourceDefinition

@@ -22,7 +22,7 @@ var (
 
 	ComponentAPIServer = Component{
 		Version:  "master",
-		Image:    "tigera/cnx-apiserver",
+		Image:    "tigera/apiserver",
 		Registry: "",
 	}
 
@@ -157,7 +157,7 @@ var (
 
 	ComponentManager = Component{
 		Version:  "master",
-		Image:    "tigera/cnx-manager",
+		Image:    "tigera/manager",
 		Registry: "",
 	}
 
@@ -245,7 +245,7 @@ var (
 
 	ComponentQueryServer = Component{
 		Version:  "master",
-		Image:    "tigera/cnx-queryserver",
+		Image:    "tigera/queryserver",
 		Registry: "",
 	}
 
@@ -257,13 +257,13 @@ var (
 
 	ComponentTigeraNode = Component{
 		Version:  "master",
-		Image:    "tigera/cnx-node",
+		Image:    "tigera/node",
 		Registry: "",
 	}
 
 	ComponentTigeraNodeWindows = Component{
 		Version:  "master",
-		Image:    "tigera/cnx-node-windows",
+		Image:    "tigera/node-windows",
 		Registry: "",
 	}
 

@@ -729,7 +729,7 @@ var _ = Describe("windows-controller installation tests", func() {
 							Images: []operator.Image{
 								{Image: "calico/kube-controllers", Digest: "sha256:tigerakubecontrollerhash"},
 								{Image: "calico/typha", Digest: "sha256:tigeratyphahash"},
-								{Image: "calico/node", Digest: "sha256:tigeracnxnodehash"},
+								{Image: "calico/node", Digest: "sha256:tigeranodehash"},
 								{Image: "calico/cni", Digest: "sha256:tigeracnihash"},
 								{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
 								{Image: "calico/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
@@ -740,7 +740,7 @@ var _ = Describe("windows-controller installation tests", func() {
 					}
 					if enableWindows {
 						imageSet.Spec.Images = append(imageSet.Spec.Images, []operator.Image{
-							{Image: "calico/node-windows", Digest: "sha256:tigeracnxnodewindowshash"},
+							{Image: "calico/node-windows", Digest: "sha256:tigeranodewindowshash"},
 							{Image: "calico/cni-windows", Digest: "sha256:tigeracniwindowshash"},
 						}...)
 					}
@@ -764,19 +764,19 @@ var _ = Describe("windows-controller installation tests", func() {
 						Expect(nodeWin.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s@%s",
 								components.ComponentCalicoNodeWindows.Image,
-								"sha256:tigeracnxnodewindowshash")))
+								"sha256:tigeranodewindowshash")))
 						felixWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "felix")
 						Expect(felixWin).ToNot(BeNil())
 						Expect(felixWin.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s@%s",
 								components.ComponentCalicoNodeWindows.Image,
-								"sha256:tigeracnxnodewindowshash")))
+								"sha256:tigeranodewindowshash")))
 						confdWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "confd")
 						Expect(confdWin).ToNot(BeNil())
 						Expect(confdWin.Image).To(Equal(
 							fmt.Sprintf("some.registry.org/%s@%s",
 								components.ComponentCalicoNodeWindows.Image,
-								"sha256:tigeracnxnodewindowshash")))
+								"sha256:tigeranodewindowshash")))
 						Expect(dsWin.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 						cniWin := test.GetContainer(dsWin.Spec.Template.Spec.InitContainers, "install-cni")
 						Expect(cniWin).ToNot(BeNil())

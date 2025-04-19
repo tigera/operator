@@ -598,7 +598,7 @@ var _ = Describe("Manager controller tests", func() {
 						ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 						Spec: operatorv1.ImageSetSpec{
 							Images: []operatorv1.Image{
-								{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
+								{Image: "tigera/manager", Digest: "sha256:managerhash"},
 								{Image: "tigera/ui-apis", Digest: "sha256:uiapihash"},
 								{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
 								{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
@@ -622,7 +622,7 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(mgr.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
 							components.ComponentManager.Image,
-							"sha256:cnxmanagerhash")))
+							"sha256:managerhash")))
 					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(

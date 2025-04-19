@@ -54,7 +54,7 @@ spec:
                   type: string
                 cnxVersion:
                   description:
-                    CNXVersion is the version of CNX that the cluster is
+                    CNXVersion is the version of Calico Enterprise that the cluster is
                     running
                   type: string
                 datastoreReady:

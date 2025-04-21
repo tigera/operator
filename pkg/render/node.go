@@ -915,7 +915,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
-	if c.cfg.Installation.BPFEnabled() {
+	// Mount the bpf fs for enterprise as we use BPF for some EE features.
+	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		initContainers = append(initContainers, c.bpffsInitContainer())
 	}
 
@@ -1063,7 +1064,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		)
 	}
 
-	if c.cfg.Installation.BPFEnabled() {
+	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		volumes = append(volumes,
 			// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
 			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
@@ -1335,7 +1336,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		)
 	}
-	if c.cfg.Installation.BPFEnabled() {
+	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName})
 	}
 	if c.vppDataplaneEnabled() {

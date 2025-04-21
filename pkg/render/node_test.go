@@ -785,6 +785,26 @@ var _ = Describe("Node rendering tests", func() {
 				// Verify the Flex volume container image.
 				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver").Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraFlexVolume.Image, components.ComponentTigeraFlexVolume.Version)))
 
+				// Verify the mount-bpffs image and command.
+				mountBpffs := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
+				Expect(mountBpffs.Image).To(Equal(ds.Spec.Template.Spec.Containers[0].Image))
+				Expect(mountBpffs.Command).To(Equal([]string{"calico-node", "-init"}))
+
+				Expect(*mountBpffs.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
+				Expect(*mountBpffs.SecurityContext.Privileged).To(BeTrue())
+				Expect(*mountBpffs.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
+				Expect(*mountBpffs.SecurityContext.RunAsNonRoot).To(BeFalse())
+				Expect(*mountBpffs.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
+				Expect(mountBpffs.SecurityContext.Capabilities).To(Equal(
+					&corev1.Capabilities{
+						Drop: []corev1.Capability{"ALL"},
+					},
+				))
+				Expect(mountBpffs.SecurityContext.SeccompProfile).To(Equal(
+					&corev1.SeccompProfile{
+						Type: corev1.SeccompProfileTypeRuntimeDefault,
+					}))
+
 				expectedNodeEnv := []corev1.EnvVar{
 					// Default envvars.
 					{Name: "DATASTORE_TYPE", Value: "kubernetes"},
@@ -836,7 +856,15 @@ var _ = Describe("Node rendering tests", func() {
 				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
 				Expect(len(ms.Spec.Ports)).To(Equal(2))
 
+				dirMustExist := corev1.HostPathDirectory
+				bpfVol := corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}}
+				Expect(ds.Spec.Template.Spec.Volumes).To(ContainElement(bpfVol))
+
+				bpfVolMount := corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: "bpffs"}
+				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(bpfVolMount))
+
 				verifyProbesAndLifecycle(ds, false, true)
+
 			})
 
 			It("should render felix service metric with FelixPrometheusMetricPort when FelixPrometheusMetricsEnabled is true", func() {

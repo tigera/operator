@@ -91,7 +91,7 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=v0.95
+GO_BUILD_VER?=1.24.2-llvm18.1.8-k8s1.32.3
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -741,7 +741,7 @@ DEFAULT_OS_CRDS_DIR?=.crds/calico
 read-libcalico-calico-version:
 	$(eval CALICO_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
-	yq r config/calico_versions.yml components.libcalico-go.version'))
+	yq -e ".components.libcalico-go.version" config/calico_versions.yml'))
 	if [ -z "$(CALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
@@ -759,7 +759,7 @@ DEFAULT_EE_CRDS_DIR=.crds/enterprise
 read-libcalico-enterprise-version:
 	$(eval CALICO_ENTERPRISE_BRANCH := $(shell $(CONTAINERIZED) $(CALICO_BUILD) \
 	bash -c '$(GIT_CONFIG_SSH) \
-	yq r config/enterprise_versions.yml components.libcalico-go.version'))
+	yq -e ".components.libcalico-go.version" config/enterprise_versions.yml'))
 	if [ -z "$(CALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds

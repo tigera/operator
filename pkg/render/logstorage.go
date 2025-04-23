@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -647,7 +647,7 @@ func (es *elasticsearchComponent) nodeSets() []esv1.NodeSet {
 	}
 
 	var nodeSets []esv1.NodeSet
-	if nodeConfig.NodeSets == nil || len(nodeConfig.NodeSets) < 1 {
+	if len(nodeConfig.NodeSets) < 1 {
 		nodeSet := es.nodeSetTemplate(pvcTemplate)
 		nodeSet.Name = nodeSetName(pvcTemplate)
 		nodeSet.Count = int32(nodeConfig.Count)

@@ -203,6 +203,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
+	guardianDeployment := v1.Deployment{}
 	// Fetch the managementClusterConnection.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.cli)
 	if err != nil {
@@ -210,7 +211,8 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	} else if managementClusterConnection == nil {
 		r.status.OnCRNotFound()
-		return result, maintainInstallationFinalizer(ctx, r.cli, nil)
+		var connection operatorv1.ManagementClusterConnection
+		return result, utils.MaintainInstallationFinalizer(ctx, r.cli, &connection, &guardianDeployment, render.GuardianFinalizer)
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -247,6 +249,11 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	if err := utils.ApplyDefaults(ctx, r.cli, managementClusterConnection); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if err := utils.MaintainInstallationFinalizer(ctx, r.cli, managementClusterConnection, &guardianDeployment, render.GuardianFinalizer); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -306,7 +313,6 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// Determine the current deployment availability.
 	var currentAvailabilityTransition metav1.Time
 	var currentlyAvailable bool
-	guardianDeployment := v1.Deployment{}
 	err = r.cli.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, &guardianDeployment)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read the deployment status of Guardian", err, reqLogger)
@@ -406,11 +412,6 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		includeEgressNetworkPolicy = tierAvailable && licenseActive
 	}
 
-	if err := maintainInstallationFinalizer(ctx, r.cli, managementClusterConnection); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, managementClusterConnection)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,
@@ -465,46 +466,4 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// We should create the Guardian deployment.
 	return result, nil
-}
-
-// maintainInstallationFinalizer manages this controller's finalizer on the Installation resource.
-// We add a finalizer to the Installation when Guardian has been installed, and only remove that finalizer when
-// the Guardian has been deleted and its pods have stopped running. This allows for a graceful cleanup of Guardian resources
-// prior to the CNI plugin being removed.
-func maintainInstallationFinalizer(ctx context.Context, c client.Client, mgmtClusterConnection *operatorv1.ManagementClusterConnection) error {
-	// Get the Installation.
-	installation := &operatorv1.Installation{}
-	if err := c.Get(ctx, utils.DefaultInstanceKey, installation); err != nil {
-		if k8serrors.IsNotFound(err) {
-			log.V(1).Info("Installation config not found")
-			return nil
-		}
-		log.Error(err, "An error occurred when querying the Installation resource")
-		return err
-	}
-	patchFrom := client.MergeFrom(installation.DeepCopy())
-
-	// Determine the correct finalizers to apply to the Installation. If the Whisker exists, we should apply
-	// a finalizer. Otherwise, if the Whisker namespace doesn't exist we should remove it. This ensures the finalizer
-	// is always present so long as the resources managed by this controller exist in the cluster.
-	if mgmtClusterConnection != nil {
-		// Add a finalizer indicating that the Goldmane is still running.
-		utils.SetInstallationFinalizer(installation, render.GuardianFinalizer)
-	} else {
-		// Check if the Guardian namespace exists, and remove the finalizer if not. Gating this on Namespace removal
-		// in the best way to approximate that all Guardian related resources have been removed.
-		l := &corev1.Namespace{}
-		err := c.Get(ctx, types.NamespacedName{Name: render.GuardianNamespace}, l)
-		if err != nil && !k8serrors.IsNotFound(err) {
-			return err
-		} else if k8serrors.IsNotFound(err) {
-			log.Info("Guardian Namespace does not exist, removing finalizer", "finalizer", render.GuardianFinalizer)
-			utils.RemoveInstallationFinalizer(installation, render.GuardianFinalizer)
-		} else {
-			log.Info("Guardian Namespace is still present, waiting for termination")
-		}
-	}
-
-	// Update the installation with any finalizer changes.
-	return c.Patch(ctx, installation, patchFrom)
 }

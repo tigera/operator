@@ -1,5 +1,5 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/enterprise.go.tpl
-title: v3.19.5
+title: v3.19.6
 components:
   libcalico-go:
     version: v3.19.5
@@ -103,14 +103,14 @@ components:
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
-    version: v2.54.1
+    version: v2.55.1
   prometheus:
     image: tigera/prometheus
     version: v3.19.5
   # coreos-prometheus holds the version of alertmanager built for tigera/alertmanager,
   # which prometheus operator uses to validate.
   coreos-alertmanager:
-    version: v0.27.0
+    version: v0.28.1
   alertmanager:
     image: tigera/alertmanager
     version: v3.19.5
@@ -135,7 +135,7 @@ components:
     image: tigera/eck-operator
     version: v3.19.5
   eck-elasticsearch-operator:
-    version: 2.16.0
+    version: 2.16.1
   l7-collector:
     image: tigera/l7-collector
     version: v3.19.5

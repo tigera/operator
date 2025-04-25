@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("Tests for Whisker installation", func() {
@@ -139,5 +140,25 @@ var _ = Describe("Tests for Whisker installation", func() {
 		By("Verifying resources were created")
 		ExpectResourceCreated(c, &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "whisker", Namespace: "calico-system"}})
 		ExpectResourceCreated(c, &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "goldmane", Namespace: "calico-system"}})
+
+		By("Verifying that the whisker and goldmane finalizer is created in the installation CR")
+		install := &operator.Installation{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+		Expect(GetResource(c, install)).To(BeNil())
+		Expect(install.ObjectMeta.Finalizers).To(ContainElement(render.WhiskerFinalizer))
+		Expect(install.ObjectMeta.Finalizers).To(ContainElement(render.GoldmaneFinalizer))
+
+		By("Verifying that the whisker finalizer is removed in the installation CR")
+		Expect(c.Delete(context.Background(), whiskerCR)).To(BeNil())
+		Expect(c.Delete(context.Background(), goldmaneCR)).To(BeNil())
+		Expect(c.Delete(context.Background(), &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "whisker", Namespace: "calico-system"}})).To(BeNil())
+		Expect(c.Delete(context.Background(), &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "goldmane", Namespace: "calico-system"}})).To(BeNil())
+		Eventually(func() error {
+			Expect(GetResource(c, install)).To(BeNil())
+			fmt.Println("Finalizers: ", install.ObjectMeta.Finalizers)
+			if len(install.ObjectMeta.Finalizers) != 0 {
+				return fmt.Errorf("expected finalizers to be removed")
+			}
+			return nil
+		}, 1*time.Minute, 1*time.Second).Should(BeNil())
 	})
 })

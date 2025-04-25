@@ -15,6 +15,7 @@
 package crds
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"fmt"
@@ -93,8 +94,9 @@ func getEnterpriseCRDSource() map[string][]byte {
 			panic(fmt.Sprintf("Failed to read Enterprise CRD %s: %v", entry.Name(), err))
 		}
 
-		if len(yamlDelimRe.FindAllString(string(b), -1)) > 1 {
-			panic(fmt.Sprintf("Too many yaml delimiters in Enterprise CRD %s", entry.Name()))
+		crds := bytes.Split(b, []byte("\n---"))
+		for i, crd := range crds {
+			ret[fmt.Sprintf("%s_%d", entry.Name(), i)] = yamlDelimRe.ReplaceAll(crd, []byte("\n"))
 		}
 
 		ret[entry.Name()] = yamlDelimRe.ReplaceAll(b, []byte("\n"))
@@ -122,10 +124,10 @@ func getOperatorCRDSource(variant opv1.ProductVariant) map[string][]byte {
 			panic(fmt.Sprintf("Failed to read Operator CRD %s: %v", entry.Name(), err))
 		}
 
-		if len(yamlDelimRe.FindAllString(string(b), -1)) > 1 {
-			panic(fmt.Sprintf("Too many yaml delimiters in Operator CRD %s", entry.Name()))
+		crds := bytes.Split(b, []byte("\n---"))
+		for i, crd := range crds {
+			ret[fmt.Sprintf("%s_%d", entry.Name(), i)] = yamlDelimRe.ReplaceAll(crd, []byte("\n"))
 		}
-
 		ret[entry.Name()] = yamlDelimRe.ReplaceAll(b, []byte("\n"))
 	}
 

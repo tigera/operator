@@ -146,15 +146,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Goldmane")
 
-	goldmaneDeployment := &v1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: goldmane.GoldmaneDeploymentName}}
 	goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Goldmane CR", err, reqLogger)
 		return reconcile.Result{}, err
 	} else if goldmaneCR == nil {
 		r.status.OnCRNotFound()
-		return reconcile.Result{}, utils.MaintainInstallationFinalizer(ctx, r.cli, goldmaneCR,
-			goldmaneDeployment, render.GoldmaneFinalizer)
+		return reconcile.Result{}, r.maintainFinalizer(ctx, nil)
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -210,7 +208,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TrustedBundle: trustedBundle,
 	})
 
-	if err := utils.MaintainInstallationFinalizer(ctx, r.cli, goldmaneCR, goldmaneDeployment, render.GoldmaneFinalizer); err != nil {
+	if err := r.maintainFinalizer(ctx, goldmaneCR); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -244,4 +242,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.ClearDegraded()
 
 	return reconcile.Result{}, nil
+}
+
+func (r *Reconciler) maintainFinalizer(ctx context.Context, goldmaneCr client.Object) error {
+	// These objects require graceful termination before the CNI plugin is torn down.
+	goldmaneDeployment := &v1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: goldmane.GoldmaneDeploymentName}}
+	return utils.MaintainInstallationFinalizer(ctx, r.cli, goldmaneCr, render.GoldmaneFinalizer, goldmaneDeployment)
 }

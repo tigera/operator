@@ -145,14 +145,13 @@ type Reconciler struct {
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Whisker")
-	whiskerDeployment := &v1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: whisker.WhiskerDeploymentName}}
 	whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Whisker CR", err, reqLogger)
 		return reconcile.Result{}, err
 	} else if whiskerCR == nil {
 		r.status.OnCRNotFound()
-		return reconcile.Result{}, utils.MaintainInstallationFinalizer(ctx, r.cli, whiskerCR, whiskerDeployment, render.WhiskerFinalizer)
+		return reconcile.Result{}, r.maintainFinalizer(ctx, nil)
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -216,7 +215,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	if err := utils.MaintainInstallationFinalizer(ctx, r.cli, whiskerCR, whiskerDeployment, render.WhiskerFinalizer); err != nil {
+	if err := r.maintainFinalizer(ctx, whiskerCR); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -274,4 +273,10 @@ func updateWhiskerWithDefaults(instance *operatorv1.Whisker) {
 	if instance.Spec.Notifications == nil {
 		instance.Spec.Notifications = ptr.ToPtr(operatorv1.Enabled)
 	}
+}
+
+func (r *Reconciler) maintainFinalizer(ctx context.Context, whiskerCr client.Object) error {
+	// These objects require graceful termination before the CNI plugin is torn down.
+	whiskerDeployment := &v1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: whisker.WhiskerDeploymentName}}
+	return utils.MaintainInstallationFinalizer(ctx, r.cli, whiskerCr, render.WhiskerFinalizer, whiskerDeployment)
 }

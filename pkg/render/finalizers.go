@@ -28,9 +28,13 @@ const (
 	// so that Calico CNI resources are not removed until calico-kube-controllers has had time to properly be torn down.
 	InstallationControllerFinalizer = "operator.tigera.io/installation-controller"
 
+	// WhiskerFinalizer is added to the Installation by the whisker controller when the whisker CR is created so that
+	// Calico CNI resources are not removed until the whisker controller has had time to properly delete the whisker deployment.
 	WhiskerFinalizer = "operator.tigera.io/whisker-controller"
-
+	// GuardianFinalizer is added to the Installation by the cluster connection controller when the management cluster connection CR
+	//  is created so that Calico CNI resources are not removed until the controller has had time to properly delete the guardian deployment.
 	GuardianFinalizer = "operator.tigera.io/guardian-controller"
-
+	// GoldmaneFinalizer is added to the Installation by the goldmane controller when the goldmane CR is created so that
+	// Calico CNI resources are not removed until the goldmane controller has had time to properly delete the goldmane deployment.
 	GoldmaneFinalizer = "operator.tigera.io/goldmane-controller"
 )

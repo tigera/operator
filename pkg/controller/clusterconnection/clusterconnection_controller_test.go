@@ -92,6 +92,8 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
+		mockStatus.On("OnCRNotFound").Return()
+
 		Expect(c.Create(ctx, &operatorv1.Monitor{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		}))
@@ -176,6 +178,38 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		})
 	})
 
+	Context("guardian finalizer", func() {
+		It("should be added and removed from the Installation CR", func() {
+			By("reconciling with the required prerequisites")
+			err := c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, dpl)
+			Expect(err).To(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ToNot(HaveOccurred())
+			err = c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, dpl)
+			// Verifying that there is a deployment is enough for the purpose of this test. More detailed testing will be done
+			// in the render package.
+			Expect(err).NotTo(HaveOccurred())
+			Expect(dpl.Labels["k8s-app"]).To(Equal(render.GuardianName))
+
+			By("verifying that the installation cr has a guardian finalizer")
+			install := &operatorv1.Installation{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+			Expect(test.GetResource(c, install)).To(BeNil())
+			Expect(install.ObjectMeta.Finalizers).To(ContainElement(render.GuardianFinalizer))
+
+			By("not removing the guardian finalizer when the management cluster connection is deleted and the guardian deployment is still present.")
+			Expect(c.Delete(ctx, cfg)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(test.GetResource(c, install)).To(BeNil())
+			Expect(install.ObjectMeta.Finalizers).To(ContainElement(render.GuardianFinalizer))
+
+			By("removing the guardian finalizer when the management cluster connection is deleted and the guardian deployment is deleted.")
+			Expect(c.Delete(ctx, dpl)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(test.GetResource(c, install)).To(BeNil())
+			Expect(install.ObjectMeta.Finalizers).To(Not(ContainElement(render.GuardianFinalizer)))
+		})
+	})
+
 	Context("image reconciliation", func() {
 		It("should use builtin images", func() {
 			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready)
@@ -197,6 +231,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentGuardian.Image,
 					components.ComponentGuardian.Version)))
+
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{

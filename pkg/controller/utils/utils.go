@@ -990,10 +990,10 @@ func RemoveInstallationFinalizer(i *operatorv1.Installation, finalizer string) {
 
 // maintainInstallationFinalizer manages a controller's finalizer on the Installation resource.
 // We add a finalizer to the Installation when the mainResource has been installed, and only remove that finalizer when
-// the resource has been deleted and its secondary resources have stopped running. This allows for a graceful cleanup of Guardian resources
+// the resource has been deleted and its secondary resources have stopped running. This allows for a graceful cleanup of any resources
 // prior to the CNI plugin being removed.
-func MaintainInstallationFinalizer[T client.Object, Y client.Object](ctx context.Context, c client.Client, mainResource T,
-	secondaryResource Y, finalizer string) error {
+func MaintainInstallationFinalizer(ctx context.Context, c client.Client, mainResource client.Object,
+	secondaryResource client.Object, finalizer string) error {
 	// Get the Installation.
 	installation := &operatorv1.Installation{}
 	if err := c.Get(ctx, DefaultInstanceKey, installation); err != nil {

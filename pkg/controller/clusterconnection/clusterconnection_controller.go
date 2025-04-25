@@ -203,7 +203,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
-	guardianDeployment := v1.Deployment{}
+	guardianDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}}
 	// Fetch the managementClusterConnection.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.cli)
 	if err != nil {
@@ -211,8 +211,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	} else if managementClusterConnection == nil {
 		r.status.OnCRNotFound()
-		var connection operatorv1.ManagementClusterConnection
-		return result, utils.MaintainInstallationFinalizer(ctx, r.cli, &connection, &guardianDeployment, render.GuardianFinalizer)
+		return result, utils.MaintainInstallationFinalizer(ctx, r.cli, managementClusterConnection, &guardianDeployment, render.GuardianFinalizer)
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.

@@ -32,5 +32,5 @@ const (
 
 	GuardianFinalizer = "operator.tigera.io/guardian-controller"
 
-	GoldmaneFinalizer = "operator.tigera.io/cluster-connection-controller"
+	GoldmaneFinalizer = "operator.tigera.io/goldmane-controller"
 )

@@ -444,6 +444,9 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	}
 	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
 
+	// Enable backend APIs.
+	envoyGatewayConfig.ExtensionAPIs.EnableBackend = true
+
 	// Rebuild the ConfigMap with those changes.
 	envoyGatewayConfigMap := resources.envoyGatewayConfigMap.DeepCopyObject().(*corev1.ConfigMap)
 	if bytes, err := yaml.Marshal(*envoyGatewayConfig); err == nil {

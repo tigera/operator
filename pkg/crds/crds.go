@@ -15,6 +15,7 @@
 package crds
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"fmt"
@@ -40,7 +41,6 @@ var (
 	//go:embed operator/*
 	operatorCRDFiles embed.FS
 
-	yamlDelimRe       *regexp.Regexp
 	calicoOprtrCRDsRe *regexp.Regexp
 
 	// We cache these CRDs because to generate the calico and enterprise takes
@@ -51,8 +51,6 @@ var (
 )
 
 func init() {
-	yamlDelimRe = regexp.MustCompile(`\n---`)
-
 	calicoCRDNames := []string{"installation", "apiserver", "gatewayapi", "imageset", "tigerastatus", "whisker", "goldmane", "managementclusterconnection"}
 	calicoOprtrCRDsRe = regexp.MustCompile(fmt.Sprintf("(%s)", strings.Join(calicoCRDNames, "|")))
 }
@@ -70,11 +68,10 @@ func getCalicoCRDSource() map[string][]byte {
 			panic(fmt.Sprintf("Failed to read Calico CRD %s: %v", entry.Name(), err))
 		}
 
-		if len(yamlDelimRe.FindAllString(string(b), -1)) > 1 {
-			panic(fmt.Sprintf("Too many yaml delimiters in Calico CRD %s", entry.Name()))
+		crds := bytes.Split(b, []byte("\n---"))
+		for i, crd := range crds {
+			ret[fmt.Sprintf("%s_%d", entry.Name(), i)] = crd
 		}
-
-		ret[entry.Name()] = yamlDelimRe.ReplaceAll(b, []byte("\n"))
 	}
 
 	return ret
@@ -93,11 +90,10 @@ func getEnterpriseCRDSource() map[string][]byte {
 			panic(fmt.Sprintf("Failed to read Enterprise CRD %s: %v", entry.Name(), err))
 		}
 
-		if len(yamlDelimRe.FindAllString(string(b), -1)) > 1 {
-			panic(fmt.Sprintf("Too many yaml delimiters in Enterprise CRD %s", entry.Name()))
+		crds := bytes.Split(b, []byte("\n---"))
+		for i, crd := range crds {
+			ret[fmt.Sprintf("%s_%d", entry.Name(), i)] = crd
 		}
-
-		ret[entry.Name()] = yamlDelimRe.ReplaceAll(b, []byte("\n"))
 	}
 
 	return ret
@@ -122,11 +118,10 @@ func getOperatorCRDSource(variant opv1.ProductVariant) map[string][]byte {
 			panic(fmt.Sprintf("Failed to read Operator CRD %s: %v", entry.Name(), err))
 		}
 
-		if len(yamlDelimRe.FindAllString(string(b), -1)) > 1 {
-			panic(fmt.Sprintf("Too many yaml delimiters in Operator CRD %s", entry.Name()))
+		crds := bytes.Split(b, []byte("\n---"))
+		for i, crd := range crds {
+			ret[fmt.Sprintf("%s_%d", entry.Name(), i)] = crd
 		}
-
-		ret[entry.Name()] = yamlDelimRe.ReplaceAll(b, []byte("\n"))
 	}
 
 	return ret

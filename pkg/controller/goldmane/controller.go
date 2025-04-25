@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	v1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -144,13 +146,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Goldmane")
 
+	goldmaneDeployment := &v1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: goldmane.GoldmaneDeploymentName}}
 	goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Goldmane CR", err, reqLogger)
 		return reconcile.Result{}, err
 	} else if goldmaneCR == nil {
 		r.status.OnCRNotFound()
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, utils.MaintainInstallationFinalizer(ctx, r.cli, goldmaneCR,
+			goldmaneDeployment, render.GoldmaneFinalizer)
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -205,6 +209,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		},
 		TrustedBundle: trustedBundle,
 	})
+
+	if err := utils.MaintainInstallationFinalizer(ctx, r.cli, goldmaneCR, goldmaneDeployment, render.GoldmaneFinalizer); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, goldmaneCR)
 	cfg := &goldmane.Configuration{

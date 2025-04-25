@@ -203,6 +203,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	}
 
+	guardianDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}}
 	// Fetch the managementClusterConnection.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.cli)
 	if err != nil {
@@ -210,7 +211,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	} else if managementClusterConnection == nil {
 		r.status.OnCRNotFound()
-		return result, nil
+		return result, utils.MaintainInstallationFinalizer(ctx, r.cli, managementClusterConnection, &guardianDeployment, render.GuardianFinalizer)
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -247,6 +248,11 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	if err := utils.ApplyDefaults(ctx, r.cli, managementClusterConnection); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if err := utils.MaintainInstallationFinalizer(ctx, r.cli, managementClusterConnection, &guardianDeployment, render.GuardianFinalizer); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -306,7 +312,6 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// Determine the current deployment availability.
 	var currentAvailabilityTransition metav1.Time
 	var currentlyAvailable bool
-	guardianDeployment := v1.Deployment{}
 	err = r.cli.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, &guardianDeployment)
 	if err != nil && !k8serrors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read the deployment status of Guardian", err, reqLogger)

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -260,7 +260,7 @@ var _ = Describe("Windows rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(numContainers))
 				for _, container := range ds.Spec.Template.Spec.Containers {
 					// Windows node image override results in correct image.
-					Expect(container.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+					Expect(container.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 					Expect(container.SecurityContext.Capabilities).To(BeNil())
 					Expect(container.SecurityContext.Privileged).To(BeNil())
 					Expect(container.SecurityContext.SELinuxOptions).To(BeNil())
@@ -281,7 +281,7 @@ var _ = Describe("Windows rendering tests", func() {
 				felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
 
 				// Windows node image override results in correct image.
-				Expect(felixContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+				Expect(felixContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 				Expect(felixContainer.SecurityContext.Capabilities).To(BeNil())
 				Expect(felixContainer.SecurityContext.Privileged).To(BeNil())
 				Expect(felixContainer.SecurityContext.SELinuxOptions).To(BeNil())
@@ -301,7 +301,7 @@ var _ = Describe("Windows rendering tests", func() {
 				nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
 
 				// Windows node image override results in correct image.
-				Expect(nodeContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+				Expect(nodeContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 				Expect(nodeContainer.SecurityContext.Capabilities).To(BeNil())
 				Expect(nodeContainer.SecurityContext.Privileged).To(BeNil())
 				Expect(nodeContainer.SecurityContext.SELinuxOptions).To(BeNil())
@@ -322,7 +322,7 @@ var _ = Describe("Windows rendering tests", func() {
 					confdContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd")
 
 					// Windows node image override results in correct image.
-					Expect(confdContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+					Expect(confdContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 					Expect(confdContainer.SecurityContext.Capabilities).To(BeNil())
 					Expect(confdContainer.SecurityContext.Privileged).To(BeNil())
 					Expect(confdContainer.SecurityContext.SELinuxOptions).To(BeNil())
@@ -346,7 +346,7 @@ var _ = Describe("Windows rendering tests", func() {
 				// CNI container uses image override.
 				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
-				Expect(cniContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNIWindows.Image, components.ComponentCalicoCNIWindows.Version)))
+				Expect(cniContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoCNIWindows.Image, components.ComponentCalicoCNIWindows.Version)))
 
 				Expect(cniContainer.SecurityContext.Capabilities).To(BeNil())
 				Expect(cniContainer.SecurityContext.Privileged).To(BeNil())
@@ -366,7 +366,7 @@ var _ = Describe("Windows rendering tests", func() {
 
 				// uninstall container uses image override.
 				uninstallContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico")
-				Expect(uninstallContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+				Expect(uninstallContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 
 				Expect(uninstallContainer.SecurityContext.Capabilities).To(BeNil())
 				Expect(uninstallContainer.SecurityContext.Privileged).To(BeNil())
@@ -413,6 +413,7 @@ var _ = Describe("Windows rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 					{Name: "VXLAN_VNI", Value: "4096"},
@@ -878,6 +879,7 @@ var _ = Describe("Windows rendering tests", func() {
 					{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 					{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 					{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+					{Name: "FELIX_TYPHACN", Value: "typha-server"},
 					{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 					{Name: "VXLAN_VNI", Value: "4096"},
@@ -1157,7 +1159,7 @@ var _ = Describe("Windows rendering tests", func() {
 
 		for _, container := range ds.Spec.Template.Spec.Containers {
 			// Windows image override results in correct image.
-			Expect(container.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+			Expect(container.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 		}
 
 		// Validate correct number of init containers.
@@ -1167,11 +1169,11 @@ var _ = Describe("Windows rendering tests", func() {
 		rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 		// CNI container uses image override.
-		Expect(cniContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNIWindows.Image, components.ComponentCalicoCNIWindows.Version)))
+		Expect(cniContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoCNIWindows.Image, components.ComponentCalicoCNIWindows.Version)))
 
 		// uninstall container uses image override.
 		uninstallContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico")
-		Expect(uninstallContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+		Expect(uninstallContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 
 		// Verify env
 		expectedNodeEnv := []corev1.EnvVar{
@@ -1203,6 +1205,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 			{Name: "VXLAN_VNI", Value: "4096"},
@@ -1401,6 +1404,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 			{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"},
 			{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"},
@@ -1559,13 +1563,13 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
 
 		felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
-		Expect(felixContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+		Expect(felixContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 		nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
-		Expect(nodeContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+		Expect(nodeContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 		cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
-		Expect(cniContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNIWindows.Image, components.ComponentCalicoCNIWindows.Version)))
+		Expect(cniContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoCNIWindows.Image, components.ComponentCalicoCNIWindows.Version)))
 		uninstallContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico")
-		Expect(uninstallContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+		Expect(uninstallContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 
 		// FIXME: confirm openshift CNI path defaults
 		expectedCNIVolumeMounts := []corev1.VolumeMount{
@@ -1645,6 +1649,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 			// Calico Windows specific envvars
@@ -1786,6 +1791,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"},
@@ -1940,6 +1946,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 			{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:kube-system/rke2-coredns-rke2-coredns"},
@@ -2420,17 +2427,17 @@ var _ = Describe("Windows rendering tests", func() {
 		rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
 
 		// Node image override results in correct image.
-		Expect(nodeContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
-		Expect(felixContainer.Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+		Expect(nodeContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+		Expect(felixContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 
 		// Validate correct number of init containers.
 		Expect(len(ds.Spec.Template.Spec.InitContainers)).To(Equal(2))
 
 		// CNI container uses image override.
-		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoCNIWindows.Image, components.ComponentCalicoCNIWindows.Version)))
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoCNIWindows.Image, components.ComponentCalicoCNIWindows.Version)))
 
 		// uninstall container uses image override.
-		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico").Image).To(Equal(fmt.Sprintf("docker.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
+		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico").Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNodeWindows.Image, components.ComponentCalicoNodeWindows.Version)))
 
 		// Verify env
 		expectedNodeEnv := []corev1.EnvVar{
@@ -2463,6 +2470,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{Name: "FELIX_TYPHAK8SSERVICENAME", Value: "calico-typha"},
 			{Name: "FELIX_TYPHACAFILE", Value: certificatemanagement.TrustedCertBundleMountPath},
 			{Name: "FELIX_TYPHACERTFILE", Value: "/node-certs/tls.crt"},
+			{Name: "FELIX_TYPHACN", Value: "typha-server"},
 			{Name: "FELIX_TYPHAKEYFILE", Value: "/node-certs/tls.key"},
 
 			{Name: "VXLAN_VNI", Value: "4096"},

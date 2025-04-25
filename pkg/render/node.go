@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
@@ -73,18 +74,20 @@ var (
 	// This is currently not intended to be user configurable.
 	nodeBGPReporterPort int32 = 9900
 
-	NodeTLSSecretName = "node-certs"
+	NodeTLSSecretName               = "node-certs"
+	NodeTLSSecretNameNonClusterHost = NodeTLSSecretName + TyphaNonClusterHostSuffix
 )
 
 // TyphaNodeTLS holds configuration for Node and Typha to establish TLS.
 type TyphaNodeTLS struct {
-	TrustedBundle   certificatemanagement.TrustedBundle
-	TyphaSecret     certificatemanagement.KeyPairInterface
-	TyphaCommonName string
-	TyphaURISAN     string
-	NodeSecret      certificatemanagement.KeyPairInterface
-	NodeCommonName  string
-	NodeURISAN      string
+	TrustedBundle             certificatemanagement.TrustedBundle
+	TyphaSecret               certificatemanagement.KeyPairInterface
+	TyphaSecretNonClusterHost certificatemanagement.KeyPairInterface
+	TyphaCommonName           string
+	TyphaURISAN               string
+	NodeSecret                certificatemanagement.KeyPairInterface
+	NodeCommonName            string
+	NodeURISAN                string
 }
 
 // NodeConfiguration is the public API used to provide information to the render code to
@@ -96,6 +99,7 @@ type NodeConfiguration struct {
 	IPPools         []operatorv1.IPPool
 	TLS             *TyphaNodeTLS
 	ClusterDomain   string
+	Nameservers     []string
 
 	// Optional fields.
 	LogCollector            *operatorv1.LogCollector
@@ -911,7 +915,8 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
-	if c.cfg.Installation.BPFEnabled() {
+	// Mount the bpf fs for enterprise as we use BPF for some EE features.
+	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		initContainers = append(initContainers, c.bpffsInitContainer())
 	}
 
@@ -985,6 +990,14 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		},
 	}
 
+	if len(c.cfg.Nameservers) > 0 && dns.IsDomainName(c.cfg.K8sServiceEp.Host) {
+		// If the configured k8s service endpoint is a domain name rather than an IP address, calico/node
+		// will need explicit nameservers to resolve it.
+		ds.Spec.Template.Spec.DNSConfig = &corev1.PodDNSConfig{
+			Nameservers: c.cfg.Nameservers,
+		}
+	}
+
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
@@ -1051,7 +1064,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		)
 	}
 
-	if c.cfg.Installation.BPFEnabled() {
+	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		volumes = append(volumes,
 			// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
 			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
@@ -1323,7 +1336,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		)
 	}
-	if c.cfg.Installation.BPFEnabled() {
+	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName})
 	}
 	if c.vppDataplaneEnabled() {
@@ -1438,7 +1451,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv,
 			corev1.EnvVar{
 				Name:  "FELIX_FLOWLOGSGOLDMANESERVER",
-				Value: "goldmane.calico-system.svc.cluster.local:7443",
+				Value: "goldmane.calico-system.svc:7443",
 			},
 			corev1.EnvVar{
 				Name:  "FELIX_FLOWLOGSFLUSHINTERVAL",

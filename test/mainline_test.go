@@ -28,7 +28,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -97,7 +96,7 @@ var _ = Describe("Mainline component function tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 		}
 		err = c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance)
-		Expect(errors.IsNotFound(err)).To(BeTrue(), fmt.Sprintf("Expected Installation not to exist, but got: %s", err))
+		Expect(kerror.IsNotFound(err)).To(BeTrue(), fmt.Sprintf("Expected Installation not to exist, but got: %s", err))
 	})
 
 	AfterEach(func() {
@@ -323,6 +322,9 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
 
+	clientset, err := kubernetes.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred())
+
 	// Create a manager to use in the tests.
 	skipNameValidation := true
 	mgr, err := manager.New(cfg, manager.Options{
@@ -357,6 +359,7 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 		EnterpriseCRDExists: enterpriseCRDsExist,
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
+		K8sClientset:        clientset,
 		MultiTenant:         multiTenant,
 	})
 	Expect(err).NotTo(HaveOccurred())

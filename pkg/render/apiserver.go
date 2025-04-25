@@ -47,8 +47,11 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
+type ContainerName string
+
 const (
 	APIServerPort       = 5443
+	APIServerPortName   = "apiserver"
 	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cnx-apiserver-access"
 
 	auditLogsVolumeName   = "tigera-audit-logs"
@@ -57,28 +60,45 @@ const (
 
 const (
 	QueryServerPort        = 8080
+	QueryServerPortName    = "queryserver"
 	QueryserverNamespace   = "tigera-system"
 	QueryserverServiceName = "tigera-api"
 
 	// Use the same API server container name for both OSS and Enterprise.
-	APIServerContainerName                  = "calico-apiserver"
-	APIServerK8sAppName                     = "calico-apiserver"
-	TigeraAPIServerQueryServerContainerName = "tigera-queryserver"
+	APIServerContainerName                  ContainerName = "calico-apiserver"
+	APIServerK8sAppName                                   = "calico-apiserver"
+	TigeraAPIServerQueryServerContainerName ContainerName = "tigera-queryserver"
 
-	calicoAPIServerTLSSecretName                    = "calico-apiserver-certs"
-	tigeraAPIServerTLSSecretName                    = "tigera-apiserver-certs"
-	APIServerSecretsRBACName                        = "tigera-extension-apiserver-secrets-access"
-	MultiTenantManagedClustersAccessClusterRoleName = "tigera-managed-cluster-access"
-	L7AdmissionControllerContainerName              = "calico-l7-admission-controller"
-	L7AdmissionControllerPort                       = 6443
+	calicoAPIServerTLSSecretName                                  = "calico-apiserver-certs"
+	tigeraAPIServerTLSSecretName                                  = "tigera-apiserver-certs"
+	APIServerSecretsRBACName                                      = "tigera-extension-apiserver-secrets-access"
+	MultiTenantManagedClustersAccessClusterRoleName               = "tigera-managed-cluster-access"
+	L7AdmissionControllerContainerName              ContainerName = "calico-l7-admission-controller"
+	L7AdmissionControllerPort                                     = 6443
+	L7AdmissionControllerPortName                                 = "l7admctrl"
 )
 
-var TigeraAPIServerEntityRule = v3.EntityRule{
-	Services: &v3.ServiceMatch{
-		Namespace: QueryserverNamespace,
-		Name:      QueryserverServiceName,
-	},
-}
+var (
+	TigeraAPIServerEntityRule = v3.EntityRule{
+		Services: &v3.ServiceMatch{
+			Namespace: QueryserverNamespace,
+			Name:      QueryserverServiceName,
+		},
+	}
+
+	// allVerbs is a list of all verbs that are supported by the API server, used
+	// for tiered policy passthrough.
+	allVerbs = []string{
+		"get",
+		"list",
+		"watch",
+		"create",
+		"update",
+		"patch",
+		"delete",
+		"deletecollection",
+	}
+)
 
 // The following functions are helpers for determining resource names based on
 // the configured product variant.
@@ -529,10 +549,14 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 		Action: v3.Pass,
 	})
 
+	apiServerContainerPort := getContainerPort(cfg, APIServerContainerName).ContainerPort
+	queryServerContainerPort := getContainerPort(cfg, TigeraAPIServerQueryServerContainerName).ContainerPort
+	l7AdmCtrlContainerPort := getContainerPort(cfg, L7AdmissionControllerContainerName).ContainerPort
+
 	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
-	ingressPorts := networkpolicy.Ports(443, APIServerPort, QueryServerPort, 10443)
+	ingressPorts := networkpolicy.Ports(443, uint16(apiServerContainerPort), uint16(queryServerContainerPort), 10443)
 	if cfg.IsSidecarInjectionEnabled() {
-		ingressPorts = append(ingressPorts, numorstring.Port{MinPort: L7AdmissionControllerPort, MaxPort: L7AdmissionControllerPort})
+		ingressPorts = append(ingressPorts, numorstring.Port{MinPort: uint16(l7AdmCtrlContainerPort), MaxPort: uint16(l7AdmCtrlContainerPort)})
 	}
 
 	return &v3.NetworkPolicy{
@@ -959,10 +983,48 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() (client.Object, c
 		}
 }
 
+func getContainerPort(cfg *APIServerConfiguration, containerName ContainerName) *operatorv1.APIServerDeploymentContainerPort {
+	// Try to get the override port
+	if cfg != nil &&
+		cfg.APIServer != nil &&
+		cfg.APIServer.APIServerDeployment != nil &&
+		cfg.APIServer.APIServerDeployment.Spec != nil &&
+		cfg.APIServer.APIServerDeployment.Spec.Template != nil &&
+		cfg.APIServer.APIServerDeployment.Spec.Template.Spec != nil {
+
+		containers := cfg.APIServer.APIServerDeployment.Spec.Template.Spec.Containers
+		if len(containers) > 0 {
+			for _, container := range containers {
+				if container.Name == string(containerName) && len(container.Ports) > 0 {
+					return &operatorv1.APIServerDeploymentContainerPort{
+						ContainerPort: container.Ports[0].ContainerPort,
+						Name:          container.Ports[0].Name,
+					}
+				}
+			}
+		}
+	}
+
+	// If no override port is found, return the default port
+	if containerName == APIServerContainerName {
+		return &operatorv1.APIServerDeploymentContainerPort{ContainerPort: APIServerPort}
+	} else if containerName == TigeraAPIServerQueryServerContainerName {
+		return &operatorv1.APIServerDeploymentContainerPort{ContainerPort: QueryServerPort}
+	} else if containerName == L7AdmissionControllerContainerName {
+		return &operatorv1.APIServerDeploymentContainerPort{ContainerPort: L7AdmissionControllerPort}
+	}
+
+	return nil
+}
+
 // apiServerService creates a service backed by the API server and - for enterprise - query server.
 //
 // Both Calico and Calico Enterprise, different namespaces.
 func (c *apiServerComponent) apiServerService() *corev1.Service {
+	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName)
+	queryServerTargetPort := getContainerPort(c.cfg, TigeraAPIServerQueryServerContainerName)
+	l7AdmissionControllerTargetPort := getContainerPort(c.cfg, L7AdmissionControllerContainerName)
+
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -973,10 +1035,10 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Name:       "apiserver",
+					Name:       APIServerPortName,
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(APIServerPort),
+					TargetPort: intstr.FromInt32(apiServerTargetPort.ContainerPort),
 				},
 			},
 			Selector: map[string]string{
@@ -989,10 +1051,10 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		// Add port for queryserver if enterprise.
 		s.Spec.Ports = append(s.Spec.Ports,
 			corev1.ServicePort{
-				Name:       "queryserver",
+				Name:       QueryServerPortName,
 				Port:       QueryServerPort,
 				Protocol:   corev1.ProtocolTCP,
-				TargetPort: intstr.FromInt(QueryServerPort),
+				TargetPort: intstr.FromInt32(queryServerTargetPort.ContainerPort),
 			},
 		)
 	}
@@ -1000,10 +1062,10 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 	if c.cfg.IsSidecarInjectionEnabled() {
 		s.Spec.Ports = append(s.Spec.Ports,
 			corev1.ServicePort{
-				Name:       "l7admctrl",
+				Name:       L7AdmissionControllerPortName,
 				Port:       L7AdmissionControllerPort,
 				Protocol:   corev1.ProtocolTCP,
-				TargetPort: intstr.FromInt(L7AdmissionControllerPort),
+				TargetPort: intstr.FromInt32(l7AdmissionControllerTargetPort.ContainerPort),
 			},
 		)
 	}
@@ -1107,7 +1169,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 // apiServer creates a MutatingWebhookConfiguration for sidecars.
 func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConfiguration {
 	var cacert []byte
-	var svcPort int32 = L7AdmissionControllerPort
+	var svcPort int32 = getContainerPort(c.cfg, L7AdmissionControllerContainerName).ContainerPort
 
 	svcpath := "/sidecar-webhook"
 	svcref := admregv1.ServiceReference{
@@ -1212,8 +1274,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
+	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
+
 	apiServer := corev1.Container{
-		Name:            APIServerContainerName,
+		Name:            string(APIServerContainerName),
 		Image:           c.apiServerImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Args:            c.startUpArgs(),
@@ -1223,7 +1287,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/readyz",
-					Port:   intstr.FromInt(APIServerPort),
+					Port:   intstr.FromInt32(apiServerTargetPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
@@ -1244,8 +1308,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 }
 
 func (c *apiServerComponent) startUpArgs() []string {
+	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
+
 	args := []string{
-		fmt.Sprintf("--secure-port=%d", APIServerPort),
+		fmt.Sprintf("--secure-port=%d", apiServerTargetPort),
 		fmt.Sprintf("--tls-private-key-file=%s", c.cfg.TLSKeyPair.VolumeMountKeyFilePath()),
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
 	}
@@ -1277,9 +1343,11 @@ func (c *apiServerComponent) startUpArgs() []string {
 
 // queryServerContainer creates the query server container.
 func (c *apiServerComponent) queryServerContainer() corev1.Container {
+	queryServerTargetPort := getContainerPort(c.cfg, TigeraAPIServerQueryServerContainerName).ContainerPort
+
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", QueryServerPort)},
+		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", queryServerTargetPort)},
 		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
 		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
 	}
@@ -1315,7 +1383,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	}
 
 	container := corev1.Container{
-		Name:            TigeraAPIServerQueryServerContainerName,
+		Name:            string(TigeraAPIServerQueryServerContainerName),
 		Image:           c.queryServerImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Env:             env,
@@ -1323,7 +1391,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/version",
-					Port:   intstr.FromInt(QueryServerPort),
+					Port:   intstr.FromInt32(queryServerTargetPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},
@@ -1394,7 +1462,8 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 // Calico only.
 func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
 	tcp := corev1.ProtocolTCP
-	p := intstr.FromInt(5443)
+	apiServerPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
+	p := intstr.FromInt32(apiServerPort)
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant)},
@@ -1843,7 +1912,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},
-			Verbs: []string{"get", "watch", "list"},
+			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},
@@ -2031,13 +2100,13 @@ func (c *apiServerComponent) calicoPolicyPassthruClusterRole() *rbacv1.ClusterRo
 			Name: "calico-tiered-policy-passthrough",
 		},
 		// If tiered policy is enabled we allow all authenticated users to access the main tier resource, instead
-		// restricting access using the tier.xxx resource type. Kubernetes NetworkPolicy and the
-		// StagedKubernetesNetworkPolicy are handled using normal (non-tiered) RBAC.
+		// restricting access using the tier.xxx resource type. Kubernetes NetworkPolicy and
+		// StagedKubernetesNetworkPolicy objects are handled using normal (non-tiered) RBAC.
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"networkpolicies", "globalnetworkpolicies"},
-				Verbs:     []string{"*"},
+				Verbs:     allVerbs,
 			},
 		},
 	}
@@ -2082,7 +2151,7 @@ func (c *apiServerComponent) tieredPolicyPassthruClusterRole() *rbacv1.ClusterRo
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"stagednetworkpolicies", "stagedglobalnetworkpolicies"},
-				Verbs:     []string{"*"},
+				Verbs:     allVerbs,
 			},
 		},
 	}
@@ -2272,8 +2341,10 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
 
+	l7AdmissionControllerTargetPort := getContainerPort(c.cfg, L7AdmissionControllerContainerName).ContainerPort
+
 	l7AdmssCtrl := corev1.Container{
-		Name:            L7AdmissionControllerContainerName,
+		Name:            string(L7AdmissionControllerContainerName),
 		Image:           c.l7AdmissionControllerImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Env: []corev1.EnvVar{
@@ -2293,13 +2364,17 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 				Name:  "L7ADMCTRL_DIKASTESIMAGE",
 				Value: c.dikastesImage,
 			},
+			{
+				Name:  "L7ADMCTRL_LISTENADDR",
+				Value: fmt.Sprintf(":%d", l7AdmissionControllerTargetPort),
+			},
 		},
 		VolumeMounts: volumeMounts,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
 					Path:   "/live",
-					Port:   intstr.FromInt(L7AdmissionControllerPort),
+					Port:   intstr.FromInt32(l7AdmissionControllerTargetPort),
 					Scheme: corev1.URISchemeHTTPS,
 				},
 			},

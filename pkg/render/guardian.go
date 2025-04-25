@@ -52,18 +52,22 @@ import (
 
 // The names of the components related to the Guardian related rendered objects.
 const (
-	GuardianName                   = "tigera-guardian"
+	GuardianName                   = "guardian"
 	GuardianNamespace              = common.CalicoNamespace
 	GuardianServiceAccountName     = GuardianName
-	GuardianClusterRoleName        = GuardianName
-	GuardianClusterRoleBindingName = GuardianName
+	GuardianClusterRoleName        = "calico-guardian"
+	GuardianClusterRoleBindingName = "calico-guardian"
 	GuardianDeploymentName         = GuardianName
-	GuardianServiceName            = "tigera-guardian"
-	GuardianVolumeName             = "tigera-guardian-certs"
-	GuardianSecretName             = "tigera-managed-cluster-connection"
-	GuardianTargetPort             = 8080
-	GuardianPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
-	GuardianKeyPairSecret          = "guardian-key-pair"
+
+	// GuardianContainerName name is the name of the container running guardian. It's named `tigera-guardian`, instead
+	// of `guardian` so that the API for the container overrides don't have to change (`tigera-guardian` is a legacy name).
+	GuardianContainerName = "tigera-guardian"
+	GuardianServiceName   = "guardian"
+	GuardianVolumeName    = "guardian-certs"
+	GuardianSecretName    = "tigera-managed-cluster-connection"
+	GuardianTargetPort    = 8080
+	GuardianPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
+	GuardianKeyPairSecret = "guardian-key-pair"
 
 	GoldmaneDeploymentName = "goldmane"
 )
@@ -244,21 +248,43 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 			})
 		}
 	} else {
-		policyRules = append(policyRules, rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{
-				"clusterinformations",
-				"tiers",
-				"stagednetworkpolicies",
-				"tier.stagednetworkpolicies",
-				"networkpolicies",
-				"tier.networkpolicies",
-				"globalnetworkpolicies",
-				"tier.globalnetworkpolicies",
-				"globalnetworksets",
+		policyRules = append(policyRules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"namespaces", "services", "pods"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
-			Verbs: []string{"get", "list", "watch"},
-		})
+			rbacv1.PolicyRule{
+				APIGroups: []string{"apps"},
+				Resources: []string{"deployments", "replicasets", "statefulsets", "daemonsets"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"networking.k8s.io"},
+				Resources: []string{"networkpolicies"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"clusterinformations",
+					"tiers",
+					"stagednetworkpolicies",
+					"tier.stagednetworkpolicies",
+					"stagedglobalnetworkpolicies",
+					"tier.stagedglobalnetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
+					"tier.stagedkubernetesnetworkpolicies",
+					"networkpolicies",
+					"tier.networkpolicies",
+					"globalnetworkpolicies",
+					"tier.globalnetworkpolicies",
+					"globalnetworksets",
+					"networksets",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+		)
 	}
 
 	return &rbacv1.ClusterRole{
@@ -391,7 +417,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 
 	return []corev1.Container{
 		{
-			Name:            GuardianDeploymentName,
+			Name:            GuardianContainerName,
 			Image:           c.image,
 			ImagePullPolicy: ImagePullPolicy(),
 			Env:             envVars,
@@ -439,7 +465,7 @@ func (c *GuardianComponent) annotations() map[string]string {
 func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "guardian", Namespace: GuardianNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: GuardianName, Namespace: GuardianNamespace},
 		Spec: netv1.NetworkPolicySpec{
 			PodSelector: *selector.PodLabelSelector(GuardianDeploymentName),
 			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
@@ -670,6 +696,16 @@ func deprecatedObjects() []client.Object {
 		// Namespace and everything within it should be removed.
 		&corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
+		},
+		// All the Guardian objects were moved to "calico-system" circa Calico v3.30, and so the legacy `tigera-`
+		// prefix is replaced with `calico-` for consistency, which means removing the old global resources.
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
 		},
 	}

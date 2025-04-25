@@ -28,7 +28,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
-	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/apis"
@@ -301,7 +300,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 
 		// Check if we need to do any cleanup.
 		client := mgr.GetClient()
-		instance := &v1.Installation{}
+		instance := &operatortigeraiov1.Installation{}
 		retries := 0
 		for {
 			if err := client.Get(ctx, utils.DefaultInstanceKey, instance); errors.IsNotFound(err) {
@@ -355,7 +354,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 
 	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
 	if err != nil {
-		log.Error(err, "Failed to get client for auto provider discovery")
+		log.Error(err, "Failed to get Kubernetes clientset")
 		os.Exit(1)
 	}
 
@@ -376,7 +375,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
 
 	// Determine if we need to start the Enterprise specific controllers.
-	enterpriseCRDExists, err := utils.RequiresTigeraSecure(mgr.GetConfig())
+	enterpriseCRDExists, err := utils.RequiresTigeraSecure(clientset)
 	if err != nil {
 		setupLog.Error(err, "Failed to determine if Enterprise controllers are required")
 		os.Exit(1)
@@ -388,6 +387,12 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		clusterDomain = dns.DefaultClusterDomain
 		log.Error(err, fmt.Sprintf("Couldn't find the cluster domain from the resolv.conf, defaulting to %s", clusterDomain))
 	}
+
+	nameservers, err := dns.Nameservers(dns.DefaultResolveConfPath)
+	if err != nil {
+		log.Error(err, "Couldn't find the nameservers from the resolv.conf")
+	}
+	log.Infof("Found nameservers: %v", nameservers)
 
 	kubernetesVersion, err := common.GetKubernetesVersion(clientset)
 	if err != nil {
@@ -436,9 +441,11 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
 		ClusterDomain:       clusterDomain,
+		Nameservers:         nameservers,
 		KubernetesVersion:   kubernetesVersion,
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,
+		K8sClientset:        clientset,
 		MultiTenant:         multiTenant,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
 	}

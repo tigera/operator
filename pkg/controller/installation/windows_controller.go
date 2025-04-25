@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -150,11 +149,7 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to IPAMConfiguration.
-	k8sClient, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return fmt.Errorf("tigera-windows-controller failed to establish a connection to k8s: %w", err)
-	}
-	go utils.WaitToAddResourceWatch(c, k8sClient, logw, ri.ipamConfigWatchReady, []client.Object{&apiv3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: apiv3.KindIPAMConfiguration}}})
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, logw, ri.ipamConfigWatchReady, []client.Object{&apiv3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: apiv3.KindIPAMConfiguration}}})
 
 	if ri.enterpriseCRDsExist {
 		for _, ns := range []string{common.CalicoNamespace, common.OperatorNamespace()} {
@@ -256,6 +251,13 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// We rely on the core controller for defaulting, so wait until it has done so before continuing
+	if reflect.DeepEqual(instanceStatus, operatorv1.InstallationStatus{}) {
+		err := fmt.Errorf("InstallationStatus is empty")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "InstallationStatus is empty", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Validate the configuration.
 	if err := validateCustomResource(instance); err != nil {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Invalid Installation provided", err, reqLogger)
@@ -281,12 +283,6 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// We rely on the core controller for defaulting, so wait until it has done so before continuing
-	if reflect.DeepEqual(instanceStatus, operatorv1.InstallationStatus{}) {
-		err := fmt.Errorf("InstallationStatus is empty")
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "InstallationStatus is empty", err, reqLogger)
-		return reconcile.Result{}, err
-	}
 	if instance.Spec.WindowsNodes == nil {
 		err := fmt.Errorf("Installation.Spec.WindowsNodes is nil")
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Installation.Spec.WindowsNodes is nil", err, reqLogger)

@@ -69,6 +69,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	for _, secretName := range []string{
 		goldmane.GoldmaneKeyPairSecret,
 		certificatemanagement.CASecretName,
+		whisker.WhiskerBackendKeyPairSecret,
+		render.VoltronLinseedPublicCert,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
@@ -213,6 +215,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		GoldmaneServerKeyPair:       keyPair,
 		ManagementClusterConnection: mgmtClusterConnectionCR,
 		ClusterDomain:               r.clusterDomain,
+		Goldmane:                    goldmaneCR,
 	}
 
 	components := []render.Component{certComponent, goldmane.Goldmane(cfg)}

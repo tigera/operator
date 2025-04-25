@@ -310,6 +310,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(*gatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container.Image).To(Equal("myregistry.io/calico/envoy-ratelimit:" + components.ComponentCalicoEnvoyRatelimit.Version))
 		Expect(gatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
 		Expect(*gatewayConfig.Provider.Kubernetes.ShutdownManager.Image).To(Equal("myregistry.io/calico/envoy-gateway:" + components.ComponentCalicoEnvoyGateway.Version))
+		Expect(gatewayConfig.ExtensionAPIs).NotTo(BeNil())
+		Expect(gatewayConfig.ExtensionAPIs.EnableBackend).To(BeTrue())
 	})
 
 	It("should honour private registry (Enterprise)", func() {

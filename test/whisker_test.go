@@ -132,10 +132,6 @@ var _ = Describe("Tests for Whisker installation", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 		}
 		Expect(c.Create(context.Background(), goldmaneCR)).NotTo(HaveOccurred())
-		defer func() {
-			Expect(c.Delete(shutdownContext, whiskerCR)).ShouldNot(HaveOccurred())
-			Expect(c.Delete(shutdownContext, goldmaneCR)).ShouldNot(HaveOccurred())
-		}()
 
 		By("Verifying resources were created")
 		ExpectResourceCreated(c, &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "whisker", Namespace: "calico-system"}})

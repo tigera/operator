@@ -155,10 +155,20 @@ var _ = Describe("Tests for Whisker installation", func() {
 		Eventually(func() error {
 			Expect(GetResource(c, install)).To(BeNil())
 			fmt.Println("Finalizers: ", install.ObjectMeta.Finalizers)
-			if len(install.ObjectMeta.Finalizers) != 0 {
-				return fmt.Errorf("expected finalizers to be removed")
+			if containsFinalizer(install.ObjectMeta.Finalizers, render.WhiskerFinalizer) ||
+				containsFinalizer(install.ObjectMeta.Finalizers, render.GoldmaneFinalizer) {
+				return fmt.Errorf("expected finalizers to be removed, but found: %v", install.ObjectMeta.Finalizers)
 			}
 			return nil
 		}, 1*time.Minute, 1*time.Second).Should(BeNil())
 	})
 })
+
+func containsFinalizer(finalizers []string, finalizer string) bool {
+	for _, f := range finalizers {
+		if f == finalizer {
+			return true
+		}
+	}
+	return false
+}

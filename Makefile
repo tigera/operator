@@ -221,7 +221,7 @@ else
 endif
 
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.2.6
+ENVOY_GATEWAY_VERSION ?= v1.3.2
 ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
 ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
 ENVOY_GATEWAY_RESOURCES = pkg/render/gateway_api_resources.yaml

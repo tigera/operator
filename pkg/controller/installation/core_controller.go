@@ -633,6 +633,14 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &delay
 	}
 
+	defaultCniNetDir, defaultCniBinDir := render.DefaultCNIDirectories(instance.Spec.KubernetesProvider)
+	if instance.Spec.CNI.ConfDir == nil || *instance.Spec.CNI.ConfDir == "" {
+		instance.Spec.CNI.ConfDir = &defaultCniNetDir
+	}
+	if instance.Spec.CNI.BinDir == nil || *instance.Spec.CNI.BinDir == "" {
+		instance.Spec.CNI.BinDir = &defaultCniBinDir
+	}
+
 	// While a number of the fields in this section are relevant to all CNI plugins,
 	// there are some settings which are currently only applicable if using Calico CNI.
 	// Handle those here.

@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
@@ -1017,26 +1018,6 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	return &ds
 }
 
-// cniDirectories returns the binary and network config directories for the configured platform.
-func (c *nodeComponent) cniDirectories() (string, string, string) {
-	var cniBinDir, cniNetDir, cniLogDir string
-	switch c.cfg.Installation.KubernetesProvider {
-	case operatorv1.ProviderOpenShift:
-		cniNetDir = "/var/run/multus/cni/net.d"
-		cniBinDir = "/var/lib/cni/bin"
-	case operatorv1.ProviderGKE:
-		// Used if we're installing a CNI plugin. If using the GKE plugin, these are not necessary.
-		cniBinDir = "/home/kubernetes/bin"
-		cniNetDir = "/etc/cni/net.d"
-	default:
-		// Default locations to match vanilla Kubernetes.
-		cniBinDir = "/opt/cni/bin"
-		cniNetDir = "/etc/cni/net.d"
-	}
-	cniLogDir = "/var/log/calico/cni"
-	return cniNetDir, cniBinDir, cniLogDir
-}
-
 // nodeVolumes creates the node's volumes.
 func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	fileOrCreate := corev1.HostPathFileOrCreate
@@ -1084,11 +1065,9 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 
 	// If needed for this configuration, then include the CNI volumes.
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
-		// Determine directories to use for CNI artifacts based on the provider.
-		cniNetDir, cniBinDir, cniLogDir := c.cniDirectories()
-		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniBinDir, Type: &dirOrCreate}}})
-		volumes = append(volumes, corev1.Volume{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniNetDir}}})
-		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: cniLogDir}}})
+		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: *c.cfg.Installation.CNI.BinDir, Type: &dirOrCreate}}})
+		volumes = append(volumes, corev1.Volume{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: *c.cfg.Installation.CNI.ConfDir}}})
+		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}})
 	}
 
 	// Override with Tigera-specific config.
@@ -1246,13 +1225,10 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 		return []corev1.EnvVar{}
 	}
 
-	// Determine directories to use for CNI artifacts based on the provider.
-	cniNetDir, _, _ := c.cniDirectories()
-
 	envVars := []corev1.EnvVar{
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
-		{Name: "CNI_NET_DIR", Value: cniNetDir},
+		{Name: "CNI_NET_DIR", Value: *c.cfg.Installation.CNI.ConfDir},
 		{
 			Name: "CNI_NETWORK_CONFIG",
 			ValueFrom: &corev1.EnvVarSource{
@@ -1891,4 +1867,23 @@ func getMTU(instance *operatorv1.InstallationSpec) *int32 {
 		mtu = instance.CalicoNetwork.MTU
 	}
 	return mtu
+}
+
+// DefaultCNIDirectories returns the binary and network config directories for the configured platform.
+func DefaultCNIDirectories(provider v1.Provider) (string, string) {
+	var cniBinDir, cniNetDir string
+	switch provider {
+	case operatorv1.ProviderOpenShift:
+		cniNetDir = "/var/run/multus/cni/net.d"
+		cniBinDir = "/var/lib/cni/bin"
+	case operatorv1.ProviderGKE:
+		// Used if we're installing a CNI plugin. If using the GKE plugin, these are not necessary.
+		cniBinDir = "/home/kubernetes/bin"
+		cniNetDir = "/etc/cni/net.d"
+	default:
+		// Default locations to match vanilla Kubernetes.
+		cniBinDir = "/opt/cni/bin"
+		cniNetDir = "/etc/cni/net.d"
+	}
+	return cniNetDir, cniBinDir
 }

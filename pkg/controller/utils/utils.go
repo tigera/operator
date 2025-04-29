@@ -1023,13 +1023,13 @@ func MaintainInstallationFinalizer(
 			if err != nil && !errors.IsNotFound(err) {
 				return err
 			} else if errors.IsNotFound(err) {
-				log.Info(fmt.Sprintf("Object %s in Namespace %s no longer exists", secondaryResource.GetName(), secondaryResource.GetNamespace()), "finalizer", finalizer)
+				log.Info("Object no longer exists.", secondaryResource.GetName(), secondaryResource)
 			} else {
-				log.Info(fmt.Sprintf("Object %s in Namespace %s is still present, waiting for termination", secondaryResource.GetName(), secondaryResource.GetNamespace()))
+				log.Info("Object is still present, waiting for termination", secondaryResource.GetName(), secondaryResource)
 				return nil
 			}
 		}
-		log.Info("All objects no longer exist; removing finalizer", "finalizer", finalizer)
+		log.Info("All objects no longer exist. Removing finalizer", "finalizer", finalizer)
 		RemoveInstallationFinalizer(installation, finalizer)
 	}
 

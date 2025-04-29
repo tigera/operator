@@ -499,7 +499,7 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 // We add a finalizer to the Installation when the API server has been installed, and only remove that finalizer when
 // the API server has been deleted and its pods have stopped running. This allows for a graceful cleanup of API server resources
 // prior to the CNI plugin being removed.
-func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver *operatorv1.APIServer) error {
+func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver client.Object) error {
 	// These objects require graceful termination before the CNI plugin is torn down.
 	_, spec, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {

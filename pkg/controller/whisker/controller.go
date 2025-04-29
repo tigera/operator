@@ -275,7 +275,7 @@ func updateWhiskerWithDefaults(instance *operatorv1.Whisker) {
 	}
 }
 
-func (r *Reconciler) maintainFinalizer(ctx context.Context, whiskerCr *operatorv1.Whisker) error {
+func (r *Reconciler) maintainFinalizer(ctx context.Context, whiskerCr client.Object) error {
 	// These objects require graceful termination before the CNI plugin is torn down.
 	whiskerDeployment := &v1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: whisker.WhiskerDeploymentName}}
 	return utils.MaintainInstallationFinalizer(ctx, r.cli, whiskerCr, render.WhiskerFinalizer, whiskerDeployment)

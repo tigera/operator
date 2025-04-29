@@ -244,7 +244,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-func (r *Reconciler) maintainFinalizer(ctx context.Context, goldmaneCr *operatorv1.Goldmane) error {
+func (r *Reconciler) maintainFinalizer(ctx context.Context, goldmaneCr client.Object) error {
 	// These objects require graceful termination before the CNI plugin is torn down.
 	goldmaneDeployment := &v1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: goldmane.GoldmaneDeploymentName}}
 	return utils.MaintainInstallationFinalizer(ctx, r.cli, goldmaneCr, render.GoldmaneFinalizer, goldmaneDeployment)

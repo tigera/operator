@@ -466,7 +466,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// We should create the Guardian deployment.
 	return result, nil
 }
-func (r *ReconcileConnection) maintainFinalizer(ctx context.Context, managementClusterConnection *operatorv1.ManagementClusterConnection) error {
+func (r *ReconcileConnection) maintainFinalizer(ctx context.Context, managementClusterConnection client.Object) error {
 	// These objects require graceful termination before the CNI plugin is torn down.
 	guardianDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.cli, managementClusterConnection, render.GuardianFinalizer, &guardianDeployment)

@@ -629,6 +629,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+	managedCalicoNamespaces, err := helper.ManagedCalicoNamespaces(r.client)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
 	routeConfig, err := getVoltronRouteConfig(ctx, r.client, helper.InstallNamespace())
 	if err != nil {

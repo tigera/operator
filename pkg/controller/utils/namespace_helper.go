@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -52,6 +53,9 @@ type NamespaceHelper interface {
 	// For single-tenant clusters, this simply returns the InstallNamespace.
 	TenantNamespaces(client.Client) ([]string, error)
 
+	// ManagedCalicoNamespaces returns all namespaces for all Tenants that have Calico OSS managed clusters.
+	ManagedCalicoNamespaces(client.Client) ([]string, error)
+
 	// Returns whether or not this is a multi-tenant helper.
 	MultiTenant() bool
 }
@@ -82,7 +86,18 @@ func (r *namespacer) TruthNamespace() string {
 
 func (r *namespacer) TenantNamespaces(c client.Client) ([]string, error) {
 	if r.multiTenant {
-		return TenantNamespaces(context.Background(), c)
+		return TenantNamespaces(context.Background(), c, nil)
 	}
 	return []string{r.InstallNamespace()}, nil
+}
+
+func (r *namespacer) ManagedCalicoNamespaces(c client.Client) ([]string, error) {
+	if r.multiTenant {
+		return TenantNamespaces(context.Background(), c, calicoOnly)
+	}
+	return []string{r.InstallNamespace()}, nil
+}
+
+func calicoOnly(t *operator.Tenant) bool {
+	return t.ManagedClusterIsCalico()
 }

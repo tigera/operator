@@ -1122,6 +1122,7 @@ var _ = Describe("Manager controller tests", func() {
 		Context("multi-tenant", func() {
 			tenantANamespace := "tenant-a"
 			tenantBNamespace := "tenant-b"
+
 			BeforeEach(func() {
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -1283,6 +1284,94 @@ var _ = Describe("Manager controller tests", func() {
 				err = test.GetResource(c, &clusterRoleBinding)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				Expect(clusterRoleBinding.Subjects).To(HaveLen(2))
+			})
+
+			Context("with both OSS and Enterprise managed clusters", func() {
+				tenantCNamespace := "tenant-c"
+
+				BeforeEach(func() {
+					// Create a third tenant that manages a Calico OSS cluster.
+					tenantC := &operatorv1.Tenant{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "default",
+							Namespace: tenantCNamespace,
+						},
+						Spec: operatorv1.TenantSpec{
+							ID:                    "tenant-c",
+							ManagedClusterVariant: &operatorv1.Calico,
+						},
+					}
+					Expect(c.Create(ctx, tenantC)).NotTo(HaveOccurred())
+
+					// Create certificates for this tenant.
+					certificateManagerTenantC, err := certificatemanager.Create(c, nil, "", tenantCNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantC))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(c.Create(ctx, certificateManagerTenantC.KeyPair().Secret(tenantCNamespace)))
+					managerTLStenantC, err := certificateManagerTenantC.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantCNamespace, []string{render.ManagerInternalTLSSecretName})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(c.Create(ctx, managerTLStenantC.Secret(tenantCNamespace))).NotTo(HaveOccurred())
+					bundleB, err := certificateManagerTenantC.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+					Expect(err).NotTo(HaveOccurred())
+					Expect(c.Create(ctx, bundleB.ConfigMap(tenantCNamespace))).NotTo(HaveOccurred())
+
+					// Create a Manager instance for it.
+					err = c.Create(ctx, &operatorv1.Manager{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      "tigera-secure",
+							Namespace: tenantCNamespace,
+						},
+					})
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should reconcile distinct RBAC for OSS and Enterprise managed clusters", func() {
+					// Reconcile the OSS tenant - tenant-c - and verify.
+					result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantCNamespace}})
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(result).To(Equal(reconcile.Result{}))
+
+					ossClusterRolebinding := rbacv1.ClusterRoleBinding{
+						TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name: render.ManagerManagedCalicoClusterRoleBinding,
+						},
+					}
+					err = test.GetResource(c, &ossClusterRolebinding)
+					Expect(kerror.IsNotFound(err)).Should(BeFalse())
+					Expect(ossClusterRolebinding.Subjects).To(HaveLen(1))
+					Expect(ossClusterRolebinding.Subjects[0].Name).To(Equal("tigera-manager"))
+					Expect(ossClusterRolebinding.Subjects[0].Namespace).To(Equal(tenantCNamespace))
+					Expect(ossClusterRolebinding.RoleRef.Name).To(Equal("tigera-manager-managed-calico"))
+
+					// The cluster role should exist too.
+					ossClusterRole := rbacv1.ClusterRole{
+						TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name: render.ManagerManagedCalicoClusterRole,
+						},
+					}
+					err = test.GetResource(c, &ossClusterRole)
+					Expect(kerror.IsNotFound(err)).Should(BeFalse())
+
+					// Reconcile tenant-b (the enterprise tenant) and verify.
+					result, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantBNamespace}})
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(result).To(Equal(reconcile.Result{}))
+
+					// It should have an entry for tenant-a and tenant-b, but not tenant-c.
+					clusterRoleBinding := rbacv1.ClusterRoleBinding{
+						TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name: render.ManagerClusterRoleBinding,
+						},
+					}
+					err = test.GetResource(c, &clusterRoleBinding)
+					Expect(kerror.IsNotFound(err)).Should(BeFalse())
+					Expect(clusterRoleBinding.Subjects).To(HaveLen(2))
+					for _, sub := range clusterRoleBinding.Subjects {
+						Expect(sub.Namespace).NotTo(Equal(tenantCNamespace))
+					}
+				})
 			})
 
 			It("should apply TLSRoutes in from the manager namespace", func() {

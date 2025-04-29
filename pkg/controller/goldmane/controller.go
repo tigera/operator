@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	v1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -150,7 +152,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	} else if goldmaneCR == nil {
 		r.status.OnCRNotFound()
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, r.maintainFinalizer(ctx, nil)
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -206,6 +208,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TrustedBundle: trustedBundle,
 	})
 
+	if err := r.maintainFinalizer(ctx, goldmaneCR); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, goldmaneCR)
 	cfg := &goldmane.Configuration{
 		PullSecrets:                 pullSecrets,
@@ -235,4 +242,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.ClearDegraded()
 
 	return reconcile.Result{}, nil
+}
+
+func (r *Reconciler) maintainFinalizer(ctx context.Context, goldmaneCr client.Object) error {
+	// These objects require graceful termination before the CNI plugin is torn down.
+	goldmaneDeployment := &v1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: goldmane.GoldmaneDeploymentName}}
+	return utils.MaintainInstallationFinalizer(ctx, r.cli, goldmaneCr, render.GoldmaneFinalizer, goldmaneDeployment)
 }

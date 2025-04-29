@@ -8,7 +8,7 @@ require (
 	github.com/containernetworking/cni v1.2.3
 	github.com/corazawaf/coraza-coreruleset/v4 v4.7.0
 	github.com/elastic/cloud-on-k8s/v2 v2.14.0
-	github.com/envoyproxy/gateway v1.2.6
+	github.com/envoyproxy/gateway v1.2.8
 	github.com/go-ldap/ldap v3.0.3+incompatible
 	github.com/go-logr/logr v1.4.2
 	github.com/google/go-cmp v0.6.0

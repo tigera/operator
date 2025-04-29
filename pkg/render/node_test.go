@@ -131,6 +131,9 @@ var _ = Describe("Node rendering tests", func() {
 				// Dummy service endpoint for k8s API.
 				k8sServiceEp = k8sapi.ServiceEndpoint{}
 
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
+
 				// Create a default configuration.
 				cfg = render.NodeConfiguration{
 					K8sServiceEp:                  k8sServiceEp,
@@ -1844,6 +1847,8 @@ var _ = Describe("Node rendering tests", func() {
 
 				defaultInstance.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 				cfg.FelixHealthPort = 9199
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
@@ -1970,6 +1975,8 @@ var _ = Describe("Node rendering tests", func() {
 
 				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 				cfg.NodeReporterMetricsPort = 9081
 				cfg.FelixHealthPort = 9199
 
@@ -2077,6 +2084,8 @@ var _ = Describe("Node rendering tests", func() {
 
 				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
 				defaultInstance.KubernetesProvider = operatorv1.ProviderRKE2
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 				cfg.NodeReporterMetricsPort = 9081
 				cfg.FelixHealthPort = 9199
 
@@ -2180,6 +2189,8 @@ var _ = Describe("Node rendering tests", func() {
 					"template-1.yaml": "dataforTemplate1 that is not used here",
 				}
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()
@@ -2224,6 +2235,8 @@ var _ = Describe("Node rendering tests", func() {
 			Describe("AKS", func() {
 				It("should avoid virtual nodes", func() {
 					defaultInstance.KubernetesProvider = operatorv1.ProviderAKS
+					defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+					defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 					component := render.Node(&cfg)
 					Expect(component.ResolveImages(nil)).To(BeNil())
 					resources, _ := component.Objects()
@@ -2250,6 +2263,8 @@ var _ = Describe("Node rendering tests", func() {
 			Describe("EKS", func() {
 				It("should avoid virtual fargate nodes", func() {
 					defaultInstance.KubernetesProvider = operatorv1.ProviderEKS
+					defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+					defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 					component := render.Node(&cfg)
 					Expect(component.ResolveImages(nil)).To(BeNil())
 					resources, _ := component.Objects()
@@ -2353,6 +2368,8 @@ var _ = Describe("Node rendering tests", func() {
 
 			It("should include updates needed for the core upgrade", func() {
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 				cfg.MigrateNamespaces = true
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
@@ -3213,6 +3230,8 @@ var _ = Describe("Node rendering tests", func() {
 				func(isOpenshift, isEnterprise bool, bgpOption operatorv1.BGPOption) {
 					if isOpenshift {
 						defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+						defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+						defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 						cfg.FelixHealthPort = 9199
 					}
 

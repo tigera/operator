@@ -501,10 +501,10 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 // prior to the CNI plugin being removed.
 func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver *operatorv1.APIServer) error {
 	// These objects require graceful termination before the CNI plugin is torn down.
-	installVariant, _, err := utils.GetInstallation(context.Background(), r.client)
+	_, spec, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		return err
 	}
-	apiServerNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: rmeta.APIServerNamespace(installVariant)}}
+	apiServerNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: rmeta.APIServerNamespace(spec.Variant)}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, apiserver, render.APIServerFinalizer, apiServerNamespace)
 }

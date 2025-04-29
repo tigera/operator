@@ -934,7 +934,7 @@ type CNISpec struct {
 	// +optional
 	// +kubebuilder:default:="/opt/cni/bin"
 	// +kubebuilder:validation:Type=string
-	BinDir string `json:"binDir,omitempty"`
+	BinDir *string `json:"binDir,omitempty"`
 
 	// ConfDir is the path to the CNI config directory.
 	// If you have changed the installation directory for CNI configuration in the container runtime configuration,
@@ -943,7 +943,7 @@ type CNISpec struct {
 	// +optional
 	// +kubebuilder:default:="/etc/cni/net.d"
 	// +kubebuilder:validation:Type=string
-	ConfDir string `json:"confDir,omitempty"`
+	ConfDir *string `json:"confDir,omitempty"`
 }
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.

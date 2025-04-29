@@ -1020,11 +1020,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 // If the user has specified a custom bin or conf dir, those will be used instead.
 func (c *nodeComponent) cniDirectories() (string, string, string) {
 	cniNetDir, cniBinDir, cniLogDir := c.cniDirectoriesForProvider()
-	if c.cfg.Installation.CNI.BinDir != "" {
-		cniBinDir = c.cfg.Installation.CNI.BinDir
+	if c.cfg.Installation.CNI.BinDir != nil {
+		cniBinDir = *c.cfg.Installation.CNI.BinDir
 	}
-	if c.cfg.Installation.CNI.ConfDir != "" {
-		cniNetDir = c.cfg.Installation.CNI.ConfDir
+	if c.cfg.Installation.CNI.ConfDir != nil {
+		cniNetDir = *c.cfg.Installation.CNI.ConfDir
 	}
 	return cniNetDir, cniBinDir, cniLogDir
 }

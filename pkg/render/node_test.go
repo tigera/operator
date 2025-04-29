@@ -1383,8 +1383,9 @@ var _ = Describe("Node rendering tests", func() {
 			})
 
 			It("should return customized CNI directories when specified", func() {
-				cfg.Installation.CNI.BinDir = "/custom/cni/bin"
-				cfg.Installation.CNI.ConfDir = "/custom/cni/net.d"
+				customBinDir, customConfDir := "/custom/cni/bin", "/custom/cni/net.d"
+				cfg.Installation.CNI.BinDir = &customBinDir
+				cfg.Installation.CNI.ConfDir = &customConfDir
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()

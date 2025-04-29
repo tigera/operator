@@ -146,8 +146,6 @@ var _ = Describe("Tests for Whisker installation", func() {
 		By("Verifying that the whisker finalizer is removed in the installation CR")
 		Expect(c.Delete(context.Background(), whiskerCR)).To(BeNil())
 		Expect(c.Delete(context.Background(), goldmaneCR)).To(BeNil())
-		Expect(c.Delete(context.Background(), &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "whisker", Namespace: "calico-system"}})).To(BeNil())
-		Expect(c.Delete(context.Background(), &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "goldmane", Namespace: "calico-system"}})).To(BeNil())
 		Eventually(func() error {
 			Expect(GetResource(c, install)).To(BeNil())
 			fmt.Println("Finalizers: ", install.ObjectMeta.Finalizers)

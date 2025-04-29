@@ -173,3 +173,47 @@ spec:
         - name: calico-node
           image: calico/node:my-special-tag
 ```
+
+### Updating the bundled version of Envoy Gateway
+
+1. In `go.mod`, update the version for `github.com/envoyproxy/gateway`.
+
+1. Run `make mod-tidy`.  If this indicates needing other changes, e.g. bumping the go-build version, do that.  (For example, for a possible move to Envoy Gateway v1.3.2 - not yet committed - I needed to update `GO_BUILD_VER` from `v0.95` to `1.23.6-llvm18.1.8-k8s1.31.5`, because Envoy Gateway v1.3.2 requires golang v1.23.6.)
+
+1. In `Makefile`, update `ENVOY_GATEWAY_VERSION`.
+
+1. Delete `pkg/render/gateway_api_resources.yaml`.
+
+1. Run `make build`.  This will generate a new version of `pkg/render/gateway_api_resources.yaml` and then build the operator image.
+
+1. Review diffs between the old and new versions of `pkg/render/gateway_api_resources.yaml` (e.g. using `git diff`) to identify:
+
+   - any incompatible changes that would need changes in our Gateway-related operator coding or image building
+
+   - any entirely new CRDs or resources, that would need changes in `pkg/render/gateway_api.go`.
+
+1. Address build issues if there are any.
+
+1. Run `make ut`, and address issues if there are any.
+
+1. Commit everything and post as a `tigera/operator` PR.
+
+1. Identify the corresponding new versions of the `gateway`, `proxy` and `ratelimit` images.
+
+   - The `gateway` version can be found by looking for "envoyproxy/gateway" in `pkg/render/gateway_api_resources.yaml`, and probably also in the Envoy Gateway release notes ([for example](https://github.com/envoyproxy/gateway/releases/tag/v1.3.2)).  It should be the same as the nominal Envoy Gateway version that you're updating to.
+
+   - The `proxy` version can be found in the Envoy Gateway release notes, or by referring to [this compatibility matrix](https://gateway.envoyproxy.io/news/releases/matrix/).
+
+   - The `ratelimit` version can be found by looking for "envoyproxy/ratelimit" in `pkg/render/gateway_api_resources.yaml`, and probably also in the Envoy Gateway release notes.
+
+1. Switching to the `projectcalico/calico` repo, update the code under `third_party/envoy-{gateway,proxy,ratelimit}` to build those new image versions.  In each case:
+
+   - Update the relevant version (e.g. `ENVOY_GATEWAY_VERSION`) in `Makefile`.
+
+   - Review if any existing patches are still required, and remove them if not.
+
+   - Review if any existing patches still apply cleanly, and update them if not.
+
+1. Commit everything and post as a `projectcalico/calico` PR.
+
+1. Review, address issues, merge, monitor hashrelease builds, address any further issues, etc.

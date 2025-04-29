@@ -57,7 +57,7 @@ type NamespaceHelper interface {
 	// For single-tenant clusters, this simply returns the InstallNamespace.
 	TenantNamespaces(client.Client) ([]string, error)
 
-	// FilteredTenantNamespaces returns all namespaces for all Tenants that have Calico OSS managed clusters.
+	// FilteredTenantNamespaces returns all namespaces for all Tenants that match the given filter.
 	FilteredTenantNamespaces(client.Client, TenantFilter) ([]string, error)
 
 	// Returns whether or not this is a multi-tenant helper.

@@ -5339,20 +5339,24 @@ spec:
                   description: CNI specifies the CNI that will be used by this installation.
                   properties:
                     binDir:
-                      default: /opt/cni/bin
                       description: |-
                         BinDir is the path to the CNI binaries directory.
                         If you have changed the installation directory for CNI binaries in the container runtime configuration,
                         please ensure that this field points to the same directory as specified in the container runtime settings.
-                        Default: /opt/cni/bin
+                        Default directory depends on the KubernetesProvider.
+                        * For KubernetesProvider GKE, this field defaults to "/home/kubernetes/bin".
+                        * For KubernetesProvider OpenShift, this field defaults to "/var/lib/cni/bin".
+                        * Otherwise, this field defaults to "/opt/cni/bin".
                       type: string
                     confDir:
-                      default: /etc/cni/net.d
                       description: |-
                         ConfDir is the path to the CNI config directory.
                         If you have changed the installation directory for CNI configuration in the container runtime configuration,
                         please ensure that this field points to the same directory as specified in the container runtime settings.
-                        Default: /etc/cni/net.d
+                        Default directory depends on the KubernetesProvider.
+                        * For KubernetesProvider GKE, this field defaults to "/etc/cni/net.d".
+                        * For KubernetesProvider OpenShift, this field defaults to "/var/run/multus/cni/net.d".
+                        * Otherwise, this field defaults to "/etc/cni/net.d".
                       type: string
                     ipam:
                       description: |-
@@ -14152,20 +14156,24 @@ spec:
                       description: CNI specifies the CNI that will be used by this installation.
                       properties:
                         binDir:
-                          default: /opt/cni/bin
                           description: |-
                             BinDir is the path to the CNI binaries directory.
                             If you have changed the installation directory for CNI binaries in the container runtime configuration,
                             please ensure that this field points to the same directory as specified in the container runtime settings.
-                            Default: /opt/cni/bin
+                            Default directory depends on the KubernetesProvider.
+                            * For KubernetesProvider GKE, this field defaults to "/home/kubernetes/bin".
+                            * For KubernetesProvider OpenShift, this field defaults to "/var/lib/cni/bin".
+                            * Otherwise, this field defaults to "/opt/cni/bin".
                           type: string
                         confDir:
-                          default: /etc/cni/net.d
                           description: |-
                             ConfDir is the path to the CNI config directory.
                             If you have changed the installation directory for CNI configuration in the container runtime configuration,
                             please ensure that this field points to the same directory as specified in the container runtime settings.
-                            Default: /etc/cni/net.d
+                            Default directory depends on the KubernetesProvider.
+                            * For KubernetesProvider GKE, this field defaults to "/etc/cni/net.d".
+                            * For KubernetesProvider OpenShift, this field defaults to "/var/run/multus/cni/net.d".
+                            * Otherwise, this field defaults to "/etc/cni/net.d".
                           type: string
                         ipam:
                           description: |-

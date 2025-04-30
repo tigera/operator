@@ -1425,7 +1425,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		OpenShift:               roc.openshift,
 		Namespace:               roc.ns,
 		BindingNamespaces:       roc.bindingNamespaces,
-		ManagedCalicoNamespaces: roc.ossBindingNamepsaces,
+		OSSTenantNamespaces:     roc.ossBindingNamepsaces,
 		TruthNamespace:          common.OperatorNamespace(),
 		Tenant:                  roc.tenant,
 		Manager:                 roc.manager,

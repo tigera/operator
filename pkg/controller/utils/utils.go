@@ -1023,9 +1023,9 @@ func MaintainInstallationFinalizer(
 			if err != nil && !errors.IsNotFound(err) {
 				return err
 			} else if errors.IsNotFound(err) {
-				log.Info("Object no longer exists.", secondaryResource.GetName(), secondaryResource)
+				log.Info("Object no longer exists.", "object", secondaryResource)
 			} else {
-				log.Info("Object is still present, waiting for termination", secondaryResource.GetName(), secondaryResource)
+				log.Info("Object is still present, waiting for termination", "object", secondaryResource)
 				return nil
 			}
 		}

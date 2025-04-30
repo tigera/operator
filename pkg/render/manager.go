@@ -49,14 +49,21 @@ import (
 )
 
 const (
-	managerPort                  = 9443
-	managerTargetPort            = 9443
-	ManagerServiceName           = "tigera-manager"
-	ManagerDeploymentName        = "tigera-manager"
-	ManagerNamespace             = "tigera-manager"
-	ManagerServiceAccount        = "tigera-manager"
-	ManagerClusterRole           = "tigera-manager-role"
-	ManagerClusterRoleBinding    = "tigera-manager-binding"
+	managerPort           = 9443
+	managerTargetPort     = 9443
+	ManagerServiceName    = "tigera-manager"
+	ManagerDeploymentName = "tigera-manager"
+	ManagerNamespace      = "tigera-manager"
+	ManagerServiceAccount = "tigera-manager"
+
+	// Default manager RBAC resources.
+	ManagerClusterRole        = "tigera-manager-role"
+	ManagerClusterRoleBinding = "tigera-manager-binding"
+
+	// Manager RBAC resources for Calico managed clusters.
+	ManagerManagedCalicoClusterRole        = "tigera-manager-managed-calico"
+	ManagerManagedCalicoClusterRoleBinding = "tigera-manager-managed-calico"
+
 	ManagerTLSSecretName         = "manager-tls"
 	ManagerInternalTLSSecretName = "internal-manager-tls"
 	ManagerPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "manager-access"
@@ -158,9 +165,15 @@ type ManagerConfiguration struct {
 	ComplianceLicenseActive bool
 	ComplianceNamespace     string
 
-	Namespace         string
-	TruthNamespace    string
+	Namespace      string
+	TruthNamespace string
+
+	// Single namespace to which RBAC should be bound, in single-tenant systems.
+	// List of all tenant namespaces, in a multi-tenant system.
 	BindingNamespaces []string
+
+	// List of namespaces for Tenants who manage Calico OSS clusters, in a multi-tenant system.
+	OSSTenantNamespaces []string
 
 	// Whether to run the rendered components in multi-tenant, single-tenant, or zero-tenant mode
 	Tenant          *operatorv1.Tenant
@@ -229,7 +242,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objs = append(objs,
-		managerClusterRoleBinding(c.cfg.BindingNamespaces),
+		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
 		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
 	)
 
@@ -695,17 +708,30 @@ func managerServiceAccount(ns string) *corev1.ServiceAccount {
 	}
 }
 
-func managerClusterRoleBinding(namespaces []string) client.Object {
-	return rcomponents.ClusterRoleBinding(ManagerClusterRoleBinding, ManagerClusterRole, ManagerServiceAccount, namespaces)
+func managerClusterRoleBinding(tenant *operatorv1.Tenant, namespaces, calicoNamespaces []string) client.Object {
+	// Different tenant types use different permission sets.
+	roleName := ManagerClusterRole
+	bindingName := ManagerClusterRoleBinding
+	chosenNamespaces := namespaces
+	if tenant.ManagedClusterIsCalico() {
+		roleName = ManagerManagedCalicoClusterRole
+		bindingName = ManagerManagedCalicoClusterRoleBinding
+		chosenNamespaces = calicoNamespaces
+	}
+	return rcomponents.ClusterRoleBinding(bindingName, roleName, ManagerServiceAccount, chosenNamespaces)
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
 func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant) *rbacv1.ClusterRole {
+	// Different tenant types use different permission sets.
+	name := ManagerClusterRole
+	if tenant.ManagedClusterIsCalico() {
+		name = ManagerManagedCalicoClusterRole
+	}
+
 	cr := &rbacv1.ClusterRole{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: ManagerClusterRole,
-		},
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"authorization.k8s.io"},

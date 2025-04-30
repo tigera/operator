@@ -147,6 +147,7 @@ var _ = Describe("Rendering tests", func() {
 	one := intstr.FromInt(1)
 	miMode := operatorv1.MultiInterfaceModeNone
 	k8sServiceEp := k8sapi.ServiceEndpoint{}
+	defaultCNIConfDir, defaultCNIBinDir := "/etc/cni/net.d", "/opt/cni/bin"
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -157,6 +158,8 @@ var _ = Describe("Rendering tests", func() {
 				IPAM: &operatorv1.IPAMSpec{
 					Type: operatorv1.IPAMPluginCalico,
 				},
+				BinDir:  &defaultCNIBinDir,
+				ConfDir: &defaultCNIConfDir,
 			},
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{
 				IPPools:            []operatorv1.IPPool{{CIDR: "192.168.1.0/16"}},

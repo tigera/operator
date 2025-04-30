@@ -131,6 +131,9 @@ var _ = Describe("Node rendering tests", func() {
 				// Dummy service endpoint for k8s API.
 				k8sServiceEp = k8sapi.ServiceEndpoint{}
 
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
+
 				// Create a default configuration.
 				cfg = render.NodeConfiguration{
 					K8sServiceEp:                  k8sServiceEp,
@@ -1410,6 +1413,33 @@ var _ = Describe("Node rendering tests", func() {
 				verifyProbesAndLifecycle(ds, false, true)
 			})
 
+			It("should return customized CNI directories when specified", func() {
+				customBinDir, customConfDir := "/custom/cni/bin", "/custom/cni/net.d"
+				cfg.Installation.CNI.BinDir = &customBinDir
+				cfg.Installation.CNI.ConfDir = &customConfDir
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+				dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+				Expect(dsResource).ToNot(BeNil())
+
+				// The DaemonSet should have the correct configuration.
+				ds := dsResource.(*appsv1.DaemonSet)
+
+				dirOrCreate := corev1.HostPathDirectoryOrCreate
+				expectedVols := []corev1.Volume{
+					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/custom/cni/bin", Type: &dirOrCreate}}},
+					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/custom/cni/net.d"}}},
+					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+				}
+				Expect(ds.Spec.Template.Spec.Volumes).To(ContainElements(expectedVols))
+				expectedCNIVolumeMounts := []corev1.VolumeMount{
+					{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
+					{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
+				}
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
+			})
+
 			DescribeTable("should properly render configuration using non-Calico CNI plugin",
 				func(cni operatorv1.CNIPluginType, ipam operatorv1.IPAMPluginType, expectedEnvs []corev1.EnvVar) {
 					installlation := &operatorv1.InstallationSpec{
@@ -1845,6 +1875,8 @@ var _ = Describe("Node rendering tests", func() {
 
 				defaultInstance.FlexVolumePath = "/etc/kubernetes/kubelet-plugins/volume/exec/"
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 				cfg.FelixHealthPort = 9199
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
@@ -1971,6 +2003,8 @@ var _ = Describe("Node rendering tests", func() {
 
 				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 				cfg.NodeReporterMetricsPort = 9081
 				cfg.FelixHealthPort = 9199
 
@@ -2078,6 +2112,8 @@ var _ = Describe("Node rendering tests", func() {
 
 				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
 				defaultInstance.KubernetesProvider = operatorv1.ProviderRKE2
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 				cfg.NodeReporterMetricsPort = 9081
 				cfg.FelixHealthPort = 9199
 
@@ -2181,6 +2217,8 @@ var _ = Describe("Node rendering tests", func() {
 					"template-1.yaml": "dataforTemplate1 that is not used here",
 				}
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()
@@ -2225,6 +2263,8 @@ var _ = Describe("Node rendering tests", func() {
 			Describe("AKS", func() {
 				It("should avoid virtual nodes", func() {
 					defaultInstance.KubernetesProvider = operatorv1.ProviderAKS
+					defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+					defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 					component := render.Node(&cfg)
 					Expect(component.ResolveImages(nil)).To(BeNil())
 					resources, _ := component.Objects()
@@ -2251,6 +2291,8 @@ var _ = Describe("Node rendering tests", func() {
 			Describe("EKS", func() {
 				It("should avoid virtual fargate nodes", func() {
 					defaultInstance.KubernetesProvider = operatorv1.ProviderEKS
+					defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+					defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 					component := render.Node(&cfg)
 					Expect(component.ResolveImages(nil)).To(BeNil())
 					resources, _ := component.Objects()
@@ -2354,6 +2396,8 @@ var _ = Describe("Node rendering tests", func() {
 
 			It("should include updates needed for the core upgrade", func() {
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 				cfg.MigrateNamespaces = true
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
@@ -3214,6 +3258,8 @@ var _ = Describe("Node rendering tests", func() {
 				func(isOpenshift, isEnterprise bool, bgpOption operatorv1.BGPOption) {
 					if isOpenshift {
 						defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
+						defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
+						defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
 						cfg.FelixHealthPort = 9199
 					}
 

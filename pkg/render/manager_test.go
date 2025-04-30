@@ -1098,7 +1098,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				complianceFeatureActive: true,
 				ns:                      tenantBNamespace,
 				bindingNamespaces:       []string{tenantANamespace, tenantBNamespace},
-				ossBindingNamepsaces:    []string{tenantBNamespace},
+				ossBindingNamespaces:    []string{tenantBNamespace},
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tenantB",
@@ -1111,7 +1111,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				},
 			})
 
-			// It should only bind to the ossBindingNamepsaces.
+			// It should only bind to the ossBindingNamespaces.
 			crb := rtest.GetResource(resources, render.ManagerManagedCalicoClusterRoleBinding, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 			Expect(crb.Subjects).To(Equal([]rbacv1.Subject{
 				{
@@ -1359,7 +1359,7 @@ type renderConfig struct {
 	openshift               bool
 	ns                      string
 	bindingNamespaces       []string
-	ossBindingNamepsaces    []string
+	ossBindingNamespaces    []string
 	tenant                  *operatorv1.Tenant
 	manager                 *operatorv1.Manager
 	externalElastic         bool
@@ -1425,7 +1425,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		OpenShift:               roc.openshift,
 		Namespace:               roc.ns,
 		BindingNamespaces:       roc.bindingNamespaces,
-		OSSTenantNamespaces:     roc.ossBindingNamepsaces,
+		OSSTenantNamespaces:     roc.ossBindingNamespaces,
 		TruthNamespace:          common.OperatorNamespace(),
 		Tenant:                  roc.tenant,
 		Manager:                 roc.manager,

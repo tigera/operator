@@ -632,7 +632,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Determine the namespaces to which we must bind the cluster role.
-	namespaces, err := helper.TenantNamespaces(r.client)
+	namespaces, err := helper.FilteredTenantNamespaces(r.client, utils.ManagedEnterpriseOnly)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	ossTenantNamespaces, err := helper.FilteredTenantNamespaces(r.client, utils.ManagedCalicoOnly)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -680,6 +684,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Tenant:                  tenant,
 		ExternalElastic:         r.elasticExternal,
 		BindingNamespaces:       namespaces,
+		OSSTenantNamespaces:     ossTenantNamespaces,
 		Manager:                 instance,
 	}
 

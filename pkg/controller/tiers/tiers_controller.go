@@ -207,7 +207,7 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 	}
 	if r.multiTenant {
 		// For multi-tenant clusters, we need to include well-known namespaces as well as per-tenant namespaces.
-		tenantNamespaces, err := utils.TenantNamespaces(ctx, r.client)
+		tenantNamespaces, err := utils.TenantNamespaces(ctx, r.client, nil)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying tenant namespaces", err, reqLogger)
 			return nil, &reconcile.Result{RequeueAfter: utils.StandardRetry}

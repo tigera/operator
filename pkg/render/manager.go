@@ -173,7 +173,7 @@ type ManagerConfiguration struct {
 	BindingNamespaces []string
 
 	// List of namespaces for Tenants who manage Calico OSS clusters, in a multi-tenant system.
-	ManagedCalicoNamespaces []string
+	OSSTenantNamespaces []string
 
 	// Whether to run the rendered components in multi-tenant, single-tenant, or zero-tenant mode
 	Tenant          *operatorv1.Tenant
@@ -242,7 +242,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objs = append(objs,
-		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.ManagedCalicoNamespaces),
+		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
 		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
 	)
 

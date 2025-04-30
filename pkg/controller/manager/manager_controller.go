@@ -636,7 +636,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	managedCalicoNamespaces, err := helper.FilteredTenantNamespaces(r.client, utils.ManagedCalicoOnly)
+	ossTenantNamespaces, err := helper.FilteredTenantNamespaces(r.client, utils.ManagedCalicoOnly)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -684,7 +684,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Tenant:                  tenant,
 		ExternalElastic:         r.elasticExternal,
 		BindingNamespaces:       namespaces,
-		ManagedCalicoNamespaces: managedCalicoNamespaces,
+		OSSTenantNamespaces:     ossTenantNamespaces,
 		Manager:                 instance,
 	}
 

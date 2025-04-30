@@ -538,7 +538,8 @@ func GetTenant(ctx context.Context, mt bool, cli client.Client, ns string) (*ope
 }
 
 // TenantNamespaces returns all namespaces that contain a tenant.
-func TenantNamespaces(ctx context.Context, cli client.Client) ([]string, error) {
+// include is an optional filter function that returns true if the tenant should be included, false otherwise.
+func TenantNamespaces(ctx context.Context, cli client.Client, include TenantFilter) ([]string, error) {
 	namespaces := []string{}
 	tenants := operatorv1.TenantList{}
 	err := cli.List(ctx, &tenants)
@@ -546,7 +547,9 @@ func TenantNamespaces(ctx context.Context, cli client.Client) ([]string, error) 
 		return nil, err
 	}
 	for _, t := range tenants.Items {
-		namespaces = append(namespaces, t.Namespace)
+		if include == nil || include(&t) {
+			namespaces = append(namespaces, t.Namespace)
+		}
 	}
 
 	// Sort the namespaces, so that the output is deterministic.

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -118,6 +118,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		logFileMaxSize := resource.MustParse("50Mi")
 		logSeverity := operator.LogLevelError
 		var linuxPolicySetupTimeoutSeconds int32 = 1
+		cniBinDir := "/opt/custom/cni/bin"
+		cniConfDir := "/etc/custom/cni/net.d"
 
 		hpEnabled := operator.HostPortsEnabled
 		disabled := operator.BGPDisabled
@@ -139,8 +141,10 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 				CNI: &operator.CNISpec{
-					Type: operator.PluginCalico,
-					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+					Type:    operator.PluginCalico,
+					IPAM:    &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+					BinDir:  &cniBinDir,
+					ConfDir: &cniConfDir,
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					LinuxDataplane:   &dpIptables, // Actually the default but BPF would make other values invalid.
@@ -211,6 +215,8 @@ var _ = Describe("Defaulting logic tests", func() {
 		var logFileMaxAgeDays uint32 = 10
 		logFileMaxSize := resource.MustParse("50Mi")
 		logSeverity := operator.LogLevelError
+		cniBinDir := "/opt/custom/cni/bin"
+		cniConfDir := "/etc/custom/cni/net.d"
 
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
@@ -232,8 +238,10 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 				CNI: &operator.CNISpec{
-					Type: operator.PluginCalico,
-					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+					Type:    operator.PluginCalico,
+					IPAM:    &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+					BinDir:  &cniBinDir,
+					ConfDir: &cniConfDir,
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					LinuxDataplane:   &dpBPF, // Actually the default but BPF would make other values invalid.

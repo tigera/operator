@@ -816,6 +816,28 @@ type CNISpec struct {
 	// Calico Enterprise installation.
 	// +optional
 	IPAM *IPAMSpec `json:"ipam"`
+
+	// BinDir is the path to the CNI binaries directory.
+	// If you have changed the installation directory for CNI binaries in the container runtime configuration,
+	// please ensure that this field points to the same directory as specified in the container runtime settings.
+	// Default directory depends on the KubernetesProvider.
+	// * For KubernetesProvider GKE, this field defaults to "/home/kubernetes/bin".
+	// * For KubernetesProvider OpenShift, this field defaults to "/var/lib/cni/bin".
+	// * Otherwise, this field defaults to "/opt/cni/bin".
+	// +optional
+	// +kubebuilder:validation:Type=string
+	BinDir *string `json:"binDir,omitempty"`
+
+	// ConfDir is the path to the CNI config directory.
+	// If you have changed the installation directory for CNI configuration in the container runtime configuration,
+	// please ensure that this field points to the same directory as specified in the container runtime settings.
+	// Default directory depends on the KubernetesProvider.
+	// * For KubernetesProvider GKE, this field defaults to "/etc/cni/net.d".
+	// * For KubernetesProvider OpenShift, this field defaults to "/var/run/multus/cni/net.d".
+	// * Otherwise, this field defaults to "/etc/cni/net.d".
+	// +optional
+	// +kubebuilder:validation:Type=string
+	ConfDir *string `json:"confDir,omitempty"`
 }
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.

@@ -554,10 +554,14 @@ func executePreDeleteHook(ctx context.Context, c client.Client) error {
 	installation.Name = utils.DefaultInstanceKey.Name
 	apiserver := &operatortigeraiov1.APIServer{}
 	apiserver.Name = utils.DefaultInstanceKey.Name
-	for _, o := range []client.Object{installation, apiserver} {
+	whisker := &operatortigeraiov1.Whisker{}
+	whisker.Name = utils.DefaultInstanceKey.Name
+	goldmane := &operatortigeraiov1.Goldmane{}
+	goldmane.Name = utils.DefaultInstanceKey.Name
+	for _, o := range []client.Object{whisker, goldmane, installation, apiserver} {
 		if err := c.Delete(ctx, o); err != nil {
 			if errors.IsNotFound(err) {
-				return nil
+				continue
 			}
 			return err
 		}

@@ -49,7 +49,7 @@ type yamlKind struct {
 }
 
 // This struct defines all of the resources that we expect to read from the rendered Envoy Gateway
-// helm chart (as of v1.2.6).
+// helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
 	namespace                 *corev1.Namespace
 	k8sCRDs                   []*apiextenv1.CustomResourceDefinition
@@ -443,6 +443,11 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod = &envoyapi.KubernetesPodSpec{}
 	}
 	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
+
+	// Enable backend APIs.
+	envoyGatewayConfig.ExtensionAPIs = &envoyapi.ExtensionAPISettings{
+		EnableBackend: true,
+	}
 
 	// Rebuild the ConfigMap with those changes.
 	envoyGatewayConfigMap := resources.envoyGatewayConfigMap.DeepCopyObject().(*corev1.ConfigMap)

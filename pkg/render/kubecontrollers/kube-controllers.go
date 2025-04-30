@@ -209,7 +209,8 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 		if cfg.ManagementCluster != nil {
 			enabledControllers = append(enabledControllers, "managedcluster")
 		}
-	} else {
+	} else if !cfg.Tenant.ManagedClusterIsCalico() {
+		// Calico OSS Managed clusters do not need the license controller.
 		enabledControllers = append(enabledControllers, "managedclusterlicensing")
 	}
 

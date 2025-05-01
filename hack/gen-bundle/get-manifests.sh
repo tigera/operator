@@ -41,7 +41,7 @@ function downloadOperatorManifests() {
     curl ${CALICO_BASE_URL}/manifests/ocp/02-rolebinding-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/rolebinding-tigera-operator.yaml
 
     # Download the installation CR so that the alm-examples annotation is generated.
-    curl ${CALICO_BASE_URL}/manifests/ocp/01-cr-installation.yaml --output ${BUNDLE_DEPLOY_DIR}/cr-installation.yaml
+    curl ${CALICO_BASE_URL}/manifests/ocp/03-cr-installation.yaml --output ${BUNDLE_DEPLOY_DIR}/cr-installation.yaml
 }
 
 # Copy over and update the v1beta1 operator crds required for Calico.
@@ -83,7 +83,7 @@ policyrecommendationscopes
 
     # Download the Calico CRDs into CRD dir.
     for resource in $CALICO_RESOURCES; do
-        curl ${CALICO_BASE_URL}/manifests/ocp/crd.projectcalico.org_${resource}.yaml --output ${BUNDLE_CRD_DIR}/crd.projectcalico.org_${resource}.yaml
+        curl ${CALICO_BASE_URL}/libcalico-go/config/crd/crd.projectcalico.org_${resource}.yaml --output ${BUNDLE_CRD_DIR}/crd.projectcalico.org_${resource}.yaml
     done
 }
 

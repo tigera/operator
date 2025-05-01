@@ -631,8 +631,8 @@ check-milestone: hack/bin/gh var-require-all-VERSION-GITHUB_TOKEN
 	$(if $(CLOSED_MILESTONE),,$(error Milestone $(VERSION) is not closed))
 
 release-prep: check-milestone var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
-	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
-	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
+	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\"" -i config/enterprise_versions.yml
+	$(YQ_V4) ".title = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
 	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
 	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
 	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-pr-labels

@@ -2,7 +2,17 @@
 #
 # This script downloads Calico and operator manifests that are used to generate
 # ClusterServiceVersions.
-set -ex
+set -e
+
+if yq --version | grep -F -q v4.; then
+    YQ4=yq
+    # shellcheck disable=SC2016
+    echo 'Local `yq` is v4, using that'
+else
+    YQ4=docker run --rm --user=root -i -v "$(pwd):/workdir" mikefarah/yq:4
+    # shellcheck disable=SC2016
+    echo 'Local `yq` is not v4, using docker container if we can'
+fi
 
 if [[ -z "${BUNDLE_CRD_DIR}" ]]; then
     echo "BUNDLE_CRD_DIR is not set"
@@ -20,7 +30,9 @@ mkdir -p ${BUNDLE_DEPLOY_DIR} || true
 CALICO_BASE_URL=https://raw.githubusercontent.com/projectcalico/calico
 
 if [ -f config/calico_versions.yml ]; then
-    CALICO_VERSION=$(yq read config/calico_versions.yml components.typha.version)
+    # yq magic; this requires yq4
+    #                          ┌─if .components.typha.version is null─┐   ┌─version = title─┐ ┌─otherwise .version = typha version─┐ ┌─then return .version─┐
+    CALICO_VERSION=$(${YQ4} '(with(select(.components.typha.version == null); .version = .title)| .version = .components.typha.version )|.version' < config/calico_versions.yml)
 else
     echo "Could not find Calico versions file."
     exit 1

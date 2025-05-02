@@ -63,8 +63,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
-	err = c.WatchObject(&operatorv1.Goldmane{}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = c.WatchObject(&operatorv1.Goldmane{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
 	}
 
@@ -83,8 +82,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to add watch for config map %s/%s: %w", common.OperatorNamespace(), certificatemanagement.TrustedCertConfigMapName, err)
 	}
 
-	err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("%s failed to watch management cluster connection resource: %w", controllerName, err)
 	}
 
@@ -102,6 +100,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("goldmane-controller failed to watch Tigerastatus: %w", err)
+	}
+
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("goldmane-controller failed to create periodic reconcile watch: %w", err)
 	}
 
 	return nil

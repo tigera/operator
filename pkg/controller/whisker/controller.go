@@ -64,13 +64,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
-	err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
 	}
 
-	err = c.WatchObject(&operatorv1.Goldmane{}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = c.WatchObject(&operatorv1.Goldmane{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("%s failed to watch for goldmane resource: %w", controllerName, err)
 	}
 
@@ -104,6 +102,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("whisker-controller failed to watch Tigerastatus: %w", err)
 	}
 
+	if err = c.WatchObject(&crdv1.ClusterInformation{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("whisker-controller failed to watch ClusterInformation")
+	}
+
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("whisker-controller failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
@@ -129,7 +137,6 @@ func newReconciler(
 // blank assignment to verify that ReconcileConnection implements reconcile.Reconciler
 var _ reconcile.Reconciler = &Reconciler{}
 
-// Reconciler reconciles a ManagementClusterConnection object
 type Reconciler struct {
 	cli           client.Client
 	scheme        *runtime.Scheme
@@ -145,6 +152,7 @@ type Reconciler struct {
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Whisker")
+
 	whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Whisker CR", err, reqLogger)
@@ -233,7 +241,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	clusterInfo := &crdv1.ClusterInformation{}
 	err = r.cli.Get(ctx, utils.DefaultInstanceKey, clusterInfo)
 	if err != nil {
-		reqLogger.Info("Unable to retrieve cluster context to Whisker. Proceeding without adding cluster context to Whisker.", err)
+		reqLogger.Info("Unable to retrieve ClusterInformation", "error", err)
 	} else {
 		cfg.CalicoVersion = clusterInfo.Spec.CalicoVersion
 		cfg.ClusterType = clusterInfo.Spec.ClusterType

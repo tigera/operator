@@ -1,4 +1,4 @@
-// Copyright (c) 2019, 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -793,7 +793,7 @@ var _ = Describe("Installation validation tests", func() {
 			instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &tos
 			instance.Spec.CalicoNetwork.BGP = &bgp
 			err := validateCustomResource(instance)
-			Expect(err).To(MatchError("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is supported only for the Iptables and BPF Linux dataplanes"))
+			Expect(err).To(MatchError("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is supported only for the Iptables, Nftables and BPF Linux dataplanes"))
 		})
 
 		It("should not error if LinuxPolicySetupTimeoutSeconds is set as a positive int32, with the Calico CNI plugin and Iptables dataplane", func() {

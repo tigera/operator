@@ -20,7 +20,7 @@ mkdir -p ${BUNDLE_DEPLOY_DIR} || true
 CALICO_BASE_URL=https://raw.githubusercontent.com/projectcalico/calico
 
 if [ -f config/calico_versions.yml ]; then
-    CALICO_VERSION=$(yq read config/calico_versions.yml components.typha.version)
+    CALICO_VERSION=$(yq '.components.typha.version' < config/calico_versions.yml)
 else
     echo "Could not find Calico versions file."
     exit 1

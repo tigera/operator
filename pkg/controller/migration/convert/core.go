@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
 package convert
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -82,8 +83,11 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	}
 
 	if c.kubeControllers != nil {
-		if err := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "ENABLED_CONTROLLERS", "node"); err != nil {
-			return err
+		controllerNodeErr := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "ENABLED_CONTROLLERS", "node")
+		controllerNodeLoadBalancerErr := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "ENABLED_CONTROLLERS", "node,loadbalancer")
+
+		if controllerNodeErr != nil && controllerNodeLoadBalancerErr != nil {
+			return errors.Join(controllerNodeErr, controllerNodeLoadBalancerErr)
 		}
 
 		if err := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "AUTO_HOST_ENDPOINTS", "disabled"); err != nil {

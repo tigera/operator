@@ -15,7 +15,7 @@ package components
 
 // Default registries for Calico and Tigera.
 const (
-	CalicoRegistry = "docker.io/"
+	CalicoRegistry = "quay.io/"
 	TigeraRegistry = "quay.io/"
 	// For production InitRegistry should match TigeraRegistry.
 	// For the master branch and other testing scenarios we switch TigeraRegistry to

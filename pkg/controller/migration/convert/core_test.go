@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -587,6 +587,13 @@ var _ = Describe("core handler", func() {
 				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 					Name:  "ENABLED_CONTROLLERS",
 					Value: "node",
+				}}
+				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
+			})
+			It("should not error if ENABLED_CONTROLLERS is expected value", func() {
+				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+					Name:  "ENABLED_CONTROLLERS",
+					Value: "node,loadbalancer",
 				}}
 				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 			})

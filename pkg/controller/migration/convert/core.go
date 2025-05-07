@@ -15,7 +15,6 @@
 package convert
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -83,11 +82,17 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	}
 
 	if c.kubeControllers != nil {
-		controllerNodeErr := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "ENABLED_CONTROLLERS", "node")
-		controllerNodeLoadBalancerErr := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "ENABLED_CONTROLLERS", "node,loadbalancer")
+		value, err := getEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "ENABLED_CONTROLLERS")
+		if err != nil {
+			return err
+		}
 
-		if controllerNodeErr != nil && controllerNodeLoadBalancerErr != nil {
-			return errors.Join(controllerNodeErr, controllerNodeLoadBalancerErr)
+		if value != nil && strings.ToLower(*value) != "node" && strings.ToLower(*value) != "node,loadbalancer" {
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("%s=%s is not supported", "ENABLED_CONTROLLERS", *value),
+				component: ComponentKubeControllers,
+				fix:       fmt.Sprintf("remove the %s env var or set it to '%s' or '%s", "ENABLED_CONTROLLERS", "node", "node,loadbalancer"),
+			}
 		}
 
 		if err := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "AUTO_HOST_ENDPOINTS", "disabled"); err != nil {

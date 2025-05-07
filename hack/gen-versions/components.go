@@ -103,6 +103,10 @@ func GetComponents(versionsPath string) (Release, error) {
 			continue
 		}
 
+		if component == nil {
+			component = &Component{}
+		}
+
 		if component.Image == "" {
 			image := defaultImages[key]
 			if image == "" {
@@ -110,6 +114,10 @@ func GetComponents(versionsPath string) (Release, error) {
 					"Either fill in the 'image' field or update this code with a defaultImage.", key)
 			}
 			component.Image = image
+		}
+
+		if component.Version == "" {
+			component.Version = cv.Title
 		}
 
 		cv.Components[key] = component

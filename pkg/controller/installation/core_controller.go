@@ -1132,7 +1132,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Set any non-default FelixConfiguration values that we need.
 	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 		// Configure defaults.
-		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger)
+		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needNsMigration)
 		if err != nil {
 			return false, err
 		}
@@ -1750,7 +1750,7 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
 // based on the install config.
-func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, needNsMigration bool) (bool, error) {
 	updated := false
 
 	switch install.Spec.CNI.Type {
@@ -1860,7 +1860,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 			reqLogger.Error(err, "An error occurred when getting the Daemonset resource")
 			return false, err
 		}
-		if install.Spec.BPFEnabled() {
+		if !needNsMigration && install.Spec.BPFEnabled() {
 			err = setBPFEnabledOnFelixConfiguration(fc, true)
 			if err != nil {
 				reqLogger.Error(err, "Unable to enable eBPF data plane with a fresh install")

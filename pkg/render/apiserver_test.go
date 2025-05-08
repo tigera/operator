@@ -1050,6 +1050,31 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-apiserver", "tigera-system")))
 	})
 
+	It("should render TLS Ciphers when TLSCipherSuits is set", func() {
+		cfg.Installation.TLSCipherSuites = operatorv1.TLSCipherSuites{
+			operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
+			operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
+		}
+		expectedEnvVar := fmt.Sprintf("%s,%s", operatorv1.TLS_AES_128_GCM_SHA256, operatorv1.TLS_AES_256_GCM_SHA384)
+		Expect(cfg.Installation.TLSCipherSuites.ToString()).To(Equal(expectedEnvVar))
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		d, ok := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		for _, c := range d.Spec.Template.Spec.Containers {
+			if c.Name == "calico-apiserver" {
+				for _, env := range c.Env {
+					if env.Name == "TLS_CIPHER_SUITES" {
+						Expect(env.Value).To(Equal(expectedEnvVar))
+					}
+				}
+			}
+		}
+	})
+
 	Context("allow-tigera rendering", func() {
 		policyName := types.NamespacedName{Name: "allow-tigera.cnx-apiserver-access", Namespace: "tigera-system"}
 
@@ -2020,6 +2045,31 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		resources, _ := component.Objects()
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, tol)))
+	})
+
+	It("should render TLS Ciphers when TLSCipherSuits is set", func() {
+		cfg.Installation.TLSCipherSuites = operatorv1.TLSCipherSuites{
+			operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
+			operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
+		}
+		expectedEnvVar := fmt.Sprintf("%s,%s", operatorv1.TLS_AES_128_GCM_SHA256, operatorv1.TLS_AES_256_GCM_SHA384)
+		Expect(cfg.Installation.TLSCipherSuites.ToString()).To(Equal(expectedEnvVar))
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		d, ok := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		for _, c := range d.Spec.Template.Spec.Containers {
+			if c.Name == "calico-apiserver" {
+				for _, env := range c.Env {
+					if env.Name == "TLS_CIPHER_SUITES" {
+						Expect(env.Value).To(Equal(cfg.Installation.TLSCipherSuites.ToString()))
+					}
+				}
+			}
+		}
 	})
 
 	It("should set KUBERNETES_SERVICE_... variables if host networked", func() {

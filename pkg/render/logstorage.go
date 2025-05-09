@@ -743,6 +743,8 @@ func (es *elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentV
 		"cluster.max_shards_per_node": 10000,
 		// Disable geoip downloader. This removes an error from the startup logs, because our network policy blocks it.
 		"ingest.geoip.downloader.enabled": false,
+		// Ensure that EQL queries fail when there are shard failures. This retains the behaviour seen prior to 8.18.
+		"xpack.eql.default_allow_partial_results": false,
 	}
 
 	if es.cfg.Installation.CertificateManagement != nil {

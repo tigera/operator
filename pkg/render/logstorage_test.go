@@ -246,9 +246,10 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				// Check that the expected config made it's way to the Elastic CR
 				Expect(nodeSet.Config.Data).Should(Equal(map[string]interface{}{
-					"node.roles":                      []string{"data", "ingest", "master", "remote_cluster_client"},
-					"cluster.max_shards_per_node":     10000,
-					"ingest.geoip.downloader.enabled": false,
+					"node.roles":                              []string{"data", "ingest", "master", "remote_cluster_client"},
+					"cluster.max_shards_per_node":             10000,
+					"ingest.geoip.downloader.enabled":         false,
+					"xpack.eql.default_allow_partial_results": false,
 				}))
 			})
 
@@ -995,6 +996,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
 						"node.attr.zone":                                  "us-west-2a",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
@@ -1014,6 +1016,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
 						"node.attr.zone":                                  "us-west-2b",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
@@ -1084,6 +1087,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
 						"node.attr.zone":                                  "us-west-2a",
 						"node.attr.rack":                                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",
@@ -1113,6 +1117,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
 						"node.attr.zone":                                  "us-west-2b",
 						"node.attr.rack":                                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",

@@ -2,7 +2,7 @@
 #
 # This script downloads Calico and operator manifests that are used to generate
 # ClusterServiceVersions.
-set -ex
+set -eu
 
 if [[ -z "${BUNDLE_CRD_DIR}" ]]; then
     echo "BUNDLE_CRD_DIR is not set"
@@ -15,6 +15,16 @@ fi
 
 mkdir -p ${BUNDLE_CRD_DIR} || true
 mkdir -p ${BUNDLE_DEPLOY_DIR} || true
+
+echo "$%#@%#$%@@#%@#$%"
+echo "$%#@%#$%@@#%@#$%"
+echo "$%#@%#$%@@#%@#$%"
+echo
+echo $BUNDLE_DEPLOY_DIR
+echo
+echo "$%#@%#$%@@#%@#$%"
+echo "$%#@%#$%@@#%@#$%"
+echo "$%#@%#$%@@#%@#$%"
 
 # Get the base path for the Calico docs site. This will be used to download manifests.
 CALICO_BASE_URL=https://raw.githubusercontent.com/projectcalico/calico

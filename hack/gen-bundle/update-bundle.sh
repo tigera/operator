@@ -5,8 +5,7 @@
 #
 # This script should be not be run directly. See the bundle target in the
 # Makefile.
-set -e
-set -x
+set -eu
 
 # VERSION is the version of the operator to publish.
 if [[ -z "${VERSION}" ]]; then
@@ -26,47 +25,55 @@ if [[ -z "${PREV_VERSION}" ]]; then
 	exit 1
 fi
 
-OPERATOR_IMAGE=quay.io/tigera/operator:v${VERSION}
 OPERATOR_IMAGE_INSPECT=$(echo $OPERATOR_IMAGE_INSPECT | base64 -d)
 OPERATOR_IMAGE_DIGEST=$(echo $OPERATOR_IMAGE_INSPECT | jq -r '.[0].RepoDigests[] | select(. | contains("quay.io/tigera/operator"))')
+OPERATOR_MANIFEST_INSPECT=$(echo $OPERATOR_MANIFEST_INSPECT | base64 -d )
 
-CSV=bundle/${VERSION}/manifests/operator.clusterserviceversion.yaml
+CSV=bundle/${VERSION}/manifests/tigera-operator.clusterserviceversion.yaml
 
 # Rearrange the bundle layout.
+rm -rf bundle/${VERSION}
 mkdir bundle/${VERSION}
 mv bundle/{metadata,manifests} bundle/${VERSION}
 
-#
+YAML_UPDATE_FILE=yaml-updates
+rm -f ${YAML_UPDATE_FILE}
+
 # Update the CSV. Set the operator image container image and creation timestamp annotations.
 #
-yq write -i ${CSV} metadata.annotations.containerImage ${OPERATOR_IMAGE_DIGEST}
 TIMESTAMP=$(echo ${OPERATOR_IMAGE_INSPECT} | jq -r .[0].Created)
-yq write -i ${CSV} metadata.annotations.createdAt ${TIMESTAMP}
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.metadata.annotations.containerImage = "${OPERATOR_IMAGE_DIGEST}" |
+	.metadata.annotations.createdAt = "${TIMESTAMP}" |
+EOF
 
 # Add the features annotations per https://docs.openshift.com/container-platform/4.14/operators/operator_sdk/osdk-generating-csvs.html
 FEATURES=features.operators.openshift.io
-yq write -i ${CSV} "metadata.annotations.\"${FEATURES}/disconnected\"" --tag '!!str' false
-yq write -i ${CSV} "metadata.annotations.\"${FEATURES}/fips-compliant\"" --tag '!!str' false
-yq write -i ${CSV} "metadata.annotations.\"${FEATURES}/proxy-aware\"" --tag '!!str' false
-yq write -i ${CSV} "metadata.annotations.\"${FEATURES}/tls-profiles\"" --tag '!!str' false
-yq write -i ${CSV} "metadata.annotations.\"${FEATURES}/token-auth-aws\"" --tag '!!str' false
-yq write -i ${CSV} "metadata.annotations.\"${FEATURES}/token-auth-azure\"" --tag '!!str' false
-yq write -i ${CSV} "metadata.annotations.\"${FEATURES}/token-auth-gcp\"" --tag '!!str' false
-yq write -i ${CSV} "metadata.annotations.\"${FEATURES}/cnf\"" --tag '!!str' false
-yq write -i ${CSV} "metadata.annotations.\"${FEATURES}/cni\"" --tag '!!str' true
-yq write -i ${CSV} "metadata.annotations.\"${FEATURES}/csi\"" --tag '!!str' false
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.metadata.annotations."${FEATURES}/disconnected" = "false" |
+	.metadata.annotations."${FEATURES}/fips-compliant" = "false" |
+	.metadata.annotations."${FEATURES}/proxy-aware" = "false" |
+	.metadata.annotations."${FEATURES}/tls-profiles" = "false" |
+	.metadata.annotations."${FEATURES}/token-auth-aws" = "false" |
+	.metadata.annotations."${FEATURES}/token-auth-azure" = "false" |
+	.metadata.annotations."${FEATURES}/token-auth-gcp" = "false" |
+	.metadata.annotations."${FEATURES}/cnf" = "false" |
+	.metadata.annotations."${FEATURES}/cni" = "true" |
+	.metadata.annotations."${FEATURES}/csi" = "false" |
+EOF
 
 # Set the operator container image by digest in the tigera-operator deployment spec embedded in the CSV.
-yq write -i ${CSV} spec.install.spec.deployments[0].spec.template.spec.containers[0].image ${OPERATOR_IMAGE_DIGEST}
-yq write -i ${CSV} spec.install.spec.deployments[0].spec.template.spec.containers[0].name tigera-operator
-yq write -i ${CSV} spec.install.spec.deployments[0].spec.selector.matchLabels.name tigera-operator
-
-# Set the CSV name.
-yq write -i ${CSV} metadata.name tigera-operator.v${VERSION}
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.spec.install.spec.deployments[0].spec.template.spec.containers[0].image = "${OPERATOR_IMAGE_DIGEST}" |
+	.spec.install.spec.deployments[0].spec.template.spec.containers[0].name = "tigera-operator" |
+	.spec.install.spec.deployments[0].spec.selector.matchLabels.name = "tigera-operator" |
+EOF
 
 # Set the previous version of the operator that this version replaces.
 if [[ "${PREV_VERSION}" != "0.0.0" ]]; then
-    yq write -i ${CSV} spec.replaces tigera-operator.v${PREV_VERSION}
+    cat <<- EOF >> ${YAML_UPDATE_FILE}
+		.spec.replaces = "tigera-operator.v${PREV_VERSION}" |
+	EOF
 fi
 
 # Add labels for each supported architecture in the CSV file, in the
@@ -74,11 +81,17 @@ fi
 # e.g. operatorframework.io/arch.arm64: supported
 # At least amd64 is needed so that we can use the SHA256 of the manifest image rather
 # than the specific SHA of the amd64 image.
-yq write -i ${CSV} 'metadata.labels."operatorframework.io/arch.amd64"' supported
+for arch in $(echo "$OPERATOR_MANIFEST_INSPECT" | jq -r '.manifests[].platform.architecture'); do
+    cat <<- EOF >> ${YAML_UPDATE_FILE}
+		.metadata.labels."operatorframework.io/arch.${arch}" = "supported" |
+	EOF
+done
 
 # Set the CSV to ignore previous versions when updating. Use brackets to preserve the
 # dot in the key "olm.skipRange".
-yq write -i ${CSV} --style double 'metadata.annotations[olm.skipRange]' \<${VERSION}
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.metadata.annotations."olm.skipRange" = "<${VERSION}" |
+EOF
 
 # Add required 'relatedImages' to CSV
 # E.g.
@@ -86,16 +99,25 @@ yq write -i ${CSV} --style double 'metadata.annotations[olm.skipRange]' \<${VERS
 #   relatedImages:
 #     - name: tigera-operator
 #       image: quay.io/tigera/operator@sha256:b4e3eeccfd3d5a931c07f31c244b272e058ccabd2d8155ccc3ff52ed78855e69
-yq write -i ${CSV} spec.relatedImages[0].name tigera-operator
-yq write -i ${CSV} spec.relatedImages[0].image ${OPERATOR_IMAGE_DIGEST}
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.spec.relatedImages[0].name = "tigera-operator" |
+	.spec.relatedImages[0].image = "${OPERATOR_IMAGE_DIGEST}" |
+EOF
 
-#
+# This line ends our yq script and commits the update
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.
+EOF
+
+yq -i --from-file "${YAML_UPDATE_FILE}" "${CSV}"
+
+# exit 1
+
 # Now start updates to the bundle dockerfile. First update the package name.
-#
 sed -i 's/\(operators\.operatorframework\.\io\.bundle\.package\.v1\)=operator/\1=tigera-operator/' bundle.Dockerfile
 
 # Supported OpenShift versions. Specify min version.
-openshiftVersions=v4.10
+openshiftVersions=v4.16-v4.18
 
 # Add in required labels
 cat <<EOF >> bundle.Dockerfile
@@ -105,13 +127,13 @@ LABEL com.redhat.delivery.operator.bundle=true
 EOF
 
 # Remove unneeded labels
-sed -i 's/.*operators\.operatorframework\.io\.metrics.*//' bundle.Dockerfile
-sed -i 's/.*operators\.operatorframework\.io\.test\.config\.v1.*//' bundle.Dockerfile
-sed -i 's/.*operators\.operatorframework\.io\.test\.mediatype\.v1.*//' bundle.Dockerfile
+sed -i -e 's/.*operators\.operatorframework\.io\.metrics.*//' \
+       -e 's/.*operators\.operatorframework\.io\.test\.config\.v1.*//' \
+       -e 's/.*operators\.operatorframework\.io\.test\.mediatype\.v1.*//' bundle.Dockerfile
 
 # Fix the bundle path
-sed -i 's/COPY bundle\/manifests.*//' bundle.Dockerfile
-sed -i 's/COPY bundle\/metadata.*//' bundle.Dockerfile
+sed -i -E '/^COPY bundle\/(manifests|metadata)/d' bundle.Dockerfile
+
 cat <<EOF >> bundle.Dockerfile
 COPY ${VERSION}/manifests /manifests/
 COPY ${VERSION}/metadata /metadata/
@@ -119,10 +141,7 @@ EOF
 
 # Delete empty permissions (we only set clusterPermissions) otherwise the CSV
 # validation fails
-yq delete -i ${CSV} spec.install.spec.permissions
-
-# Rename CSV to "tigera-operator".
-mv bundle/${VERSION}/manifests/operator.clusterserviceversion.yaml bundle/${VERSION}/manifests/tigera-operator.clusterserviceversion.yaml
+yq -i 'del(.spec.install.spec.permissions)' "${CSV}"
 
 # Remove unneeded empty lines
 sed -i '/^$/d' bundle.Dockerfile

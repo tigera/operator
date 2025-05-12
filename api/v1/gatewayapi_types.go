@@ -131,11 +131,17 @@ type GatewayControllerDeployment struct {
 
 // GatewayControllerDeploymentSpec allows customization of the gateway controller deployment spec.
 //
+// If GatewayControllerDeployment.Spec.Replicas is non-nil it customizes the number of replicas for
+// the deployment.
+//
 // If GatewayControllerDeployment.Spec.MinReadySeconds is non-nil, it sets the minReadySeconds field
 // for the deployment.
 //
 // For customization of the pod template see GatewayControllerDeploymentPodTemplate.
 type GatewayControllerDeploymentSpec struct {
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=2147483647
@@ -172,6 +178,9 @@ type GatewayControllerDeploymentPodTemplate struct {
 // If GatewayControllerDeployment.Spec.Template.Spec.Tolerations is non-nil, it sets the tolerations
 // field of the deployment's pod template.
 //
+// If GatewayControllerDeployment.Spec.Template.Spec.TopologySpreadConstraints is non-nil, it sets the
+// topology spread constraints of the deployment's pod template.
+//
 // For customization of container resources see GatewayControllerDeploymentContainer.
 type GatewayControllerDeploymentPodSpec struct {
 	// +optional
@@ -182,6 +191,12 @@ type GatewayControllerDeploymentPodSpec struct {
 
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// TopologySpreadConstraints describes how a group of pods ought to spread across topology
+	// domains. Scheduler will schedule pods in a way which abides by the constraints.
+	// All topologySpreadConstraints are ANDed.
+	// +optional
+	TopologySpreadConstraints []v1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations"`
@@ -288,10 +303,15 @@ type GatewayDeployment struct {
 
 // GatewayDeploymentSpec allows customization of the spec of gateway deployments.
 //
+// If Replicas is non-nil it customizes the number of replicas for each gateway deployment.
+//
 // For customization of the pod template see GatewayDeploymentPodTemplate.
 //
 // For customization of the deployment strategy see GatewayDeploymentStrategy.
 type GatewayDeploymentSpec struct {
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// +optional
 	Template *GatewayDeploymentPodTemplate `json:"template,omitempty"`
 

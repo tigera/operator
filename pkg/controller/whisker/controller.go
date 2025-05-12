@@ -236,6 +236,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TrustedCertBundle:     trustedBundle,
 		WhiskerBackendKeyPair: backendKeyPair,
 		Whisker:               whiskerCR,
+		ClusterDomain:         r.clusterDomain,
 	}
 
 	clusterInfo := &crdv1.ClusterInformation{}

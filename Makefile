@@ -956,8 +956,7 @@ endif
 
 .PHONY: bundle-generate
 bundle-generate: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
-	$(KUSTOMIZE) build config/manifests \
-	| $(OPERATOR_SDK_BARE) generate bundle \
+	$(OPERATOR_SDK_BARE) generate bundle \
 		--crds-dir $(BUNDLE_CRD_DIR) \
 		--deploy-dir $(BUNDLE_DEPLOY_DIR) \
 		--version $(VERSION) \

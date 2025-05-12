@@ -209,7 +209,8 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 		if cfg.ManagementCluster != nil {
 			enabledControllers = append(enabledControllers, "managedcluster")
 		}
-	} else {
+	} else if !cfg.Tenant.ManagedClusterIsCalico() {
+		// Calico OSS Managed clusters do not need the license controller.
 		enabledControllers = append(enabledControllers, "managedclusterlicensing")
 	}
 
@@ -272,6 +273,7 @@ func (c *kubeControllersComponent) SupportedOSType() rmeta.OSType {
 
 func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) {
 	objectsToCreate := []client.Object{}
+	objectsToDelete := []client.Object{}
 
 	if c.kubeControllerAllowTigeraPolicy != nil {
 		objectsToCreate = append(objectsToCreate, c.kubeControllerAllowTigeraPolicy)
@@ -287,13 +289,18 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		c.controllersServiceAccount(),
 		c.controllersClusterRole(),
 		c.controllersClusterRoleBinding(),
-		c.controllersDeployment(),
 	)
+	if len(c.enabledControllers) > 0 {
+		// There's something to run, so create the deployment.
+		objectsToCreate = append(objectsToCreate, c.controllersDeployment())
+	} else {
+		// No controllers are enabled, so delete the deployment.
+		objectsToDelete = append(objectsToDelete, c.controllersDeployment())
+	}
 
 	if c.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		objectsToCreate = append(objectsToCreate, c.controllersOCPFederationRoleBinding())
 	}
-	objectsToDelete := []client.Object{}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.KubeControllersGatewaySecret)...)...)

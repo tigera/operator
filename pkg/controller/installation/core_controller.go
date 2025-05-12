@@ -64,6 +64,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
@@ -185,6 +186,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		namespaceMigration:   nm,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
+		nameservers:          opts.Nameservers,
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
@@ -368,6 +370,7 @@ type ReconcileInstallation struct {
 	enterpriseCRDsExist           bool
 	migrationChecked              bool
 	clusterDomain                 string
+	nameservers                   []string
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
@@ -630,6 +633,14 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &delay
 	}
 
+	defaultCNINetDir, defaultCNIBinDir := render.DefaultCNIDirectories(instance.Spec.KubernetesProvider)
+	if instance.Spec.CNI.ConfDir == nil || *instance.Spec.CNI.ConfDir == "" {
+		instance.Spec.CNI.ConfDir = &defaultCNINetDir
+	}
+	if instance.Spec.CNI.BinDir == nil || *instance.Spec.CNI.BinDir == "" {
+		instance.Spec.CNI.BinDir = &defaultCNIBinDir
+	}
+
 	// While a number of the fields in this section are relevant to all CNI plugins,
 	// there are some settings which are currently only applicable if using Calico CNI.
 	// Handle those here.
@@ -717,7 +728,7 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 	}
 
 	if instance.Spec.KubernetesProvider == operator.ProviderAKS && instance.Spec.Azure == nil {
-		defaultPolicyMode := operator.Default
+		defaultPolicyMode := operator.PolicyModeDefault
 		instance.Spec.Azure = &operator.Azure{PolicyMode: &defaultPolicyMode}
 	}
 
@@ -952,19 +963,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
-	// the run the reset the degraded status and requeue the request.
-	if r.typhaAutoscaler.isDegraded() {
-		if err := r.typhaAutoscaler.triggerRun(); err != nil {
-			r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha", err, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	if !installationMarkedForDeletion {
+		// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
+		// the run the reset the degraded status and requeue the request.
+		if r.typhaAutoscaler.isDegraded() {
+			if err := r.typhaAutoscaler.triggerRun(); err != nil {
+				r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha", err, reqLogger)
+				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			}
 		}
-	}
 
-	if r.typhaAutoscalerNonClusterHost != nil && r.typhaAutoscalerNonClusterHost.isDegraded() {
-		if err := r.typhaAutoscalerNonClusterHost.triggerRun(); err != nil {
-			r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha for noncluster hosts", err, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		if r.typhaAutoscalerNonClusterHost != nil && r.typhaAutoscalerNonClusterHost.isDegraded() {
+			if err := r.typhaAutoscalerNonClusterHost.triggerRun(); err != nil {
+				r.status.SetDegraded(operator.ResourceScalingError, "Failed to scale typha for noncluster hosts", err, reqLogger)
+				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			}
 		}
 	}
 
@@ -1119,7 +1132,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Set any non-default FelixConfiguration values that we need.
 	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 		// Configure defaults.
-		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger)
+		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needNsMigration)
 		if err != nil {
 			return false, err
 		}
@@ -1410,6 +1423,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BirdTemplates:                 birdTemplates,
 		TLS:                           typhaNodeTLS,
 		ClusterDomain:                 r.clusterDomain,
+		Nameservers:                   r.nameservers,
 		NodeReporterMetricsPort:       nodeReporterMetricsPort,
 		BGPLayouts:                    bgpLayout,
 		NodeAppArmorProfile:           nodeAppArmorProfile,
@@ -1736,7 +1750,7 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
 // based on the install config.
-func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, needNsMigration bool) (bool, error) {
 	updated := false
 
 	switch install.Spec.CNI.Type {
@@ -1846,7 +1860,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 			reqLogger.Error(err, "An error occurred when getting the Daemonset resource")
 			return false, err
 		}
-		if install.Spec.BPFEnabled() {
+		if !needNsMigration && install.Spec.BPFEnabled() {
 			err = setBPFEnabledOnFelixConfiguration(fc, true)
 			if err != nil {
 				reqLogger.Error(err, "Unable to enable eBPF data plane with a fresh install")
@@ -2044,7 +2058,7 @@ func crdPoolsToOperator(crds []crdv1.IPPool) []operator.IPPool {
 	pools := []v1.IPPool{}
 	for _, p := range crds {
 		op := v1.IPPool{}
-		op.FromProjectCalicoV1(p)
+		ippool.FromProjectCalicoV1(&op, p)
 		pools = append(pools, op)
 	}
 	return pools

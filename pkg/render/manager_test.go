@@ -1089,6 +1089,39 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			}))
 		})
 
+		It("should render distinct RBAC for Calico OSS managed cluster tenants", func() {
+			resources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              compliance,
+				complianceFeatureActive: true,
+				ns:                      tenantBNamespace,
+				bindingNamespaces:       []string{tenantANamespace, tenantBNamespace},
+				ossBindingNamespaces:    []string{tenantBNamespace},
+				tenant: &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tenantB",
+						Namespace: tenantBNamespace,
+					},
+					Spec: operatorv1.TenantSpec{
+						ID:                    "tenant-b",
+						ManagedClusterVariant: &operatorv1.Calico,
+					},
+				},
+			})
+
+			// It should only bind to the ossBindingNamespaces.
+			crb := rtest.GetResource(resources, render.ManagerManagedCalicoClusterRoleBinding, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(crb.Subjects).To(Equal([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      render.ManagerServiceAccount,
+					Namespace: tenantBNamespace,
+				},
+			}))
+		})
+
 		It("should render cluster role/roles with additional RBAC", func() {
 			resources := renderObjects(renderConfig{
 				oidc:                    false,
@@ -1326,6 +1359,7 @@ type renderConfig struct {
 	openshift               bool
 	ns                      string
 	bindingNamespaces       []string
+	ossBindingNamespaces    []string
 	tenant                  *operatorv1.Tenant
 	manager                 *operatorv1.Manager
 	externalElastic         bool
@@ -1391,6 +1425,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		OpenShift:               roc.openshift,
 		Namespace:               roc.ns,
 		BindingNamespaces:       roc.bindingNamespaces,
+		OSSTenantNamespaces:     roc.ossBindingNamespaces,
 		TruthNamespace:          common.OperatorNamespace(),
 		Tenant:                  roc.tenant,
 		Manager:                 roc.manager,

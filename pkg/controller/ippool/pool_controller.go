@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,8 +24,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
-	operator "github.com/tigera/operator/api/v1"
-	v1 "github.com/tigera/operator/api/v1"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -68,13 +67,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to primary resource Installation
-	err = c.WatchObject(&operator.Installation{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.Installation{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to watch primary resource: %w", err)
 	}
 
 	// Watch for changes to APIServer
-	err = c.WatchObject(&operator.APIServer{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.APIServer{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		log.V(5).Info("Failed to create APIServer watch", "err", err)
 		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
@@ -117,7 +116,7 @@ type Reconciler struct {
 	client               client.Client
 	scheme               *runtime.Scheme
 	watches              map[runtime.Object]struct{}
-	autoDetectedProvider operator.Provider
+	autoDetectedProvider operatorv1.Provider
 	status               status.StatusManager
 }
 
@@ -147,7 +146,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	// Get the Installation object - this is the source of truth for IP pools managed by
 	// this controller.
-	installation := &operator.Installation{}
+	installation := &operatorv1.Installation{}
 	if err := r.client.Get(ctx, utils.DefaultInstanceKey, installation); err != nil {
 		if apierrors.IsNotFound(err) {
 			reqLogger.Info("Installation config not found")
@@ -177,11 +176,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 	}
 	if !readyToGo {
-		r.status.SetDegraded(operator.ResourceNotReady, "Waiting for Installation defaulting to occur", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 	if installation.Spec.CNI == nil || installation.Spec.CNI.Type == "" {
-		r.status.SetDegraded(operator.ResourceNotReady, "Waiting for CNI type to be configured on Installation", nil, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for CNI type to be configured on Installation", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
@@ -189,12 +188,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	currentPools := &crdv1.IPPoolList{}
 	err := r.client.List(ctx, currentPools)
 	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operator.ResourceReadError, "error querying IP pools", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "error querying IP pools", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	for i := range currentPools.Items {
 		if err := restoreV3Metadata(&currentPools.Items[i]); err != nil {
-			r.status.SetDegraded(operator.ResourceValidationError, "error obtaining v3 IPPool metadata", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "error obtaining v3 IPPool metadata", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -202,15 +201,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// Write default IP pool configuration back to the Installation object using patch.
 	preDefaultPatchFrom := client.MergeFrom(installation.DeepCopy())
 	if err = fillDefaults(ctx, r.client, installation, currentPools); err != nil {
-		r.status.SetDegraded(operator.ResourceReadError, "error filling IP pool defaults", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "error filling IP pool defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	if err = ValidatePools(installation); err != nil {
-		r.status.SetDegraded(operator.InvalidConfigurationError, "error validating IP pool configuration", err, reqLogger)
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "error validating IP pool configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	if err := r.client.Patch(ctx, installation, preDefaultPatchFrom); err != nil {
-		r.status.SetDegraded(operator.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	reqLogger.V(1).Info("Reconciling IP pools for installation", "installation", installation.Spec)
@@ -221,10 +220,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// properly handled when using the v3 API.
 	apiserver, _, err := utils.GetAPIServer(ctx, r.client)
 	if err != nil && !apierrors.IsNotFound(err) {
-		r.status.SetDegraded(operator.ResourceNotReady, "Error querying APIServer", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying APIServer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	apiAvailable := apiserver != nil && apiserver.Status.State == v1.TigeraStatusReady
+	apiAvailable := apiserver != nil && apiserver.Status.State == operatorv1.TigeraStatusReady
 
 	// Create a lookup map of pools owned by this controller for easy access.
 	// This controller will only modify IP pools if:
@@ -247,8 +246,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			// Without this logic, this controller would consider these pools as not owned by itself, resulting in errors
 			// when it attempts to create overlappin IP pools.
 			for _, cnp := range installation.Spec.CalicoNetwork.IPPools {
-				v1p := v1.IPPool{}
-				v1p.FromProjectCalicoV1(p)
+				v1p := operatorv1.IPPool{}
+				FromProjectCalicoV1(&v1p, p)
 				reqLogger.V(1).Info("Comparing IP pool", "clusterPool", p, "installationPool", cnp)
 				if !reflect.DeepEqual(cnp, v1p) {
 					// The IP pool in the cluster doesn't match the IP pool in the Installation - ignore it.
@@ -278,9 +277,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	for _, p := range installation.Spec.CalicoNetwork.IPPools {
 		// We need to check if updates are required, but the installation uses the operator API format and the queried
 		// pools are in crd.projectcalico.org/v1 format. Compare the pools using the crd.projectcalico.org/v1 format.
-		v1res, err := p.ToProjectCalicoV1()
+		v1res, err := ToProjectCalicoV1(p)
 		if err != nil {
-			r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "error handling IP pool", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		v1res.Labels[managedByLabel] = managedByValue
@@ -288,7 +287,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		// If there is an existing IP pool in the cluster with the same CIDR, but it is not owned by us, then we cannot
 		// take action on it.
 		if _, ok := notOurs[p.CIDR]; ok {
-			r.status.SetDegraded(operator.ResourceValidationError, "Cannot update an IP pool not owned by the operator", nil, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Cannot update an IP pool not owned by the operator", nil, reqLogger)
 			continue
 		}
 
@@ -314,7 +313,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				// There are IP pools in the cluster and the v3 API is available, so use it to create / update the pool.
 				v3res, err := v1ToV3(v1res)
 				if err != nil {
-					r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceValidationError, "error handling IP pool", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 				toCreateOrUpdate = append(toCreateOrUpdate, v3res)
@@ -322,7 +321,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			} else {
 				// The v3 API is not available, and there are existing pools in the cluster. We cannot create new pools until the v3 API is available.
 				// The user may need to manually delete or update pools in order to allow the v3 API to launch successfully.
-				r.status.SetDegraded(operator.ResourceNotReady, "Unable to modify IP pools while Calico API server is unavailable", nil, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Unable to modify IP pools while Calico API server is unavailable", nil, reqLogger)
 				return reconcile.Result{}, nil
 			}
 		}
@@ -348,14 +347,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				// v3 API is available - send a delete request.
 				v3res, err := v1ToV3(&v1res)
 				if err != nil {
-					r.status.SetDegraded(operator.ResourceValidationError, "error handling IP pool", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceValidationError, "error handling IP pool", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 				toDelete = append(toDelete, v3res)
 			} else {
 				// The v3 API is not available, so we can't delete the pool. Mark degraded and return. We'll delete the pool
 				// when the API server become available.
-				r.status.SetDegraded(operator.ResourceNotReady, "Unable to delete IP pools while Calico API server is unavailable", nil, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Unable to delete IP pools while Calico API server is unavailable", nil, reqLogger)
 				return reconcile.Result{}, nil
 			}
 		}
@@ -369,12 +368,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	passThru := render.NewPassthroughWithLog(log, toCreateOrUpdate...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, passThru, nil); err != nil {
-		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating IPPools", err, log)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating IPPools", err, log)
 		return reconcile.Result{}, err
 	}
 	delPassThru := render.NewDeletionPassthrough(toDelete...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, delPassThru, nil); err != nil {
-		r.status.SetDegraded(operator.ResourceUpdateError, "Error deleting IPPools", err, log)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error deleting IPPools", err, log)
 		return reconcile.Result{}, err
 	}
 
@@ -393,11 +392,126 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-func CRDPoolsToOperator(crds []crdv1.IPPool) []v1.IPPool {
-	pools := []v1.IPPool{}
+// ToProjectCalicoV1 converts an IPPool to a crd.projectcalico.org/v1 IPPool resource.
+func ToProjectCalicoV1(p operatorv1.IPPool) (*crdv1.IPPool, error) {
+	pool := crdv1.IPPool{
+		TypeMeta: metav1.TypeMeta{Kind: "IPPool", APIVersion: "crd.projectcalico.org/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   p.Name,
+			Labels: map[string]string{},
+		},
+		Spec: crdv1.IPPoolSpec{CIDR: p.CIDR},
+	}
+
+	// Set encap.
+	switch p.Encapsulation {
+	case operatorv1.EncapsulationIPIP:
+		pool.Spec.IPIPMode = crdv1.IPIPModeAlways
+		pool.Spec.VXLANMode = crdv1.VXLANModeNever
+	case operatorv1.EncapsulationIPIPCrossSubnet:
+		pool.Spec.IPIPMode = crdv1.IPIPModeCrossSubnet
+		pool.Spec.VXLANMode = crdv1.VXLANModeNever
+	case operatorv1.EncapsulationVXLAN:
+		pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+		pool.Spec.IPIPMode = crdv1.IPIPModeNever
+	case operatorv1.EncapsulationVXLANCrossSubnet:
+		pool.Spec.VXLANMode = crdv1.VXLANModeCrossSubnet
+		pool.Spec.IPIPMode = crdv1.IPIPModeNever
+	}
+
+	// Set NAT
+	switch p.NATOutgoing {
+	case operatorv1.NATOutgoingEnabled:
+		pool.Spec.NATOutgoing = true
+	}
+
+	if p.DisableNewAllocations != nil {
+		pool.Spec.Disabled = *p.DisableNewAllocations
+	}
+
+	// Set BlockSize
+	if p.BlockSize != nil {
+		pool.Spec.BlockSize = int(*p.BlockSize)
+	}
+
+	// Set selector.
+	pool.Spec.NodeSelector = p.NodeSelector
+
+	// Set BGP export.
+	if p.DisableBGPExport != nil {
+		pool.Spec.DisableBGPExport = *p.DisableBGPExport
+	}
+
+	for _, use := range p.AllowedUses {
+		pool.Spec.AllowedUses = append(pool.Spec.AllowedUses, crdv1.IPPoolAllowedUse(use))
+	}
+
+	pool.Spec.AssignmentMode = p.AssignmentMode
+
+	return &pool, nil
+}
+
+// FromProjectCalicoV1 populates the IP pool with the data from the given
+// crd.projectcalico.org/v1 IP pool. It is the direct inverse of ToProjectCalicoV1,
+// and should be updated with every new field added to the IP pool structure.
+func FromProjectCalicoV1(p *operatorv1.IPPool, crd crdv1.IPPool) {
+	p.Name = crd.Name
+	p.CIDR = crd.Spec.CIDR
+
+	// Set encap.
+	switch crd.Spec.IPIPMode {
+	case crdv1.IPIPModeAlways:
+		p.Encapsulation = operatorv1.EncapsulationIPIP
+	case crdv1.IPIPModeCrossSubnet:
+		p.Encapsulation = operatorv1.EncapsulationIPIPCrossSubnet
+	}
+	switch crd.Spec.VXLANMode {
+	case crdv1.VXLANModeAlways:
+		p.Encapsulation = operatorv1.EncapsulationVXLAN
+	case crdv1.VXLANModeCrossSubnet:
+		p.Encapsulation = operatorv1.EncapsulationVXLANCrossSubnet
+	}
+
+	// Set NAT
+	if crd.Spec.NATOutgoing {
+		p.NATOutgoing = operatorv1.NATOutgoingEnabled
+	} else {
+		p.NATOutgoing = operatorv1.NATOutgoingDisabled
+	}
+
+	// Configure DisableNewAllocations
+	disableAlloc := false
+	if crd.Spec.Disabled {
+		disableAlloc = true
+	}
+	p.DisableNewAllocations = &disableAlloc
+
+	// Set BlockSize
+	blockSize := int32(crd.Spec.BlockSize)
+	p.BlockSize = &blockSize
+
+	// Set selector.
+	p.NodeSelector = crd.Spec.NodeSelector
+
+	// Set BGP export.
+	disableExport := false
+	if crd.Spec.DisableBGPExport {
+		disableExport = true
+	}
+	p.DisableBGPExport = &disableExport
+
+	for _, use := range crd.Spec.AllowedUses {
+		p.AllowedUses = append(p.AllowedUses, operatorv1.IPPoolAllowedUse(use))
+	}
+
+	p.AssignmentMode = crd.Spec.AssignmentMode
+}
+
+func CRDPoolsToOperator(crds []crdv1.IPPool) []operatorv1.IPPool {
+	pools := []operatorv1.IPPool{}
 	for _, p := range crds {
-		op := v1.IPPool{}
-		op.FromProjectCalicoV1(p)
+		op := operatorv1.IPPool{}
+		FromProjectCalicoV1(&op, p)
 		pools = append(pools, op)
 	}
 	return pools

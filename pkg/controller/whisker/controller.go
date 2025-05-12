@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	v1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -36,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -61,13 +64,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
-	err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = c.WatchObject(&operatorv1.Whisker{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
 	}
 
-	err = c.WatchObject(&operatorv1.Goldmane{}, &handler.EnqueueRequestForObject{})
-	if err != nil {
+	if err = c.WatchObject(&operatorv1.Goldmane{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("%s failed to watch for goldmane resource: %w", controllerName, err)
 	}
 
@@ -101,6 +102,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("whisker-controller failed to watch Tigerastatus: %w", err)
 	}
 
+	if err = c.WatchObject(&crdv1.ClusterInformation{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("whisker-controller failed to watch ClusterInformation")
+	}
+
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("whisker-controller failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
@@ -126,7 +137,6 @@ func newReconciler(
 // blank assignment to verify that ReconcileConnection implements reconcile.Reconciler
 var _ reconcile.Reconciler = &Reconciler{}
 
-// Reconciler reconciles a ManagementClusterConnection object
 type Reconciler struct {
 	cli           client.Client
 	scheme        *runtime.Scheme
@@ -149,7 +159,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	} else if whiskerCR == nil {
 		r.status.OnCRNotFound()
-		return reconcile.Result{}, nil
+		return reconcile.Result{}, r.maintainFinalizer(ctx, nil)
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -201,6 +211,23 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
 	}
 
+	preDefaultPatchFrom := client.MergeFrom(whiskerCR.DeepCopy())
+
+	// update Installation with defaults
+	updateWhiskerWithDefaults(whiskerCR)
+
+	// Write the whisker CR configuration back to the API. This is essentially a poor-man's defaulting, and
+	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
+	if err := r.cli.Patch(ctx, whiskerCR, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if err := r.maintainFinalizer(ctx, whiskerCR); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
 	cfg := &whisker.Configuration{
 		PullSecrets:           pullSecrets,
@@ -214,7 +241,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	clusterInfo := &crdv1.ClusterInformation{}
 	err = r.cli.Get(ctx, utils.DefaultInstanceKey, clusterInfo)
 	if err != nil {
-		reqLogger.Info("Unable to retrieve cluster context to Whisker. Proceeding without adding cluster context to Whisker.", err)
+		reqLogger.Info("Unable to retrieve ClusterInformation", "error", err)
 	} else {
 		cfg.CalicoVersion = clusterInfo.Spec.CalicoVersion
 		cfg.ClusterType = clusterInfo.Spec.ClusterType
@@ -248,4 +275,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.ClearDegraded()
 
 	return reconcile.Result{}, nil
+}
+
+func updateWhiskerWithDefaults(instance *operatorv1.Whisker) {
+	if instance.Spec.Notifications == nil {
+		instance.Spec.Notifications = ptr.ToPtr(operatorv1.Enabled)
+	}
+}
+
+func (r *Reconciler) maintainFinalizer(ctx context.Context, whiskerCr client.Object) error {
+	// These objects require graceful termination before the CNI plugin is torn down.
+	whiskerDeployment := &v1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: whisker.WhiskerDeploymentName}}
+	return utils.MaintainInstallationFinalizer(ctx, r.cli, whiskerCr, render.WhiskerFinalizer, whiskerDeployment)
 }

@@ -292,7 +292,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentTigeraNode.Image,
 					components.ComponentTigeraNode.Version)))
-			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(4))
+			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
 			fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 			Expect(fv).ToNot(BeNil())
 			Expect(fv.Image).To(Equal(
@@ -317,6 +317,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentTigeraCSRInitContainer.Image,
 					components.ComponentTigeraCSRInitContainer.Version)))
+			bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
+			Expect(bpfInit).ToNot(BeNil())
+			Expect(bpfInit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s:%s",
+					components.ComponentTigeraNode.Image,
+					components.ComponentTigeraNode.Version)))
 		})
 
 		It("should use images from imageset", func() {
@@ -394,7 +400,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentTigeraNode.Image,
 					"sha256:tigeracnxnodehash")))
-			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(4))
+			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
 			fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 			Expect(fv).ToNot(BeNil())
 			Expect(fv.Image).To(Equal(
@@ -420,6 +426,12 @@ var _ = Describe("Testing core-controller installation", func() {
 					components.ComponentTigeraCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
 
+			bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
+			Expect(bpfInit).ToNot(BeNil())
+			Expect(bpfInit.Image).To(Equal(
+				fmt.Sprintf("some.registry.org/%s@%s",
+					components.ComponentTigeraNode.Image,
+					"sha256:tigeracnxnodehash")))
 			inst := operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
@@ -1581,7 +1593,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			policyMode := operator.Default
+			policyMode := operator.PolicyModeDefault
 			azure := &operator.Azure{
 				PolicyMode: &policyMode,
 			}

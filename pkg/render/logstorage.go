@@ -250,7 +250,11 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, es.elasticsearchClusterRole(), es.elasticsearchClusterRoleBinding())
 	}
 
-	roles, bindings := es.elasticsearchRolesAndBindings()
+	// We need to allow to es-kube-controllers to managed secrets in the management clusters
+	// before pushing the Linseed - Voltron certificate to the tunnel. This certificate is pushed
+	// from es-kube-controllers for zero tenants and single tenant management clusters. Single tenant management
+	// cluster with external ES have these permissions configured with external elasticsearch renderer.
+	roles, bindings := es.kubecControllersRolesAndBindings()
 	for _, r := range roles {
 		toCreate = append(toCreate, r)
 	}
@@ -647,7 +651,7 @@ func (es *elasticsearchComponent) nodeSets() []esv1.NodeSet {
 	}
 
 	var nodeSets []esv1.NodeSet
-	if nodeConfig.NodeSets == nil || len(nodeConfig.NodeSets) < 1 {
+	if len(nodeConfig.NodeSets) < 1 {
 		nodeSet := es.nodeSetTemplate(pvcTemplate)
 		nodeSet.Name = nodeSetName(pvcTemplate)
 		nodeSet.Count = int32(nodeConfig.Count)
@@ -1016,7 +1020,7 @@ func (es *elasticsearchComponent) elasticsearchInternalAllowTigeraPolicy() *v3.N
 	}
 }
 
-func (es *elasticsearchComponent) elasticsearchRolesAndBindings() ([]*rbacv1.Role, []*rbacv1.RoleBinding) {
+func (es *elasticsearchComponent) kubecControllersRolesAndBindings() ([]*rbacv1.Role, []*rbacv1.RoleBinding) {
 
 	secretsRole := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{

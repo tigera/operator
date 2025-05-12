@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -100,10 +100,11 @@ func (c *component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
-	objectsToCreate := append(
-		secret.ToRuntimeObjects(c.egwPullSecrets()...),
-		c.egwServiceAccount(),
-	)
+
+	var objectsToCreate []client.Object
+	objectsToCreate = append(objectsToCreate, c.egwOperatorSecretsRoleBinding())
+	objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(c.egwPullSecrets()...)...)
+	objectsToCreate = append(objectsToCreate, c.egwServiceAccount())
 
 	var objectsToDelete []client.Object
 	if c.config.OpenShift {
@@ -120,6 +121,16 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 
 	objectsToCreate = append(objectsToCreate, c.egwDeployment())
 	return objectsToCreate, objectsToDelete
+}
+
+func (c *component) egwOperatorSecretsRoleBinding() *rbacv1.RoleBinding {
+	operatorSecretRB := render.CreateOperatorSecretsRoleBinding(c.config.EgressGW.Namespace)
+	operatorSecretRB.ObjectMeta.Labels = common.MapExistsOrInitialize(operatorSecretRB.ObjectMeta.Labels)
+	// The tigera-operator-secrets RoleBinding is shared across all EGW CRs in this namespace.
+	// As such, we mark it as having multiple owners so that we maintain multiple owner references
+	// when creating the rolebinding so that it will only be GC'd when all of its owners have been deleted.
+	operatorSecretRB.ObjectMeta.Labels[common.MultipleOwnersLabel] = "true"
+	return operatorSecretRB
 }
 
 func (c *component) Ready() bool {

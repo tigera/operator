@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024, 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025, Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -278,8 +278,9 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				return fmt.Errorf("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds requires the Iptables Linux dataplane to be set")
 			}
 			if *instance.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneIptables &&
-				*instance.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneBPF {
-				return fmt.Errorf("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is supported only for the Iptables and BPF Linux dataplanes")
+				*instance.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneBPF &&
+				*instance.Spec.CalicoNetwork.LinuxDataplane != operatorv1.LinuxDataplaneNftables {
+				return fmt.Errorf("spec.calicoNetwork.linuxPolicySetupTimeoutSeconds is supported only for the Iptables, Nftables and BPF Linux dataplanes")
 			}
 		}
 	}

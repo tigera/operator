@@ -6,7 +6,7 @@
     "namespace": "calico-system"
   },
   "spec": {
-    "selector": "k8s-app == 'tigera-guardian'",
+    "selector": "k8s-app == 'guardian'",
     "order": 1,
     "tier": "allow-tigera",
     "types": [

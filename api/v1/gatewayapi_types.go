@@ -281,6 +281,9 @@ type GatewayCertgenJobContainer struct {
 type GatewayDeployment struct {
 	// +optional
 	Spec *GatewayDeploymentSpec `json:"spec,omitempty"`
+
+	// +optional
+	Service *GatewayService `json:"service,omitempty"`
 }
 
 // GatewayDeploymentSpec allows customization of the spec of gateway deployments.
@@ -296,9 +299,6 @@ type GatewayDeploymentSpec struct {
 	// +optional
 	// +patchStrategy=retainKeys
 	Strategy *GatewayDeploymentStrategy `json:"strategy,omitempty" patchStrategy:"retainKeys" protobuf:"bytes,4,opt,name=strategy"`
-
-	// Annotations to place on the corresponding Service for each Gateway deployment.
-	ServiceAnnotations map[string]string
 }
 
 // GatewayDeploymentPodTemplate allows customization of the pod template of gateway deployments.
@@ -373,4 +373,40 @@ type GatewayDeploymentContainer struct {
 type GatewayDeploymentStrategy struct {
 	// +optional
 	RollingUpdate *appsv1.RollingUpdateDeployment `json:"rollingUpdate,omitempty" protobuf:"bytes,2,opt,name=rollingUpdate"`
+}
+
+// GatewayService allows customization of the services that front gateway deployments.
+//
+// If Metadata is non-nil, non-clashing labels and annotations from that metadata are added into the
+// each Gateway service's metadata.
+//
+// For customization of the service spec see GatewayServiceSpec.
+type GatewayService struct {
+	// +optional
+	Metadata *Metadata `json:"metadata,omitempty"`
+
+	// +optional
+	Spec *GatewayServiceSpec `json:"spec,omitempty"`
+}
+
+// GatewayServiceSpec allows customization of the services that front gateway deployments.
+//
+// The LoadBalancer fields allow customization of the corresponding fields in the Kubernetes
+// ServiceSpec.  These can be used for some cloud-independent control of the external load balancer
+// that is provisioned for each Gateway.  For finer-grained cloud-specific control please use
+// the Metadata.Annotations field in GatewayService.
+//
+// For customization of the service spec see GatewayServiceSpec.
+type GatewayServiceSpec struct {
+	// +optional
+	LoadBalancerClass *string `json:"loadBalancerClass,omitempty"`
+
+	// +optional
+	AllocateLoadBalancerNodePorts *bool `json:"allocateLoadBalancerNodePorts,omitempty"`
+
+	// +optional
+	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
+
+	// +optional
+	LoadBalancerIP *string `json:"loadBalancerIP,omitempty"`
 }

@@ -20,15 +20,14 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	gapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
 // GatewayAPISpec has fields that can be used to customize our GatewayAPI support.
 type GatewayAPISpec struct {
 	// Allow optional customization of the GatewayClasses that will be available; please see
 	// GatewayClassSpec for more detail.  If GatewayClasses is nil, the Tigera operator
-	// configures a single GatewayClass named "tigera-gateway-class" with none of the
-	// customizations that are allowed by GatewayClassSpec.
+	// configures a single GatewayClass named "tigera-gateway-class" without any of the
+	// additional customizations that are allowed by GatewayClassSpec.
 	GatewayClasses []GatewayClassSpec
 
 	// Allow optional customization of the gateway controller deployment.
@@ -37,7 +36,10 @@ type GatewayAPISpec struct {
 	// Allow optional customization of the gateway certgen job.
 	GatewayCertgenJob *GatewayCertgenJob `json:"gatewayCertgenJob,omitempty"`
 
-	// Allow optional customization of gateway deployments.
+	// Allow optional customization of gateway deployments (or daemonsets) and services.  These
+	// customizations will apply to all of the GatewayClasses that the Tigera operator
+	// provisions.  GatewayClass-specific customizations can be specified in
+	// `GatewayClasses[*].GatewayDeployment`.
 	GatewayDeployment *GatewayDeployment `json:"gatewayDeployment,omitempty"`
 
 	// Configure how to manage and update Gateway API CRDs.  The default behaviour - which is
@@ -59,20 +61,35 @@ type GatewayClassSpec struct {
 	// The name of this GatewayClass.
 	Name string
 
-	// The name of an EnvoyProxyConfig resource to use for this GatewayClass.  If non-nil, this
-	// provides an "escape valve" for any customizations that are needed but not supported more
-	// specifically by the following fields.
-	EnvoyProxyConfigName *string
+	// The name of a custom EnvoyProxy resource to use as the base EnvoyProxy configuration for
+	// this GatewayClass.  If not specified, the Tigera operator uses an empty EnvoyProxy
+	// resource as its base.
+	//
+	// Starting from that base, the Tigera operator modifies the EnvoyProxy resource as follows,
+	// in the order described:
+	//
+	// 1. It configures the `tigera/envoy-proxy` image that will be used (according to the
+	// current Calico version, private registry and image set settings) and any pull secrets
+	// that are needed to pull that image.
+	//
+	// 2. It applies settings according to the following high-level customization fields.  For
+	// example the `LoadBalancerType` field here causes annotations to be added to the
+	// `EnvoyService.ServiceAnnotations` field of the EnvoyProxy resource.
+	//
+	// 3. It applies common low-level customizations as specified by the `GatewayDeployment`
+	// field at the top level of this GatewayAPI resource's Spec.
+	//
+	// 4. It applies GatewayClass-specific low-level customizations as specified by the
+	// following `GatewayDeployment` field.
+	//
+	// If a custom EnvoyProxy resource is specified and uses `EnvoyDaemonSet` instead of the
+	// default `EnvoyDeployment`, deployment-related customizations will be applied within
+	// `EnvoyDaemonSet` instead of within `EnvoyDeployment`.
+	EnvoyProxyName *string
 
-	// Annotations to place on the Service for each Gateway that is configured with this
-	// GatewayClass.  These can be used, in particular, to specify annotations that cloud
-	// providers honour to configure the external load balancer that routes traffic to this
-	// Gateway.
-	ServiceAnnotations map[string]string
-
-	// The client certificate that Gateways of this GatewayClass should use when establishing a
-	// TLS connection to a backend.
-	ClientCertificateRef *gapi.SecretObjectReference
+	// Allow class-specific customization of gateway deployments (or daemonsets) and services,
+	// for Gateways in this GatewayClass.
+	GatewayDeployment *GatewayDeployment `json:"gatewayDeployment,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -278,6 +295,9 @@ type GatewayDeploymentSpec struct {
 	// +optional
 	// +patchStrategy=retainKeys
 	Strategy *GatewayDeploymentStrategy `json:"strategy,omitempty" patchStrategy:"retainKeys" protobuf:"bytes,4,opt,name=strategy"`
+
+	// Annotations to place on the corresponding Service for each Gateway deployment.
+	ServiceAnnotations map[string]string
 }
 
 // GatewayDeploymentPodTemplate allows customization of the pod template of gateway deployments.

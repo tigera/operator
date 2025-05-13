@@ -2,7 +2,7 @@
 #
 # This script downloads Calico and operator manifests that are used to generate
 # ClusterServiceVersions.
-set -ex
+set -eu
 
 if [[ -z "${BUNDLE_CRD_DIR}" ]]; then
     echo "BUNDLE_CRD_DIR is not set"
@@ -16,11 +16,13 @@ fi
 mkdir -p ${BUNDLE_CRD_DIR} || true
 mkdir -p ${BUNDLE_DEPLOY_DIR} || true
 
+echo "Building bundle from ${BUNDLE_DEPLOY_DIR}"
+
 # Get the base path for the Calico docs site. This will be used to download manifests.
 CALICO_BASE_URL=https://raw.githubusercontent.com/projectcalico/calico
 
 if [ -f config/calico_versions.yml ]; then
-    CALICO_VERSION=$(yq read config/calico_versions.yml components.typha.version)
+    CALICO_VERSION=$(yq '.components.typha.version' < config/calico_versions.yml)
 else
     echo "Could not find Calico versions file."
     exit 1
@@ -32,16 +34,16 @@ CALICO_BASE_URL=${CALICO_BASE_URL}/${CALICO_VERSION}
 # operator deployment manifest that doesn't include an init container and
 # volumes for creating install-time resources.
 function downloadOperatorManifests() {
-    curl ${CALICO_BASE_URL}/manifests/ocp-tigera-operator-no-resource-loading.yaml --output ${BUNDLE_DEPLOY_DIR}/operator.yaml
-    curl ${CALICO_BASE_URL}/manifests/ocp/02-role-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/role.yaml
+    curl -fsSL ${CALICO_BASE_URL}/manifests/ocp-tigera-operator-no-resource-loading.yaml --output ${BUNDLE_DEPLOY_DIR}/operator.yaml
+    curl -fsSL ${CALICO_BASE_URL}/manifests/ocp/02-role-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/role.yaml
     # The binding is required unlike in earlier bundle generation. The
     # 'operator-sdk generate bundle' command combines clusterroles bound to service
     # accounts. The resulting permissions is set to the CSV's
     # spec.install.clusterPermissions field.
-    curl ${CALICO_BASE_URL}/manifests/ocp/02-rolebinding-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/rolebinding-tigera-operator.yaml
+    curl -fsSL ${CALICO_BASE_URL}/manifests/ocp/02-rolebinding-tigera-operator.yaml --output ${BUNDLE_DEPLOY_DIR}/rolebinding-tigera-operator.yaml
 
     # Download the installation CR so that the alm-examples annotation is generated.
-    curl ${CALICO_BASE_URL}/manifests/ocp/01-cr-installation.yaml --output ${BUNDLE_DEPLOY_DIR}/cr-installation.yaml
+    curl -fsSL ${CALICO_BASE_URL}/manifests/ocp/03-cr-installation.yaml --output ${BUNDLE_DEPLOY_DIR}/cr-installation.yaml
 }
 
 # Copy over and update the v1beta1 operator crds required for Calico.
@@ -78,12 +80,12 @@ ipreservations
 kubecontrollersconfigurations
 networkpolicies
 networksets
-policyrecommendationscopes
 "
 
     # Download the Calico CRDs into CRD dir.
     for resource in $CALICO_RESOURCES; do
-        curl ${CALICO_BASE_URL}/manifests/ocp/crd.projectcalico.org_${resource}.yaml --output ${BUNDLE_CRD_DIR}/crd.projectcalico.org_${resource}.yaml
+        echo "  [curl] Downloading libcalico-go CRD ${resource}"
+        curl -fsSL ${CALICO_BASE_URL}/libcalico-go/config/crd/crd.projectcalico.org_${resource}.yaml --output ${BUNDLE_CRD_DIR}/crd.projectcalico.org_${resource}.yaml
     done
 }
 

@@ -15,6 +15,8 @@
 package goldmane_test
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -268,6 +270,35 @@ var _ = Describe("ComponentRendering", func() {
 		Expect(deployment.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
 		Expect(deployment.Spec.Template.Spec.PriorityClassName).To(Equal(priorityClassName))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Resources).To(Equal(*goldmaneResources))
+	})
+
+	It("should render TLS Ciphers when TLSCipherSuits is set", func() {
+		cfg := &goldmane.Configuration{
+			ClusterDomain: "cluster.local",
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+				TLSCipherSuites: operatorv1.TLSCipherSuites{
+					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
+					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
+				},
+			},
+			TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
+			GoldmaneServerKeyPair: defaultTLSKeyPair,
+			Goldmane:              &operatorv1.Goldmane{},
+		}
+
+		expectedEnvVar := fmt.Sprintf("%s,%s", operatorv1.TLS_AES_128_GCM_SHA256, operatorv1.TLS_AES_256_GCM_SHA384)
+		Expect(cfg.Installation.TLSCipherSuites.ToString()).To(Equal(expectedEnvVar))
+
+		component := goldmane.Goldmane(cfg)
+		resources, _ := component.Objects()
+
+		d := rtest.GetResource(resources, goldmane.GoldmaneDeploymentName, goldmane.GoldmaneNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d).NotTo(BeNil())
+		container := rtest.GetContainer(d.Spec.Template.Spec.Containers, goldmane.GoldmaneContainerName)
+		Expect(container).NotTo(BeNil())
+		rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
 	})
 })
 

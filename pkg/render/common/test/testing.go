@@ -28,7 +28,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -241,22 +240,6 @@ func ExpectGlobalAlertTemplateToBePopulated(resource runtime.Object) {
 	if v.Spec.Type != v3.GlobalAlertTypeAnomalyDetection { // ignored for  AnomalyDetection Typed
 		Expect(v.Spec.DataSet).ToNot(BeEmpty(), fmt.Sprintf("DataSet should not be empty for resource (%v)", resource))
 	}
-}
-
-func ExpectTLSCipherSuitesEnvVar(resources []client.Object, resourceName, resourceNS, containerName, envName, expectedEnvVar string) {
-	depResource := GetResource(resources, resourceName, resourceNS, "apps", "v1", "Deployment")
-	Expect(depResource).ToNot(BeNil())
-	deployment := depResource.(*appsv1.Deployment)
-
-	passed := false
-	for _, container := range deployment.Spec.Template.Spec.Containers {
-		if container.Name == containerName {
-			Expect(container.Env).To(ContainElements(corev1.EnvVar{Name: envName, Value: expectedEnvVar}))
-			passed = true
-			break
-		}
-	}
-	Expect(passed).To(Equal(true), "%s value mismatch in %s", envName, containerName)
 }
 
 func ExpectEnv(env []v1.EnvVar, key, value string) {

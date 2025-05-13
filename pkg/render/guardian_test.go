@@ -184,7 +184,11 @@ var _ = Describe("Rendering tests", func() {
 			expectedEnvVar := fmt.Sprintf("%s,%s", operatorv1.TLS_AES_128_GCM_SHA256, operatorv1.TLS_AES_256_GCM_SHA384)
 			Expect(cfg.Installation.TLSCipherSuites.ToString()).To(Equal(expectedEnvVar))
 
-			rtest.ExpectTLSCipherSuitesEnvVar(resources, render.GuardianDeploymentName, render.GuardianNamespace, render.GuardianContainerName, "GUARDIAN_TLS_CIPHER_SUITES", expectedEnvVar)
+			d := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d).NotTo(BeNil())
+			container := rtest.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianContainerName)
+			Expect(container).NotTo(BeNil())
+			rtest.ExpectEnv(container.Env, "GUARDIAN_TLS_CIPHER_SUITES", expectedEnvVar)
 		})
 	})
 

@@ -1061,7 +1061,12 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
-		rtest.ExpectTLSCipherSuitesEnvVar(resources, "tigera-apiserver", "tigera-system", "calico-apiserver", "TLS_CIPHER_SUITES", expectedEnvVar)
+
+		d := rtest.GetResource(resources, "tigera-apiserver", "tigera-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d).NotTo(BeNil())
+		container := rtest.GetContainer(d.Spec.Template.Spec.Containers, "calico-apiserver")
+		Expect(container).NotTo(BeNil())
+		rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
 	})
 
 	Context("allow-tigera rendering", func() {
@@ -2047,7 +2052,12 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
-		rtest.ExpectTLSCipherSuitesEnvVar(resources, "calico-apiserver", "calico-apiserver", "calico-apiserver", "TLS_CIPHER_SUITES", expectedEnvVar)
+
+		d := rtest.GetResource(resources, "calico-apiserver", "calico-apiserver", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d).NotTo(BeNil())
+		container := rtest.GetContainer(d.Spec.Template.Spec.Containers, "calico-apiserver")
+		Expect(container).NotTo(BeNil())
+		rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
 	})
 
 	It("should set KUBERNETES_SERVICE_... variables if host networked", func() {

@@ -297,7 +297,11 @@ var _ = Describe("Typha rendering tests", func() {
 		component := render.Typha(&cfg)
 		resources, _ := component.Objects()
 
-		rtest.ExpectTLSCipherSuitesEnvVar(resources, common.TyphaDeploymentName, common.CalicoNamespace, render.TyphaContainerName, "TYPHA_TLSCIPHERSUITES", expectedEnvVar)
+		d := rtest.GetResource(resources, common.TyphaDeploymentName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d).NotTo(BeNil())
+		container := rtest.GetContainer(d.Spec.Template.Spec.Containers, render.TyphaContainerName)
+		Expect(container).NotTo(BeNil())
+		rtest.ExpectEnv(container.Env, "TYPHA_TLSCIPHERSUITES", expectedEnvVar)
 	})
 
 	It("should render resourcerequirements", func() {

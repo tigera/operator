@@ -283,8 +283,16 @@ var _ = Describe("ComponentRendering", func() {
 		component := whisker.Whisker(cfg)
 		resources, _ := component.Objects()
 
-		rtest.ExpectTLSCipherSuitesEnvVar(resources, whisker.WhiskerDeploymentName, whisker.WhiskerNamespace, whisker.WhiskerContainerName, "TLS_CIPHER_SUITES", expectedEnvVar)
-		rtest.ExpectTLSCipherSuitesEnvVar(resources, whisker.WhiskerDeploymentName, whisker.WhiskerNamespace, whisker.WhiskerBackendContainerName, "TLS_CIPHER_SUITES", expectedEnvVar)
+		d := rtest.GetResource(resources, whisker.WhiskerDeploymentName, whisker.WhiskerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d).NotTo(BeNil())
+		container := rtest.GetContainer(d.Spec.Template.Spec.Containers, whisker.WhiskerContainerName)
+		Expect(container).NotTo(BeNil())
+		rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
+
+		// Check the backend container as well.
+		container = rtest.GetContainer(d.Spec.Template.Spec.Containers, whisker.WhiskerBackendContainerName)
+		Expect(container).NotTo(BeNil())
+		rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
 	})
 })
 

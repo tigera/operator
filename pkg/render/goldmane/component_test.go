@@ -294,7 +294,11 @@ var _ = Describe("ComponentRendering", func() {
 		component := goldmane.Goldmane(cfg)
 		resources, _ := component.Objects()
 
-		rtest.ExpectTLSCipherSuitesEnvVar(resources, goldmane.GoldmaneDeploymentName, goldmane.GoldmaneNamespace, goldmane.GoldmaneContainerName, "TLS_CIPHER_SUITES", expectedEnvVar)
+		d := rtest.GetResource(resources, goldmane.GoldmaneDeploymentName, goldmane.GoldmaneNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d).NotTo(BeNil())
+		container := rtest.GetContainer(d.Spec.Template.Spec.Containers, goldmane.GoldmaneContainerName)
+		Expect(container).NotTo(BeNil())
+		rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
 	})
 })
 

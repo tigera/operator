@@ -286,6 +286,20 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(passed).To(Equal(true), "Typha healthport configuration missing an expected field")
 	})
 
+	It("should properly configure a non-default TLS Cipher Suites", func() {
+		cfg.Installation.TLSCipherSuites = operatorv1.TLSCipherSuites{
+			operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
+			operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
+		}
+		expectedEnvVar := fmt.Sprintf("%s,%s", operatorv1.TLS_AES_128_GCM_SHA256, operatorv1.TLS_AES_256_GCM_SHA384)
+		Expect(cfg.Installation.TLSCipherSuites.ToString()).To(Equal(expectedEnvVar))
+
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		rtest.ExpectTLSCipherSuitesEnvVar(resources, common.TyphaDeploymentName, common.CalicoNamespace, render.TyphaContainerName, "TYPHA_TLSCIPHERSUITES", expectedEnvVar)
+	})
+
 	It("should render resourcerequirements", func() {
 		rr := &corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{

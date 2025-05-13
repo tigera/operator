@@ -22,6 +22,32 @@ GIT       = echo [DRY RUN] $(GIT_CMD)
 CURL      = echo [DRY RUN] $(CURL_CMD)
 endif
 
+# These values are used for fetching tools to run as part of the build process
+# and shouldn't vary based on the target we're building for
+NATIVE_ARCH := $(shell bash -c 'if [[ "$(shell uname -m)" == "x86_64" ]]; then echo amd64; else uname -m; fi')
+NATIVE_OS := $(shell uname -s | tr A-Z a-z)
+
+# The version of kustomize we use for generating bundles
+KUSTOMIZE_VERSION = v5.6.0
+KUSTOMIZE_DOWNLOAD_URL = https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F$(KUSTOMIZE_VERSION)/kustomize_$(KUSTOMIZE_VERSION)_$(NATIVE_OS)_$(NATIVE_ARCH).tar.gz
+
+# Our version of operator-sdk
+OPERATOR_SDK_VERSION = v1.39.2
+OPERATOR_SDK_URL = https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$(NATIVE_OS)_$(NATIVE_ARCH)
+
+# Our version of helm3 - Note that we use BUILD_ARCH here instead of NATIVE_ARCH because
+# that's what we used before and we don't want to break things if that's necessary.
+HELM3_VERSION = v3.11.3
+HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).tar.gz
+HELM_BUILDARCH_BINARY = $(HACK_BIN)/helm-$(BUILDARCH)
+HELM_BUILDARCH_VERSIONED_BINARY = $(HELM_BUILDARCH_BINARY)-$(HELM3_VERSION)
+
+
+# The directory into which we download binaries we need to run certain
+# processes, e.g. generating bundles
+HACK_BIN ?= hack/bin
+$(HACK_BIN):
+	mkdir -p $(HACK_BIN)
 
 # Shortcut targets
 default: build
@@ -228,24 +254,28 @@ ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
 ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
 ENVOY_GATEWAY_RESOURCES = pkg/render/gateway_api_resources.yaml
 
-$(ENVOY_GATEWAY_RESOURCES): hack/bin/helm-$(BUILDARCH)
+$(ENVOY_GATEWAY_RESOURCES): $(HACK_BIN)/helm-$(BUILDARCH)
 	echo "---" > $@
 	echo "apiVersion: v1" >> $@
 	echo "kind: Namespace" >> $@
 	echo "metadata:" >> $@
 	echo "  name: $(ENVOY_GATEWAY_NAMESPACE)" >> $@
-	hack/bin/helm-$(BUILDARCH) template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
+	$(HELM_BUILDARCH_BINARY) template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
 		--version $(ENVOY_GATEWAY_VERSION) \
 		-n $(ENVOY_GATEWAY_NAMESPACE) \
 		--include-crds \
 	>> $@
 
-hack/bin/helm-$(BUILDARCH):
-	mkdir -p hack/bin
-	curl -sSf -L --retry 5 -o hack/bin/helm3.tar.gz https://get.helm.sh/helm-v3.11.3-linux-$(BUILDARCH).tar.gz
-	tar -zxvf hack/bin/helm3.tar.gz -C hack/bin linux-$(BUILDARCH)/helm
-	mv hack/bin/linux-$(BUILDARCH)/helm hack/bin/helm-$(BUILDARCH)
-	rmdir hack/bin/linux-$(BUILDARCH)
+$(HELM_BUILDARCH_BINARY): $(HACK_BIN) $(HELM_BUILDARCH_VERSIONED_BINARY)
+	$(info ░▒▓ symlink $(HELM_BUILDARCH_VERSIONED_BINARY) -> $(HELM_BUILDARCH_BINARY))
+	@ln -sf helm-$(BUILDARCH)-$(HELM3_VERSION) $(HACK_BIN)/helm-$(BUILDARCH)
+
+$(HELM_BUILDARCH_VERSIONED_BINARY): $(HACK_BIN)
+	$(info ░▒▓ Downloading helm3 $(HELM3_VERSION) for $(BUILDARCH) to $(HELM_BUILDARCH_VERSIONED_BINARY))
+	@rm $(HELM_BUILDARCH_VERSIONED_BINARY)
+	@curl -fsSL --retry 5 $(HELM3_URL) | tar --extract --gzip -C $(HACK_BIN) --strip-components=1 $(NATIVE_OS)-$(BUILDARCH)/helm -O > $(HELM_BUILDARCH_VERSIONED_BINARY)
+	@chmod a+x $(HELM_BUILDARCH_VERSIONED_BINARY)
+
 
 build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES)
@@ -667,18 +697,21 @@ release-prep/set-pr-labels:
 ###############################################################################
 # Utilities
 ###############################################################################
-OPERATOR_SDK_VERSION=v1.0.1
+.PHONY: operator-sdk
 OPERATOR_SDK_BARE=hack/bin/operator-sdk
 OPERATOR_SDK=$(OPERATOR_SDK_BARE)-$(OPERATOR_SDK_VERSION)
-$(OPERATOR_SDK):
-	mkdir -p hack/bin
-	curl --fail -L -o $@ \
-		https://github.com/operator-framework/operator-sdk/releases/download/${OPERATOR_SDK_VERSION}/operator-sdk-${OPERATOR_SDK_VERSION}-x86_64-linux-gnu
-	chmod +x $@
 
-.PHONY: $(OPERATOR_SDK_BARE)
+operator-sdk: $(OPERATOR_SDK_BARE)
+
+$(OPERATOR_SDK):
+	$(info ░▒▓ Downloading operator-sdk to $(OPERATOR_SDK))
+	@mkdir -p hack/bin
+	@curl -fsSL -o $@ $(OPERATOR_SDK_URL)
+	@chmod +x $@
+
 $(OPERATOR_SDK_BARE): $(OPERATOR_SDK)
-	ln -f -s operator-sdk-$(OPERATOR_SDK_VERSION) $(OPERATOR_SDK_BARE)
+	$(info ░▒▓ Linking $(OPERATOR_SDK) to $(OPERATOR_SDK_BARE))
+	@ln -f -s operator-sdk-$(OPERATOR_SDK_VERSION) $(OPERATOR_SDK_BARE)
 
 ## Generating code after API changes.
 gen-files: manifests generate
@@ -800,6 +833,7 @@ prepull-image:
 get-digest: prepull-image
 	@echo Getting operator image digest...
 	$(eval OPERATOR_IMAGE_INSPECT=$(shell sh -c "docker image inspect $(IMAGE_REGISTRY)/$(BUILD_IMAGE):v$(VERSION) | base64 -w 0"))
+	$(eval OPERATOR_MANIFEST_INSPECT=$(shell sh -c "docker manifest inspect $(IMAGE_REGISTRY)/$(BUILD_IMAGE):v$(VERSION) | base64 -w 0"))
 
 .PHONY: help
 ## Display this help text
@@ -880,17 +914,13 @@ GO_GET_CONTAINER=docker run --rm \
 		$(EXTRA_DOCKER_ARGS) \
 		$(CALICO_BUILD)
 
-KUSTOMIZE=$(BINDIR)/kustomize
-# download kustomize if necessary
-$(BINDIR)/kustomize:
-	mkdir -p $(BINDIR)
-	$(GO_GET_CONTAINER) \
-		sh -c '$(GIT_CONFIG_SSH) \
-		set -e ;\
-		TMP_DIR=$$(mktemp -d) ;\
-		cd $$TMP_DIR ;\
-		go mod init tmp ;\
-		go get sigs.k8s.io/kustomize/kustomize/v3@v3.5.4 '
+.PHONY: kustomize
+KUSTOMIZE = $(HACK_BIN)/kustomize
+kustomize: $(KUSTOMIZE)
+$(KUSTOMIZE): $(HACK_BIN)
+	$(info ░▒▓ Downloading kustomize $(KUSTOMIZE_VERSION) to $(KUSTOMIZE))
+	@curl -fsSL $(KUSTOMIZE_DOWNLOAD_URL) | tar -C $(HACK_BIN) --extract --gzip kustomize
+	@chmod a+x $(KUSTOMIZE)
 
 
 # Options for 'bundle-build'
@@ -902,8 +932,9 @@ BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
-BUNDLE_CRD_DIR ?= $(BUILD_DIR)/bundle/$(VERSION)/crds
-BUNDLE_DEPLOY_DIR ?= $(BUILD_DIR)/bundle/$(VERSION)/deploy
+BUNDLE_BASE_DIR ?= $(BUILD_DIR)/bundle/$(VERSION)
+BUNDLE_CRD_DIR ?= $(BUNDLE_BASE_DIR)/crds
+BUNDLE_DEPLOY_DIR ?= $(BUNDLE_BASE_DIR)/deploy
 
 ## Create an operator bundle image.
 # E.g., make bundle VERSION=1.13.1 PREV_VERSION=1.13.0 CHANNELS=release-v1.13 DEFAULT_CHANNEL=release-v1.13
@@ -915,7 +946,7 @@ bundle-crd-clean:
 	git checkout -- config/crd/bases
 
 .PHONY: bundle-validate
-bundle-validate:
+bundle-validate: $(OPERATOR_SDK_BARE)
 	$(OPERATOR_SDK_BARE) bundle validate bundle/$(VERSION)
 
 .PHONY: bundle-manifests
@@ -931,19 +962,19 @@ endif
 
 .PHONY: bundle-generate
 bundle-generate: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
-	$(KUSTOMIZE) build config/manifests \
-	| $(OPERATOR_SDK_BARE) generate bundle \
+	$(OPERATOR_SDK_BARE) generate bundle \
 		--crds-dir $(BUNDLE_CRD_DIR) \
 		--deploy-dir $(BUNDLE_DEPLOY_DIR) \
 		--version $(VERSION) \
 		--verbose \
 		--manifests \
+		--package tigera-operator \
 		--metadata $(BUNDLE_METADATA_OPTS)
 
 # Update a generated bundle so that it can be certified.
 .PHONY: update-bundle
 update-bundle: $(OPERATOR_SDK_BARE) get-digest
-	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
+	$(eval EXTRA_DOCKER_ARGS += -e OPERATOR_IMAGE_INSPECT="$(OPERATOR_IMAGE_INSPECT)" -e OPERATOR_MANIFEST_INSPECT="$(OPERATOR_MANIFEST_INSPECT)" -e VERSION=$(VERSION) -e PREV_VERSION=$(PREV_VERSION))
 	$(CONTAINERIZED) $(CALICO_BUILD) hack/gen-bundle/update-bundle.sh
 
 # Build the bundle image.

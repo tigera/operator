@@ -15,6 +15,8 @@
 package whisker
 
 import (
+	"fmt"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -70,6 +72,7 @@ type Configuration struct {
 	ClusterID             string
 	CalicoVersion         string
 	ClusterType           string
+	ClusterDomain         string
 }
 
 type Component struct {
@@ -178,7 +181,7 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "LOG_LEVEL", Value: "INFO"},
 		{Name: "PORT", Value: "3002"},
-		{Name: "GOLDMANE_HOST", Value: "goldmane.calico-system.svc.cluster.local:7443"},
+		{Name: "GOLDMANE_HOST", Value: fmt.Sprintf("goldmane.%s.svc.%s:7443", GoldmaneNamespace, c.cfg.ClusterDomain)},
 		{Name: "TLS_CERT_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath()},
 		{Name: "TLS_KEY_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath()},
 	}

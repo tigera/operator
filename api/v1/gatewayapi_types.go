@@ -54,7 +54,7 @@ type GatewayAPISpec struct {
 	// Allow optional customization of the GatewayClasses that will be available; please see
 	// GatewayClassSpec for more detail.  If GatewayClasses is nil, the Tigera operator
 	// configures a single GatewayClass named "tigera-gateway-class" without any of the
-	// additional customizations that are allowed by GatewayClassSpec.
+	// enhanced customizations that are allowed by GatewayClassSpec.
 	GatewayClasses []GatewayClassSpec
 
 	// Allow optional customization of the gateway controller deployment.

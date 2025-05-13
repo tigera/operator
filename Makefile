@@ -39,6 +39,9 @@ OPERATOR_SDK_URL = https://github.com/operator-framework/operator-sdk/releases/d
 # that's what we used before and we don't want to break things if that's necessary.
 HELM3_VERSION = v3.11.3
 HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).tar.gz
+HELM_BUILDARCH_BINARY = $(HACK_BIN)/helm-$(BUILDARCH)
+HELM_BUILDARCH_VERSIONED_BINARY = $(HELM_BUILDARCH_BINARY)-$(HELM3_VERSION)
+
 
 # The directory into which we download binaries we need to run certain
 # processes, e.g. generating bundles
@@ -257,17 +260,21 @@ $(ENVOY_GATEWAY_RESOURCES): $(HACK_BIN)/helm-$(BUILDARCH)
 	echo "kind: Namespace" >> $@
 	echo "metadata:" >> $@
 	echo "  name: $(ENVOY_GATEWAY_NAMESPACE)" >> $@
-	$(HACK_BIN)/helm-$(BUILDARCH) template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
+	$(HELM_BUILDARCH_BINARY) template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
 		--version $(ENVOY_GATEWAY_VERSION) \
 		-n $(ENVOY_GATEWAY_NAMESPACE) \
 		--include-crds \
 	>> $@
 
-$(HACK_BIN)/helm-$(BUILDARCH): $(HACK_BIN) $(HACK_BIN)/helm-$(BUILDARCH)-$(HELM3_VERSION)
-	ln -sf helm-$(BUILDARCH)-$(HELM3_VERSION) $(HACK_BIN)/helm-$(BUILDARCH)
-$(HACK_BIN)/helm-$(BUILDARCH)-$(HELM3_VERSION): $(HACK_BIN)
-	curl -fsSL --retry 5 $(HELM3_URL) | tar --extract --gzip -C $(HACK_BIN) --strip-components=1 $(NATIVE_OS)-$(BUILDARCH)/helm -O > $(HACK_BIN)/helm-$(BUILDARCH)-$(HELM3_VERSION)
-	chmod a+x $(HACK_BIN)/helm-$(BUILDARCH)-$(HELM3_VERSION)
+$(HELM_BUILDARCH_BINARY): $(HACK_BIN) $(HELM_BUILDARCH_VERSIONED_BINARY)
+	$(info ░▒▓ symlink $(HELM_BUILDARCH_VERSIONED_BINARY) -> $(HELM_BUILDARCH_BINARY))
+	@ln -sf helm-$(BUILDARCH)-$(HELM3_VERSION) $(HACK_BIN)/helm-$(BUILDARCH)
+
+$(HELM_BUILDARCH_VERSIONED_BINARY): $(HACK_BIN)
+	$(info ░▒▓ Downloading helm3 $(HELM3_VERSION) for $(BUILDARCH) to $(HELM_BUILDARCH_VERSIONED_BINARY))
+	@curl -fsSL --retry 5 $(HELM3_URL) | tar --extract --gzip -C $(HACK_BIN) --strip-components=1 $(NATIVE_OS)-$(BUILDARCH)/helm -O > $(HELM_BUILDARCH_VERSIONED_BINARY)
+	@chmod a+x $(HELM_BUILDARCH_VERSIONED_BINARY)
+
 
 build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES)

@@ -6,8 +6,6 @@
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
 
-SHELL = /bin/bash
-
 define yq_cmd
 	$(shell yq --version | grep v$1.* >/dev/null && which yq || echo docker run --rm --user="root" -i -v "$(shell pwd)":/workdir mikefarah/yq:$1 $(if $(shell [ $1 -lt 4 ] && echo "true"), yq,))
 endef
@@ -26,7 +24,7 @@ endif
 
 # These values are used for fetching tools to run as part of the build process
 # and shouldn't vary based on the target we're building for
-NATIVE_ARCH := $(shell if [[ "$(shell uname -m)" == "x86_64" ]]; then echo amd64; else uname -m; fi)
+NATIVE_ARCH := $(shell bash -c 'if [[ "$(shell uname -m)" == "x86_64" ]]; then echo amd64; else uname -m; fi')
 NATIVE_OS := $(shell uname -s | tr A-Z a-z)
 
 # The version of kustomize we use for generating bundles
@@ -37,10 +35,10 @@ KUSTOMIZE_DOWNLOAD_URL = https://github.com/kubernetes-sigs/kustomize/releases/d
 OPERATOR_SDK_VERSION = v1.39.2
 OPERATOR_SDK_URL = https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$(NATIVE_OS)_$(NATIVE_ARCH)
 
-# Our version of helm3
+# Our version of helm3 - Note that we use BUILD_ARCH here instead of NATIVE_ARCH because
+# that's what we used before and we don't want to break things if that's necessary.
 HELM3_VERSION = v3.11.3
-HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(NATIVE_ARCH).tar.gz
-
+HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).tar.gz
 
 # The directory into which we download binaries we need to run certain
 # processes, e.g. generating bundles
@@ -265,11 +263,11 @@ $(ENVOY_GATEWAY_RESOURCES): $(HACK_BIN)/helm-$(BUILDARCH)
 		--include-crds \
 	>> $@
 
-$(HACK_BIN)/helm-$(BUILDARCH): $(HACK_BIN)
-	curl -fsSL --retry 5 $(HELM3_URL) | tar --extract --gzip -C $(HACK_BIN)/helm-$(BUILDARCH)
-	tar -zxvf $(HACK_BIN)/helm3.tar.gz -C $(HACK_BIN) linux-$(BUILDARCH)/helm
-	mv $(HACK_BIN)/linux-$(BUILDARCH)/helm $(HACK_BIN)/helm-$(BUILDARCH)
-	rmdir $(HACK_BIN)/linux-$(BUILDARCH)
+$(HACK_BIN)/helm-$(BUILDARCH): $(HACK_BIN) $(HACK_BIN)/helm-$(BUILDARCH)-$(HELM3_VERSION)
+	ln -sf helm-$(BUILDARCH)-$(HELM3_VERSION) $(HACK_BIN)/helm-$(BUILDARCH)
+$(HACK_BIN)/helm-$(BUILDARCH)-$(HELM3_VERSION): $(HACK_BIN)
+	curl -fsSL --retry 5 $(HELM3_URL) | tar --extract --gzip -C $(HACK_BIN) --strip-components=1 $(NATIVE_OS)-$(BUILDARCH)/helm -O > $(HACK_BIN)/helm-$(BUILDARCH)-$(HELM3_VERSION)
+	chmod a+x $(HACK_BIN)/helm-$(BUILDARCH)-$(HELM3_VERSION)
 
 build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES)

@@ -94,6 +94,7 @@ var _ = Describe("ComponentRendering", func() {
 				ClusterID:             "test-cluster-id",
 				CalicoVersion:         "test-calico-version",
 				ClusterType:           "test-cluster-type",
+				ClusterDomain:         "cluster.domain",
 			},
 			&appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -134,7 +135,7 @@ var _ = Describe("ComponentRendering", func() {
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "PORT", Value: "3002"},
-										{Name: "GOLDMANE_HOST", Value: "goldmane.calico-system.svc.cluster.local:7443"},
+										{Name: "GOLDMANE_HOST", Value: "goldmane.calico-system.svc.cluster.domain:7443"},
 										{Name: "TLS_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
 										{Name: "TLS_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
 									},

@@ -249,6 +249,9 @@ type TLSCipherSuites []TLSCipherSuite
 
 // ToString returns a comma-separated string of cipher suite names.
 func (s TLSCipherSuites) ToString() string {
+	if len(s) == 0 {
+		return ""
+	}
 	names := make([]string, len(s))
 	for i, suite := range s {
 		names[i] = suite.Name.String()

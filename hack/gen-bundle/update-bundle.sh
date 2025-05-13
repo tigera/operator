@@ -36,20 +36,49 @@ rm -rf bundle/${VERSION}
 mkdir bundle/${VERSION}
 mv bundle/{metadata,manifests} bundle/${VERSION}
 
+##############
+###
+### YAML FILE UPDATES START HERE
+###
+### We put all of our updates into a file and then feed it to yq for a few reasons:
+###
+### 1. The heredoc syntax means we don't have to escape anything
+### 2. It leaves a yaml-update file behind that we can inspect if
+###    something goes wrong
+###
+### Make sure every line you add ends with a | so that yq knows where each
+### command ends and the next begins (like a semicolon at the end of a line in C)
+###
+##############
+
 YAML_UPDATE_FILE=yaml-updates
 rm -f ${YAML_UPDATE_FILE}
 
+##
+## .metadata.annotations
+##
+
 # Update the CSV. Set the operator image container image and creation timestamp annotations.
-#
 TIMESTAMP=$(echo ${OPERATOR_IMAGE_INSPECT} | jq -r .[0].Created)
 cat <<- EOF >> ${YAML_UPDATE_FILE}
 	.metadata.annotations.containerImage = "${OPERATOR_IMAGE_DIGEST}" |
 	.metadata.annotations.createdAt = "${TIMESTAMP}" |
+	.metadata.annotations.categories = "Networking, Security" |
+	.metadata.annotations.capabilities = "Basic Install" |
 EOF
+
+# Fetch some annotations from our base yaml file
+for annotation in categories description support repository; do
+	annotation_value=$(yq ".metadata.annotations.${annotation}" config/manifests/bases/tigera-operator.clusterserviceversion.yaml)
+	cat <<- EOF >> ${YAML_UPDATE_FILE}
+		.metadata.annotations.${annotation} = "${annotation_value}" |
+	EOF
+done
 
 # Add the features annotations per https://docs.openshift.com/container-platform/4.14/operators/operator_sdk/osdk-generating-csvs.html
 FEATURES=features.operators.openshift.io
 cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.metadata.annotations."${FEATURES}/valid-subscription" = "No subscription required" |
 	.metadata.annotations."${FEATURES}/disconnected" = "false" |
 	.metadata.annotations."${FEATURES}/fips-compliant" = "false" |
 	.metadata.annotations."${FEATURES}/proxy-aware" = "false" |
@@ -62,19 +91,15 @@ cat <<- EOF >> ${YAML_UPDATE_FILE}
 	.metadata.annotations."${FEATURES}/csi" = "false" |
 EOF
 
-# Set the operator container image by digest in the tigera-operator deployment spec embedded in the CSV.
+# Set the CSV to ignore previous versions when updating. Use brackets to preserve the
+# dot in the key "olm.skipRange".
 cat <<- EOF >> ${YAML_UPDATE_FILE}
-	.spec.install.spec.deployments[0].spec.template.spec.containers[0].image = "${OPERATOR_IMAGE_DIGEST}" |
-	.spec.install.spec.deployments[0].spec.template.spec.containers[0].name = "tigera-operator" |
-	.spec.install.spec.deployments[0].spec.selector.matchLabels.name = "tigera-operator" |
+	.metadata.annotations."olm.skipRange" = "<${VERSION}" |
 EOF
 
-# Set the previous version of the operator that this version replaces.
-if [[ "${PREV_VERSION}" != "0.0.0" ]]; then
-    cat <<- EOF >> ${YAML_UPDATE_FILE}
-		.spec.replaces = "tigera-operator.v${PREV_VERSION}" |
-	EOF
-fi
+##
+## .metadata.labels
+##
 
 # Add labels for each supported architecture in the CSV file, in the
 # metadata.labels section:
@@ -87,22 +112,75 @@ for arch in $(echo "$OPERATOR_MANIFEST_INSPECT" | jq -r '.manifests[].platform.a
 	EOF
 done
 
-# Set the CSV to ignore previous versions when updating. Use brackets to preserve the
-# dot in the key "olm.skipRange".
+##
+## .spec
+##
+
+# Set some basic required CSV fields
+description_value=$(yq ".metadata.annotations.description" config/manifests/bases/tigera-operator.clusterserviceversion.yaml)
+
+echo " #### DESCRIPTION IS ${description_value} ### "
+
 cat <<- EOF >> ${YAML_UPDATE_FILE}
-	.metadata.annotations."olm.skipRange" = "<${VERSION}" |
+	.spec.displayName = "Tigera Operator v1.38" |
+	.spec.description = "${description_value}" |
 EOF
 
+
+# Set the previous version of the operator that this version replaces.
+if [[ "${PREV_VERSION}" != "0.0.0" ]]; then
+    cat <<- EOF >> ${YAML_UPDATE_FILE}
+		.spec.replaces = "tigera-operator.v${PREV_VERSION}" |
+	EOF
+fi
+
 # Add required 'relatedImages' to CSV
-# E.g.
-#
-#   relatedImages:
-#     - name: tigera-operator
-#       image: quay.io/tigera/operator@sha256:b4e3eeccfd3d5a931c07f31c244b272e058ccabd2d8155ccc3ff52ed78855e69
 cat <<- EOF >> ${YAML_UPDATE_FILE}
 	.spec.relatedImages[0].name = "tigera-operator" |
 	.spec.relatedImages[0].image = "${OPERATOR_IMAGE_DIGEST}" |
 EOF
+
+# Add some keywords
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.spec.keywords += "networking" |
+	.spec.keywords += "security" |
+	.spec.keywords += "monitoring" |
+EOF
+
+# Update our maintainers objet
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.spec.maintainers[0] = {"name": "Project Calico Maintainers", "email": "maintainers@tigera.io"} |
+EOF
+
+# Set the operator container image by digest in the tigera-operator deployment spec embedded in the CSV.
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.spec.install.spec.deployments[0].spec.template.spec.containers[0].image = "${OPERATOR_IMAGE_DIGEST}" |
+	.spec.install.spec.deployments[0].spec.template.spec.containers[0].name = "tigera-operator" |
+	.spec.install.spec.deployments[0].spec.selector.matchLabels.name = "tigera-operator" |
+EOF
+
+
+# Update our provider object
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.spec.provider = {"name": "Tigera", "url": "https://tigera.io/"} |
+EOF
+
+# Attest to our own maturity
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.spec.maturity = "stable" |
+EOF
+
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.spec.links[0] = {"name": "Tigera", "url": "https://tigera.io/"} |
+	.spec.links += {"name": "Calico Introduction", "url": "https://docs.tigera.io/calico/latest/about/"} |
+	.spec.links += {"name": "Install an OpenShift 4 cluster with Calico", "url": "https://docs.tigera.io/calico/latest/getting-started/kubernetes/openshift/installation"} |
+EOF
+
+##############
+###
+### ALL YAML UPDATES MUST HAPPEN ABOVE THIS LINE
+###
+##############
 
 # This line ends our yq script and commits the update
 cat <<- EOF >> ${YAML_UPDATE_FILE}

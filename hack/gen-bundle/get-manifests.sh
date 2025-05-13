@@ -16,15 +16,7 @@ fi
 mkdir -p ${BUNDLE_CRD_DIR} || true
 mkdir -p ${BUNDLE_DEPLOY_DIR} || true
 
-echo "$%#@%#$%@@#%@#$%"
-echo "$%#@%#$%@@#%@#$%"
-echo "$%#@%#$%@@#%@#$%"
-echo
-echo $BUNDLE_DEPLOY_DIR
-echo
-echo "$%#@%#$%@@#%@#$%"
-echo "$%#@%#$%@@#%@#$%"
-echo "$%#@%#$%@@#%@#$%"
+echo "Building bundle from ${BUNDLE_DEPLOY_DIR}"
 
 # Get the base path for the Calico docs site. This will be used to download manifests.
 CALICO_BASE_URL=https://raw.githubusercontent.com/projectcalico/calico

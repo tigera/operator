@@ -24,13 +24,49 @@ import (
 
 // GatewayAPISpec has fields that can be used to customize our GatewayAPI support.
 type GatewayAPISpec struct {
+	// Reference to a custom EnvoyGateway resource to use as the base EnvoyGateway configuration
+	// for the gateway controller.  When specified, only the `kind`, `name` and `namespace`
+	// fields of the ObjectReference are significant, and they must identify an existing
+	// EnvoyGateway resource.  `kind` must be either ConfigMap - in which case the referenced
+	// resource is a ConfigMap that wraps an EnvoyGateway, like the default
+	// `envoy-gateway-config` ConfigMap - or EnvoyGateway - in which case the referenced
+	// resource must be an EnvoyGateway resource.
+	//
+	// When not specified, the Tigera operator uses the `envoy-gateway-config` from the Envoy
+	// Gateway helm chart as its base.
+	//
+	// Starting from that base, the Tigera operator copies and modifies the EnvoyGateway
+	// resource as follows:
+	//
+	// 1. If not already specified, it sets the ControllerName to
+	// "gateway.envoyproxy.io/gatewayclass-controller".
+	//
+	// 2. It configures the `tigera/envoy-gateway` and `tigera/envoy-ratelimit` images that will
+	// be used (according to the current Calico version, private registry and image set
+	// settings) and any pull secrets that are needed to pull those images.
+	//
+	// 3. It enables use of the Backend API.
+	//
+	// The resulting EnvoyGateway is provisioned as the `envoy-gateway-config` ConfigMap (which
+	// the gateway controller then uses as its config).
+	EnvoyGatewayRef *v1.ObjectReference `json:"envoyGatewayRef,omitempty"`
+
+	// Allow optional customization of the GatewayClasses that will be available; please see
+	// GatewayClassSpec for more detail.  If GatewayClasses is nil, the Tigera operator
+	// configures a single GatewayClass named "tigera-gateway-class" without any of the
+	// additional customizations that are allowed by GatewayClassSpec.
+	GatewayClasses []GatewayClassSpec
+
 	// Allow optional customization of the gateway controller deployment.
 	GatewayControllerDeployment *GatewayControllerDeployment `json:"gatewayControllerDeployment,omitempty"`
 
 	// Allow optional customization of the gateway certgen job.
 	GatewayCertgenJob *GatewayCertgenJob `json:"gatewayCertgenJob,omitempty"`
 
-	// Allow optional customization of gateway deployments.
+	// Allow optional customization of gateway deployments (or daemonsets) and services.  These
+	// customizations will apply to all of the GatewayClasses that the Tigera operator
+	// provisions.  GatewayClass-specific customizations can be specified in
+	// `GatewayClasses[*].GatewayDeployment`.
 	GatewayDeployment *GatewayDeployment `json:"gatewayDeployment,omitempty"`
 
 	// Configure how to manage and update Gateway API CRDs.  The default behaviour - which is
@@ -46,6 +82,42 @@ type GatewayAPISpec struct {
 	// cluster's Gateway API CRDs aligned with those that it would install on a cluster that
 	// does not yet have any version of those CRDs.
 	CRDManagement *CRDManagement `json:"crdManagement,omitempty"`
+}
+
+type GatewayClassSpec struct {
+	// The name of this GatewayClass.
+	Name string
+
+	// Reference to a custom EnvoyProxy resource to use as the base EnvoyProxy configuration for
+	// this GatewayClass.  When specified, only the `name` and `namespace` fields of the
+	// ObjectReference are significant, and they must identify an existing EnvoyProxy resource.
+	//
+	// When not specified, the Tigera operator uses an empty EnvoyProxy resource as its base.
+	//
+	// Starting from that base, the Tigera operator copies and modifies the EnvoyProxy resource
+	// as follows, in the order described:
+	//
+	// 1. It configures the `tigera/envoy-proxy` image that will be used (according to the
+	// current Calico version, private registry and image set settings) and any pull secrets
+	// that are needed to pull that image.
+	//
+	// 2. It applies common customizations as specified by the `GatewayDeployment` field at the
+	// top level of this GatewayAPI resource's Spec.
+	//
+	// 3. It applies GatewayClass-specific customizations as specified by the following
+	// `GatewayDeployment` field.
+	//
+	// The resulting EnvoyProxy is provisioned in the `tigera-gateway` namespace, together with
+	// a GatewayClass that references it.
+	//
+	// If a custom EnvoyProxy resource is specified and uses `EnvoyDaemonSet` instead of the
+	// default `EnvoyDeployment`, deployment-related customizations will be applied within
+	// `EnvoyDaemonSet` instead of within `EnvoyDeployment`.
+	EnvoyProxyRef *v1.ObjectReference `json:"envoyProxyRef,omitempty"`
+
+	// Allow class-specific customization of gateway deployments (or daemonsets) and services,
+	// for Gateways in this GatewayClass.
+	GatewayDeployment *GatewayDeployment `json:"gatewayDeployment,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -86,11 +158,17 @@ type GatewayControllerDeployment struct {
 
 // GatewayControllerDeploymentSpec allows customization of the gateway controller deployment spec.
 //
+// If GatewayControllerDeployment.Spec.Replicas is non-nil it customizes the number of replicas for
+// the deployment.
+//
 // If GatewayControllerDeployment.Spec.MinReadySeconds is non-nil, it sets the minReadySeconds field
 // for the deployment.
 //
 // For customization of the pod template see GatewayControllerDeploymentPodTemplate.
 type GatewayControllerDeploymentSpec struct {
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// +optional
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=2147483647
@@ -127,6 +205,9 @@ type GatewayControllerDeploymentPodTemplate struct {
 // If GatewayControllerDeployment.Spec.Template.Spec.Tolerations is non-nil, it sets the tolerations
 // field of the deployment's pod template.
 //
+// If GatewayControllerDeployment.Spec.Template.Spec.TopologySpreadConstraints is non-nil, it sets the
+// topology spread constraints of the deployment's pod template.
+//
 // For customization of container resources see GatewayControllerDeploymentContainer.
 type GatewayControllerDeploymentPodSpec struct {
 	// +optional
@@ -137,6 +218,12 @@ type GatewayControllerDeploymentPodSpec struct {
 
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// TopologySpreadConstraints describes how a group of pods ought to spread across topology
+	// domains. Scheduler will schedule pods in a way which abides by the constraints.
+	// All topologySpreadConstraints are ANDed.
+	// +optional
+	TopologySpreadConstraints []v1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations"`
@@ -236,14 +323,22 @@ type GatewayCertgenJobContainer struct {
 type GatewayDeployment struct {
 	// +optional
 	Spec *GatewayDeploymentSpec `json:"spec,omitempty"`
+
+	// +optional
+	Service *GatewayService `json:"service,omitempty"`
 }
 
 // GatewayDeploymentSpec allows customization of the spec of gateway deployments.
+//
+// If Replicas is non-nil it customizes the number of replicas for each gateway deployment.
 //
 // For customization of the pod template see GatewayDeploymentPodTemplate.
 //
 // For customization of the deployment strategy see GatewayDeploymentStrategy.
 type GatewayDeploymentSpec struct {
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// +optional
 	Template *GatewayDeploymentPodTemplate `json:"template,omitempty"`
 
@@ -325,4 +420,40 @@ type GatewayDeploymentContainer struct {
 type GatewayDeploymentStrategy struct {
 	// +optional
 	RollingUpdate *appsv1.RollingUpdateDeployment `json:"rollingUpdate,omitempty" protobuf:"bytes,2,opt,name=rollingUpdate"`
+}
+
+// GatewayService allows customization of the services that front gateway deployments.
+//
+// If Metadata is non-nil, non-clashing labels and annotations from that metadata are added into the
+// each Gateway service's metadata.
+//
+// For customization of the service spec see GatewayServiceSpec.
+type GatewayService struct {
+	// +optional
+	Metadata *Metadata `json:"metadata,omitempty"`
+
+	// +optional
+	Spec *GatewayServiceSpec `json:"spec,omitempty"`
+}
+
+// GatewayServiceSpec allows customization of the services that front gateway deployments.
+//
+// The LoadBalancer fields allow customization of the corresponding fields in the Kubernetes
+// ServiceSpec.  These can be used for some cloud-independent control of the external load balancer
+// that is provisioned for each Gateway.  For finer-grained cloud-specific control please use
+// the Metadata.Annotations field in GatewayService.
+//
+// For customization of the service spec see GatewayServiceSpec.
+type GatewayServiceSpec struct {
+	// +optional
+	LoadBalancerClass *string `json:"loadBalancerClass,omitempty"`
+
+	// +optional
+	AllocateLoadBalancerNodePorts *bool `json:"allocateLoadBalancerNodePorts,omitempty"`
+
+	// +optional
+	LoadBalancerSourceRanges []string `json:"loadBalancerSourceRanges,omitempty"`
+
+	// +optional
+	LoadBalancerIP *string `json:"loadBalancerIP,omitempty"`
 }

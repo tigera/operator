@@ -134,6 +134,16 @@ if [[ "${PREV_VERSION}" != "0.0.0" ]]; then
 	EOF
 fi
 
+# Specify supported installModes
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.spec.installModes = [] |
+	.spec.installModes += {"type": "OwnNamespace", "supported": true} |
+	.spec.installModes += {"type": "SingleNamespace", "supported": true} |
+	.spec.installModes += {"type": "MultiNamespace", "supported": false} |
+	.spec.installModes += {"type": "AllNamespaces", "supported": true} |
+EOF
+
+
 # Add required 'relatedImages' to CSV
 cat <<- EOF >> ${YAML_UPDATE_FILE}
 	.spec.relatedImages[0].name = "tigera-operator" |

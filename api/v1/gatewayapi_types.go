@@ -24,6 +24,33 @@ import (
 
 // GatewayAPISpec has fields that can be used to customize our GatewayAPI support.
 type GatewayAPISpec struct {
+	// Reference to a custom EnvoyGateway resource to use as the base EnvoyGateway configuration
+	// for the gateway controller.  When specified, only the `kind`, `name` and `namespace`
+	// fields of the ObjectReference are significant, and they must identify an existing
+	// EnvoyGateway resource.  `kind` must be either ConfigMap - in which case the referenced
+	// resource is a ConfigMap that wraps an EnvoyGateway, like the default
+	// `envoy-gateway-config` ConfigMap - or EnvoyGateway - in which case the referenced
+	// resource must be an EnvoyGateway resource.
+	//
+	// When not specified, the Tigera operator uses the `envoy-gateway-config` from the Envoy
+	// Gateway helm chart as its base.
+	//
+	// Starting from that base, the Tigera operator copies and modifies the EnvoyGateway
+	// resource as follows:
+	//
+	// 1. If not already specified, it sets the ControllerName to
+	// "gateway.envoyproxy.io/gatewayclass-controller".
+	//
+	// 2. It configures the `tigera/envoy-gateway` and `tigera/envoy-ratelimit` images that will
+	// be used (according to the current Calico version, private registry and image set
+	// settings) and any pull secrets that are needed to pull those images.
+	//
+	// 3. It enables use of the Backend API.
+	//
+	// The resulting EnvoyGateway is provisioned as the `envoy-gateway-config` ConfigMap (which
+	// the gateway controller then uses as its config).
+	EnvoyGatewayRef *v1.ObjectReference `json:"envoyGatewayRef,omitempty"`
+
 	// Allow optional customization of the GatewayClasses that will be available; please see
 	// GatewayClassSpec for more detail.  If GatewayClasses is nil, the Tigera operator
 	// configures a single GatewayClass named "tigera-gateway-class" without any of the
@@ -86,7 +113,7 @@ type GatewayClassSpec struct {
 	// If a custom EnvoyProxy resource is specified and uses `EnvoyDaemonSet` instead of the
 	// default `EnvoyDeployment`, deployment-related customizations will be applied within
 	// `EnvoyDaemonSet` instead of within `EnvoyDeployment`.
-	EnvoyProxyRef *v1.ObjectReference `json:"envoyProxyName,omitempty"`
+	EnvoyProxyRef *v1.ObjectReference `json:"envoyProxyRef,omitempty"`
 
 	// Allow class-specific customization of gateway deployments (or daemonsets) and services,
 	// for Gateways in this GatewayClass.

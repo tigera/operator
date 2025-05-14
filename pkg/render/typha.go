@@ -633,6 +633,10 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 		)
 	}
 
+	if len(c.cfg.Installation.TLSCipherSuites) > 0 {
+		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "TYPHA_TLSCIPHERSUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
+	}
+
 	return typhaEnv
 }
 

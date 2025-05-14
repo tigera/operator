@@ -15,6 +15,8 @@
 package render_test
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -170,6 +172,23 @@ var _ = Describe("Rendering tests", func() {
 				Value:    "arm64",
 				Effect:   corev1.TaintEffectNoSchedule,
 			}))
+		})
+
+		It("should render a non-default TLS Cipher Suites", func() {
+			renderGuardian(operatorv1.InstallationSpec{
+				TLSCipherSuites: operatorv1.TLSCipherSuites{
+					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
+					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
+				},
+			})
+			expectedEnvVar := fmt.Sprintf("%s,%s", operatorv1.TLS_AES_128_GCM_SHA256, operatorv1.TLS_AES_256_GCM_SHA384)
+			Expect(cfg.Installation.TLSCipherSuites.ToString()).To(Equal(expectedEnvVar))
+
+			d := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d).NotTo(BeNil())
+			container := rtest.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianContainerName)
+			Expect(container).NotTo(BeNil())
+			rtest.ExpectEnv(container.Env, "GUARDIAN_TLS_CIPHER_SUITES", expectedEnvVar)
 		})
 	})
 

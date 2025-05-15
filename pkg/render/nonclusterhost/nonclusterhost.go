@@ -209,6 +209,15 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 		},
 	}...)
 
+	// For non-cluster host init process to update labels.
+	rules = append(rules, []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"hostendpoints"},
+			Verbs:     []string{"list", "update"},
+		},
+	}...)
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

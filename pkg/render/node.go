@@ -1445,7 +1445,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 	}
 
 	if len(c.cfg.Installation.TLSCipherSuites) > 0 {
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_TLSCIPHERSUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "TLS_CIPHER_SUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
 	}
 
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {

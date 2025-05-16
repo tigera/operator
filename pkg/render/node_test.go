@@ -2208,7 +2208,7 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds).NotTo(BeNil())
 				container := rtest.GetContainer(ds.Spec.Template.Spec.Containers, render.CalicoNodeObjectName)
 				Expect(container).NotTo(BeNil())
-				rtest.ExpectEnv(container.Env, "FELIX_TLSCIPHERSUITES", expectedEnvVar)
+				rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
 			})
 
 			It("should render volumes and node volumemounts when bird templates are provided", func() {

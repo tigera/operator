@@ -188,7 +188,7 @@ var _ = Describe("Rendering tests", func() {
 			Expect(d).NotTo(BeNil())
 			container := rtest.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianContainerName)
 			Expect(container).NotTo(BeNil())
-			rtest.ExpectEnv(container.Env, "GUARDIAN_TLS_CIPHER_SUITES", expectedEnvVar)
+			rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
 		})
 	})
 

@@ -575,7 +575,7 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 	}
 
 	if len(c.cfg.Installation.TLSCipherSuites) > 0 {
-		windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "FELIX_TLSCIPHERSUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
+		windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "TLS_CIPHER_SUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
 	}
 
 	kubeNetwork := "Calico.*"

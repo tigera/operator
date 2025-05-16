@@ -301,7 +301,7 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d).NotTo(BeNil())
 		container := rtest.GetContainer(d.Spec.Template.Spec.Containers, render.TyphaContainerName)
 		Expect(container).NotTo(BeNil())
-		rtest.ExpectEnv(container.Env, "TYPHA_TLSCIPHERSUITES", expectedEnvVar)
+		rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
 	})
 
 	It("should render resourcerequirements", func() {

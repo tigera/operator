@@ -2194,6 +2194,23 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 			})
 
+			It("should render TLS Ciphers when TLSCipherSuits is set", func() {
+				cfg.Installation.TLSCipherSuites = operatorv1.TLSCipherSuites{
+					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
+					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
+				}
+				expectedEnvVar := fmt.Sprintf("%s,%s", operatorv1.TLS_AES_128_GCM_SHA256, operatorv1.TLS_AES_256_GCM_SHA384)
+				Expect(cfg.Installation.TLSCipherSuites.ToString()).To(Equal(expectedEnvVar))
+
+				component := render.Node(&cfg)
+				resources, _ := component.Objects()
+				ds := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+				Expect(ds).NotTo(BeNil())
+				container := rtest.GetContainer(ds.Spec.Template.Spec.Containers, render.CalicoNodeObjectName)
+				Expect(container).NotTo(BeNil())
+				rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
+			})
+
 			It("should render volumes and node volumemounts when bird templates are provided", func() {
 				expectedResources := []struct {
 					name    string

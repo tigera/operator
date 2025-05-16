@@ -1444,6 +1444,10 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_TYPHAURISAN", Value: c.cfg.TLS.TyphaURISAN})
 	}
 
+	if len(c.cfg.Installation.TLSCipherSuites) > 0 {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "TLS_CIPHER_SUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
+	}
+
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// If using Calico CNI, we need to manage CNI credential rotation on the host.
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_MANAGE_CNI", Value: "true"})

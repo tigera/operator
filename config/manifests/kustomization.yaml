@@ -1,2 +1,2 @@
 resources:
-- bases/operator.clusterserviceversion.yaml
+- bases/tigera-operator.clusterserviceversion.yaml

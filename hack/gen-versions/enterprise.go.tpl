@@ -163,6 +163,13 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
+{{ with index .Components "waf-http-filter" }}
+	ComponentWafHTTPFilter = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "webhooks-processor" }}
 	ComponentSecurityEventWebhooksProcessor = Component{
 		Version:  "{{ .Version }}",

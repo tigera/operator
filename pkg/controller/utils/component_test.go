@@ -628,7 +628,7 @@ var _ = Describe("Component handler tests", func() {
 					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
 					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
 				},
-				fmt.Sprintf("%s", operatorv1.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256),
+				string(operatorv1.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256),
 			},
 		},
 		TableEntry{

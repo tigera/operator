@@ -141,19 +141,17 @@ func (c *Component) serviceAccount() *corev1.ServiceAccount {
 }
 
 func (c *Component) whiskerContainer() corev1.Container {
-	env := []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "INFO"},
-		{Name: "CALICO_VERSION", Value: c.cfg.CalicoVersion},
-		{Name: "CLUSTER_ID", Value: c.cfg.ClusterID},
-		{Name: "CLUSTER_TYPE", Value: c.cfg.ClusterType},
-		{Name: "NOTIFICATIONS", Value: string(*c.cfg.Whisker.Spec.Notifications)},
-	}
-
 	return corev1.Container{
 		Name:            WhiskerContainerName,
 		Image:           c.whiskerImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
-		Env:             env,
+		Env: []corev1.EnvVar{
+			{Name: "LOG_LEVEL", Value: "INFO"},
+			{Name: "CALICO_VERSION", Value: c.cfg.CalicoVersion},
+			{Name: "CLUSTER_ID", Value: c.cfg.ClusterID},
+			{Name: "CLUSTER_TYPE", Value: c.cfg.ClusterType},
+			{Name: "NOTIFICATIONS", Value: string(*c.cfg.Whisker.Spec.Notifications)},
+		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}
 }
@@ -174,19 +172,17 @@ func (c *Component) whiskerService() *corev1.Service {
 }
 
 func (c *Component) whiskerBackendContainer() corev1.Container {
-	env := []corev1.EnvVar{
-		{Name: "LOG_LEVEL", Value: "INFO"},
-		{Name: "PORT", Value: "3002"},
-		{Name: "GOLDMANE_HOST", Value: fmt.Sprintf("goldmane.%s.svc.%s:7443", GoldmaneNamespace, c.cfg.ClusterDomain)},
-		{Name: "TLS_CERT_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath()},
-		{Name: "TLS_KEY_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath()},
-	}
-
 	return corev1.Container{
 		Name:            WhiskerBackendContainerName,
 		Image:           c.whiskerBackendImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
-		Env:             env,
+		Env: []corev1.EnvVar{
+			{Name: "LOG_LEVEL", Value: "INFO"},
+			{Name: "PORT", Value: "3002"},
+			{Name: "GOLDMANE_HOST", Value: fmt.Sprintf("goldmane.%s.svc.%s:7443", GoldmaneNamespace, c.cfg.ClusterDomain)},
+			{Name: "TLS_CERT_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath()},
+			{Name: "TLS_KEY_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath()},
+		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts: append(
 			c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),

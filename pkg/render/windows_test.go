@@ -564,7 +564,6 @@ var _ = Describe("Windows rendering tests", func() {
 			})
 		}
 	})
-
 	It("should properly render an explicitly configured MTU", func() {
 		mtu := int32(1450)
 		defaultInstance.CalicoNetwork.MTU = &mtu

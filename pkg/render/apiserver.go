@@ -1274,10 +1274,6 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
-	if len(c.cfg.Installation.TLSCipherSuites) > 0 {
-		env = append(env, corev1.EnvVar{Name: "TLS_CIPHER_SUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
-	}
-
 	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
 
 	apiServer := corev1.Container{

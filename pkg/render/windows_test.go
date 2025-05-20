@@ -565,28 +565,6 @@ var _ = Describe("Windows rendering tests", func() {
 		}
 	})
 
-	It("should render TLS Ciphers when TLSCipherSuits is set", func() {
-		cfg.Installation.TLSCipherSuites = operatorv1.TLSCipherSuites{
-			operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
-			operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
-		}
-		expectedEnvVar := fmt.Sprintf("%s,%s", operatorv1.TLS_AES_128_GCM_SHA256, operatorv1.TLS_AES_256_GCM_SHA384)
-		Expect(cfg.Installation.TLSCipherSuites.ToString()).To(Equal(expectedEnvVar))
-
-		component := render.Windows(&cfg)
-		resources, _ := component.Objects()
-		ds := rtest.GetResource(resources, common.WindowsDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-		Expect(ds).NotTo(BeNil())
-
-		container := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
-		Expect(container).NotTo(BeNil())
-		rtest.ExpectEnv(container.Env, "FELIX_TLSCIPHERSUITES", expectedEnvVar)
-
-		container = rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
-		Expect(container).NotTo(BeNil())
-		rtest.ExpectEnv(container.Env, "FELIX_TLSCIPHERSUITES", expectedEnvVar)
-	})
-
 	It("should properly render an explicitly configured MTU", func() {
 		mtu := int32(1450)
 		defaultInstance.CalicoNetwork.MTU = &mtu

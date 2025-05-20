@@ -574,10 +574,6 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 		windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "FELIX_TYPHAURISAN", Value: c.cfg.TLS.TyphaURISAN})
 	}
 
-	if len(c.cfg.Installation.TLSCipherSuites) > 0 {
-		windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "TLS_CIPHER_SUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
-	}
-
 	kubeNetwork := "Calico.*"
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		// If using Calico CNI, we need to manage CNI credential rotation on the host.

@@ -149,10 +149,6 @@ func (c *Component) whiskerContainer() corev1.Container {
 		{Name: "NOTIFICATIONS", Value: string(*c.cfg.Whisker.Spec.Notifications)},
 	}
 
-	if len(c.cfg.Installation.TLSCipherSuites) > 0 {
-		env = append(env, corev1.EnvVar{Name: "TLS_CIPHER_SUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
-	}
-
 	return corev1.Container{
 		Name:            WhiskerContainerName,
 		Image:           c.whiskerImage,
@@ -184,10 +180,6 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 		{Name: "GOLDMANE_HOST", Value: fmt.Sprintf("goldmane.%s.svc.%s:7443", GoldmaneNamespace, c.cfg.ClusterDomain)},
 		{Name: "TLS_CERT_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath()},
 		{Name: "TLS_KEY_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath()},
-	}
-
-	if len(c.cfg.Installation.TLSCipherSuites) > 0 {
-		env = append(env, corev1.EnvVar{Name: "TLS_CIPHER_SUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
 	}
 
 	return corev1.Container{

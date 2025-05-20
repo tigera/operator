@@ -398,10 +398,6 @@ func (c *GuardianComponent) container() []corev1.Container {
 		)
 	}
 
-	if len(c.cfg.Installation.TLSCipherSuites) > 0 {
-		envVars = append(envVars, corev1.EnvVar{Name: "TLS_CIPHER_SUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
-	}
-
 	if c.cfg.GuardianClientKeyPair != nil {
 		envVars = append(envVars,
 			corev1.EnvVar{

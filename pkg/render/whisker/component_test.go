@@ -15,8 +15,6 @@
 package whisker_test
 
 import (
-	"fmt"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -261,38 +259,6 @@ var _ = Describe("ComponentRendering", func() {
 		Expect(deployment.Spec.Template.Spec.PriorityClassName).To(Equal(priorityClassName))
 		Expect(deployment.Spec.Template.Spec.Containers[0].Resources).To(Equal(*whiskerResources))
 		Expect(deployment.Spec.Template.Spec.Containers[1].Resources).To(Equal(*whiskerbackendResources))
-	})
-
-	It("should render TLS Ciphers when TLSCipherSuits is set", func() {
-		cfg := &whisker.Configuration{
-			Installation: &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderGKE,
-				Variant:            operatorv1.Calico,
-				TLSCipherSuites: operatorv1.TLSCipherSuites{
-					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
-					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
-				},
-			},
-			TrustedCertBundle:     defaultTrustedCertBundle,
-			WhiskerBackendKeyPair: defaultTLSKeyPair,
-			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
-		}
-		expectedEnvVar := fmt.Sprintf("%s,%s", operatorv1.TLS_AES_128_GCM_SHA256, operatorv1.TLS_AES_256_GCM_SHA384)
-		Expect(cfg.Installation.TLSCipherSuites.ToString()).To(Equal(expectedEnvVar))
-
-		component := whisker.Whisker(cfg)
-		resources, _ := component.Objects()
-
-		d := rtest.GetResource(resources, whisker.WhiskerDeploymentName, whisker.WhiskerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(d).NotTo(BeNil())
-		container := rtest.GetContainer(d.Spec.Template.Spec.Containers, whisker.WhiskerContainerName)
-		Expect(container).NotTo(BeNil())
-		rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
-
-		// Check the backend container as well.
-		container = rtest.GetContainer(d.Spec.Template.Spec.Containers, whisker.WhiskerBackendContainerName)
-		Expect(container).NotTo(BeNil())
-		rtest.ExpectEnv(container.Env, "TLS_CIPHER_SUITES", expectedEnvVar)
 	})
 })
 

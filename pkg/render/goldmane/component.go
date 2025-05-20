@@ -171,10 +171,6 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		{Name: "HEALTH_ENABLED", Value: "true"},
 	}
 
-	if len(c.cfg.Installation.TLSCipherSuites) > 0 {
-		env = append(env, corev1.EnvVar{Name: "TLS_CIPHER_SUITES", Value: c.cfg.Installation.TLSCipherSuites.ToString()})
-	}
-
 	volumeMounts := []corev1.VolumeMount{c.cfg.GoldmaneServerKeyPair.VolumeMount(c.SupportedOSType())}
 	volumeMounts = append(volumeMounts, c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())...)
 	volumeMounts = append(volumeMounts, corev1.VolumeMount{

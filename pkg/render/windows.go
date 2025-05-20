@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -495,7 +495,7 @@ func (c *windowsComponent) felixContainer() corev1.Container {
 	}
 }
 
-// nodeContainer creates the windows confd container (used only for the windows-bgp backend).
+// confdContainer creates the windows confd container (used only for the windows-bgp backend).
 func (c *windowsComponent) confdContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "confd",

@@ -351,6 +351,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
+		ComponentWafHTTPFilter,
 		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,

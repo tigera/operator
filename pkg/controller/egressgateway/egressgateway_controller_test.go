@@ -480,7 +480,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 		It("Should throw an error when ippool is not present", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "ippools.crd.projectcalico.org \"ippool-3\" not found", mock.Anything, mock.Anything).Return()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "ippools.projectcalico.org \"ippool-3\" not found", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			labels := map[string]string{"egress-code": "red"}
@@ -734,7 +734,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 
 		It("Should throw an error when externalNetworks are not present", func() {
 			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "externalnetworks.crd.projectcalico.org \"three\" not found", mock.Anything, mock.Anything).Return()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "externalnetworks.projectcalico.org \"three\" not found", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			labels := map[string]string{"egress-code": "red"}

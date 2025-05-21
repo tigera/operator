@@ -65,7 +65,7 @@ func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
 func isRolloutCompleteWithBPFVolumes(ds *appsv1.DaemonSet) bool {
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == render.BPFVolumeName {
-			//return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
+			// return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
 			if ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable {
 				return true
 			} else {

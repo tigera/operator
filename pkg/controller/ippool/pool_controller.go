@@ -276,7 +276,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	toCreateOrUpdate := []client.Object{}
 	for _, p := range installation.Spec.CalicoNetwork.IPPools {
 		// We need to check if updates are required, but the installation uses the operator API format and the queried
-		// pools are in crd.projectcalico.org/v1 format. Compare the pools using the crd.projectcalico.org/v1 format.
+		// pools are in projectcalico.org/v3 format. Compare the pools using the projectcalico.org/v3 format.
 		v1res, err := ToProjectCalicoV1(p)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "error handling IP pool", err, reqLogger)
@@ -392,10 +392,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-// ToProjectCalicoV1 converts an IPPool to a crd.projectcalico.org/v1 IPPool resource.
+// ToProjectCalicoV1 converts an IPPool to a projectcalico.org/v3 IPPool resource.
 func ToProjectCalicoV1(p operatorv1.IPPool) (*crdv1.IPPool, error) {
 	pool := crdv1.IPPool{
-		TypeMeta: metav1.TypeMeta{Kind: "IPPool", APIVersion: "crd.projectcalico.org/v1"},
+		TypeMeta: metav1.TypeMeta{Kind: "IPPool", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   p.Name,
 			Labels: map[string]string{},
@@ -452,7 +452,7 @@ func ToProjectCalicoV1(p operatorv1.IPPool) (*crdv1.IPPool, error) {
 }
 
 // FromProjectCalicoV1 populates the IP pool with the data from the given
-// crd.projectcalico.org/v1 IP pool. It is the direct inverse of ToProjectCalicoV1,
+// projectcalico.org/v3 IP pool. It is the direct inverse of ToProjectCalicoV1,
 // and should be updated with every new field added to the IP pool structure.
 func FromProjectCalicoV1(p *operatorv1.IPPool, crd crdv1.IPPool) {
 	p.Name = crd.Name

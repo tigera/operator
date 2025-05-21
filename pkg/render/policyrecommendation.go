@@ -183,7 +183,7 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "list", "watch"},
 			},

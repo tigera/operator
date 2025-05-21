@@ -50,8 +50,10 @@ def issues_in_milestone() -> list:
     # Find the milestone to get the id.
     milestones = repo.get_milestones(state="all")
     # Filter for the milestone we're interested in.
-    milestone = [m for m in milestones if m.title == VERSION]
-    m = milestone[0] if milestone else None
+    for milestone in milestones:
+        if milestone.title == VERSION:
+            m = milestone
+            break
     if not m:
         raise ReleaseNoteError(f"milestone {VERSION} not found")
     # Ensure the milestone is closed before generating release notes.
@@ -59,24 +61,30 @@ def issues_in_milestone() -> list:
         raise ReleaseNoteError(
             f"milestone {m.title} is not closed, please close it before generating release notes"
         )
-    print(f"  found milestone {m.title}")
+    print(f"Found milestone {m.title} at {m.raw_data['html_url']}")
     milestone_issues = repo.get_issues(
         milestone=m, state="closed", labels=["release-note-required"]
     )
+
+    # Get our "issues" as pull requests, which is what we care about
+    pr_list = [issue.as_pull_request() for issue in milestone_issues]
+
     # If there are no issues in the milestone, raise an error.
-    if milestone_issues.totalCount == 0:
+    if pr_list:
+        print(f"Got {len(pr_list)} PRs from milestone")
+    else:
         raise ReleaseNoteError(f"no issues found for milestone {m.title}")
-    open_issues = [
-        issue for issue in milestone_issues if issue.as_pull_request().state == "open"
-    ]
+
+    open_prs = [pr for pr in pr_list if pr.state == "open"]
+
     # If there are open issues in the milestone, raise an error.
-    if len(open_issues) > 0:
+    if len(open_prs) > 0:
         raise ReleaseNoteError(
-            f"{len(open_issues)} PRs are still open, remove from milestone"
+            f"{len(open_prs)} PRs are still open, remove from milestone"
         )
 
     # Return only the merged PRs
-    return [issue for issue in milestone_issues if issue.as_pull_request().merged]
+    return [pr for pr in pr_list if pr.merged]
 
 
 def extract_release_notes(issue: Issue) -> list:

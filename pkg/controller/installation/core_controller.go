@@ -1430,9 +1430,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		CanRemoveCNIFinalizer:         canRemoveCNI,
 		PrometheusServerTLS:           nodePrometheusTLS,
 		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
-		BindMode:                      string(*bgpConfiguration.Spec.BindMode),
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
+	}
+
+	if bgpConfiguration != nil && bgpConfiguration.Spec.BindMode != nil {
+		nodeCfg.BindMode = string(*bgpConfiguration.Spec.BindMode)
 	}
 	components = append(components, render.Node(&nodeCfg))
 

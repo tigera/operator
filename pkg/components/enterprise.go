@@ -143,7 +143,7 @@ var (
 		Registry: "",
 	}
 
-	ComponentWafHTTPFilter = Component{
+	ComponentWAFHTTPFilter = Component{
 		Version:  "master",
 		Image:    "tigera/waf-http-filter",
 		Registry: "",
@@ -351,7 +351,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
-		ComponentWafHTTPFilter,
+		ComponentWAFHTTPFilter,
 		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,

@@ -164,7 +164,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "waf-http-filter" }}
-	ComponentWafHTTPFilter = Component{
+	ComponentWAFHTTPFilter = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -404,7 +404,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
-		ComponentWafHTTPFilter,
+		ComponentWAFHTTPFilter,
 		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,

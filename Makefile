@@ -572,7 +572,7 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 
 release-notes: var-require-all-VERSION-GITHUB_TOKEN
 	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .
-	@docker run --rm -v $(CURDIR):/workdir -e	GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) tigera/release-notes
+	@docker run --rm -v $(CURDIR):/workdir -e GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) -u $(shell id -u):$(shell id -g) tigera/release-notes
 
 ## Tags and builds a release from start to finish.
 release: release-prereqs

@@ -671,11 +671,6 @@ func setImagePullPolicy(podSpec *v1.PodSpec) {
 
 // ensureTLSCiphers sets the TLSCipherSuites configuration as a Env Var to the Deployments and DaemonSets.
 func ensureTLSCiphers(obj client.Object, c client.Client) error {
-	_, installationSpec, err := GetInstallation(context.Background(), c)
-	if err != nil {
-		return err
-	}
-
 	var containers []v1.Container
 	switch obj := obj.(type) {
 	case *apps.Deployment:
@@ -684,6 +679,15 @@ func ensureTLSCiphers(obj client.Object, c client.Client) error {
 		containers = obj.Spec.Template.Spec.Containers
 	default:
 		return nil
+	}
+
+	_, installationSpec, err := GetInstallation(context.Background(), c)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		} else {
+			return err
+		}
 	}
 
 	for i := range containers {

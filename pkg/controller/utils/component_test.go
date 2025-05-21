@@ -2034,8 +2034,28 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				InputMutator: setToDS,
 			})
 			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
 				Method: "Update",
 				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
 			})
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
@@ -2051,7 +2071,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
 
-			Expect(mc.Index).To(Equal(4))
+			Expect(mc.Index).To(Equal(8))
 		})
 
 		It("if Updating a resource conflicts try the update again", func() {
@@ -2061,8 +2081,28 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				InputMutator: setToDS,
 			})
 			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
 				Method: "Update",
 				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method:       "Get",
+				Return:       nil,
+				InputMutator: setToDS,
 			})
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
@@ -2077,7 +2117,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).NotTo(BeNil())
 
-			Expect(mc.Index).To(Equal(4))
+			Expect(mc.Index).To(Equal(8))
 		})
 	})
 

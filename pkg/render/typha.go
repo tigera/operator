@@ -326,7 +326,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			{
 				// But, we only need to be able to query for IPAM config.
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"ipamconfigs"},
+				Resources: []string{"ipamconfigurations"},
 				Verbs:     []string{"get"},
 			},
 			{

@@ -509,7 +509,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{
 					"blockaffinities",
 					"ipamblocks",
-					"ipamconfigs",
+					"ipamconfigurations",
 					"ipamhandles",
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
@@ -517,7 +517,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			{
 				// But, we only need to be able to query for IPAM config.
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"ipamconfigs"},
+				Resources: []string{"ipamconfigurations"},
 				Verbs:     []string{"get"},
 			},
 			{
@@ -599,7 +599,7 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 					"blockaffinities",
 					"ipamblocks",
 					"ipamhandles",
-					"ipamconfigs",
+					"ipamconfigurations",
 					"clusterinformations",
 					"ippools",
 					"ipreservations",

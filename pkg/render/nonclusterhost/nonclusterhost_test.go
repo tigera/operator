@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -67,5 +68,101 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 		secret := rtest.GetResource(toCreate, "tigera-noncluster-host", "calico-system", "", "v1", "Secret").(*corev1.Secret)
 		Expect(secret.GetObjectMeta().GetAnnotations()).To(HaveKeyWithValue("kubernetes.io/service-account.name", "tigera-noncluster-host"))
 		Expect(secret.Type).To(Equal(corev1.SecretType("kubernetes.io/service-account-token")))
+
+		clusterRole := rtest.GetResource(toCreate, "tigera-noncluster-host", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ContainElements(
+			rbacv1.PolicyRule{
+				APIGroups: []string{"discovery.k8s.io"},
+				Resources: []string{"endpointslices"},
+				Verbs:     []string{"list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"endpoints", "services"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"networking.k8s.io"},
+				Resources: []string{"networkpolicies"},
+				Verbs:     []string{"watch", "list"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"policy.networking.k8s.io"},
+				Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
+				Verbs:     []string{"get", "watch", "list"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"pods", "namespaces", "serviceaccounts"},
+				Verbs:     []string{"watch", "list"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"nodes"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{
+					"bfdconfigurations",
+					"bgpconfigurations",
+					"clusterinformations",
+					"egressgatewaypolicies",
+					"externalnetworks",
+					"felixconfigurations",
+					"globalnetworkpolicies",
+					"globalnetworksets",
+					"hostendpoints",
+					"ipamblocks",
+					"ippools",
+					"licensekeys",
+					"networkpolicies",
+					"networksets",
+					"packetcaptures",
+					"remoteclusterconfigurations",
+					"stagedglobalnetworkpolicies",
+					"stagedkubernetesnetworkpolicies",
+					"stagednetworkpolicies",
+					"tiers",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"serviceaccounts/token"},
+				Verbs:     []string{"create"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"operator.tigera.io"},
+				Resources: []string{"nonclusterhosts"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"flowlogs"},
+				Verbs:     []string{"create"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"certificates.k8s.io"},
+				Resources: []string{"certificatesigningrequests"},
+				Verbs:     []string{"create", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups:     []string{"certificates.tigera.io"},
+				Resources:     []string{"certificatesigningrequests/common-name"},
+				Verbs:         []string{"create"},
+				ResourceNames: []string{"typha-server-noncluster-host"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"hostendpoints"},
+				Verbs:     []string{"list", "update"},
+			},
+		))
 	})
 })

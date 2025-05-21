@@ -60,7 +60,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -258,19 +257,19 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 	}
 
 	// Watch for changes to KubeControllersConfiguration.
-	err = c.WatchObject(&crdv1.KubeControllersConfiguration{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.KubeControllersConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch KubeControllersConfiguration resource: %w", err)
 	}
 
 	// Watch for changes to FelixConfiguration.
-	err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
 	// Watch for changes to BGPConfiguration.
-	err = c.WatchObject(&crdv1.BGPConfiguration{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.BGPConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch BGPConfiguration resource: %w", err)
 	}
@@ -313,7 +312,7 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 	}
 
 	// Watch for changes to IPPool.
-	err = c.WatchObject(&crdv1.IPPool{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.IPPool{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch IPPool resource: %w", err)
 	}
@@ -378,12 +377,12 @@ type ReconcileInstallation struct {
 }
 
 // getActivePools returns the full set of enabled IP pools in the cluster.
-func getActivePools(ctx context.Context, client client.Client) (*crdv1.IPPoolList, error) {
-	allPools := crdv1.IPPoolList{}
+func getActivePools(ctx context.Context, client client.Client) (*v3.IPPoolList, error) {
+	allPools := v3.IPPoolList{}
 	if err := client.List(ctx, &allPools); err != nil && !apierrors.IsNotFound(err) {
 		return nil, fmt.Errorf("unable to list IPPools: %s", err.Error())
 	}
-	filtered := crdv1.IPPoolList{}
+	filtered := v3.IPPoolList{}
 	for _, pool := range allPools.Items {
 		if pool.Spec.Disabled {
 			continue
@@ -426,7 +425,7 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 
 // MergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
 // populates defaults in the Installation instance.
-func MergeAndFillDefaults(i *operator.Installation, awsNode *appsv1.DaemonSet, currentPools *crdv1.IPPoolList) error {
+func MergeAndFillDefaults(i *operator.Installation, awsNode *appsv1.DaemonSet, currentPools *v3.IPPoolList) error {
 	if awsNode != nil {
 		if err := updateInstallationForAWSNode(i, awsNode); err != nil {
 			return fmt.Errorf("could not resolve AWS node configuration: %s", err.Error())
@@ -437,7 +436,7 @@ func MergeAndFillDefaults(i *operator.Installation, awsNode *appsv1.DaemonSet, c
 }
 
 // fillDefaults populates the default values onto an Installation object.
-func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolList) error {
+func fillDefaults(instance *operator.Installation, currentPools *v3.IPPoolList) error {
 	// Populate the instance with defaults for any fields not provided by the user.
 	if len(instance.Spec.Registry) != 0 && instance.Spec.Registry != components.UseDefault && !strings.HasSuffix(instance.Spec.Registry, "/") {
 		// Make sure registry, except for the special case "UseDefault", always ends with a slash.
@@ -1130,7 +1129,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Set any non-default FelixConfiguration values that we need.
-	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
 		// Configure defaults.
 		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needNsMigration)
 		if err != nil {
@@ -1395,7 +1394,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Fetch any existing default BGPConfiguration object.
-	bgpConfiguration := &crdv1.BGPConfiguration{}
+	bgpConfiguration := &v3.BGPConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
 	if err != nil && !apierrors.IsNotFound(err) {
 		r.status.SetDegraded(operator.ResourceReadError, "Unable to read BGPConfiguration", err, reqLogger)
@@ -1431,7 +1430,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		CanRemoveCNIFinalizer:         canRemoveCNI,
 		PrometheusServerTLS:           nodePrometheusTLS,
 		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
-		BindMode:                      bgpConfiguration.Spec.BindMode,
+		BindMode:                      string(*bgpConfiguration.Spec.BindMode),
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
 	}
@@ -1586,7 +1585,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	r.status.ReadyToMonitor()
 
 	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
 		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
 	})
 	if err != nil {
@@ -1723,7 +1722,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 	}, nil
 }
 
-func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
+func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *operator.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
 	updated := false
 
 	// Set the FelixConfiguration nftables dataplane mode based on the operator configuration. We do this unconditonally because
@@ -1732,12 +1731,12 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
 		if *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables {
 			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
-			nftablesMode := crdv1.NFTablesModeEnabled
+			nftablesMode := v3.NFTablesMode(v3.NFTablesModeEnabled)
 			fc.Spec.NFTablesMode = &nftablesMode
 			updated = true
 		} else {
 			// The operator is configured to use another dataplane. Disable nftables.
-			nftablesMode := crdv1.NFTablesModeDisabled
+			nftablesMode := v3.NFTablesMode(v3.NFTablesModeDisabled)
 			fc.Spec.NFTablesMode = &nftablesMode
 			updated = true
 		}
@@ -1750,7 +1749,7 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
 // based on the install config.
-func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, needNsMigration bool) (bool, error) {
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger, needNsMigration bool) (bool, error) {
 	updated := false
 
 	switch install.Spec.CNI.Type {
@@ -1766,7 +1765,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 			//   p4d.24xlarge is reported to support 4x15 ENI but it uses 4 cards
 			//   and AWS CNI only uses ENIs on card 0.
 			// - The VLAN table ID + 100 (there is doubt if this is true)
-			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
+			fc.Spec.RouteTableRange = &v3.RouteTableRange{
 				Min: 65,
 				Max: 99,
 			}
@@ -1775,7 +1774,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		if fc.Spec.RouteTableRange == nil {
 			updated = true
 			// Don't conflict with the GKE CNI plugin's routes.
-			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
+			fc.Spec.RouteTableRange = &v3.RouteTableRange{
 				Min: 10,
 				Max: 250,
 			}
@@ -1889,7 +1888,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 
 // setBPFUpdatesOnFelixConfiguration will take the passed in fc and update any BPF properties needed
 // based on the install config and the daemonset.
-func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
+func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Context, install *operator.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
 	updated := false
 
 	bpfEnabledOnInstall := install.Spec.BPFEnabled()
@@ -2054,7 +2053,7 @@ func addCRDWatches(c ctrlruntime.Controller, v operator.ProductVariant) error {
 	return nil
 }
 
-func crdPoolsToOperator(crds []crdv1.IPPool) []operator.IPPool {
+func crdPoolsToOperator(crds []v3.IPPool) []operator.IPPool {
 	pools := []v1.IPPool{}
 	for _, p := range crds {
 		op := v1.IPPool{}

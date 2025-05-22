@@ -46,6 +46,8 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
+const TLS_CIPHERS_ENV_VAR_NAME = "TLS_CIPHER_SUITES"
+
 type ComponentHandler interface {
 	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
 
@@ -126,6 +128,10 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 
 	// Make sure we have our standard selector and pod labels
 	setStandardSelectorAndLabels(obj)
+
+	if err := ensureTLSCiphers(ctx, obj, c.client); err != nil {
+		return fmt.Errorf("failed to set TLS Ciphers: %w", err)
+	}
 
 	cur, ok := obj.DeepCopyObject().(client.Object)
 	if !ok {
@@ -661,6 +667,47 @@ func setImagePullPolicy(podSpec *v1.PodSpec) {
 			podSpec.Containers[i].ImagePullPolicy = v1.PullIfNotPresent
 		}
 	}
+}
+
+// ensureTLSCiphers sets the TLSCipherSuites configuration as a Env Var to the Deployments and DaemonSets.
+func ensureTLSCiphers(ctx context.Context, obj client.Object, c client.Client) error {
+	var containers []v1.Container
+	switch obj := obj.(type) {
+	case *apps.Deployment:
+		containers = obj.Spec.Template.Spec.Containers
+	case *apps.DaemonSet:
+		containers = obj.Spec.Template.Spec.Containers
+	default:
+		return nil
+	}
+
+	_, installationSpec, err := GetInstallation(ctx, c)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		} else {
+			return err
+		}
+	}
+
+	for i := range containers {
+		exists := false
+		for _, envVar := range containers[i].Env {
+			if envVar.Name == TLS_CIPHERS_ENV_VAR_NAME {
+				exists = true
+				break
+			}
+		}
+		envVarValue := installationSpec.TLSCipherSuites.ToString()
+		if !exists && envVarValue != "" {
+			containers[i].Env = append(containers[i].Env, v1.EnvVar{
+				Name:  TLS_CIPHERS_ENV_VAR_NAME,
+				Value: envVarValue,
+			})
+		}
+	}
+
+	return nil
 }
 
 func orderVolumes(podSpec *v1.PodSpec) {

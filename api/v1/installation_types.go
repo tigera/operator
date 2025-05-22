@@ -242,7 +242,7 @@ const (
 type TLSCipherSuite struct {
 	// This should be a valid TLS cipher suite name.
 	// +optional
-	Name TLSCipher `json:"name"`
+	Name *TLSCipher `json:"name"`
 }
 
 type TLSCipherSuites []TLSCipherSuite

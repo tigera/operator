@@ -528,94 +528,97 @@ var _ = Describe("Component handler tests", func() {
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
 	})
 
-	DescribeTable("ensuring TLS Ciphers are set properly",
-		func(obj client.Object, installationCiphers operatorv1.TLSCipherSuites, expectedEnvVar string) {
-			installation := &operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "default",
-					Generation: 2,
-				},
-				Spec: operatorv1.InstallationSpec{
-					TLSCipherSuites: installationCiphers,
-				},
-			}
-			Expect(c.Create(ctx, installation)).To(BeNil())
-			Expect(ensureTLSCiphers(obj, c)).To(BeNil())
-
-			var containers []v1.Container
-			switch o := obj.(type) {
-			case *apps.Deployment:
-				containers = o.Spec.Template.Spec.Containers
-			case *apps.DaemonSet:
-				containers = o.Spec.Template.Spec.Containers
-			}
-
-			for _, c := range containers {
-				envVarFound := false
-				for _, envVar := range c.Env {
-					if envVar.Name == TLS_CIPHERS_ENV_VAR_NAME {
-						Expect(envVar.Value).To(Equal(expectedEnvVar))
-						return
-					}
+	Context("ensureTLSCiphers", func() {
+		cipher1 := operatorv1.TLS_AES_128_GCM_SHA256
+		cipher2 := operatorv1.TLS_AES_256_GCM_SHA384
+		cipherList := operatorv1.TLSCipherSuites{
+			operatorv1.TLSCipherSuite{Name: &cipher1},
+			operatorv1.TLSCipherSuite{Name: &cipher2},
+		}
+		ciphersToString := fmt.Sprintf("%s,%s", cipher1, cipher2)
+		DescribeTable("ensuring TLS Ciphers are set properly",
+			func(obj client.Object, installationCiphers operatorv1.TLSCipherSuites, expectedEnvVar string) {
+				installation := &operatorv1.Installation{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "default",
+						Generation: 2,
+					},
+					Spec: operatorv1.InstallationSpec{
+						TLSCipherSuites: installationCiphers,
+					},
 				}
-				Expect(envVarFound).To(Equal(expectedEnvVar != ""), "%s env var not found in container %s", TLS_CIPHERS_ENV_VAR_NAME, c.Name)
-			}
-		},
-		TableEntry{
-			Description: "set TLS Ciphers on a DaemonSet",
-			Parameters: []interface{}{
-				&apps.DaemonSet{
-					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-					Spec: apps.DaemonSetSpec{
-						Template: corev1.PodTemplateSpec{
-							Spec: corev1.PodSpec{
-								Containers: []corev1.Container{{Image: "foo"}, {Image: "bar"}},
+				Expect(c.Create(ctx, installation)).To(BeNil())
+				Expect(ensureTLSCiphers(ctx, obj, c)).To(BeNil())
+
+				var containers []v1.Container
+				switch o := obj.(type) {
+				case *apps.Deployment:
+					containers = o.Spec.Template.Spec.Containers
+				case *apps.DaemonSet:
+					containers = o.Spec.Template.Spec.Containers
+				}
+
+				for _, c := range containers {
+					envVarFound := false
+					for _, envVar := range c.Env {
+						if envVar.Name == TLS_CIPHERS_ENV_VAR_NAME {
+							Expect(envVar.Value).To(Equal(expectedEnvVar))
+							return
+						}
+					}
+					Expect(envVarFound).To(Equal(expectedEnvVar != ""), "%s env var not found in container %s", TLS_CIPHERS_ENV_VAR_NAME, c.Name)
+				}
+			},
+			TableEntry{
+				Description: "set TLS Ciphers on a DaemonSet",
+				Parameters: []interface{}{
+					&apps.DaemonSet{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+						Spec: apps.DaemonSetSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{{Image: "foo"}, {Image: "bar"}},
+								},
 							},
 						},
 					},
+					cipherList,
+					ciphersToString,
 				},
-				operatorv1.TLSCipherSuites{
-					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
-					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
-				},
-				fmt.Sprintf("%s,%s", operatorv1.TLS_AES_128_GCM_SHA256, operatorv1.TLS_AES_256_GCM_SHA384),
 			},
-		},
-		TableEntry{
-			Description: "set TLS Ciphers on a Deployment",
-			Parameters: []interface{}{
-				&apps.Deployment{
-					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-					Spec: apps.DeploymentSpec{
-						Template: corev1.PodTemplateSpec{
-							Spec: corev1.PodSpec{
-								Containers: []corev1.Container{{Image: "foo"}, {Image: "bar"}},
+			TableEntry{
+				Description: "set TLS Ciphers on a Deployment",
+				Parameters: []interface{}{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+						Spec: apps.DeploymentSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{{Image: "foo"}, {Image: "bar"}},
+								},
 							},
 						},
 					},
+					cipherList,
+					ciphersToString,
 				},
-				operatorv1.TLSCipherSuites{
-					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
-					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
-				},
-				fmt.Sprintf("%s,%s", operatorv1.TLS_AES_128_GCM_SHA256, operatorv1.TLS_AES_256_GCM_SHA384),
 			},
-		},
-		TableEntry{
-			Description: "set TLS Ciphers env var explicitly in the object",
-			Parameters: []interface{}{
-				&apps.Deployment{
-					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-					Spec: apps.DeploymentSpec{
-						Template: corev1.PodTemplateSpec{
-							Spec: corev1.PodSpec{
-								Containers: []corev1.Container{
-									{
-										Image: "foo",
-										Env: []corev1.EnvVar{
-											corev1.EnvVar{
-												Name:  TLS_CIPHERS_ENV_VAR_NAME,
-												Value: "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+			TableEntry{
+				Description: "set TLS Ciphers env var explicitly in the object",
+				Parameters: []interface{}{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+						Spec: apps.DeploymentSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{
+										{
+											Image: "foo",
+											Env: []corev1.EnvVar{
+												corev1.EnvVar{
+													Name:  TLS_CIPHERS_ENV_VAR_NAME,
+													Value: "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
+												},
 											},
 										},
 									},
@@ -623,33 +626,29 @@ var _ = Describe("Component handler tests", func() {
 							},
 						},
 					},
+					cipherList,
+					string(operatorv1.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256),
 				},
-				operatorv1.TLSCipherSuites{
-					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_128_GCM_SHA256},
-					operatorv1.TLSCipherSuite{Name: operatorv1.TLS_AES_256_GCM_SHA384},
-				},
-				string(operatorv1.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256),
 			},
-		},
-		TableEntry{
-			Description: "empty TLS Ciphers configuration",
-			Parameters: []interface{}{
-				&apps.Deployment{
-					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-					Spec: apps.DeploymentSpec{
-						Template: corev1.PodTemplateSpec{
-							Spec: corev1.PodSpec{
-								Containers: []corev1.Container{{Image: "foo"}},
+			TableEntry{
+				Description: "empty TLS Ciphers configuration",
+				Parameters: []interface{}{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+						Spec: apps.DeploymentSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers: []corev1.Container{{Image: "foo"}},
+								},
 							},
 						},
 					},
+					nil,
+					"",
 				},
-				nil,
-				"",
 			},
-		},
-	)
-
+		)
+	})
 	DescribeTable("ensuring ImagePullPolicy is set", func(obj client.Object) {
 		modifyPodSpec(obj, setImagePullPolicy)
 

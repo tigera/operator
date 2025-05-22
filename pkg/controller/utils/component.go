@@ -129,7 +129,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	// Make sure we have our standard selector and pod labels
 	setStandardSelectorAndLabels(obj)
 
-	if err := ensureTLSCiphers(obj, c.client); err != nil {
+	if err := ensureTLSCiphers(ctx, obj, c.client); err != nil {
 		return fmt.Errorf("failed to set TLS Ciphers: %w", err)
 	}
 
@@ -670,7 +670,7 @@ func setImagePullPolicy(podSpec *v1.PodSpec) {
 }
 
 // ensureTLSCiphers sets the TLSCipherSuites configuration as a Env Var to the Deployments and DaemonSets.
-func ensureTLSCiphers(obj client.Object, c client.Client) error {
+func ensureTLSCiphers(ctx context.Context, obj client.Object, c client.Client) error {
 	var containers []v1.Container
 	switch obj := obj.(type) {
 	case *apps.Deployment:
@@ -681,7 +681,7 @@ func ensureTLSCiphers(obj client.Object, c client.Client) error {
 		return nil
 	}
 
-	_, installationSpec, err := GetInstallation(context.Background(), c)
+	_, installationSpec, err := GetInstallation(ctx, c)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil

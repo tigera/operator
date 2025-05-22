@@ -77,6 +77,9 @@ type AdditionalLogStoreSpec struct {
 	// If specified, enables exporting of flow, audit, and DNS logs to splunk.
 	// +optional
 	Splunk *SplunkStoreSpec `json:"splunk,omitempty"`
+	// If true, only logs from NonClusterHost instances will be forwarded to additional log stores defined in this spec.
+	// +optional
+	NonClusterLogsOnly bool `json:"nonClusterLogsOnly,omitempty"`
 }
 
 type AdditionalLogSourceSpec struct {

@@ -21,49 +21,49 @@ var (
 	EnterpriseRelease string = "master"
 
 	ComponentAPIServer = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/cnx-apiserver",
 		Registry: "",
 	}
 
 	ComponentComplianceBenchmarker = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/compliance-benchmarker",
 		Registry: "",
 	}
 
 	ComponentComplianceController = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/compliance-controller",
 		Registry: "",
 	}
 
 	ComponentComplianceReporter = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/compliance-reporter",
 		Registry: "",
 	}
 
 	ComponentComplianceServer = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/compliance-server",
 		Registry: "",
 	}
 
 	ComponentComplianceSnapshotter = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/compliance-snapshotter",
 		Registry: "",
 	}
 
 	ComponentTigeraCSRInitContainer = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/key-cert-provisioner",
 		Registry: "",
 	}
 
 	ComponentDeepPacketInspection = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/deep-packet-inspection",
 		Registry: "",
 	}
@@ -79,13 +79,13 @@ var (
 	}
 
 	ComponentElasticTseeInstaller = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/intrusion-detection-job-installer",
 		Registry: "",
 	}
 
 	ComponentElasticsearch = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/elasticsearch",
 		Registry: "",
 	}
@@ -96,127 +96,139 @@ var (
 	}
 
 	ComponentElasticsearchOperator = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/eck-operator",
 		Registry: "",
 	}
 
 	ComponentUIAPIs = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/ui-apis",
 		Registry: "",
 	}
 
 	ComponentESGateway = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/es-gateway",
 		Registry: "",
 	}
 
 	ComponentLinseed = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/linseed",
 		Registry: "",
 	}
+	//
+	//ComponentFluentd = Component{
+	//	Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
+	//	Image:    "tigera/fluentd",
+	//	Registry: "",
+	//}
 
 	ComponentFluentd = Component{
-		Version:  "master",
-		Image:    "tigera/fluentd",
-		Registry: "",
+		Version:  "may21",
+		Image:    "fluentd",
+		Registry: "gcr.io/tigera-dev/pasan/",
 	}
 
 	ComponentFluentdWindows = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/fluentd-windows",
 		Registry: "",
 	}
 
 	ComponentGuardian = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/guardian",
 		Registry: "",
 	}
 
 	ComponentIntrusionDetectionController = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/intrusion-detection-controller",
 		Registry: "",
 	}
 
 	ComponentWafHTTPFilter = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/waf-http-filter",
 		Registry: "",
 	}
 
 	ComponentSecurityEventWebhooksProcessor = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/webhooks-processor",
 		Registry: "",
 	}
 
 	ComponentKibana = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/kibana",
 		Registry: "",
 	}
 
 	ComponentManager = Component{
-		Version:  "master",
+		Version:  "v3.21.0-2.0-calient-0.dev-137-gae7de2ec6364",
 		Image:    "tigera/cnx-manager",
 		Registry: "",
 	}
 
 	ComponentDex = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/dex",
 		Registry: "",
 	}
 
+	//ComponentManagerProxy = Component{
+	//	Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
+	//	Image:    "tigera/voltron",
+	//	Registry: "",
+	//}
+
 	ComponentManagerProxy = Component{
-		Version:  "master",
-		Image:    "tigera/voltron",
-		Registry: "",
+		Version:  "may21",
+		Image:    "voltron",
+		Registry: "gcr.io/tigera-dev/pasan/",
 	}
 
 	ComponentPacketCapture = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/packetcapture",
 		Registry: "",
 	}
 
 	ComponentPolicyRecommendation = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/policy-recommendation",
 		Registry: "",
 	}
 
 	ComponentEgressGateway = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/egress-gateway",
 		Registry: "",
 	}
 
 	ComponentL7Collector = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/l7-collector",
 		Registry: "",
 	}
 
 	ComponentEnvoyProxy = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/envoy",
 		Registry: "",
 	}
 
 	ComponentDikastes = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/dikastes",
 		Registry: "",
 	}
 
 	ComponentL7AdmissionController = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/l7-admission-controller",
 		Registry: "",
 	}
@@ -227,13 +239,13 @@ var (
 	}
 
 	ComponentPrometheus = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/prometheus",
 		Registry: "",
 	}
 
 	ComponentTigeraPrometheusService = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/prometheus-service",
 		Registry: "",
 	}
@@ -244,91 +256,91 @@ var (
 	}
 
 	ComponentPrometheusAlertmanager = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/alertmanager",
 		Registry: "",
 	}
 
 	ComponentQueryServer = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/cnx-queryserver",
 		Registry: "",
 	}
 
 	ComponentTigeraKubeControllers = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/kube-controllers",
 		Registry: "",
 	}
 
 	ComponentTigeraNode = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/cnx-node",
 		Registry: "",
 	}
 
 	ComponentTigeraNodeWindows = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/cnx-node-windows",
 		Registry: "",
 	}
 
 	ComponentTigeraTypha = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/typha",
 		Registry: "",
 	}
 
 	ComponentTigeraCNI = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/cni",
 		Registry: "",
 	}
 
 	ComponentTigeraCNIWindows = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/cni-windows",
 		Registry: "",
 	}
 
 	ComponentElasticsearchMetrics = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/elasticsearch-metrics",
 		Registry: "",
 	}
 
 	ComponentTigeraFlexVolume = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/pod2daemon-flexvol",
 		Registry: "",
 	}
 
 	ComponentTigeraCSI = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/csi",
 		Registry: "",
 	}
 
 	ComponentTigeraCSINodeDriverRegistrar = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/node-driver-registrar",
 		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/envoy-gateway",
 		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/envoy-proxy",
 		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:  "master",
+		Version:  "v3.22.0-1.0-calient-0.dev-661-gd153384ba1c8",
 		Image:    "tigera/envoy-ratelimit",
 		Registry: "",
 	}

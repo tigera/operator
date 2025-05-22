@@ -57,8 +57,12 @@ const (
 	FluentdPrometheusTLSSecretName           = "tigera-fluentd-prometheus-tls"
 	FluentdMetricsService                    = "fluentd-metrics"
 	FluentdMetricsServiceWindows             = "fluentd-metrics-windows"
+	FluentdInputService                      = "fluentd-http-input"
+	FluentdInputServiceWindows               = "fluentd-http-input-windows"
 	FluentdMetricsPortName                   = "fluentd-metrics-port"
 	FluentdMetricsPort                       = 9081
+	FluentdInputPortName                     = "fluentd-http-input-port"
+	FluentdInputPort                         = 9880
 	FluentdPolicyName                        = networkpolicy.TigeraComponentPolicyPrefix + "allow-fluentd-node"
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
@@ -228,6 +232,13 @@ func (c *fluentdComponent) fluentdMetricsServiceName() string {
 	return FluentdMetricsService
 }
 
+func (c *fluentdComponent) fluentdInputServiceName() string {
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		return FluentdInputServiceWindows
+	}
+	return FluentdInputService
+}
+
 func (c *fluentdComponent) readinessCmd() []string {
 	if c.cfg.OSType == rmeta.OSTypeWindows {
 		// On Windows, we rely on bash via msys2 installed by the fluentd base image.
@@ -319,7 +330,36 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs, c.daemonset())
 
+	objs = append(objs, c.nonClusterHostInputService())
+
 	return objs, toDelete
+}
+
+func (c *fluentdComponent) nonClusterHostInputService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      c.fluentdInputServiceName(),
+			Namespace: LogCollectorNamespace,
+			Labels:    map[string]string{"k8s-app": c.fluentdNodeName()},
+		},
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"k8s-app": c.fluentdNodeName()},
+			// Important: "None" tells Kubernetes that we want a headless service with
+			// no kube-proxy load balancer.  If we omit this then kube-proxy will render
+			// a huge set of iptables rules for this service since there's an instance
+			// on every node.
+			//ClusterIP: "None",
+			Ports: []corev1.ServicePort{
+				{
+					Name:       FluentdInputPortName,
+					Port:       int32(FluentdInputPort),
+					TargetPort: intstr.FromInt(FluentdInputPort),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
 }
 
 func (c *fluentdComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
@@ -638,6 +678,10 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {
+		if c.cfg.LogCollector.Spec.AdditionalStores.NonClusterLogsOnly {
+			envs = append(envs, corev1.EnvVar{Name: "ONLY_FORWARD_NON_CLUSTER_FLOWS", Value: "true"})
+		}
+
 		s3 := c.cfg.LogCollector.Spec.AdditionalStores.S3
 		if s3 != nil {
 			envs = append(envs,
@@ -1252,6 +1296,14 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 					Source:   networkpolicy.PrometheusSourceEntityRule,
 					Destination: v3.EntityRule{
 						Ports: networkpolicy.Ports(FluentdMetricsPort),
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					// todo: source entity rule
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(FluentdInputPort),
 					},
 				},
 			},

@@ -262,7 +262,7 @@ var (
 	}
 
 	ComponentTigeraNode = Component{
-		Version:  "v3.20.3",
+		Version:  "v3.20.4-calient-0.dev-25-gd12e807e8d31",
 		Image:    "tigera/cnx-node",
 		Registry: "",
 	}

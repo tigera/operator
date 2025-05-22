@@ -23,7 +23,7 @@ components:
     version: v3.20.3
   cnx-node:
     image: tigera/cnx-node
-    version: v3.20.3
+    version: v3.20.4-calient-0.dev-25-gd12e807e8d31
   cnx-node-windows:
     image: tigera/cnx-node-windows
     version: v3.20.3

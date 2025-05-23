@@ -58,7 +58,6 @@ const (
 	FluentdMetricsService                    = "fluentd-metrics"
 	FluentdMetricsServiceWindows             = "fluentd-metrics-windows"
 	FluentdInputService                      = "fluentd-http-input"
-	FluentdInputServiceWindows               = "fluentd-http-input-windows"
 	FluentdMetricsPortName                   = "fluentd-metrics-port"
 	FluentdMetricsPort                       = 9081
 	FluentdInputPortName                     = "fluentd-http-input-port"
@@ -176,6 +175,8 @@ type FluentdConfiguration struct {
 	EKSLogForwarderKeyPair certificatemanagement.KeyPairInterface
 
 	PacketCapture *operatorv1.PacketCaptureAPI
+
+	NonClusterHost *operatorv1.NonClusterHost
 }
 
 type fluentdComponent struct {
@@ -230,13 +231,6 @@ func (c *fluentdComponent) fluentdMetricsServiceName() string {
 		return FluentdMetricsServiceWindows
 	}
 	return FluentdMetricsService
-}
-
-func (c *fluentdComponent) fluentdInputServiceName() string {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
-		return FluentdInputServiceWindows
-	}
-	return FluentdInputService
 }
 
 func (c *fluentdComponent) readinessCmd() []string {
@@ -330,7 +324,9 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs, c.daemonset())
 
-	objs = append(objs, c.nonClusterHostInputService())
+	if c.cfg.NonClusterHost != nil && c.cfg.OSType == rmeta.OSTypeLinux {
+		objs = append(objs, c.nonClusterHostInputService())
+	}
 
 	return objs, toDelete
 }
@@ -339,17 +335,16 @@ func (c *fluentdComponent) nonClusterHostInputService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.fluentdInputServiceName(),
+			Name:      FluentdInputService,
 			Namespace: LogCollectorNamespace,
 			Labels:    map[string]string{"k8s-app": c.fluentdNodeName()},
 		},
+		// We do not treat this service as a headless service, as we want traffic to be load balanced.
+		// We expect this service to be queried by voltron, which is a golang service. If this service was headless,
+		// we would not get proper load balancing as the dialer implementation in golang prefers the first record
+		// returned (see dialSerial in the golang source).
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": c.fluentdNodeName()},
-			// Important: "None" tells Kubernetes that we want a headless service with
-			// no kube-proxy load balancer.  If we omit this then kube-proxy will render
-			// a huge set of iptables rules for this service since there's an instance
-			// on every node.
-			//ClusterIP: "None",
 			Ports: []corev1.ServicePort{
 				{
 					Name:       FluentdInputPortName,
@@ -678,7 +673,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {
-		if c.cfg.LogCollector.Spec.AdditionalStores.NonClusterLogsOnly {
+		if c.cfg.NonClusterHost != nil && c.cfg.LogCollector.Spec.AdditionalStores.NonClusterLogsOnly {
 			envs = append(envs, corev1.EnvVar{Name: "ONLY_FORWARD_NON_CLUSTER_FLOWS", Value: "true"})
 		}
 
@@ -1238,6 +1233,14 @@ func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
 }
 
 func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
+	multiTenant := false
+	tenantNamespace := ""
+	if c.cfg.Tenant != nil {
+		multiTenant = true
+		tenantNamespace = c.cfg.Tenant.Namespace
+	}
+	policyHelper := networkpolicy.Helper(multiTenant, tenantNamespace)
+
 	egressRules := []v3.Rule{}
 	if c.cfg.ManagedCluster {
 		egressRules = append(egressRules, v3.Rule{
@@ -1277,6 +1280,28 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 		Action: v3.Allow,
 	})
 
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   networkpolicy.PrometheusSourceEntityRule,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(FluentdMetricsPort),
+			},
+		},
+	}
+
+	if c.cfg.NonClusterHost != nil {
+		ingressRules = append(ingressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   policyHelper.ManagerSourceEntityRule(),
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(FluentdInputPort),
+			},
+		})
+	}
+
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1289,25 +1314,8 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 			Selector:               networkpolicy.KubernetesAppSelector(FluentdNodeName, fluentdNodeWindowsName),
 			ServiceAccountSelector: "",
 			Types:                  []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source:   networkpolicy.PrometheusSourceEntityRule,
-					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(FluentdMetricsPort),
-					},
-				},
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					// todo: source entity rule
-					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(FluentdInputPort),
-					},
-				},
-			},
-			Egress: egressRules,
+			Ingress:                ingressRules,
+			Egress:                 egressRules,
 		},
 	}
 }

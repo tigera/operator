@@ -966,18 +966,21 @@ func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
-		{
+	}
+
+	if c.cfg.NonClusterHost != nil {
+		egressRules = append(egressRules, v3.Rule{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
 				Services: &v3.ServiceMatch{
 					Namespace: LogCollectorNamespace,
-					// todo: windows naming
-					Name: FluentdInputService,
+					Name:      FluentdInputService,
 				},
 			},
-		},
+		})
 	}
+
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,

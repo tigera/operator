@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/clusterrole"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -106,32 +107,21 @@ type KubeControllersConfiguration struct {
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
-	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, KubeController)
+
+	// Determine flags for role rules.
+	isEnterprise := cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise
+	isOpenShift := cfg.Installation.KubernetesProvider.IsOpenShift()
+	isManagedCluster := cfg.ManagementClusterConnection != nil
+
+	// Generate policy rules for Calico Kube Controllers ClusterRole.
+	kubeControllerRolePolicyRules := clusterrole.CalicoKubeControllersClusterRoleRules(
+		isEnterprise,
+		isOpenShift,
+		isManagedCluster,
+	)
+
 	enabledControllers := []string{"node", "loadbalancer"}
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"remoteclusterconfigurations"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"endpoints"},
-				Verbs:     []string{"create", "update", "delete"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"namespaces"},
-				Verbs:     []string{"get"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"usage.tigera.io"},
-				Resources: []string{"licenseusagereports"},
-				Verbs:     []string{"create", "update", "delete", "watch", "list", "get"},
-			},
-		)
 		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
 	}
 
@@ -154,7 +144,7 @@ func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration) render.Co
 
 func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
 	var kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
-	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, EsKubeController)
+	kubeControllerRolePolicyRules := clusterrole.KubeControllersRoleCommonRules(cfg.Installation.KubernetesProvider.IsOpenShift())
 	if cfg.Tenant.MultiTenant() {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, []rbacv1.PolicyRule{
 			{
@@ -177,7 +167,8 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	}
 
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
+		isManagedCluster := cfg.ManagementClusterConnection != nil
+		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, clusterrole.KubeControllersRoleEnterpriseCommonRules(isManagedCluster)...)
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
 			rbacv1.PolicyRule{
 				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
@@ -356,7 +347,7 @@ func (c *kubeControllersComponent) Ready() bool {
 	return true
 }
 
-func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeControllerName string) []rbacv1.PolicyRule {
+func kubeControllersRoleCommonRules(isOpenShift bool) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{
 			// Nodes are watched to monitor for deletions.
@@ -420,7 +411,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 		},
 	}
 
-	if cfg.Installation.KubernetesProvider.IsOpenShift() {
+	if isOpenShift {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
 			Resources:     []string{"securitycontextconstraints"},
@@ -432,7 +423,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 	return rules
 }
 
-func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {
+func kubeControllersRoleEnterpriseCommonRules(isManagedCluster bool) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
@@ -475,7 +466,7 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 		},
 	}
 
-	if cfg.ManagementClusterConnection != nil {
+	if isManagedCluster {
 		rules = append(rules,
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},

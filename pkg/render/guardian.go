@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/render/common/selector"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -151,10 +152,10 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs,
 			// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
 			// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
-			CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
-			managerServiceAccount(ManagerNamespace),
-			managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil),
-			managerClusterRoleBinding(nil, []string{ManagerNamespace}, []string{}),
+			//CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
+			//managerServiceAccount(ManagerNamespace),
+			//managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil), - moved into guardian cluster role as ManagerBaseRulePolicy
+			//managerClusterRoleBinding(nil, []string{ManagerNamespace}, []string{}),
 
 			// Install default UI settings for this managed cluster.
 			managerClusterWideSettingsGroup(),
@@ -238,6 +239,18 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"users", "groups", "serviceaccounts"},
 			Verbs:     []string{"impersonate"},
 		})
+
+		// Add rules needed for guardian to handle the policy recommendation request in managed clusters.
+		policyRules = append(policyRules, PolicyRecommendationClusterRoleRules(true, c.cfg.OpenShift, false)...)
+
+		// Add rules needed for guardian to handle the manager request in managed clusters.
+		policyRules = append(policyRules, ManagerBasePolicyRules(false, c.cfg.OpenShift, nil)...)
+
+		// Add rules needed for guardian to handle the linseed request in managed cluster
+		policyRules = append(policyRules, LinseedExternalRoles()...)
+
+		// Add rules needed for guardian to handle calico-kube-controller request from management cluster.
+		policyRules = append(policyRules, kubecontrollers.CalicoKubeControllersClusterRoleRules(true, c.cfg.OpenShift, false)...)
 
 		if c.cfg.OpenShift {
 			policyRules = append(policyRules, rbacv1.PolicyRule{

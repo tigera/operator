@@ -438,8 +438,8 @@ func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleB
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      linseed,
-				Namespace: ElasticsearchNamespace,
+				Name:      GuardianName,
+				Namespace: GuardianNamespace,
 			},
 		},
 	}

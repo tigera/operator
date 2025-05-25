@@ -113,22 +113,14 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	var objs []client.Object
 
 	if pr.cfg.ManagedCluster {
-		// For Managed cluster create the required Service Account in calico-system
-		//objs = []client.Object{
-		//	pr.serviceAccount(),
-		//	pr.clusterRole(),
-		//	pr.clusterRoleBinding(),
-		//}
-		return objs, nil
+		return objs, pr.deprecatedObjects()
 	}
 
 	// Management and managed clusters need API access to the resources defined in the policy
 	// recommendation cluster role
-
 	objs = []client.Object{
 		CreateNamespace(pr.cfg.Namespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted, pr.cfg.Installation.Azure),
 		CreateOperatorSecretsRoleBinding(pr.cfg.Namespace),
-
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
@@ -381,8 +373,8 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 	}
 }
 
-// PolicyRecommendationClusterRoleRules is shared by both policy recommendation service account and guardian service account
-// since in managed cluster, guardian takes care of policy recommendation request from management cluster.
+// PolicyRecommendationClusterRoleRules are shared between the policy-recommendation and guardian service accounts.
+// In a managed cluster, guardian handles policy recommendation requests forwarded from the management cluster.
 func PolicyRecommendationClusterRoleRules(isManagedCluster, isOpenShift, isMultitenant bool) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{
@@ -462,4 +454,23 @@ func PolicyRecommendationClusterRoleRules(isManagedCluster, isOpenShift, isMulti
 		}...)
 	}
 	return rules
+}
+
+func (pr *policyRecommendationComponent) deprecatedObjects() []client.Object {
+	return []client.Object{
+		// In a managed cluster, the guardian identity handles policy recommendation requests.
+		// Therefore, the tigera-policy-recommendation namespace and its associated resources should be removed in the managed cluster.
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationNamespace},
+		},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
+		},
+	}
 }

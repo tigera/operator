@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render/common/clusterrole"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -47,7 +48,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/render/common/selector"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -244,13 +244,16 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 		policyRules = append(policyRules, PolicyRecommendationClusterRoleRules(true, c.cfg.OpenShift, false)...)
 
 		// Add rules needed for guardian to handle the manager request in managed clusters.
-		policyRules = append(policyRules, ManagerBasePolicyRules(false, c.cfg.OpenShift, nil)...)
+		policyRules = append(policyRules, ManagerBasePolicyRules(true, c.cfg.OpenShift, nil)...)
 
 		// Add rules needed for guardian to handle the linseed request in managed cluster
 		policyRules = append(policyRules, LinseedExternalRoles()...)
 
 		// Add rules needed for guardian to handle calico-kube-controller request from management cluster.
-		policyRules = append(policyRules, kubecontrollers.CalicoKubeControllersClusterRoleRules(true, c.cfg.OpenShift, false)...)
+		policyRules = append(policyRules, clusterrole.CalicoKubeControllersClusterRoleRules(true, c.cfg.OpenShift, true)...)
+
+		// Add rules needed for guardian to handle intrusion-detection-controller request from management cluster.
+		policyRules = append(policyRules, IntrusionDetectionClusterRoleRules(true, c.cfg.OpenShift, false, false)...)
 
 		if c.cfg.OpenShift {
 			policyRules = append(policyRules, rbacv1.PolicyRule{
@@ -720,6 +723,22 @@ func deprecatedObjects() []client.Object {
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
+		},
+
+		// Delete Managed namespace objects, guardian identity will take care of handling the manager request
+		// from management cluster.
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerNamespace},
+		},
+		//ManagerClusterRole
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},
 		},
 	}
 }

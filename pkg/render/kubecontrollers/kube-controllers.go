@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/clusterrole"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -113,7 +114,7 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 	isManagedCluster := cfg.ManagementClusterConnection != nil
 
 	// Generate policy rules for Calico Kube Controllers ClusterRole.
-	kubeControllerRolePolicyRules := CalicoKubeControllersClusterRoleRules(
+	kubeControllerRolePolicyRules := clusterrole.CalicoKubeControllersClusterRoleRules(
 		isEnterprise,
 		isOpenShift,
 		isManagedCluster,
@@ -137,45 +138,13 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 	}
 }
 
-// CalicoKubeControllersClusterRoleRules is used to populate rules for calico-kube-controller CR to handle request from calico-kube-controller pods
-// and for guardian CR to handle request kube-controller request from management cluster.
-func CalicoKubeControllersClusterRoleRules(isEnterpriseCluster bool, isOpenShift bool, isManagedCluster bool) []rbacv1.PolicyRule {
-	rules := kubeControllersRoleCommonRules(isOpenShift)
-	if isEnterpriseCluster {
-		rules = append(rules, kubeControllersRoleEnterpriseCommonRules(isManagedCluster)...)
-		rules = append(rules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"remoteclusterconfigurations"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"endpoints"},
-				Verbs:     []string{"create", "update", "delete"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"namespaces"},
-				Verbs:     []string{"get"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"usage.tigera.io"},
-				Resources: []string{"licenseusagereports"},
-				Verbs:     []string{"create", "update", "delete", "watch", "list", "get"},
-			},
-		)
-	}
-	return rules
-}
-
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration) render.Component {
 	return render.NewPassthrough(kubeControllersAllowTigeraPolicy(cfg))
 }
 
 func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
 	var kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
-	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg.Installation.KubernetesProvider.IsOpenShift())
+	kubeControllerRolePolicyRules := clusterrole.KubeControllersRoleCommonRules(cfg.Installation.KubernetesProvider.IsOpenShift())
 	if cfg.Tenant.MultiTenant() {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, []rbacv1.PolicyRule{
 			{
@@ -199,7 +168,7 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		isManagedCluster := cfg.ManagementClusterConnection != nil
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(isManagedCluster)...)
+		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, clusterrole.KubeControllersRoleEnterpriseCommonRules(isManagedCluster)...)
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
 			rbacv1.PolicyRule{
 				APIGroups: []string{"elasticsearch.k8s.elastic.co"},

@@ -1209,7 +1209,7 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 		toCreate = append(toCreate, binding)
 	}
 
-	return toCreate, nil
+	return toCreate, m.deprecatedObjects()
 }
 
 func (m *managedClusterLogStorage) Ready() bool {
@@ -1372,4 +1372,36 @@ func (m managedClusterLogStorage) kubeControllersRolesAndBindings() ([]*rbacv1.R
 
 	return []*rbacv1.Role{operatorSecretsRole}, []*rbacv1.RoleBinding{operatorSecretBinding}
 
+}
+
+func (m *managedClusterLogStorage) deprecatedObjects() []client.Object {
+	return []client.Object{
+		// In managed cluster, guardian identity will take care of the linseed request.
+		// so the linseed cluster scoped RBAC objects should be removed in managed cluster.
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: TigeraLinseedSecretsClusterRole},
+		},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-namespaces"},
+		},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-configmaps"},
+		},
+
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: TigeraLinseedSecretsClusterRole},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-configmaps"},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-namespaces"},
+		},
+	}
 }

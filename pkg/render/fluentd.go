@@ -339,10 +339,10 @@ func (c *fluentdComponent) nonClusterHostInputService() *corev1.Service {
 			Namespace: LogCollectorNamespace,
 			Labels:    map[string]string{"k8s-app": c.fluentdNodeName()},
 		},
-		// We do not treat this service as a headless service, as we want traffic to be load balanced.
-		// We expect this service to be queried by voltron, which is a golang service. If this service was headless,
-		// we would not get proper load balancing as the dialer implementation in golang prefers the first record
-		// returned (see dialSerial in the golang source).
+		// We do not treat this service as a headless service, as we want to ensure traffic is load-balanced. This is because:
+		// - We have no guarantee that the client (voltron) will perform load balancing across the returned records. The
+		//   golang dialer implementation appears to prefer the first record returned (see dialSerial in the go SDK)
+		// - We have no guarantee that the DNS server will perform load-balancing or randomize the order of records returned
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"k8s-app": c.fluentdNodeName()},
 			Ports: []corev1.ServicePort{

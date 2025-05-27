@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -77,6 +77,9 @@ type AdditionalLogStoreSpec struct {
 	// If specified, enables exporting of flow, audit, and DNS logs to splunk.
 	// +optional
 	Splunk *SplunkStoreSpec `json:"splunk,omitempty"`
+	// If true, only logs from NonClusterHost instances will be forwarded to additional log stores defined in this spec.
+	// +optional
+	NonClusterLogsOnly bool `json:"nonClusterLogsOnly,omitempty"`
 }
 
 type AdditionalLogSourceSpec struct {

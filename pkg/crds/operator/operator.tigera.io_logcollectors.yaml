@@ -80,6 +80,11 @@ spec:
                     Configuration for exporting flow, audit, and DNS logs
                     to external storage.
                   properties:
+                    nonClusterLogsOnly:
+                      description:
+                        If true, only logs from NonClusterHost instances
+                        will be forwarded to additional log stores defined in this spec.
+                      type: boolean
                     s3:
                       description:
                         If specified, enables exporting of flow, audit, and

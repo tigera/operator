@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/tigera/operator/pkg/dns"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -157,6 +158,9 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		return fmt.Errorf("logcollector-controller failed to watch log-collector Tigerastatus: %w", err)
 	}
 
+	if err = c.WatchObject(&operatorv1.NonClusterHost{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch resource: %w", err)
+	}
 	return nil
 }
 
@@ -374,7 +378,8 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// fluentdKeyPair is the key pair fluentd presents to identify itself
-	fluentdKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{render.FluentdPrometheusTLSSecretName})
+	httpInputServiceNames := dns.GetServiceDNSNames(render.FluentdInputService, render.LogCollectorNamespace, r.clusterDomain)
+	fluentdKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), append([]string{render.FluentdPrometheusTLSSecretName}, httpInputServiceNames...))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -563,6 +568,19 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Check if non-cluster host feature is enabled.
+	nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if nonclusterhost != nil {
+		if _, _, _, err := url.ParseEndpoint(nonclusterhost.Spec.Endpoint); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read parse endpoint from NonClusterHost resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -585,6 +603,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		ExternalElastic:        r.externalElastic,
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 		PacketCapture:          packetcaptureapi,
+		NonClusterHost:         nonclusterhost,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)

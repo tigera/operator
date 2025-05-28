@@ -661,5 +661,15 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 					Namespace: render.PolicyRecommendationNamespace,
 				}))
 		})
+
+		It("should not render any resources in a managed cluster", func() {
+			cfg.ManagedCluster = true
+
+			component := render.PolicyRecommendation(cfg)
+			resources, _ := component.Objects()
+
+			Expect(resources).To(BeEmpty(), "Expected no resources to be rendered in a managed cluster")
+		})
+
 	})
 })

@@ -727,7 +727,7 @@ var _ = Describe("Windows rendering tests", func() {
 				for _, container := range ds.Spec.Template.Spec.Containers {
 
 					// Windows node image override results in correct image.
-					Expect(container.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
+					Expect(container.Image).To(Equal(components.TigeraRegistry + "tigera/node-windows:" + components.ComponentTigeraNodeWindows.Version))
 					Expect(container.SecurityContext.Capabilities).To(BeNil())
 					Expect(container.SecurityContext.Privileged).To(BeNil())
 					Expect(container.SecurityContext.SELinuxOptions).To(BeNil())
@@ -748,7 +748,7 @@ var _ = Describe("Windows rendering tests", func() {
 				felixContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix")
 
 				// Windows node image override results in correct image.
-				Expect(felixContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
+				Expect(felixContainer.Image).To(Equal(components.TigeraRegistry + "tigera/node-windows:" + components.ComponentTigeraNodeWindows.Version))
 				Expect(felixContainer.SecurityContext.Capabilities).To(BeNil())
 				Expect(felixContainer.SecurityContext.Privileged).To(BeNil())
 				Expect(felixContainer.SecurityContext.SELinuxOptions).To(BeNil())
@@ -768,7 +768,7 @@ var _ = Describe("Windows rendering tests", func() {
 				nodeContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "node")
 
 				// Windows node image override results in correct image.
-				Expect(nodeContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
+				Expect(nodeContainer.Image).To(Equal(components.TigeraRegistry + "tigera/node-windows:" + components.ComponentTigeraNodeWindows.Version))
 				Expect(nodeContainer.SecurityContext.Capabilities).To(BeNil())
 				Expect(nodeContainer.SecurityContext.Privileged).To(BeNil())
 				Expect(nodeContainer.SecurityContext.SELinuxOptions).To(BeNil())
@@ -789,7 +789,7 @@ var _ = Describe("Windows rendering tests", func() {
 					confdContainer := rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd")
 
 					// Windows node image override results in correct image.
-					Expect(confdContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
+					Expect(confdContainer.Image).To(Equal(components.TigeraRegistry + "tigera/node-windows:" + components.ComponentTigeraNodeWindows.Version))
 					Expect(confdContainer.SecurityContext.Capabilities).To(BeNil())
 					Expect(confdContainer.SecurityContext.Privileged).To(BeNil())
 					Expect(confdContainer.SecurityContext.SELinuxOptions).To(BeNil())
@@ -833,7 +833,7 @@ var _ = Describe("Windows rendering tests", func() {
 
 				// uninstall container uses image override.
 				uninstallContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico")
-				Expect(uninstallContainer.Image).To(Equal(components.TigeraRegistry + "tigera/cnx-node-windows:" + components.ComponentTigeraNodeWindows.Version))
+				Expect(uninstallContainer.Image).To(Equal(components.TigeraRegistry + "tigera/node-windows:" + components.ComponentTigeraNodeWindows.Version))
 
 				Expect(uninstallContainer.SecurityContext.Capabilities).To(BeNil())
 				Expect(uninstallContainer.SecurityContext.Privileged).To(BeNil())

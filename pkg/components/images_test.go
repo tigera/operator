@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ var _ = Describe("test GetReference", func() {
 				Expect(GetReference(c, "", "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, "calico/node"),
-			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "tigera/cnx-node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "tigera/node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry, "tigera/eck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry, "tigera/operator"),
 			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoRegistry, "calico/key-cert-provisioner"),
@@ -46,7 +46,7 @@ var _ = Describe("test GetReference", func() {
 				Expect(GetReference(c, ud, ud, "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, "calico/node"),
-			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "tigera/cnx-node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "tigera/node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry, "tigera/eck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry, "tigera/operator"),
 			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoRegistry, "calico/key-cert-provisioner"),
@@ -60,7 +60,7 @@ var _ = Describe("test GetReference", func() {
 				Expect(GetReference(c, "quay.io/", "", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", "quay.io/", image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, "calico/node"),
-			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/cnx-node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, "tigera/eck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, "tigera/operator"),
 			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, "calico/key-cert-provisioner"),
@@ -74,7 +74,7 @@ var _ = Describe("test GetReference", func() {
 				Expect(GetReference(c, "quay.io/", "", "prefix-", nil)).To(Equal(fmt.Sprintf("quay.io/%s:%s", image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, "calico/prefix-node"),
-			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/prefix-cnx-node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, "tigera/prefix-node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, "tigera/prefix-eck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, "tigera/prefix-operator"),
 			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, "calico/prefix-key-cert-provisioner"),
@@ -88,7 +88,7 @@ var _ = Describe("test GetReference", func() {
 				Expect(GetReference(c, "", "userpath", "", nil)).To(Equal(fmt.Sprintf("%s%s:%s", registry, image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, "userpath/node"),
-			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "userpath/cnx-node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, "userpath/node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry, "userpath/eck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry, "userpath/operator"),
 			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoRegistry, "userpath/key-cert-provisioner"),
@@ -101,7 +101,7 @@ var _ = Describe("test GetReference", func() {
 				Expect(GetReference(c, "quay.io/extra/", "userpath", "", nil)).To(Equal(fmt.Sprintf("quay.io/extra/%s:%s", image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, "userpath/node"),
-			Entry("a tigera image correctly", ComponentTigeraNode, "userpath/cnx-node"),
+			Entry("a tigera image correctly", ComponentTigeraNode, "userpath/node"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, "userpath/eck-operator"),
 			Entry("an operator init image correctly", ComponentOperatorInit, "userpath/operator"),
 			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, "userpath/key-cert-provisioner"),
@@ -115,7 +115,7 @@ var _ = Describe("test GetReference", func() {
 					Spec: op.ImageSetSpec{
 						Images: []op.Image{
 							{Image: "calico/node", Digest: "sha256:caliconodehash"},
-							{Image: "tigera/cnx-node", Digest: "sha256:tigeracnxnodehash"},
+							{Image: "tigera/node", Digest: "sha256:tigeranodehash"},
 							{Image: "tigera/eck-operator", Digest: "sha256:eckeckoperatorhash"},
 							{Image: "tigera/operator", Digest: "sha256:tigeraoperatorhash"},
 							{Image: "tigera/key-cert-provisioner", Digest: "sha256:tigerakeycertprovisionerhash"},
@@ -125,7 +125,7 @@ var _ = Describe("test GetReference", func() {
 				Expect(GetReference(c, "quay.io/extra/", "userpath", "", is)).To(Equal(fmt.Sprintf("quay.io/extra/%s%s", image, hash)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, "userpath/node", "@sha256:caliconodehash"),
-			Entry("a tigera image correctly", ComponentTigeraNode, "userpath/cnx-node", "@sha256:tigeracnxnodehash"),
+			Entry("a tigera image correctly", ComponentTigeraNode, "userpath/node", "@sha256:tigeranodehash"),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, "userpath/eck-operator", "@sha256:eckeckoperatorhash"),
 			Entry("an operator init image correctly", ComponentOperatorInit, "userpath/operator", "@sha256:tigeraoperatorhash"),
 			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, "userpath/key-cert-provisioner", "@sha256:tigerakeycertprovisionerhash"),

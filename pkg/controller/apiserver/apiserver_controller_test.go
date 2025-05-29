@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -212,8 +212,8 @@ var _ = Describe("apiserver controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
-						{Image: "tigera/cnx-apiserver", Digest: "sha256:apiserverhash"},
-						{Image: "tigera/cnx-queryserver", Digest: "sha256:queryserverhash"},
+						{Image: "tigera/apiserver", Digest: "sha256:apiserverhash"},
+						{Image: "tigera/queryserver", Digest: "sha256:queryserverhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
 					},
 				},
@@ -324,7 +324,7 @@ var _ = Describe("apiserver controller tests", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(1))
-			Expect(policies.Items[0].Name).To(Equal("allow-tigera.cnx-apiserver-access"))
+			Expect(policies.Items[0].Name).To(Equal("allow-tigera.tigera-apiserver-access"))
 		})
 
 		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {

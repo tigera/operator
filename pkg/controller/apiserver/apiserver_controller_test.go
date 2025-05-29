@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -113,7 +113,7 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		cryptoCA, err := tls.MakeCA("byo-ca")
 		Expect(err).NotTo(HaveOccurred())
-		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "tigera-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(operatorv1.TigeraSecureEnterprise), "tigera-system", dns.DefaultClusterDomain)...)
+		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "tigera-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(operatorv1.TigeraSecureEnterprise), "calico-system", dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &operatorv1.Authentication{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -178,7 +178,7 @@ var _ = Describe("apiserver controller tests", func() {
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tigera-apiserver",
-					Namespace: "tigera-system",
+					Namespace: "calico-system",
 				},
 			}
 			Expect(test.GetResource(cli, &d)).To(BeNil())
@@ -234,7 +234,7 @@ var _ = Describe("apiserver controller tests", func() {
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "tigera-apiserver",
-					Namespace: "tigera-system",
+					Namespace: "calico-system",
 				},
 			}
 			Expect(test.GetResource(cli, &d)).To(BeNil())
@@ -408,7 +408,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			certSecret := corev1.Secret{}
-			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-apiserver-certs", Namespace: "tigera-system"}, &certSecret)).ToNot(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-apiserver-certs", Namespace: "calico-system"}, &certSecret)).ToNot(HaveOccurred())
 		})
 	})
 
@@ -697,11 +697,11 @@ var _ = Describe("apiserver controller tests", func() {
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      render.VoltronTunnelSecretName,
-						Namespace: "tigera-system",
+						Namespace: "calico-system",
 					},
 				}
 
-				// Ensure that the tunnel secret was copied in tigera-system namespace
+				// Ensure that the tunnel secret was copied in calico-system namespace
 				err = test.GetResource(cli, &clusterConnectionInAppNs)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				Expect(clusterConnectionInAppNs.Data).Should(HaveKeyWithValue("tls.crt", []byte("certvalue")))
@@ -738,14 +738,14 @@ var _ = Describe("apiserver controller tests", func() {
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tigera-apiserver",
-						Namespace: "tigera-system",
+						Namespace: "calico-system",
 					},
 				}
 				clusterConnectionInAppNs := corev1.Secret{
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      render.VoltronTunnelSecretName,
-						Namespace: "tigera-system",
+						Namespace: "calico-system",
 					},
 				}
 
@@ -753,7 +753,7 @@ var _ = Describe("apiserver controller tests", func() {
 				err = test.GetResource(cli, &deployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 
-				// Ensure that the tunnel secret was copied in tigera-system namespace
+				// Ensure that the tunnel secret was copied in calico-system namespace
 				err = test.GetResource(cli, &clusterConnectionInAppNs)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 			})
@@ -777,14 +777,14 @@ var _ = Describe("apiserver controller tests", func() {
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tigera-apiserver",
-						Namespace: "tigera-system",
+						Namespace: "calico-system",
 					},
 				}
 				clusterConnectionInAppNs := corev1.Secret{
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      render.VoltronTunnelSecretName,
-						Namespace: "tigera-system",
+						Namespace: "calico-system",
 					},
 				}
 

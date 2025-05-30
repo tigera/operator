@@ -2073,8 +2073,8 @@ func allowTigeraDefaultDenyForCalicoSystem(namespace string) *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Tier: networkpolicy.TigeraComponentTierName,
-			// Exclude tigera-apiserver pods from default deny in calico-system, This is essential for
-			// proper reconciliation.
+			// Default deny policy should exclude pods with label k8s-app=tigera-apiserver
+			// so the API server remains accessible within the calico-system namespace.
 			Selector: "k8s-app != 'tigera-apiserver'",
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 		},

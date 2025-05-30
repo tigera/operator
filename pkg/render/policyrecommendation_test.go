@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -39,7 +40,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -379,7 +379,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		cfg.ManagementCluster = true
 		cfg.Tenant = &operatorv1.Tenant{
 			Spec: operatorv1.TenantSpec{
-				ManagedClusterVariant: ptr.ToPtr(operatorv1.Calico),
+				ManagedClusterVariant: ptr.To(operatorv1.Calico),
 			},
 		}
 		component := render.PolicyRecommendation(cfg)
@@ -397,7 +397,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		cfg.ManagementCluster = true
 		cfg.Tenant = &operatorv1.Tenant{
 			Spec: operatorv1.TenantSpec{
-				ManagedClusterVariant: ptr.ToPtr(operatorv1.TigeraSecureEnterprise),
+				ManagedClusterVariant: ptr.To(operatorv1.TigeraSecureEnterprise),
 			},
 		}
 		component := render.PolicyRecommendation(cfg)

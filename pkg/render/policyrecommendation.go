@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+	"k8s.io/utils/ptr"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -29,7 +30,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -372,7 +372,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 			Namespace: pr.cfg.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: ptr.Int32ToPtr(1),
+			Replicas: ptr.To(int32(1)),
 			Template: *podTemplateSpec,
 		},
 	}

@@ -25,9 +25,9 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/manager"
 )
 
@@ -62,8 +62,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 			Spec: operatorv1.TLSTerminatedRouteSpec{
 				PathMatch: &operatorv1.PathMatch{
 					Path:        "/foobar",
-					PathRegexp:  ptr.ToPtr("^/foobar$"),
-					PathReplace: ptr.ToPtr("/"),
+					PathRegexp:  ptr.To("^/foobar$"),
+					PathReplace: ptr.To("/"),
 				},
 			},
 		}
@@ -77,7 +77,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: "voltron-routes"},
-					DefaultMode:          ptr.ToPtr(int32(420)),
+					DefaultMode:          ptr.To(int32(420)),
 				},
 			},
 		}
@@ -102,7 +102,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: "ca-bundle"},
-					DefaultMode:          ptr.ToPtr(int32(420)),
+					DefaultMode:          ptr.To(int32(420)),
 				},
 			},
 		}
@@ -123,7 +123,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  mtlsCert.Name,
-					DefaultMode: ptr.ToPtr(int32(420)),
+					DefaultMode: ptr.To(int32(420)),
 				},
 			},
 		}
@@ -145,7 +145,7 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  mtlsKey.Name,
-					DefaultMode: ptr.ToPtr(int32(420)),
+					DefaultMode: ptr.To(int32(420)),
 				},
 			},
 		}
@@ -197,8 +197,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 						Spec: operatorv1.TLSTerminatedRouteSpec{
 							PathMatch: &operatorv1.PathMatch{
 								Path:        fmt.Sprintf("/foobar-%d", num-1-i),
-								PathRegexp:  ptr.ToPtr("^/foobar$"),
-								PathReplace: ptr.ToPtr("/"),
+								PathRegexp:  ptr.To("^/foobar$"),
+								PathReplace: ptr.To("/"),
 							},
 						},
 					}
@@ -376,8 +376,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 							},
 							PathMatch: &operatorv1.PathMatch{
 								Path:        "/bar/",
-								PathRegexp:  ptr.ToPtr("^/bar/?"),
-								PathReplace: ptr.ToPtr("/"),
+								PathRegexp:  ptr.To("^/bar/?"),
+								PathReplace: ptr.To("/"),
 							},
 							Destination: "bar",
 						},
@@ -395,8 +395,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 							},
 							PathMatch: &operatorv1.PathMatch{
 								Path:        "/foo/",
-								PathRegexp:  ptr.ToPtr("^/foo/?"),
-								PathReplace: ptr.ToPtr("/"),
+								PathRegexp:  ptr.To("^/foo/?"),
+								PathReplace: ptr.To("/"),
 							},
 							Destination: "foo",
 						},
@@ -414,8 +414,8 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 							},
 							PathMatch: &operatorv1.PathMatch{
 								Path:        "/goo/",
-								PathRegexp:  ptr.ToPtr("^/goo/?"),
-								PathReplace: ptr.ToPtr("/"),
+								PathRegexp:  ptr.To("^/goo/?"),
+								PathReplace: ptr.To("/"),
 							},
 							Destination: "goo",
 						},

@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -41,7 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
+	operatorptr "github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -580,17 +581,17 @@ var _ = Describe("Linseed rendering tests", func() {
 		})
 
 		It("should override replicas with the value from TenantSpec's controlPlaneReplicas when available", func() {
-			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.Int32ToPtr(3)
+			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.To(int32(3))
 			component := Linseed(cfg)
 
 			resources, _ := component.Objects()
 			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
-			Expect(d.Spec.Replicas).To(Equal(ptr.Int32ToPtr(3)))
+			Expect(d.Spec.Replicas).To(Equal(ptr.To(int32(3))))
 		})
 
 		It("should render PodAffinity when TenantSpec ControlPlaneReplicas is greater than 1", func() {
-			installation.ControlPlaneReplicas = ptr.Int32ToPtr(1)
-			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.Int32ToPtr(3)
+			installation.ControlPlaneReplicas = ptr.To(int32(1))
+			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.To(int32(3))
 			component := Linseed(cfg)
 
 			resources, _ := component.Objects()
@@ -832,8 +833,8 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	deployment := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 	ExpectWithOffset(1, deployment).NotTo(BeNil())
 	ExpectWithOffset(1, deployment.Spec.Strategy.Type).To(Equal(appsv1.RollingUpdateDeploymentStrategyType))
-	ExpectWithOffset(1, deployment.Spec.Strategy.RollingUpdate.MaxSurge).To(Equal(ptr.IntOrStrPtr("100%")))
-	ExpectWithOffset(1, deployment.Spec.Strategy.RollingUpdate.MaxUnavailable).To(Equal(ptr.IntOrStrPtr("0")))
+	ExpectWithOffset(1, deployment.Spec.Strategy.RollingUpdate.MaxSurge).To(Equal(operatorptr.IntOrStrPtr("100%")))
+	ExpectWithOffset(1, deployment.Spec.Strategy.RollingUpdate.MaxUnavailable).To(Equal(operatorptr.IntOrStrPtr("0")))
 
 	// Check containers
 	expected := expectedContainers()
@@ -942,7 +943,7 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  render.TigeraLinseedSecret,
-						DefaultMode: ptr.Int32ToPtr(420),
+						DefaultMode: ptr.To(int32(420)),
 					},
 				},
 			},
@@ -951,7 +952,7 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  "tigera-secure-linseed-token-tls",
-						DefaultMode: ptr.Int32ToPtr(420),
+						DefaultMode: ptr.To(int32(420)),
 					},
 				},
 			},
@@ -978,11 +979,11 @@ func expectedContainers() []corev1.Container {
 			ImagePullPolicy: render.ImagePullPolicy(),
 			SecurityContext: &corev1.SecurityContext{
 				Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
-				AllowPrivilegeEscalation: ptr.BoolToPtr(false),
-				Privileged:               ptr.BoolToPtr(false),
-				RunAsNonRoot:             ptr.BoolToPtr(true),
-				RunAsGroup:               ptr.Int64ToPtr(10001),
-				RunAsUser:                ptr.Int64ToPtr(10001),
+				AllowPrivilegeEscalation: ptr.To(false),
+				Privileged:               ptr.To(false),
+				RunAsNonRoot:             ptr.To(true),
+				RunAsGroup:               ptr.To(int64(10001)),
+				RunAsUser:                ptr.To(int64(10001)),
 				SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 			},
 			ReadinessProbe: &corev1.Probe{

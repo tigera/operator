@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -33,7 +34,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -588,8 +588,8 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	// UID 999 is used in kube-controller Dockerfile.
 	sc := securitycontext.NewNonRootContext()
-	sc.RunAsUser = ptr.Int64ToPtr(999)
-	sc.RunAsGroup = ptr.Int64ToPtr(0)
+	sc.RunAsUser = ptr.To(int64(999))
+	sc.RunAsGroup = ptr.To(int64(0))
 
 	container := corev1.Container{
 		Name:            c.kubeControllerName,

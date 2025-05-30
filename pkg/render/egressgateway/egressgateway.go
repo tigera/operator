@@ -28,13 +28,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -470,7 +470,7 @@ func (c *component) getSecurityContextConstraints() *ocsv1.SecurityContextConstr
 
 func SecurityContextConstraints() *ocsv1.SecurityContextConstraints {
 	scc := securitycontextconstraints.NewNonRootSecurityContextConstraints(OpenShiftSCCName, []string{})
-	scc.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
+	scc.AllowPrivilegeEscalation = ptr.To(true)
 	scc.AllowPrivilegedContainer = true
 	scc.AllowedCapabilities = []corev1.Capability{corev1.Capability("NET_ADMIN"), corev1.Capability("NET_RAW")}
 	scc.ReadOnlyRootFilesystem = false

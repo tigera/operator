@@ -21,6 +21,7 @@ import (
 	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -38,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -280,7 +280,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 func updateWhiskerWithDefaults(instance *operatorv1.Whisker) {
 	if instance.Spec.Notifications == nil {
-		instance.Spec.Notifications = ptr.ToPtr(operatorv1.Enabled)
+		instance.Spec.Notifications = ptr.To(operatorv1.Enabled)
 	}
 }
 

@@ -30,6 +30,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -39,7 +40,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -477,14 +477,14 @@ func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
 						},
 					},
 					Ports: []netv1.NetworkPolicyPort{{
-						Protocol: ptr.ToPtr(corev1.ProtocolTCP),
-						Port:     ptr.ToPtr(intstr.FromInt32(GuardianTargetPort)),
+						Protocol: ptr.To(corev1.ProtocolTCP),
+						Port:     ptr.To(intstr.FromInt32(GuardianTargetPort)),
 					}},
 				},
 				{
 					Ports: []netv1.NetworkPolicyPort{{
-						Protocol: ptr.ToPtr(corev1.ProtocolUDP),
-						Port:     ptr.ToPtr(intstr.FromInt32(53)),
+						Protocol: ptr.To(corev1.ProtocolUDP),
+						Port:     ptr.To(intstr.FromInt32(53)),
 					}},
 				},
 			},

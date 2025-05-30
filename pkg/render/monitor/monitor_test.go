@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -41,7 +42,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -92,7 +92,7 @@ var _ = Describe("monitor rendering tests", func() {
 		bundle := certificateManager.CreateTrustedBundle()
 		cfg = &monitor.Config{
 			Installation: &operatorv1.InstallationSpec{
-				ControlPlaneReplicas: ptr.Int32ToPtr(3),
+				ControlPlaneReplicas: ptr.To(int32(3)),
 			},
 			PullSecrets: []*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
@@ -911,7 +911,7 @@ var _ = Describe("monitor rendering tests", func() {
 	})
 
 	It("Should render typha service monitor if typha metrics are enabled", func() {
-		cfg.Installation.TyphaMetricsPort = ptr.Int32ToPtr(9093)
+		cfg.Installation.TyphaMetricsPort = ptr.To(int32(9093))
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, toDelete := component.Objects()

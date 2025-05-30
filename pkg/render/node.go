@@ -470,8 +470,8 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// For migration code in calico/node startup only. Remove when the migration
-				// code is removed from node.
-				APIGroups: []string{"projectcalico.org"},
+				// code is removed from node. This only exists in the crd.projectcalico.org API group.
+				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{
 					"globalbgpconfigs",
 					"globalfelixconfigs",

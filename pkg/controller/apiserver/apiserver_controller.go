@@ -297,6 +297,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	if installationSpec.Variant == operatorv1.TigeraSecureEnterprise {
 		trustedBundle, err = certificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, r.client,
 			common.OperatorNamespace(), false)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 
 		applicationLayer, err = utils.GetApplicationLayer(ctx, r.client)
 		if err != nil {
@@ -414,10 +418,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// Check if the legacy namespace 'tigera-system' exists and can be cleaned up
-	canCleanupOlderResources := false
-	canCleanupOlderResources = r.checkIfOlderNamespaceCanBeCleanedUp(ctx, reqLogger)
-
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -439,7 +439,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		MultiTenant:                 r.multiTenant,
 		KeyValidatorConfig:          keyValidatorConfig,
 		KubernetesVersion:           r.kubernetesVersion,
-		CanCleanupOlderResources:    canCleanupOlderResources,
+		CanCleanupOlderResources:    r.canCleanupLegacyNamespace(ctx, reqLogger),
 	}
 
 	var components []render.Component
@@ -523,13 +523,13 @@ func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver cl
 	return utils.MaintainInstallationFinalizer(ctx, r.client, apiserver, render.APIServerFinalizer, apiServerNamespace)
 }
 
-// checkIfOlderNamespaceCanBeCleanedUp determines whether the legacy "tigera-system" namespace
+// canCleanupLegacyNamespace determines whether the legacy "tigera-system" namespace
 // (which previously hosted the API server) can be safely cleaned up.
 // It returns true only if:
 // - The new API server deployment in "calico-system" exists and is available.
 // - The old API server deployment in "tigera-system" is either removed or inactive.
 // - Both the APIServer custom resource and the TigeraStatus for 'apiserver' are in the Ready state
-func (r *ReconcileAPIServer) checkIfOlderNamespaceCanBeCleanedUp(ctx context.Context, logger logr.Logger) bool {
+func (r *ReconcileAPIServer) canCleanupLegacyNamespace(ctx context.Context, logger logr.Logger) bool {
 	const (
 		newNamespace   = "calico-system"
 		oldNamespace   = "tigera-system"
@@ -580,7 +580,7 @@ func (r *ReconcileAPIServer) checkIfOlderNamespaceCanBeCleanedUp(ctx context.Con
 		}
 		return false
 	}
-	if !utils.IsTigeraStatusReady(ts, logger) {
+	if !ts.Available() {
 		logger.V(3).Info("TigeraStatus for apiserver is not in Available status.")
 		return false
 	}

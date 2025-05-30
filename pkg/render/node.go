@@ -28,6 +28,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -37,7 +38,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -1259,14 +1259,14 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 	if c.runAsNonPrivileged() {
 		sc = securitycontext.NewNonRootContext()
 		// Set the group to be the root user group since all container users should be a member
-		sc.RunAsGroup = ptr.Int64ToPtr(0)
+		sc.RunAsGroup = ptr.To(int64(0))
 		sc.Capabilities.Add = []corev1.Capability{
 			"NET_ADMIN",
 			"NET_BIND_SERVICE",
 			"NET_RAW",
 		}
 		// Set the privilege escalation to true so that routes, ipsets can be programmed.
-		sc.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
+		sc.AllowPrivilegeEscalation = ptr.To(true)
 		sc.Capabilities.Drop = []corev1.Capability{}
 	}
 

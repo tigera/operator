@@ -23,7 +23,8 @@ import (
 const (
 	TenantCASecretName                = "tigera-ca-private-tenant"
 	CASecretName                      = "tigera-ca-private"
-	TrustedCertConfigMapKeyName       = "tigera-ca-bundle.crt"
+	TrustedCertConfigMapKeyName       = "ca.crt"
+	legacyTrustedCertConfigMapKeyName = "tigera-ca-bundle.crt"
 	TrustedCertVolumeMountPath        = "/etc/pki/tls/"
 	TrustedCertVolumeMountPathWindows = "c:/etc/pki/tls/"
 	TrustedCertBundleMountPath        = "/etc/pki/tls/certs/tigera-ca-bundle.crt"

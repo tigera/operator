@@ -195,6 +195,7 @@ func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 		pemBuf.WriteString(fmt.Sprintf("# certificate name: %s/%s\n%s\n\n", cert.GetNamespace(), cert.GetName(), string(cert.GetCertificatePEM())))
 	}
 
+	pemStr := pemBuf.String()
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -206,8 +207,9 @@ func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 			Annotations: t.HashAnnotations(),
 		},
 		Data: map[string]string{
-			RHELRootCertificateBundleName: string(t.systemCertificates),
-			TrustedCertConfigMapKeyName:   pemBuf.String(),
+			RHELRootCertificateBundleName:     string(t.systemCertificates),
+			TrustedCertConfigMapKeyName:       pemStr,
+			legacyTrustedCertConfigMapKeyName: pemStr, // This is for backwards compatibility for pods that use the old default.
 		},
 	}
 }

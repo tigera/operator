@@ -404,7 +404,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	// to make sure that we're not doing so, and exit if we are.
 	badNamespaces := []string{
 		common.CalicoNamespace,
-		"calico-apiserver", "tigera-system",
+		"calico-apiserver",
 		render.ElasticsearchNamespace,
 		render.ComplianceNamespace,
 		render.IntrusionDetectionNamespace,

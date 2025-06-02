@@ -370,10 +370,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	replicas := l.cfg.Installation.ControlPlaneReplicas
 	if l.cfg.Tenant != nil {
-		if l.cfg.ExternalElastic {
-			// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
-			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
-		}
+		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
+		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
 
 		if l.cfg.Tenant.MultiTenant() {
 			// For clusters shared between multiple tenants, we need to configure Linseed with the correct namespace information for its tenant.

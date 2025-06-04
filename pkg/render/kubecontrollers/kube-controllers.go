@@ -188,10 +188,11 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 			// and configure them. Zero and single tenant bind this cluster role for service account
 			// calico-system/calico-kube-controllers for es-kube-controllers. A Multi-tenant setup will bind these rules
 			// to the same service account, but in the tenant namespace.
+			// Grant update permissions to allow updating the version information in ManagedCluster resources.
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
-				Verbs:     []string{"watch", "list", "get"},
+				Verbs:     []string{"update", "watch", "list", "get"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"rbac.authorization.k8s.io"},
@@ -207,11 +208,13 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	if !cfg.Tenant.MultiTenant() {
 		enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
 		if cfg.ManagementCluster != nil {
-			enabledControllers = append(enabledControllers, "managedcluster")
+			// The clusterinfo controller updates the managed cluster's version information
+			// in the ManagedCluster resource in an MCM setup.
+			enabledControllers = append(enabledControllers, "managedcluster", "clusterinfo")
 		}
 	} else if !cfg.Tenant.ManagedClusterIsCalico() {
 		// Calico OSS Managed clusters do not need the license controller.
-		enabledControllers = append(enabledControllers, "managedclusterlicensing")
+		enabledControllers = append(enabledControllers, "managedclusterlicensing", "clusterinfo")
 	}
 
 	return &kubeControllersComponent{
@@ -478,6 +481,12 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+			// Grant permissions to access ClusterInformation resources in managed clusters.
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
 		)
 	}

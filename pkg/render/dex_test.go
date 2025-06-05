@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -126,6 +126,8 @@ var _ = Describe("dex rendering tests", func() {
 						},
 						Items: []corev1.KeyToPath{
 							{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: certificatemanagement.TrustedCertConfigMapKeyName},
+							//nolint:staticcheck // Ignore SA1019 deprecated
+							{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: certificatemanagement.LegacyTrustedCertConfigMapKeyName},
 							{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: "ca.pem"},
 							{Key: certificatemanagement.RHELRootCertificateBundleName, Path: certificatemanagement.RHELRootCertificateBundleName},
 						},

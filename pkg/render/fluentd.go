@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1080,6 +1080,7 @@ func trustedBundleVolume(bundle certificatemanagement.TrustedBundle) corev1.Volu
 	// We mount the bundle under two names; the standard name and the name for the expected elastic cert.
 	volume.ConfigMap.Items = []corev1.KeyToPath{
 		{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: certificatemanagement.TrustedCertConfigMapKeyName},
+		{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: certificatemanagement.LegacyTrustedCertConfigMapKeyName},
 		{Key: certificatemanagement.TrustedCertConfigMapKeyName, Path: SplunkFluentdSecretCertificateKey},
 		{Key: certificatemanagement.RHELRootCertificateBundleName, Path: certificatemanagement.RHELRootCertificateBundleName},
 	}

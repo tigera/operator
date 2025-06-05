@@ -18,6 +18,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -290,8 +293,11 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	var keyValidatorConfig authentication.KeyValidatorConfig
 	includeV3NetworkPolicy := false
+
 	if installationSpec.Variant == operatorv1.TigeraSecureEnterprise {
-		trustedBundle = certificateManager.CreateTrustedBundle()
+		trustedBundle, err = certificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, r.client,
+			common.OperatorNamespace(), false)
+
 		applicationLayer, err = utils.GetApplicationLayer(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ApplicationLayer", err, reqLogger)
@@ -321,7 +327,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		if managementCluster != nil && managementCluster.Spec.TLS != nil && !r.multiTenant {
 			// The secret that contains the CA x509 certificate to create client certificates for the managed cluster
 			// is created by the Manager controller in tigera-operator namespace. We will read this secret and make
-			// sure it is available in the same namespace as the API server (tigera-system)
+			// sure it is available in the same namespace as the API server (calico-system)
 			// This secret is only created for a management cluster in a multi-cluster setup for a single tenant.
 			// Other cluster types do not require this secret. (Standalone configuration do not need it and multi-tenant
 			// configuration create secrets inside the tenant namespaces)
@@ -408,6 +414,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	// Check if the legacy namespace 'tigera-system' exists and can be cleaned up
+	canCleanupOlderResources := false
+	canCleanupOlderResources = r.checkIfOlderNamespaceCanBeCleanedUp(ctx, reqLogger)
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -429,6 +439,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		MultiTenant:                 r.multiTenant,
 		KeyValidatorConfig:          keyValidatorConfig,
 		KubernetesVersion:           r.kubernetesVersion,
+		CanCleanupOlderResources:    canCleanupOlderResources,
+	}
+
+	var components []render.Component
+
+	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
+	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
+	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
+	if includeV3NetworkPolicy {
+		components = append(components, render.APIServerPolicy(&apiServerCfg))
 	}
 
 	component, err := render.APIServer(&apiServerCfg)
@@ -436,7 +456,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering APIServer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	components := []render.Component{
+
+	components = append(components,
 		component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       rmeta.APIServerNamespace(installationSpec.Variant),
@@ -447,14 +468,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			},
 			TrustedBundle: trustedBundle,
 		}),
-	}
-
-	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
-	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
-	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
-	if includeV3NetworkPolicy {
-		components = append(components, render.APIServerPolicy(&apiServerCfg))
-	}
+	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, installationSpec.Variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
@@ -507,4 +521,70 @@ func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver cl
 	}
 	apiServerNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: rmeta.APIServerNamespace(spec.Variant)}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, apiserver, render.APIServerFinalizer, apiServerNamespace)
+}
+
+// checkIfOlderNamespaceCanBeCleanedUp determines whether the legacy "tigera-system" namespace
+// (which previously hosted the API server) can be safely cleaned up.
+// It returns true only if:
+// - The new API server deployment in "calico-system" exists and is available.
+// - The old API server deployment in "tigera-system" is either removed or inactive.
+// - Both the APIServer custom resource and the TigeraStatus for 'apiserver' are in the Ready state
+func (r *ReconcileAPIServer) checkIfOlderNamespaceCanBeCleanedUp(ctx context.Context, logger logr.Logger) bool {
+	const (
+		newNamespace   = "calico-system"
+		oldNamespace   = "tigera-system"
+		deploymentName = "tigera-apiserver"
+	)
+
+	// Fetch the new API server deployment in calico-system
+	newDeploy := &appsv1.Deployment{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: newNamespace}, newDeploy); err != nil {
+		if errors.IsNotFound(err) {
+			logger.V(3).Info("New API server not found", "ns", newNamespace)
+		} else {
+			logger.Error(err, "Failed to get new API server", "ns", newNamespace)
+		}
+		return false
+	}
+	if newDeploy.Status.AvailableReplicas == 0 {
+		logger.V(3).Info("New API server has 0 replicas", "ns", newNamespace)
+		return false
+	}
+
+	// Fetch the old API server deployment in tigera-system
+	oldDeploy := &appsv1.Deployment{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: oldNamespace}, oldDeploy); err != nil {
+		if !errors.IsNotFound(err) {
+			logger.Error(err, "Failed to get old API server", "ns", oldNamespace)
+			return false
+		}
+	}
+	if oldDeploy.Status.AvailableReplicas > 0 {
+		logger.V(3).Info("Old API server still running", "ns", oldNamespace)
+		return false
+	}
+
+	// Ensure the new API server is functionally ready
+	if !utils.IsAPIServerReady(r.client, logger) {
+		logger.V(3).Info("APIServer CR is not ready")
+		return false
+	}
+
+	// Ensure TigeraStatus indicates readiness
+	ts := &operatorv1.TigeraStatus{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: ResourceName}, ts); err != nil {
+		if errors.IsNotFound(err) {
+			logger.V(3).Info("TigeraStatus not found")
+		} else {
+			logger.Error(err, "Failed to get TigeraStatus resource.")
+		}
+		return false
+	}
+	if !utils.IsTigeraStatusReady(ts, logger) {
+		logger.V(3).Info("TigeraStatus for apiserver is not in Available status.")
+		return false
+	}
+
+	logger.Info("Safe to clean up old namespace for apiserver.")
+	return true
 }

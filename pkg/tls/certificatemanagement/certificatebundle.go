@@ -209,7 +209,7 @@ func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 		Data: map[string]string{
 			RHELRootCertificateBundleName:     string(t.systemCertificates),
 			TrustedCertConfigMapKeyName:       pemStr,
-			legacyTrustedCertConfigMapKeyName: pemStr, // This is for backwards compatibility for pods that use the old default.
+			LegacyTrustedCertConfigMapKeyName: pemStr, // This is for backwards compatibility for pods that use the old default.
 		},
 	}
 }

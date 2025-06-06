@@ -249,7 +249,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobServiceAccount() *cor
 	}
 }
 
-func IntrusionDetectionClusterRoleRules(isManagedCluster, isOpenShift bool, isMultiTenant bool, isSyslogForwardingEnabled bool) []rbacv1.PolicyRule {
+// IntrusionDetectionClusterRoleRules generates RBAC rules used by both the Intrusion Detection pods
+// and the Guardian service account to handle requests from the management cluster.
+func IntrusionDetectionClusterRoleRules(isManagedCluster, isOpenShift, isMultiTenant, isSyslogForwardingEnabled bool) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{

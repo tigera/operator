@@ -15,12 +15,13 @@
 package clusterrole
 
 import (
-	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	rbacv1 "k8s.io/api/rbac/v1"
+
+	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 )
 
-// CalicoKubeControllersClusterRoleRules is used to populate rules for calico-kube-controller CR to handle request from calico-kube-controller pods
-// and for guardian CR to handle request kube-controller request from management cluster.
+// CalicoKubeControllersClusterRoleRules defines RBAC rules for calico-kube-controller pods
+// and for guardian to handle kube-controller requests from the management cluster.
 func CalicoKubeControllersClusterRoleRules(isEnterpriseCluster bool, isOpenShift bool, isManagedCluster bool) []rbacv1.PolicyRule {
 	rules := KubeControllersRoleCommonRules(isOpenShift)
 	if isEnterpriseCluster {
@@ -176,6 +177,12 @@ func KubeControllersRoleEnterpriseCommonRules(isManagedCluster bool) []rbacv1.Po
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+			// Grant permissions to access ClusterInformation resources in managed clusters.
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
 		)
 	}

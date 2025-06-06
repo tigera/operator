@@ -112,6 +112,8 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 
 	var objs []client.Object
 
+	// Guardian has RBAC permissions to handle policy recommendation requests in managed clusters,
+	// so only resource cleanup is required.
 	if pr.cfg.ManagedCluster {
 		return objs, pr.deprecatedObjects()
 	}
@@ -321,13 +323,9 @@ func (pr *policyRecommendationComponent) policyRecommendationAnnotations() map[s
 }
 
 func (pr *policyRecommendationComponent) serviceAccount() client.Object {
-	namespace := pr.cfg.Namespace
-	if pr.cfg.ManagedCluster {
-		namespace = "calico-system"
-	}
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName, Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName, Namespace: pr.cfg.Namespace},
 	}
 }
 
@@ -373,8 +371,8 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 	}
 }
 
-// PolicyRecommendationClusterRoleRules are shared between the policy-recommendation and guardian service accounts.
-// In a managed cluster, guardian handles policy recommendation requests forwarded from the management cluster.
+// PolicyRecommendationClusterRoleRules defines the RBAC rules required for policy recommendation pods,
+// and for Guardian to handle policy recommendation requests from the management cluster.
 func PolicyRecommendationClusterRoleRules(isManagedCluster, isOpenShift, isMultitenant bool) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{

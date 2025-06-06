@@ -718,8 +718,7 @@ func deprecatedObjects() []client.Object {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
 		},
 
-		// Remove managed namespace objects since the guardian identity is responsible for handling manager requests
-		// from the management cluster.
+		// Remove manager namespace objects since the guardian identity is responsible for handling manager requests
 		&corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: ManagerNamespace},

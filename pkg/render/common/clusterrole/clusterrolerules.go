@@ -177,6 +177,12 @@ func KubeControllersRoleEnterpriseCommonRules(isManagedCluster bool) []rbacv1.Po
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "create", "update", "list", "watch"},
 			},
+			// Grant permissions to access ClusterInformation resources in managed clusters.
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
 		)
 	}
 

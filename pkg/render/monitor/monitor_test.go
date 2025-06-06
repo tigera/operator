@@ -550,7 +550,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.Selector.MatchLabels["k8s-app"]).To(Equal("tigera-api"))
 		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames).To(HaveLen(1))
-		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("tigera-system"))
+		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("calico-system"))
 		Expect(servicemonitorObj.Spec.Endpoints).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.Endpoints[0].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))

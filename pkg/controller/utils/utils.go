@@ -1039,3 +1039,15 @@ func MaintainInstallationFinalizer(
 	// Update the installation with any finalizer changes.
 	return c.Patch(ctx, installation, patchFrom)
 }
+
+func IsTigeraStatusReady(ts *operatorv1.TigeraStatus, l logr.Logger) bool {
+	if ts != nil && ts.Status.Conditions != nil {
+		for _, condition := range ts.Status.Conditions {
+			if condition.Type == operatorv1.ComponentAvailable && condition.Status == operatorv1.ConditionTrue {
+				return true
+			}
+		}
+	}
+	l.V(3).Info("TigeraStatus is not in Available status")
+	return false
+}

@@ -3,7 +3,7 @@
   "kind": "NetworkPolicy",
   "metadata": {
     "name": "allow-tigera.cnx-apiserver-access",
-    "namespace": "tigera-system"
+    "namespace": "calico-system"
   },
   "spec": {
     "order": 1,

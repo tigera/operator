@@ -664,11 +664,17 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 
 		It("should not render any resources in a managed cluster", func() {
 			cfg.ManagedCluster = true
+			expectedDeleteResources := []client.Object{
+				&corev1.Namespace{TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.PolicyRecommendationNamespace}},
+				&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.PolicyRecommendationName}},
+				&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.PolicyRecommendationName}},
+			}
 
 			component := render.PolicyRecommendation(cfg)
-			resources, _ := component.Objects()
+			resources, deleteResources := component.Objects()
 
 			Expect(resources).To(BeEmpty(), "Expected no resources to be rendered in a managed cluster")
+			rtest.ExpectResources(deleteResources, expectedDeleteResources)
 		})
 
 	})

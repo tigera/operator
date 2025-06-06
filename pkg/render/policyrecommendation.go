@@ -113,7 +113,7 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	var objs []client.Object
 
 	// Guardian has RBAC permissions to handle policy recommendation requests in managed clusters,
-	// so only resource cleanup is required.
+	// so clean up the resources left behind in older clusters during upgrade.
 	if pr.cfg.ManagedCluster {
 		return objs, pr.deprecatedObjects()
 	}
@@ -456,8 +456,6 @@ func PolicyRecommendationClusterRoleRules(isManagedCluster, isOpenShift, isMulti
 
 func (pr *policyRecommendationComponent) deprecatedObjects() []client.Object {
 	return []client.Object{
-		// In a managed cluster, the guardian identity handles policy recommendation requests.
-		// Therefore, the tigera-policy-recommendation namespace and its associated resources should be removed in the managed cluster.
 		&corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationNamespace},

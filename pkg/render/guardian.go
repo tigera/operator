@@ -150,13 +150,6 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		objs = append(objs,
-			// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
-			// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
-			//CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
-			//managerServiceAccount(ManagerNamespace),
-			//managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil), - moved into guardian cluster role as ManagerBaseRulePolicy
-			//managerClusterRoleBinding(nil, []string{ManagerNamespace}, []string{}),
-
 			// Install default UI settings for this managed cluster.
 			managerClusterWideSettingsGroup(),
 			managerUserSpecificSettingsGroup(),

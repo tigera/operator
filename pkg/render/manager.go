@@ -994,8 +994,8 @@ func managerClusterWideDefaultView() *v3.UISettings {
 	}
 }
 
-// ManagerBasePolicyRules returns rules defines permission to handle manager request in management cluster via manager identity and
-// for via guardian identity in managed cluster.
+// ManagerBasePolicyRules defines the RBAC rules required for manager pods, as well as for guardian identity to handle
+// manager requests originating from the management cluster.
 func ManagerBasePolicyRules(isManagedCluster, isOpenShift bool, tenant *operatorv1.Tenant) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{

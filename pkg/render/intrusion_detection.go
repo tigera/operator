@@ -249,7 +249,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionJobServiceAccount() *cor
 	}
 }
 
-func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.ClusterRole {
+func IntrusionDetectionClusterRoleRules(isManagedCluster, isOpenShift bool, isMultiTenant bool, isSyslogForwardingEnabled bool) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{
@@ -329,7 +329,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		},
 	}
 
-	if !c.cfg.ManagedCluster {
+	if !isManagedCluster {
 		managementRule := []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -358,7 +358,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		// is the owner of the AD Cronjobs - Openshift blocks setting an
 		// blockOwnerDeletion to true if an ownerReference refers to a resource
 		// you can't set finalizers on"
-		if c.cfg.OpenShift {
+		if isOpenShift {
 			managementRule = append(managementRule,
 				rbacv1.PolicyRule{
 					APIGroups: []string{"apps"},
@@ -370,7 +370,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		rules = append(rules, managementRule...)
 	}
 
-	if c.cfg.Tenant.MultiTenant() {
+	if isMultiTenant {
 		// These rules are used by Intrusion Detection Controller in a management cluster serving multiple tenants in order to appear to managed
 		// clusters as the expected serviceaccount. They're only needed when there are multiple tenants sharing the same
 		// management cluster.
@@ -393,10 +393,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			},
 		}...)
 	}
-
-	if c.cfg.OpenShift {
+	if isOpenShift {
 		sccName := securitycontextconstraints.NonRootV2
-		if c.cfg.SyslogForwardingIsEnabled {
+		if isSyslogForwardingEnabled {
 			sccName = securitycontextconstraints.Privileged
 		}
 		rules = append(rules, rbacv1.PolicyRule{
@@ -406,6 +405,12 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			ResourceNames: []string{sccName},
 		})
 	}
+
+	return rules
+}
+
+func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.ClusterRole {
+	rules := IntrusionDetectionClusterRoleRules(c.cfg.ManagedCluster, c.cfg.OpenShift, c.cfg.Tenant.MultiTenant(), c.cfg.SyslogForwardingIsEnabled)
 
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -438,8 +443,8 @@ func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleB
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      linseed,
-				Namespace: ElasticsearchNamespace,
+				Name:      GuardianName,
+				Namespace: GuardianNamespace,
 			},
 		},
 	}

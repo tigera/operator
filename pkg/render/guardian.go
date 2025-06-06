@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render/common/clusterrole"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -151,10 +152,10 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs,
 			// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
 			// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
-			CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
-			managerServiceAccount(ManagerNamespace),
-			managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil),
-			managerClusterRoleBinding(nil, []string{ManagerNamespace}, []string{}),
+			//CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
+			//managerServiceAccount(ManagerNamespace),
+			//managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil), - moved into guardian cluster role as ManagerBaseRulePolicy
+			//managerClusterRoleBinding(nil, []string{ManagerNamespace}, []string{}),
 
 			// Install default UI settings for this managed cluster.
 			managerClusterWideSettingsGroup(),
@@ -238,6 +239,21 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"users", "groups", "serviceaccounts"},
 			Verbs:     []string{"impersonate"},
 		})
+
+		// Add rules needed for guardian to handle the policy recommendation request in managed clusters.
+		policyRules = append(policyRules, PolicyRecommendationClusterRoleRules(true, c.cfg.OpenShift, false)...)
+
+		// Add rules needed for guardian to handle the manager request in managed clusters.
+		policyRules = append(policyRules, ManagerBasePolicyRules(true, c.cfg.OpenShift, nil)...)
+
+		// Add rules needed for guardian to handle the linseed request in managed cluster
+		policyRules = append(policyRules, LinseedExternalRoles()...)
+
+		// Add rules needed for guardian to handle calico-kube-controller request from management cluster.
+		policyRules = append(policyRules, clusterrole.CalicoKubeControllersClusterRoleRules(true, c.cfg.OpenShift, true)...)
+
+		// Add rules needed for guardian to handle intrusion-detection-controller request from management cluster.
+		policyRules = append(policyRules, IntrusionDetectionClusterRoleRules(true, c.cfg.OpenShift, false, false)...)
 
 		if c.cfg.OpenShift {
 			policyRules = append(policyRules, rbacv1.PolicyRule{
@@ -707,6 +723,25 @@ func deprecatedObjects() []client.Object {
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
+		},
+
+		// Remove managed namespace objects since the guardian identity is responsible for handling manager requests
+		// from the management cluster.
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerNamespace},
+		},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},
+		},
+		&corev1.ServiceAccount{
+			TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerServiceAccount, Namespace: ManagerNamespace},
 		},
 	}
 }

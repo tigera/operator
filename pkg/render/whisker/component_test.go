@@ -25,9 +25,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
@@ -56,7 +56,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
-				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
+				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			},
 			4, 0,
 		),
@@ -68,7 +68,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
-				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
+				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			},
 			0, 4,
 		),
@@ -90,7 +90,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
-				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
+				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 				ClusterID:             "test-cluster-id",
 				CalicoVersion:         "test-calico-version",
 				ClusterType:           "test-cluster-type",
@@ -103,7 +103,7 @@ var _ = Describe("ComponentRendering", func() {
 					Namespace: whisker.WhiskerNamespace,
 				},
 				Spec: appsv1.DeploymentSpec{
-					Replicas: ptr.ToPtr(int32(1)),
+					Replicas: ptr.To(int32(1)),
 					Strategy: appsv1.DeploymentStrategy{
 						Type: appsv1.RecreateDeploymentStrategyType,
 					},
@@ -273,7 +273,7 @@ func GetOverriddenWhiskerDeployment(overrides *operatorv1.WhiskerDeployment) (*a
 		Whisker: &operatorv1.Whisker{
 			Spec: operatorv1.WhiskerSpec{
 				WhiskerDeployment: overrides,
-				Notifications:     ptr.ToPtr(operatorv1.Enabled),
+				Notifications:     ptr.To(operatorv1.Enabled),
 			},
 		},
 	})

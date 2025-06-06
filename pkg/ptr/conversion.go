@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,23 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func BoolToPtr(b bool) *bool {
-	return &b
-}
-
-func Int64ToPtr(i int64) *int64 {
-	return &i
-}
-
-func Int32ToPtr(i int32) *int32 {
-	return &i
-}
-
 func IntOrStrPtr(v string) *intstr.IntOrString {
 	ios := intstr.Parse(v)
 	return &ios
-}
-
-func ToPtr[V any](v V) *V {
-	return &v
 }

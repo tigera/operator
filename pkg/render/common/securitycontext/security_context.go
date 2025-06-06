@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,8 +16,7 @@ package securitycontext
 
 import (
 	corev1 "k8s.io/api/core/v1"
-
-	"github.com/tigera/operator/pkg/ptr"
+	"k8s.io/utils/ptr"
 )
 
 var (
@@ -33,13 +32,13 @@ var (
 // the containers should be using.
 func NewNonRootContext() *corev1.SecurityContext {
 	return &corev1.SecurityContext{
-		AllowPrivilegeEscalation: ptr.BoolToPtr(false),
+		AllowPrivilegeEscalation: ptr.To(false),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		},
-		Privileged:   ptr.BoolToPtr(false),
+		Privileged:   ptr.To(false),
 		RunAsGroup:   &runAsGroupID,
-		RunAsNonRoot: ptr.BoolToPtr(true),
+		RunAsNonRoot: ptr.To(true),
 		RunAsUser:    &runAsUserID,
 		SeccompProfile: &corev1.SeccompProfile{
 			Type: corev1.SeccompProfileTypeRuntimeDefault,
@@ -50,14 +49,14 @@ func NewNonRootContext() *corev1.SecurityContext {
 // NewRootContext returns the root container security context for containers that access host files or network.
 func NewRootContext(privileged bool) *corev1.SecurityContext {
 	return &corev1.SecurityContext{
-		AllowPrivilegeEscalation: ptr.BoolToPtr(privileged),
+		AllowPrivilegeEscalation: ptr.To(privileged),
 		Capabilities: &corev1.Capabilities{
 			Drop: []corev1.Capability{"ALL"},
 		},
-		Privileged:   ptr.BoolToPtr(privileged),
-		RunAsGroup:   ptr.Int64ToPtr(0),
-		RunAsNonRoot: ptr.BoolToPtr(false),
-		RunAsUser:    ptr.Int64ToPtr(0),
+		Privileged:   ptr.To(privileged),
+		RunAsGroup:   ptr.To(int64(0)),
+		RunAsNonRoot: ptr.To(false),
+		RunAsUser:    ptr.To(int64(0)),
 		SeccompProfile: &corev1.SeccompProfile{
 			Type: corev1.SeccompProfileTypeRuntimeDefault,
 		},
@@ -80,7 +79,7 @@ func NewWindowsHostProcessContext() *corev1.SecurityContext {
 func NewNonRootPodContext() *corev1.PodSecurityContext {
 	return &corev1.PodSecurityContext{
 		RunAsGroup:   &runAsGroupID,
-		RunAsNonRoot: ptr.BoolToPtr(true),
+		RunAsNonRoot: ptr.To(true),
 		RunAsUser:    &runAsUserID,
 		SeccompProfile: &corev1.SeccompProfile{
 			Type: corev1.SeccompProfileTypeRuntimeDefault,

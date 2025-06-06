@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,10 +17,9 @@ package securitycontextconstraints
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	ocsv1 "github.com/openshift/api/security/v1"
-
-	"github.com/tigera/operator/pkg/ptr"
 )
 
 // Default OpenShift security context constraints (SCCs) defined in
@@ -43,7 +42,7 @@ func NewNonRootSecurityContextConstraints(name string, users []string) *ocsv1.Se
 		AllowHostNetwork:         false,
 		AllowHostPID:             false,
 		AllowHostPorts:           false,
-		AllowPrivilegeEscalation: ptr.BoolToPtr(false),
+		AllowPrivilegeEscalation: ptr.To(false),
 		AllowPrivilegedContainer: false,
 		FSGroup:                  ocsv1.FSGroupStrategyOptions{Type: ocsv1.FSGroupStrategyRunAsAny},
 		ReadOnlyRootFilesystem:   false,

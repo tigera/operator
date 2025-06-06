@@ -34,6 +34,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -48,7 +49,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/test"
 )
 
@@ -779,8 +779,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			egw := &operatorv1.EgressGateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
 				Spec: operatorv1.EgressGatewaySpec{
-					Replicas:    ptr.ToPtr(int32(2)),
-					LogSeverity: ptr.ToPtr(operatorv1.LogSeverityInfo),
+					Replicas:    ptr.To(int32(2)),
+					LogSeverity: ptr.To(operatorv1.LogSeverityInfo),
 					IPPools: []operatorv1.EgressGatewayIPPool{
 						{Name: "ippool-1"},
 					},

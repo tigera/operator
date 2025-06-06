@@ -510,7 +510,7 @@ func (c *dpiComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     render.TigeraLinseedSecretsClusterRole,
+			Name:     render.GuardianClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			{

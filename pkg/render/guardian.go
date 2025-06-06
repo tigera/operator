@@ -150,13 +150,6 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		objs = append(objs,
-			// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
-			// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
-			//CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
-			//managerServiceAccount(ManagerNamespace),
-			//managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil), - moved into guardian cluster role as ManagerBaseRulePolicy
-			//managerClusterRoleBinding(nil, []string{ManagerNamespace}, []string{}),
-
 			// Install default UI settings for this managed cluster.
 			managerClusterWideSettingsGroup(),
 			managerUserSpecificSettingsGroup(),
@@ -725,13 +718,11 @@ func deprecatedObjects() []client.Object {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
 		},
 
-		// Delete Managed namespace objects, guardian identity will take care of handling the manager request
-		// from management cluster.
+		// Remove manager namespace objects since the guardian identity is responsible for handling manager requests
 		&corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: ManagerNamespace},
 		},
-		//ManagerClusterRole
 		&rbacv1.ClusterRole{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole},
@@ -739,6 +730,10 @@ func deprecatedObjects() []client.Object {
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},
+		},
+		&corev1.ServiceAccount{
+			TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerServiceAccount, Namespace: ManagerNamespace},
 		},
 	}
 }

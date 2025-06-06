@@ -114,6 +114,13 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 		return operatorv1.ProviderRKE2, nil
 	}
 
+	// We failed to determine the platform based on API groups. Some platforms can be detected in other ways, though.
+	if talos, err := isTalos(ctx, clientset); err != nil {
+		return operatorv1.ProviderNone, fmt.Errorf("failed to check if Talos is the provider: %s", err)
+	} else if talos {
+		return operatorv1.ProviderTalos, nil
+	}
+
 	// Couldn't detect any specific platform.
 	return operatorv1.ProviderNone, nil
 }
@@ -237,6 +244,24 @@ func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	}
 
 	return foundRKE2Resource, nil
+}
+
+// isTalos returns true if running on a Talos cluster, and false otherwise.
+// Talos doesn't have any provider-specific API groups, so we need to use a different approach than
+// we use for other platforms in autodetectFromGroup.
+func isTalos(ctx context.Context, c kubernetes.Interface) (bool, error) {
+	masterNodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{LabelSelector: "node-role.kubernetes.io/control-plane"})
+	if err != nil {
+		return false, err
+	}
+	for _, n := range masterNodes.Items {
+		for l := range n.Annotations {
+			if strings.HasPrefix(l, "talos.dev") {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // UseExternalElastic returns true if this cluster is configured to use an external elasticsearch cluster,

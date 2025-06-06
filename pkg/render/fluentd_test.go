@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -373,12 +373,12 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			}))
 
 		linseedRoleBinding := rtest.GetResource(createResources, "tigera-linseed", render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(linseedRoleBinding.RoleRef.Name).To(Equal("tigera-linseed-secrets"))
+		Expect(linseedRoleBinding.RoleRef.Name).To(Equal("calico-guardian"))
 		Expect(linseedRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      render.LinseedServiceName,
-				Namespace: render.ElasticsearchNamespace,
+				Name:      render.GuardianServiceAccountName,
+				Namespace: render.GuardianNamespace,
 			},
 		}))
 
@@ -483,12 +483,12 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			}))
 
 		linseedRoleBinding := rtest.GetResource(createResources, "tigera-linseed", render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(linseedRoleBinding.RoleRef.Name).To(Equal("tigera-linseed-secrets"))
+		Expect(linseedRoleBinding.RoleRef.Name).To(Equal("calico-guardian"))
 		Expect(linseedRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      render.LinseedServiceName,
-				Namespace: render.ElasticsearchNamespace,
+				Name:      render.GuardianServiceAccountName,
+				Namespace: render.GuardianNamespace,
 			},
 		}))
 

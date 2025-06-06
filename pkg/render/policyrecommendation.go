@@ -109,12 +109,18 @@ func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {
+
+	var objs []client.Object
+
+	if pr.cfg.ManagedCluster {
+		return objs, pr.deprecatedObjects()
+	}
+
 	// Management and managed clusters need API access to the resources defined in the policy
 	// recommendation cluster role
-	objs := []client.Object{
+	objs = []client.Object{
 		CreateNamespace(pr.cfg.Namespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted, pr.cfg.Installation.Azure),
 		CreateOperatorSecretsRoleBinding(pr.cfg.Namespace),
-
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
@@ -145,84 +151,8 @@ func (pr *policyRecommendationComponent) Ready() bool {
 }
 
 func (pr *policyRecommendationComponent) clusterRole() client.Object {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"namespaces"},
-			Verbs:     []string{"get", "list", "watch"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{
-				"tiers",
-				"policyrecommendationscopes",
-				"policyrecommendationscopes/status",
-				"stagednetworkpolicies",
-				"tier.stagednetworkpolicies",
-				"networkpolicies",
-				"tier.networkpolicies",
-				"globalnetworksets",
-			},
-			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
-		},
-		{
-			// Add read access to Linseed APIs.
-			APIGroups: []string{"linseed.tigera.io"},
-			Resources: []string{
-				"flows",
-			},
-			Verbs: []string{"get"},
-		},
-	}
 
-	if !pr.cfg.ManagedCluster {
-		rules = append(rules, []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"licensekeys", "managedclusters"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"licensekeys"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-		}...)
-	}
-
-	if pr.cfg.OpenShift {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{securitycontextconstraints.HostNetworkV2},
-		})
-	}
-
-	if pr.cfg.Tenant.MultiTenant() {
-		// These rules are used by policy-recommendation in a management cluster serving multiple tenants in order to appear to managed
-		// clusters as the expected serviceaccount. They're only needed when there are multiple tenants sharing the same
-		// management cluster.
-		rules = append(rules, []rbacv1.PolicyRule{
-			{
-				APIGroups:     []string{""},
-				Resources:     []string{"serviceaccounts"},
-				Verbs:         []string{"impersonate"},
-				ResourceNames: []string{PolicyRecommendationName},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"groups"},
-				Verbs:     []string{"impersonate"},
-				ResourceNames: []string{
-					serviceaccount.AllServiceAccountsGroup,
-					"system:authenticated",
-					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, PolicyRecommendationNamespace),
-				},
-			},
-		}...)
-	}
-
+	rules := PolicyRecommendationClusterRoleRules(pr.cfg.ManagedCluster, pr.cfg.OpenShift, pr.cfg.Tenant.MultiTenant())
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -391,9 +321,13 @@ func (pr *policyRecommendationComponent) policyRecommendationAnnotations() map[s
 }
 
 func (pr *policyRecommendationComponent) serviceAccount() client.Object {
+	namespace := pr.cfg.Namespace
+	if pr.cfg.ManagedCluster {
+		namespace = "calico-system"
+	}
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName, Namespace: pr.cfg.Namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName, Namespace: namespace},
 	}
 }
 
@@ -435,6 +369,108 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Ingress:  []v3.Rule{},
 			Egress:   egressRules,
+		},
+	}
+}
+
+// PolicyRecommendationClusterRoleRules are shared between the policy-recommendation and guardian service accounts.
+// In a managed cluster, guardian handles policy recommendation requests forwarded from the management cluster.
+func PolicyRecommendationClusterRoleRules(isManagedCluster, isOpenShift, isMultitenant bool) []rbacv1.PolicyRule {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"namespaces"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"tiers",
+				"policyrecommendationscopes",
+				"policyrecommendationscopes/status",
+				"stagednetworkpolicies",
+				"tier.stagednetworkpolicies",
+				"networkpolicies",
+				"tier.networkpolicies",
+				"globalnetworksets",
+			},
+			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+		},
+		{
+			// Add read access to Linseed APIs.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{
+				"flows",
+			},
+			Verbs: []string{"get"},
+		},
+	}
+
+	if !isManagedCluster {
+		rules = append(rules, []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"licensekeys", "managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		}...)
+	}
+
+	if isOpenShift {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"security.openshift.io"},
+			Resources:     []string{"securitycontextconstraints"},
+			Verbs:         []string{"use"},
+			ResourceNames: []string{securitycontextconstraints.HostNetworkV2},
+		})
+	}
+
+	if isMultitenant {
+		// These rules are used by policy-recommendation in a management cluster serving multiple tenants in order to appear to managed
+		// clusters as the expected serviceaccount. They're only needed when there are multiple tenants sharing the same
+		// management cluster.
+		rules = append(rules, []rbacv1.PolicyRule{
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"serviceaccounts"},
+				Verbs:         []string{"impersonate"},
+				ResourceNames: []string{PolicyRecommendationName},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+				ResourceNames: []string{
+					serviceaccount.AllServiceAccountsGroup,
+					"system:authenticated",
+					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, PolicyRecommendationNamespace),
+				},
+			},
+		}...)
+	}
+	return rules
+}
+
+func (pr *policyRecommendationComponent) deprecatedObjects() []client.Object {
+	return []client.Object{
+		// In a managed cluster, the guardian identity handles policy recommendation requests.
+		// Therefore, the tigera-policy-recommendation namespace and its associated resources should be removed in the managed cluster.
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationNamespace},
+		},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
 		},
 	}
 }

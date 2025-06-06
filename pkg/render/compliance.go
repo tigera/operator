@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -720,13 +720,13 @@ func (c *complianceComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     TigeraLinseedSecretsClusterRole,
+			Name:     GuardianClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      linseed,
-				Namespace: ElasticsearchNamespace,
+				Name:      GuardianName,
+				Namespace: GuardianNamespace,
 			},
 		},
 	}

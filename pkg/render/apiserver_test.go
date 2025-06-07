@@ -753,7 +753,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		component := render.APIServerPolicy(cfg)
 		resources, _ := component.Objects()
-		policyName := types.NamespacedName{Name: "allow-tigera.cnx-apiserver-access", Namespace: "tigera-system"}
+		policyName := types.NamespacedName{Name: "allow-tigera.tigera-apiserver-access", Namespace: "tigera-system"}
 		policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
 		Expect(policy).ToNot(BeNil())
 		Expect(policy.Spec).ToNot(BeNil())
@@ -775,7 +775,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		component := render.APIServerPolicy(cfg)
 		resources, _ := component.Objects()
-		policyName := types.NamespacedName{Name: "allow-tigera.cnx-apiserver-access", Namespace: "tigera-system"}
+		policyName := types.NamespacedName{Name: "allow-tigera.tigera-apiserver-access", Namespace: "tigera-system"}
 		policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
 		Expect(policy).ToNot(BeNil())
 		Expect(policy.Spec).ToNot(BeNil())
@@ -1051,7 +1051,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	Context("allow-tigera rendering", func() {
-		policyName := types.NamespacedName{Name: "allow-tigera.cnx-apiserver-access", Namespace: "tigera-system"}
+		policyName := types.NamespacedName{Name: "allow-tigera.tigera-apiserver-access", Namespace: "tigera-system"}
 
 		DescribeTable("should render allow-tigera policy",
 			func(scenario testutils.AllowTigeraScenario) {

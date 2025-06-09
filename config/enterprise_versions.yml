@@ -44,7 +44,7 @@ components:
     version: v3.20.4
   dex:
     image: tigera/dex
-    version: v3.20.4
+    version: v3.20.4-1-g46918b5532a8
   eck-kibana:
     version: 7.17.28
   kibana:

@@ -168,7 +168,7 @@ var (
 	}
 
 	ComponentDex = Component{
-		Version:  "v3.20.4",
+		Version:  "v3.20.4-1-g46918b5532a8",
 		Image:    "tigera/dex",
 		Registry: "",
 	}

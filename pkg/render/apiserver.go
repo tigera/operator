@@ -73,6 +73,7 @@ const (
 	tigeraAPIServerTLSSecretName                                  = "tigera-apiserver-certs"
 	APIServerSecretsRBACName                                      = "tigera-extension-apiserver-secrets-access"
 	MultiTenantManagedClustersAccessClusterRoleName               = "tigera-managed-cluster-access"
+	ManagedClustersWatchClusterRoleName                           = "tigera-managed-cluster-watch"
 	L7AdmissionControllerContainerName              ContainerName = "calico-l7-admission-controller"
 	L7AdmissionControllerPort                                     = 6443
 	L7AdmissionControllerPortName                                 = "l7admctrl"
@@ -287,6 +288,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		)
 	}
 
+	globalEnterpriseObjects = append(globalEnterpriseObjects, c.managedClusterWatchClusterRoles()...)
 	if c.cfg.ManagementCluster != nil {
 		if c.cfg.MultiTenant {
 			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
@@ -2282,6 +2284,25 @@ func (c *apiServerComponent) multiTenantManagedClusterAccessClusterRoles() []cli
 					// the service in the canonical namespace) can get a managed clusters before sending the request down the tunnel.
 					// This ClusterRole will be assigned to each component using a RoleBinding in the canonical or tenant namespace.
 					"get",
+				},
+			},
+		},
+	})
+
+	return objects
+}
+
+func (c *apiServerComponent) managedClusterWatchClusterRoles() []client.Object {
+	var objects []client.Object
+	objects = append(objects, &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: ManagedClustersWatchClusterRoleName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs: []string{
+					"get", "list", "watch",
 				},
 			},
 		},

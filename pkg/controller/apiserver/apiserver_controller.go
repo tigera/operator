@@ -418,10 +418,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// Check if the legacy namespace 'tigera-system' exists and can be cleaned up
-	canCleanupOlderResources := false
-	canCleanupOlderResources = r.canCleanupLegacyNamespace(ctx, reqLogger)
-
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -443,7 +439,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		MultiTenant:                 r.multiTenant,
 		KeyValidatorConfig:          keyValidatorConfig,
 		KubernetesVersion:           r.kubernetesVersion,
-		CanCleanupOlderResources:    canCleanupOlderResources,
+		CanCleanupOlderResources:    r.canCleanupLegacyNamespace(ctx, reqLogger),
 	}
 
 	var components []render.Component
@@ -584,7 +580,7 @@ func (r *ReconcileAPIServer) canCleanupLegacyNamespace(ctx context.Context, logg
 		}
 		return false
 	}
-	if !utils.IsTigeraStatusReady(ts, logger) {
+	if !ts.Available() {
 		logger.V(3).Info("TigeraStatus for apiserver is not in Available status.")
 		return false
 	}

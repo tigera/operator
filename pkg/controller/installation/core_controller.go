@@ -1469,7 +1469,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		components = append(components,
 			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg),
-			render.NewPassthrough(allowTigeraDefaultDenyForCalicoSystem(common.CalicoNamespace)),
+			render.NewPassthrough(allowTigeraDefaultDenyForCalicoSystem()),
 		)
 	}
 
@@ -2064,12 +2064,12 @@ func crdPoolsToOperator(crds []crdv1.IPPool) []operator.IPPool {
 	return pools
 }
 
-func allowTigeraDefaultDenyForCalicoSystem(namespace string) *v3.NetworkPolicy {
+func allowTigeraDefaultDenyForCalicoSystem() *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      networkpolicy.TigeraComponentDefaultDenyPolicyName,
-			Namespace: namespace,
+			Namespace: common.CalicoNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Tier: networkpolicy.TigeraComponentTierName,

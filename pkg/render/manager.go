@@ -83,6 +83,8 @@ const (
 	KibanaTLSHashAnnotation                                       = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation                               = "hash.operator.tigera.io/elasticsearch-user"
 	ManagerMultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-manager-managed-cluster-access"
+	ManagerManagedClustersWatchClusterRoleBindingName             = "tigera-manager-managed-cluster-watch"
+	ManagerManagedClustersWriteAccessClusterRoleBindingName       = "tigera-manager-managed-cluster-write-access"
 )
 
 // ManagementClusterConnection configuration constants
@@ -246,6 +248,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
 	)
 
+	objs = append(objs, c.managedClustersWatchRoleBinding()...)
 	if c.cfg.Tenant.MultiTenant() {
 		objs = append(objs, c.multiTenantManagedClustersAccess()...)
 	}
@@ -719,6 +722,13 @@ func managerClusterRoleBinding(tenant *operatorv1.Tenant, namespaces, calicoName
 	return rcomponents.ClusterRoleBinding(bindingName, roleName, ManagerServiceAccount, chosenNamespaces)
 }
 
+func (c *managerComponent) managedClustersWatchRoleBinding() []client.Object {
+	return []client.Object{
+		rcomponents.RoleBinding(ManagerManagedClustersWatchClusterRoleBindingName, ManagedClustersWatchClusterRoleName, ManagerServiceAccount, c.cfg.Namespace),
+		rcomponents.RoleBinding(ManagerManagedClustersWriteAccessClusterRoleBindingName, ManagedClustersWriteAccessClusterRoleName, ManagerServiceAccount, c.cfg.Namespace),
+	}
+}
+
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
 func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant) *rbacv1.ClusterRole {
 	// Different tenant types use different permission sets.
@@ -863,16 +873,6 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				Verbs: []string{"dismiss", "delete"},
 			},
 		},
-	}
-
-	if !managedCluster {
-		cr.Rules = append(cr.Rules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"list", "get", "watch", "update"},
-			},
-		)
 	}
 
 	if tenant.MultiTenant() {

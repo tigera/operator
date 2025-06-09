@@ -74,6 +74,8 @@ const (
 	tigeraAPIServerTLSSecretName                                  = "tigera-apiserver-certs"
 	APIServerSecretsRBACName                                      = "tigera-extension-apiserver-secrets-access"
 	MultiTenantManagedClustersAccessClusterRoleName               = "tigera-managed-cluster-access"
+	ManagedClustersWatchClusterRoleName                           = "tigera-managed-cluster-watch"
+	ManagedClustersWriteAccessClusterRoleName                     = "tigera-managed-cluster-write-access"
 	L7AdmissionControllerContainerName              ContainerName = "calico-l7-admission-controller"
 	L7AdmissionControllerPort                                     = 6443
 	L7AdmissionControllerPortName                                 = "l7admctrl"
@@ -289,6 +291,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		)
 	}
 
+	globalEnterpriseObjects = append(globalEnterpriseObjects, c.managedClusterClusterRoles()...)
 	if c.cfg.ManagementCluster != nil {
 		if c.cfg.MultiTenant {
 			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
@@ -2288,6 +2291,38 @@ func (c *apiServerComponent) multiTenantManagedClusterAccessClusterRoles() []cli
 			},
 		},
 	})
+
+	return objects
+}
+
+func (c *apiServerComponent) managedClusterClusterRoles() []client.Object {
+	var objects []client.Object
+	objects = append(objects, &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: ManagedClustersWatchClusterRoleName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs: []string{
+					"get", "list", "watch",
+				},
+			},
+		},
+	},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagedClustersWriteAccessClusterRoleName},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"managedclusters"},
+					Verbs: []string{
+						"update",
+					},
+				},
+			},
+		})
 
 	return objects
 }

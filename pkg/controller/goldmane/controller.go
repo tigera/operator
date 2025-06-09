@@ -31,6 +31,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	installationpkg "github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -194,13 +195,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	nodeTyphaTLSConfig, err := installationpkg.GetTyphaNodeTLSConfig(r.cli, certificateManager)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Typha node TLS config", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(goldmane.GoldmaneDeploymentName, r.cli,
 		common.OperatorNamespace(), false,
 		whisker.WhiskerBackendKeyPairSecret, render.VoltronLinseedPublicCert)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
 	}
-	trustedBundle.AddCertificates(keyPair)
+	trustedBundle.AddCertificates(keyPair, nodeTyphaTLSConfig.NodeSecret)
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:       goldmane.GoldmaneNamespace,

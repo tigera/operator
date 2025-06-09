@@ -332,6 +332,9 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	var alreadyExistsErr error = nil
 
 	for _, obj := range objsToCreate {
+		if obj == nil {
+			continue
+		}
 		key := client.ObjectKeyFromObject(obj)
 
 		// Pass in a DeepCopy so any modifications made by createOrUpdateObject won't be included

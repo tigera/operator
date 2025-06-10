@@ -1189,7 +1189,7 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 	// ManagedClusters simply need the namespace, role, and binding created so that Linseed in the management cluster has permissions
 	// to create token secrets in the managed cluster.
 	toCreate := []client.Object{}
-	bindings := m.linseedExternalRoleBindings()
+	roles, bindings := m.linseedExternalRolesAndBindings()
 	toCreate = append(toCreate,
 		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged, m.cfg.Installation.Azure),
 		m.elasticsearchExternalService(),
@@ -1197,6 +1197,9 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 		CreateOperatorSecretsRoleBinding(ElasticsearchNamespace),
 	)
 
+	for _, r := range roles {
+		toCreate = append(toCreate, r)
+	}
 	for _, b := range bindings {
 		toCreate = append(toCreate, b)
 	}
@@ -1248,9 +1251,41 @@ func (m *managedClusterLogStorage) elasticsearchExternalService() *corev1.Servic
 	}
 }
 
-// In managed clusters we need to provision bindings for linseed to provide permissions
+// In managed clusters we need to provision roles and bindings for linseed to provide permissions
 // to get configmaps and manipulate secrets
-func (m managedClusterLogStorage) linseedExternalRoleBindings() []*rbacv1.RoleBinding {
+func (m managedClusterLogStorage) linseedExternalRolesAndBindings() ([]*rbacv1.ClusterRole, []*rbacv1.RoleBinding) {
+	// Create separate ClusterRoles for necessary configmap and secret operations, then bind them to the namespaces
+	// where they are required so that we're only granting exactly which permissions we need in the namespaces in which
+	// they're required. Other controllers may also bind this cluster role to their own namespace if they require
+	// linseed access tokens.
+	secretsRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: TigeraLinseedSecretsClusterRole,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"create", "update", "get", "list"},
+			},
+		},
+	}
+
+	// These permissions are necessary so that we can fetch the operator namespace of the managed cluster from the
+	// management cluster so that we're copying secrets into the right place in a multi-tenant environment.
+	configMapsRole := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-linseed-configmaps",
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get"},
+			},
+		},
+	}
+
 	// Bind the secrets permission to the operator namespace. This binding now adds permissions for Linseed to create
 	// its public cert secret in the tigera-operator namespace
 	secretBinding := &rbacv1.RoleBinding{
@@ -1261,7 +1296,7 @@ func (m managedClusterLogStorage) linseedExternalRoleBindings() []*rbacv1.RoleBi
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     GuardianClusterRoleName,
+			Name:     TigeraLinseedSecretsClusterRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -1281,7 +1316,7 @@ func (m managedClusterLogStorage) linseedExternalRoleBindings() []*rbacv1.RoleBi
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     GuardianClusterRoleName,
+			Name:     "tigera-linseed-configmaps",
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -1292,37 +1327,21 @@ func (m managedClusterLogStorage) linseedExternalRoleBindings() []*rbacv1.RoleBi
 		},
 	}
 
-	return []*rbacv1.RoleBinding{configMapBinding, secretBinding}
+	return []*rbacv1.ClusterRole{secretsRole, configMapsRole}, []*rbacv1.RoleBinding{configMapBinding, secretBinding}
 }
 
 // For managed clusters, returns RBAC rules required by Guardian to handle Linseed requests
 // for accessing ConfigMaps and managing Secrets.
 func LinseedExternalRoles() []rbacv1.PolicyRule {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"create", "update", "get", "list"},
-		},
-	}
-
 	// This permission allows Linseed to watch for namespace creation and existence in the managed cluster
 	// before attempting to copy the Linseed token into those namespaces.
-	rules = append(rules, rbacv1.PolicyRule{
-		APIGroups: []string{""},
-		Resources: []string{"namespaces"},
-		Verbs:     []string{"get", "list", "watch"},
-	})
-
-	// These permissions are necessary so that we can fetch the operator namespace of the managed cluster from the
-	// management cluster so that we're copying secrets into the right place in a multi-tenant environment.
-	rules = append(rules, rbacv1.PolicyRule{
-		APIGroups: []string{""},
-		Resources: []string{"configmaps"},
-		Verbs:     []string{"get"},
-	})
-
-	return rules
+	return []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{""},
+			Resources: []string{"namespaces"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+	}
 }
 
 // In managed clusters we need to provision roles and bindings for kubecontrollers to provide permissions
@@ -1375,15 +1394,7 @@ func (m *managedClusterLogStorage) deprecatedObjects() []client.Object {
 		// Therefore, Linseed's cluster-scoped RBAC objects should be removed in a managed cluster.
 		&rbacv1.ClusterRole{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: TigeraLinseedSecretsClusterRole},
-		},
-		&rbacv1.ClusterRole{
-			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-namespaces"},
-		},
-		&rbacv1.ClusterRole{
-			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-configmaps"},
 		},
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},

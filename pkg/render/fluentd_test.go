@@ -373,7 +373,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			}))
 
 		linseedRoleBinding := rtest.GetResource(createResources, "tigera-linseed", render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(linseedRoleBinding.RoleRef.Name).To(Equal("calico-guardian"))
+		Expect(linseedRoleBinding.RoleRef.Name).To(Equal("tigera-linseed-secrets"))
 		Expect(linseedRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
@@ -483,7 +483,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			}))
 
 		linseedRoleBinding := rtest.GetResource(createResources, "tigera-linseed", render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(linseedRoleBinding.RoleRef.Name).To(Equal("calico-guardian"))
+		Expect(linseedRoleBinding.RoleRef.Name).To(Equal("tigera-linseed-secrets"))
 		Expect(linseedRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",

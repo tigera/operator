@@ -440,7 +440,7 @@ func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleB
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     GuardianClusterRoleName,
+			Name:     TigeraLinseedSecretsClusterRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{

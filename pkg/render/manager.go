@@ -1104,34 +1104,34 @@ func ManagerBasePolicyRules(isManagedCluster, isOpenShift bool, tenant *operator
 			},
 			Verbs: []string{"get", "create"},
 		},
-		{
-			// Add access to Linseed APIs.
-			APIGroups: []string{"linseed.tigera.io"},
-			Resources: []string{
-				"flows",
-				"flowlogs",
-				"bgplogs",
-				"auditlogs",
-				"dnsflows",
-				"dnslogs",
-				"l7flows",
-				"l7logs",
-				"events",
-				"processes",
-			},
-			Verbs: []string{"get"},
-		},
-		{
-			// Dismiss events.
-			APIGroups: []string{"linseed.tigera.io"},
-			Resources: []string{
-				"events",
-			},
-			Verbs: []string{"dismiss", "delete"},
-		},
 	}
 	if !isManagedCluster {
 		rules = append(rules,
+			rbacv1.PolicyRule{
+				// Add access to Linseed APIs.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"flows",
+					"flowlogs",
+					"bgplogs",
+					"auditlogs",
+					"dnsflows",
+					"dnslogs",
+					"l7flows",
+					"l7logs",
+					"events",
+					"processes",
+				},
+				Verbs: []string{"get"},
+			},
+			rbacv1.PolicyRule{
+				// Dismiss events.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"events",
+				},
+				Verbs: []string{"dismiss", "delete"},
+			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},

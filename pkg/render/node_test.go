@@ -788,7 +788,7 @@ var _ = Describe("Node rendering tests", func() {
 				// Verify the mount-bpffs image and command.
 				mountBpffs := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
 				Expect(mountBpffs.Image).To(Equal(ds.Spec.Template.Spec.Containers[0].Image))
-				Expect(mountBpffs.Command).To(Equal([]string{"calico-node", "-init"}))
+				Expect(mountBpffs.Command).To(Equal([]string{"calico-node", "-init", "-skip-cgroup"}))
 
 				Expect(*mountBpffs.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 				Expect(*mountBpffs.SecurityContext.Privileged).To(BeTrue())

@@ -730,180 +730,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	cr := &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"authorization.k8s.io"},
-				Resources: []string{"subjectaccessreviews"},
-				Verbs:     []string{"create"},
-			},
-			{
-				APIGroups: []string{"authentication.k8s.io"},
-				Resources: []string{"tokenreviews"},
-				Verbs:     []string{"create"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"networksets",
-					"globalnetworksets",
-					"globalnetworkpolicies",
-					"tier.globalnetworkpolicies",
-					"networkpolicies",
-					"tier.networkpolicies",
-					"stagedglobalnetworkpolicies",
-					"tier.stagedglobalnetworkpolicies",
-					"stagednetworkpolicies",
-					"tier.stagednetworkpolicies",
-					"stagedkubernetesnetworkpolicies",
-				},
-				Verbs: []string{"list"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"stagednetworkpolicies",
-					"tier.stagednetworkpolicies",
-				},
-				Verbs: []string{"patch"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"tiers",
-				},
-				Verbs: []string{"get", "list"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"hostendpoints",
-				},
-				Verbs: []string{"list"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"felixconfigurations",
-				},
-				ResourceNames: []string{
-					"default",
-				},
-				Verbs: []string{"get"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"alertexceptions",
-				},
-				Verbs: []string{"get", "list", "update"},
-			},
-			{
-				APIGroups: []string{"networking.k8s.io"},
-				Resources: []string{"networkpolicies"},
-				Verbs:     []string{"get", "list"},
-			},
-			{
-				APIGroups: []string{"policy.networking.k8s.io"},
-				Resources: []string{
-					"adminnetworkpolicies",
-					"baselineadminnetworkpolicies",
-				},
-				Verbs: []string{"list"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "pods"},
-				Verbs:     []string{"list"},
-			},
-			{
-				APIGroups: []string{"apps"},
-				Resources: []string{"replicasets", "statefulsets", "daemonsets"},
-				Verbs:     []string{"list"},
-			},
-			// When a request is made in the manager UI, they are proxied through the Voltron backend server. If the
-			// request is targeting a k8s api or when it is targeting a managed cluster, Voltron will authenticate the
-			// user based on the auth header and then impersonate the user.
-			{
-				APIGroups: []string{""},
-				Resources: []string{"users", "groups", "serviceaccounts"},
-				Verbs:     []string{"impersonate"},
-			},
-			// Allow query server talk to Prometheus via the manager user.
-			{
-				APIGroups: []string{""},
-				Resources: []string{"services/proxy"},
-				ResourceNames: []string{
-					"https:tigera-api:8080", "calico-node-prometheus:9090",
-				},
-				Verbs: []string{"get", "create"},
-			},
-			{
-				// Add access to Linseed APIs.
-				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{
-					"flows",
-					"flowlogs",
-					"bgplogs",
-					"auditlogs",
-					"dnsflows",
-					"dnslogs",
-					"l7flows",
-					"l7logs",
-					"events",
-					"processes",
-				},
-				Verbs: []string{"get"},
-			},
-			{
-				// Dismiss events.
-				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{
-					"events",
-				},
-				Verbs: []string{"dismiss", "delete"},
-			},
-		},
-	}
-
-	if !managedCluster {
-		cr.Rules = append(cr.Rules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"list", "get", "watch", "update"},
-			},
-		)
-	}
-
-	if tenant.MultiTenant() {
-		cr.Rules = append(cr.Rules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"authorization.k8s.io"},
-				Resources: []string{"localsubjectaccessreviews"},
-				Verbs:     []string{"create"},
-			},
-		)
-
-		if tenant.ManagedClusterIsCalico() {
-			// Voltron needs permissions to write flow logs.
-			cr.Rules = append(cr.Rules,
-				rbacv1.PolicyRule{
-					APIGroups: []string{"linseed.tigera.io"},
-					Resources: []string{"flowlogs"},
-					Verbs:     []string{"create"},
-				})
-		}
-	}
-
-	if kubernetesProvider.IsOpenShift() {
-		cr.Rules = append(cr.Rules,
-			rbacv1.PolicyRule{
-				APIGroups:     []string{"security.openshift.io"},
-				Resources:     []string{"securitycontextconstraints"},
-				Verbs:         []string{"use"},
-				ResourceNames: []string{securitycontextconstraints.NonRootV2},
-			},
-		)
+		Rules:      ManagerBasePolicyRules(managedCluster, kubernetesProvider.IsOpenShift(), tenant),
 	}
 
 	return cr
@@ -1165,4 +992,184 @@ func managerClusterWideDefaultView() *v3.UISettings {
 			},
 		},
 	}
+}
+
+// ManagerBasePolicyRules defines the RBAC rules required for manager pods, as well as for guardian identity to handle
+// manager requests originating from the management cluster.
+func ManagerBasePolicyRules(isManagedCluster, isOpenShift bool, tenant *operatorv1.Tenant) []rbacv1.PolicyRule {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"authorization.k8s.io"},
+			Resources: []string{"subjectaccessreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups: []string{"authentication.k8s.io"},
+			Resources: []string{"tokenreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"networksets",
+				"globalnetworksets",
+				"globalnetworkpolicies",
+				"tier.globalnetworkpolicies",
+				"networkpolicies",
+				"tier.networkpolicies",
+				"stagedglobalnetworkpolicies",
+				"tier.stagedglobalnetworkpolicies",
+				"stagednetworkpolicies",
+				"tier.stagednetworkpolicies",
+				"stagedkubernetesnetworkpolicies",
+			},
+			Verbs: []string{"list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"stagednetworkpolicies",
+				"tier.stagednetworkpolicies",
+			},
+			Verbs: []string{"patch"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"tiers",
+			},
+			Verbs: []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"hostendpoints",
+			},
+			Verbs: []string{"list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"felixconfigurations",
+			},
+			ResourceNames: []string{
+				"default",
+			},
+			Verbs: []string{"get"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"alertexceptions",
+			},
+			Verbs: []string{"get", "list", "update"},
+		},
+		{
+			APIGroups: []string{"networking.k8s.io"},
+			Resources: []string{"networkpolicies"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"policy.networking.k8s.io"},
+			Resources: []string{
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
+			},
+			Verbs: []string{"list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "pods"},
+			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"replicasets", "statefulsets", "daemonsets"},
+			Verbs:     []string{"list"},
+		},
+		// When a request is made in the manager UI, they are proxied through the Voltron backend server. If the
+		// request is targeting a k8s api or when it is targeting a managed cluster, Voltron will authenticate the
+		// user based on the auth header and then impersonate the user.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"users", "groups", "serviceaccounts"},
+			Verbs:     []string{"impersonate"},
+		},
+		// Allow query server talk to Prometheus via the manager user.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services/proxy"},
+			ResourceNames: []string{
+				"https:tigera-api:8080", "calico-node-prometheus:9090",
+			},
+			Verbs: []string{"get", "create"},
+		},
+	}
+	if !isManagedCluster {
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				// Add access to Linseed APIs.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"flows",
+					"flowlogs",
+					"bgplogs",
+					"auditlogs",
+					"dnsflows",
+					"dnslogs",
+					"l7flows",
+					"l7logs",
+					"events",
+					"processes",
+				},
+				Verbs: []string{"get"},
+			},
+			rbacv1.PolicyRule{
+				// Dismiss events.
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{
+					"events",
+				},
+				Verbs: []string{"dismiss", "delete"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"list", "get", "watch", "update"},
+			},
+		)
+	}
+
+	if isOpenShift {
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{securitycontextconstraints.NonRootV2},
+			},
+		)
+	}
+
+	if tenant.MultiTenant() {
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"localsubjectaccessreviews"},
+				Verbs:     []string{"create"},
+			},
+		)
+
+		if tenant.ManagedClusterIsCalico() {
+			// Voltron needs permissions to write flow logs.
+			rules = append(rules,
+				rbacv1.PolicyRule{
+					APIGroups: []string{"linseed.tigera.io"},
+					Resources: []string{"flowlogs"},
+					Verbs:     []string{"create"},
+				})
+		}
+	}
+
+	return rules
 }

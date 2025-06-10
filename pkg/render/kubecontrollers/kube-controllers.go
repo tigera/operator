@@ -35,13 +35,13 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/clusterrole"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
-	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
@@ -106,32 +106,21 @@ type KubeControllersConfiguration struct {
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
-	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, KubeController)
+
+	// Determine flags for role rules.
+	isEnterprise := cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise
+	isOpenShift := cfg.Installation.KubernetesProvider.IsOpenShift()
+	isManagedCluster := cfg.ManagementClusterConnection != nil
+
+	// Generate policy rules for Calico Kube Controllers ClusterRole.
+	kubeControllerRolePolicyRules := clusterrole.CalicoKubeControllersClusterRoleRules(
+		isEnterprise,
+		isOpenShift,
+		isManagedCluster,
+	)
+
 	enabledControllers := []string{"node", "loadbalancer"}
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"remoteclusterconfigurations"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"endpoints"},
-				Verbs:     []string{"create", "update", "delete"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"namespaces"},
-				Verbs:     []string{"get"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"usage.tigera.io"},
-				Resources: []string{"licenseusagereports"},
-				Verbs:     []string{"create", "update", "delete", "watch", "list", "get"},
-			},
-		)
 		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
 	}
 
@@ -154,7 +143,7 @@ func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration) render.Co
 
 func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
 	var kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
-	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, EsKubeController)
+	kubeControllerRolePolicyRules := clusterrole.KubeControllersRoleCommonRules(cfg.Installation.KubernetesProvider.IsOpenShift())
 	if cfg.Tenant.MultiTenant() {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, []rbacv1.PolicyRule{
 			{
@@ -177,7 +166,8 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	}
 
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
+		isManagedCluster := cfg.ManagementClusterConnection != nil
+		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, clusterrole.KubeControllersRoleEnterpriseCommonRules(isManagedCluster)...)
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
 			rbacv1.PolicyRule{
 				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
@@ -354,144 +344,6 @@ func (c *kubeControllersComponent) multiTenantManagedClustersAccess() []client.O
 
 func (c *kubeControllersComponent) Ready() bool {
 	return true
-}
-
-func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeControllerName string) []rbacv1.PolicyRule {
-	rules := []rbacv1.PolicyRule{
-		{
-			// Nodes are watched to monitor for deletions.
-			APIGroups: []string{""},
-			Resources: []string{"nodes", "endpoints", "services"},
-			Verbs:     []string{"watch", "list", "get"},
-		},
-		{
-			// Pods are watched to check for existence as part of IPAM GC.
-			APIGroups: []string{""},
-			Resources: []string{"pods"},
-			Verbs:     []string{"get", "list", "watch"},
-		},
-		{
-			APIGroups: []string{""},
-			Resources: []string{"services", "services/status"},
-			Verbs:     []string{"get", "list", "update", "watch"},
-		},
-		{
-			// IPAM resources are manipulated in response to node and block updates, as well as periodic triggers.
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"ipreservations"},
-			Verbs:     []string{"list"},
-		},
-		{
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets", "ipamconfigs"},
-			Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
-		},
-		{
-			// Pools are watched to maintain a mapping of blocks to IP pools.
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"ippools"},
-			Verbs:     []string{"list", "watch"},
-		},
-		{
-			// Needs access to update clusterinformations.
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"clusterinformations"},
-			Verbs:     []string{"get", "create", "update", "list", "watch"},
-		},
-		{
-			// Needs to manage hostendpoints.
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"hostendpoints"},
-			Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
-		},
-		{
-			// Needs to manipulate kubecontrollersconfiguration, which contains
-			// its config.  It creates a default if none exists, and updates status
-			// as well.
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"kubecontrollersconfigurations"},
-			Verbs:     []string{"get", "create", "list", "update", "watch"},
-		},
-		{
-			// calico-kube-controllers requires tiers create
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"tiers"},
-			Verbs:     []string{"create"},
-		},
-	}
-
-	if cfg.Installation.KubernetesProvider.IsOpenShift() {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"security.openshift.io"},
-			Resources:     []string{"securitycontextconstraints"},
-			Verbs:         []string{"use"},
-			ResourceNames: []string{securitycontextconstraints.NonRootV2},
-		})
-	}
-
-	return rules
-}
-
-func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
-			Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
-		},
-		{
-			// The Federated Services Controller needs access to the remote kubeconfig secret
-			// in order to create a remote syncer.
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"watch", "list", "get"},
-		},
-		{
-			// Needed to validate the license
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"licensekeys"},
-			Verbs:     []string{"get", "watch", "list"},
-		},
-		{
-			// Needed to validate the license
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"licensekeys"},
-			Verbs:     []string{"get", "watch"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-			Resources: []string{"deeppacketinspections"},
-			Verbs:     []string{"get", "watch", "list"},
-		},
-		{
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"deeppacketinspections/status"},
-			Verbs:     []string{"update"},
-		},
-		{
-			APIGroups: []string{"crd.projectcalico.org"},
-			Resources: []string{"packetcaptures"},
-			Verbs:     []string{"get", "list", "update"},
-		},
-	}
-
-	if cfg.ManagementClusterConnection != nil {
-		rules = append(rules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"licensekeys"},
-				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
-			// Grant permissions to access ClusterInformation resources in managed clusters.
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"clusterinformations"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-		)
-	}
-
-	return rules
 }
 
 func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAccount {

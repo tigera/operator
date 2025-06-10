@@ -244,6 +244,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs,
 		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
 		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
+		c.managedClustersWatchRoleBinding(),
 	)
 
 	if c.cfg.Tenant.MultiTenant() {
@@ -719,6 +720,10 @@ func managerClusterRoleBinding(tenant *operatorv1.Tenant, namespaces, calicoName
 	return rcomponents.ClusterRoleBinding(bindingName, roleName, ManagerServiceAccount, chosenNamespaces)
 }
 
+func (c *managerComponent) managedClustersWatchRoleBinding() client.Object {
+	return rcomponents.RoleBinding(ManagedClustersWatchClusterRoleName, ManagedClustersWatchClusterRoleName, ManagerServiceAccount, c.cfg.Namespace)
+}
+
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
 func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant) *rbacv1.ClusterRole {
 	// Different tenant types use different permission sets.
@@ -870,7 +875,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
-				Verbs:     []string{"list", "get", "watch", "update"},
+				Verbs:     []string{"update"},
 			},
 		)
 	}

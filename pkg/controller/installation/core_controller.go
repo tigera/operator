@@ -438,12 +438,6 @@ func MergeAndFillDefaults(i *operator.Installation, awsNode *appsv1.DaemonSet, c
 
 // fillDefaults populates the default values onto an Installation object.
 func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolList) error {
-	// Populate the instance with defaults for any fields not provided by the user.
-	if len(instance.Spec.Registry) != 0 && instance.Spec.Registry != components.UseDefault && !strings.HasSuffix(instance.Spec.Registry, "/") {
-		// Make sure registry, except for the special case "UseDefault", always ends with a slash.
-		instance.Spec.Registry = fmt.Sprintf("%s/", instance.Spec.Registry)
-	}
-
 	if len(instance.Spec.Variant) == 0 {
 		// Default to installing Calico.
 		instance.Spec.Variant = operator.Calico

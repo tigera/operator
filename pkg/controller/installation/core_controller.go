@@ -1469,7 +1469,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		components = append(components,
 			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg),
-			render.NewPassthrough(networkpolicy.AllowTigeraDefaultDeny(common.CalicoNamespace)),
+			render.NewPassthrough(allowTigeraDefaultDenyForCalicoSystem()),
 		)
 	}
 
@@ -2062,4 +2062,21 @@ func crdPoolsToOperator(crds []crdv1.IPPool) []operator.IPPool {
 		pools = append(pools, op)
 	}
 	return pools
+}
+
+func allowTigeraDefaultDenyForCalicoSystem() *v3.NetworkPolicy {
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      networkpolicy.TigeraComponentDefaultDenyPolicyName,
+			Namespace: common.CalicoNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier: networkpolicy.TigeraComponentTierName,
+			// Default deny policy should exclude pods with label k8s-app=tigera-apiserver
+			// so the API server remains accessible within the calico-system namespace.
+			Selector: "k8s-app != 'tigera-apiserver'",
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+		},
+	}
 }

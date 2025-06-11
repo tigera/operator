@@ -43,7 +43,7 @@ var (
 	// TolerateControlPlane allows pod to be scheduled on master nodes
 	TolerateControlPlane = []corev1.Toleration{
 		{
-			Key:    "node-role.kubernetes.io/master",
+			Key:    "node-role.kubernetes.io/control-plane",
 			Effect: corev1.TaintEffectNoSchedule,
 		},
 		{

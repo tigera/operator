@@ -326,9 +326,12 @@ func GatewayAPICRDs(log logr.Logger) []client.Object {
 }
 
 type GatewayAPIImplementationConfig struct {
-	Installation *operatorv1.InstallationSpec
-	GatewayAPI   *operatorv1.GatewayAPI
-	PullSecrets  []*corev1.Secret
+	Installation          *operatorv1.InstallationSpec
+	GatewayAPI            *operatorv1.GatewayAPI
+	PullSecrets           []*corev1.Secret
+	CustomEnvoyGateway    *envoyapi.EnvoyGateway
+	CustomEnvoyProxies    map[string]*envoyapi.EnvoyProxy
+	CurrentGatewayClasses map[string]string // Map from GatewayClass name to EnvoyProxy name.
 }
 
 type gatewayAPIImplementationComponent struct {
@@ -547,4 +550,12 @@ func (pr *gatewayAPIImplementationComponent) gatewayClass(controllerName string,
 			},
 		},
 	}
+}
+
+type GatewayAPIImplementationConfigInterface interface {
+	GetConfig() *GatewayAPIImplementationConfig
+}
+
+func (pr *gatewayAPIImplementationComponent) GetConfig() *GatewayAPIImplementationConfig {
+	return pr.cfg
 }

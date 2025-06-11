@@ -81,7 +81,6 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 	} else if !strings.HasSuffix(registry, "/") {
 		// If the registry is explicitly set, make sure it ends with a slash so that the
 		// image can be appended correctly below.
-		// Make sure registry, except for the special case "UseDefault", always ends with a slash.
 		registry = fmt.Sprintf("%s/", registry)
 	}
 

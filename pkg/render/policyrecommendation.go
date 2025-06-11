@@ -52,6 +52,7 @@ const (
 
 	PolicyRecommendationTLSSecretName                                   = "policy-recommendation-tls"
 	PolicyRecommendationMultiTenantManagedClustersAccessRoleBindingName = "tigera-policy-recommendation-managed-cluster-access"
+	PolicyRecommendationManagedClustersWatchRoleBindingName             = "tigera-policy-recommendation-managed-cluster-watch"
 )
 
 // Register secret/certs that need Server and Client Key usage
@@ -118,6 +119,7 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
+		pr.managedClustersWatchRoleBinding(),
 		networkpolicy.AllowTigeraDefaultDeny(pr.cfg.Namespace),
 	}
 	if pr.cfg.Tenant.MultiTenant() {
@@ -179,7 +181,7 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 		rules = append(rules, []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"licensekeys", "managedclusters"},
+				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
@@ -234,6 +236,10 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 
 func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 	return rcomponents.ClusterRoleBinding(PolicyRecommendationName, PolicyRecommendationName, PolicyRecommendationNamespace, pr.cfg.BindingNamespaces)
+}
+
+func (pr *policyRecommendationComponent) managedClustersWatchRoleBinding() client.Object {
+	return rcomponents.RoleBinding(PolicyRecommendationManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, PolicyRecommendationName, pr.cfg.Namespace)
 }
 
 func (pr *policyRecommendationComponent) multiTenantManagedClustersAccess() []client.Object {

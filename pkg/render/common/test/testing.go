@@ -114,6 +114,9 @@ func ExpectResource(expected client.Object, resources []client.Object) error {
 	ns := expected.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
 
 	for _, resource := range resources {
+		if resource == nil {
+			continue
+		}
 		if reflect.TypeOf(resource) == reflect.TypeOf(expected) {
 			if resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName() == name &&
 				resource.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace() == ns {
@@ -163,6 +166,9 @@ func ExpectResourceTypeAndObjectMetadata(resource runtime.Object, name, ns, grou
 // GetResource returns the resource with the given name, namespace, group, version, and kind from the given list of resources.
 func GetResource(resources []client.Object, name, ns, group, version, kind string) client.Object {
 	for _, resource := range resources {
+		if resource == nil {
+			continue
+		}
 		gvk := schema.GroupVersionKind{Group: group, Version: version, Kind: kind}
 		om := resource.(metav1.ObjectMetaAccessor).GetObjectMeta()
 		if name == om.GetName() &&

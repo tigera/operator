@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -86,6 +86,17 @@ type AdditionalLogSourceSpec struct {
 	EksCloudwatchLog *EksCloudwatchLogsSpec `json:"eksCloudwatchLog,omitempty"`
 }
 
+// HostScope determines the set of hosts that forward logs to a given store.
+// +kubebuilder:default=All
+// +kubebuilder:validation:Enum=All;NonClusterOnly
+// +optional
+type HostScope string
+
+const (
+	HostScopeAll            HostScope = "All"
+	HostScopeNonClusterOnly HostScope = "NonClusterOnly"
+)
+
 // S3StoreSpec defines configuration for exporting logs to Amazon S3.
 // +k8s:openapi-gen=true
 type S3StoreSpec struct {
@@ -97,6 +108,10 @@ type S3StoreSpec struct {
 
 	// Path in the S3 bucket where to send logs
 	BucketPath string `json:"bucketPath"`
+
+	// The set of hosts that will forward their logs to this store.
+	// +optional
+	HostScope HostScope `json:"hostScope"`
 }
 
 // SyslogLogType represents the allowable log types for syslog.
@@ -156,12 +171,20 @@ type SyslogStoreSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=None;TLS
 	Encryption EncryptionOption `json:"encryption,omitempty"`
+
+	// The set of hosts that will forward their logs to this store.
+	// +optional
+	HostScope HostScope `json:"hostScope"`
 }
 
 // SplunkStoreSpec defines configuration for exporting logs to splunk.
 type SplunkStoreSpec struct {
 	// Location for splunk's http event collector end point. example `https://1.2.3.4:8088`
 	Endpoint string `json:"endpoint"`
+
+	// The set of hosts that will forward their logs to this store
+	// +optional
+	HostScope HostScope `json:"hostScope"`
 }
 
 // EksConfigSpec defines configuration for fetching EKS audit logs.

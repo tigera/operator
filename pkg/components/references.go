@@ -78,6 +78,10 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 		if c.Registry != "" {
 			registry = c.Registry
 		}
+	} else if !strings.HasSuffix(registry, "/") {
+		// If the registry is explicitly set, make sure it ends with a slash so that the
+		// image can be appended correctly below.
+		registry = fmt.Sprintf("%s/", registry)
 	}
 
 	image := c.Image

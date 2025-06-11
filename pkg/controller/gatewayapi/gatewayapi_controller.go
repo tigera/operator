@@ -18,17 +18,24 @@ import (
 	"context"
 	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	gapi "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
+	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -46,7 +53,17 @@ var log = logf.Log.WithName("controller_gatewayapi")
 // Start Watches within the Add function for any resources that this controller creates or monitors. This will trigger
 // calls to Reconcile() when an instance of one of the watched resources is modified.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	r := newReconciler(mgr, opts)
+	r := &ReconcileGatewayAPI{
+		client:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		provider:            opts.DetectedProvider,
+		enterpriseCRDsExist: opts.EnterpriseCRDExists,
+		status:              status.New(mgr.GetClient(), "gatewayapi", opts.KubernetesVersion),
+		clusterDomain:       opts.ClusterDomain,
+		multiTenant:         opts.MultiTenant,
+		newComponentHandler: utils.NewComponentHandler,
+	}
+	r.status.Run(opts.ShutdownContext)
 
 	c, err := ctrlruntime.NewController("gatewayapi-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -64,22 +81,25 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		log.V(5).Info("Failed to create network watch", "err", err)
 		return fmt.Errorf("gatewayapi-controller failed to watch Tigera network resource: %v", err)
 	}
-	return nil
-}
 
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileGatewayAPI {
-	r := &ReconcileGatewayAPI{
-		client:              mgr.GetClient(),
-		scheme:              mgr.GetScheme(),
-		provider:            opts.DetectedProvider,
-		enterpriseCRDsExist: opts.EnterpriseCRDExists,
-		status:              status.New(mgr.GetClient(), "gatewayapi", opts.KubernetesVersion),
-		clusterDomain:       opts.ClusterDomain,
-		multiTenant:         opts.MultiTenant,
+	watchedEnvoyProxies := make(map[types.NamespacedName]struct{})
+	r.watchEnvoyProxy = func(namespacedName types.NamespacedName) error {
+		if _, alreadyWatching := watchedEnvoyProxies[namespacedName]; !alreadyWatching {
+			if err = utils.AddNamespacedWatch(c, &envoyapi.EnvoyProxy{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespacedName.Namespace,
+					Name:      namespacedName.Name,
+				},
+			}, &handler.EnqueueRequestForObject{}); err != nil {
+				log.V(5).Info("Failed to create EnvoyProxy watch", "err", err)
+				return fmt.Errorf("gatewayapi-controller failed to watch EnvoyProxy resource: %v", err)
+			}
+			watchedEnvoyProxies[namespacedName] = struct{}{}
+		}
+		return nil
 	}
-	r.status.Run(opts.ShutdownContext)
-	return r
+
+	return nil
 }
 
 // blank assignment to verify that ReconcileGatewayAPI implements reconcile.Reconciler
@@ -94,6 +114,8 @@ type ReconcileGatewayAPI struct {
 	status              status.StatusManager
 	clusterDomain       string
 	multiTenant         bool
+	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
+	watchEnvoyProxy     func(namespacedName types.NamespacedName) error
 }
 
 // Reconcile reads that state of the cluster for a GatewayAPI object and makes changes based on the state read
@@ -121,34 +143,14 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// SetMetaData in the TigeraStatus such as observedGenerations.
 	defer r.status.SetMetaData(&gatewayAPI.ObjectMeta)
 
-	// Get the Installation, for private registry and pull secret config.
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	if variant == "" {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
-
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// Render CRDs.  For these we specify nil for the owning CR - i.e. no ownership - so that
-	// the CRDs are left in place even if the GatewayAPI CR is removed again.  This is in case
-	// the customer uses a second (or more) implementation of the Gateway API in addition to the
-	// one that we are providing here.
+	// Render CRDs.  Note, we do this as early as possible so as to enable the following
+	// controller code that reads GatewayClasses and EnvoyProxies (which depends on the CRDs
+	// already existing).  For the CRDs we specify nil for the owning CR - i.e. no ownership -
+	// so that the CRDs are left in place even if the GatewayAPI CR is removed again.  This is
+	// in case the customer uses a second (or more) implementation of the Gateway API in
+	// addition to the one that we are providing here.
 	crdComponent := render.NewPassthrough(render.GatewayAPICRDs(log)...)
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
 	}
@@ -192,20 +194,109 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	// Get the Installation, for private registry and pull secret config.
+	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if variant == "" {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	gatewayConfig := &render.GatewayAPIImplementationConfig{
+		Installation:          installation,
+		PullSecrets:           pullSecrets,
+		GatewayAPI:            gatewayAPI,
+		CustomEnvoyProxies:    make(map[string]*envoyapi.EnvoyProxy),
+		CurrentGatewayClasses: make(map[string]string),
+	}
+
+	if gatewayAPI.Spec.EnvoyGatewayRef != nil {
+		configMap := &corev1.ConfigMap{}
+		err = r.client.Get(
+			ctx,
+			types.NamespacedName{
+				Namespace: gatewayAPI.Spec.EnvoyGatewayRef.Namespace,
+				Name:      gatewayAPI.Spec.EnvoyGatewayRef.Name,
+			},
+			configMap,
+		)
+		if err == nil {
+			if _, ok := configMap.Data[render.EnvoyGatewayConfigKey]; !ok {
+				err = fmt.Errorf("missing '%s' key", render.EnvoyGatewayConfigKey)
+			}
+		}
+		if err == nil {
+			gatewayConfig.CustomEnvoyGateway = &envoyapi.EnvoyGateway{}
+			err = yaml.Unmarshal([]byte(configMap.Data[render.EnvoyGatewayConfigKey]), gatewayConfig.CustomEnvoyGateway)
+		}
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyGatewayRef", err, log)
+			return reconcile.Result{}, err
+		}
+	}
+
+	for i := range gatewayAPI.Spec.GatewayClasses {
+		if gatewayAPI.Spec.GatewayClasses[i].EnvoyProxyRef != nil {
+			namespacedName := types.NamespacedName{
+				Namespace: gatewayAPI.Spec.GatewayClasses[i].EnvoyProxyRef.Namespace,
+				Name:      gatewayAPI.Spec.GatewayClasses[i].EnvoyProxyRef.Name,
+			}
+			envoyProxy := &envoyapi.EnvoyProxy{}
+			err = r.client.Get(ctx, namespacedName, envoyProxy)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyProxyRef", err, log)
+				return reconcile.Result{}, err
+			}
+			if err = r.watchEnvoyProxy(namespacedName); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error watching EnvoyProxyRef", err, log)
+				return reconcile.Result{}, err
+			}
+			gatewayConfig.CustomEnvoyProxies[gatewayAPI.Spec.GatewayClasses[i].Name] = envoyProxy
+		}
+	}
+
+	// Enumerate existing GatewayClasses, in case some of them will need to be cleaned up.
+	var gcList gapi.GatewayClassList
+	err = r.client.List(ctx, &gcList)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading GatewayClasses", err, log)
+		return reconcile.Result{}, err
+	}
+	for i := range gcList.Items {
+		operatorOwned, err := controllerutil.HasOwnerReference(gcList.Items[i].GetOwnerReferences(), gatewayAPI, r.scheme)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading GatewayClass owner references", err, log)
+			return reconcile.Result{}, err
+		}
+		if operatorOwned {
+			gatewayConfig.CurrentGatewayClasses[gcList.Items[i].Name] = gcList.Items[i].Spec.ParametersRef.Name
+		}
+	}
+
 	// Render non-CRD resources for Gateway API support, i.e. for our specific bundled
 	// implementation of the Gateway API.  For these we specify the GatewayAPI CR as the owner,
 	// so that they all get automatically cleaned up if the GatewayAPI CR is removed again.
-	nonCRDComponent := render.GatewayAPIImplementationComponent(&render.GatewayAPIImplementationConfig{
-		Installation: installation,
-		PullSecrets:  pullSecrets,
-		GatewayAPI:   gatewayAPI,
-	})
+	nonCRDComponent := render.GatewayAPIImplementationComponent(gatewayConfig)
 	err = imageset.ApplyImageSet(ctx, r.client, variant, nonCRDComponent)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error with images from ImageSet", err, log)
 		return reconcile.Result{}, err
 	}
-	err = utils.NewComponentHandler(log, r.client, r.scheme, gatewayAPI).CreateOrUpdateOrDelete(ctx, nonCRDComponent, r.status)
+	err = r.newComponentHandler(log, r.client, r.scheme, gatewayAPI).CreateOrUpdateOrDelete(ctx, nonCRDComponent, r.status)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI resources", err, log)
 		return reconcile.Result{}, err

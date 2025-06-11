@@ -97,7 +97,7 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version:  "2.16.0",
+		Version:  "2.16.1",
 		Registry: "",
 	}
 
@@ -222,7 +222,7 @@ var (
 	}
 
 	ComponentCoreOSPrometheus = Component{
-		Version:  "v2.54.1",
+		Version:  "v2.55.1",
 		Registry: "",
 	}
 
@@ -239,7 +239,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = Component{
-		Version:  "v0.28.0",
+		Version:  "v0.28.1",
 		Registry: "",
 	}
 

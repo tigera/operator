@@ -126,16 +126,16 @@ func AddNamespaceWatch(c ctrlruntime.Controller, name string) error {
 
 type MetaMatch func(metav1.ObjectMeta) bool
 
-func AddSecretsWatch(c ctrlruntime.Controller, name, namespace string, metaMatches ...MetaMatch) error {
-	return AddSecretsWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{}, metaMatches...)
+func AddSecretsWatch(c ctrlruntime.Controller, name, namespace string) error {
+	return AddSecretsWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{})
 }
 
-func AddSecretsWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler, metaMatches ...MetaMatch) error {
+func AddSecretsWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
 	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return AddNamespacedWatch(c, s, h, metaMatches...)
+	return AddNamespacedWatch(c, s, h)
 }
 
 func AddConfigMapWatch(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
@@ -256,7 +256,7 @@ func WaitToAddTierWatch(tierName string, controller ctrlruntime.Controller, c ku
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
-func AddNamespacedWatch(c ctrlruntime.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
+func AddNamespacedWatch(c ctrlruntime.Controller, obj client.Object, h handler.EventHandler) error {
 	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
 	pred := createPredicateForObject(objMeta)
 	return c.WatchObject(obj, h, pred)

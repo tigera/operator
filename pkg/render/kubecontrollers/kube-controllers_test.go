@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -537,7 +537,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name:  "ENABLED_CONTROLLERS",
-			Value: "authorization,elasticsearchconfiguration,managedcluster",
+			Value: "authorization,elasticsearchconfiguration,managedcluster,clusterinfo",
 		}))
 
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(1))
@@ -563,6 +563,22 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				APIGroups: []string{""},
 				Resources: []string{"secrets"},
 				Verbs:     []string{"watch", "list", "get"},
+			}))
+	})
+
+	It("should render clusterInformation policy for es-calico-kube-controllers using TigeraSecureEnterprise and ClusterType is Managed", func() {
+		instance.Variant = operatorv1.TigeraSecureEnterprise
+		cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+
+		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ContainElement(
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "list", "watch"},
 			}))
 	})
 
@@ -1235,7 +1251,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(envs).To(ContainElements(
 				corev1.EnvVar{
 					Name:  "ENABLED_CONTROLLERS",
-					Value: "managedclusterlicensing",
+					Value: "managedclusterlicensing,clusterinfo",
 				},
 				corev1.EnvVar{
 					Name:  "TENANT_NAMESPACE",
@@ -1286,7 +1302,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				{
 					APIGroups: []string{"projectcalico.org"},
 					Resources: []string{"managedclusters"},
-					Verbs:     []string{"watch", "list", "get"},
+					Verbs:     []string{"update", "watch", "list", "get"},
 				},
 			}
 			Expect(cr.Rules).To(ContainElements(expectedRules))

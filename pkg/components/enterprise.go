@@ -143,6 +143,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentWafHTTPFilter = Component{
+		Version:  "master",
+		Image:    "tigera/waf-http-filter",
+		Registry: "",
+	}
+
 	ComponentSecurityEventWebhooksProcessor = Component{
 		Version:  "master",
 		Image:    "tigera/webhooks-processor",

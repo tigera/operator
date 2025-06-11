@@ -55,6 +55,7 @@ spec:
                               items:
                                 properties:
                                   generateName:
+                                    maxLength: 253
                                     type: string
                                   interfaceCIDRs:
                                     items:
@@ -143,6 +144,7 @@ spec:
                                   items:
                                     properties:
                                       generateName:
+                                        maxLength: 253
                                         type: string
                                       interfaceCIDRs:
                                         items:

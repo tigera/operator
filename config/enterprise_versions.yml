@@ -64,6 +64,9 @@ components:
   intrusion-detection-controller:
     image: tigera/intrusion-detection-controller
     version: master
+  waf-http-filter:
+    image: tigera/waf-http-filter
+    version: master
   webhooks-processor:
     image: tigera/webhooks-processor
     version: master

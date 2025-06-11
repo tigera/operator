@@ -1382,7 +1382,7 @@ var _ = Describe("Manager controller tests", func() {
 					},
 					Spec: operatorv1.TLSTerminatedRouteSpec{
 						CABundle: &corev1.ConfigMapKeySelector{
-							Key: "tigera-ca-bundle.crt",
+							Key: certificatemanagement.TrustedCertConfigMapKeyName,
 							LocalObjectReference: corev1.LocalObjectReference{
 								Name: certificatemanagement.TrustedCertConfigMapNamePublic,
 							},

@@ -317,7 +317,7 @@ func newNonCachingClient(config *rest.Config, options client.Options) (client.Cl
 	return client.New(config, options)
 }
 
-func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
+func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, *kubernetes.Clientset, manager.Manager) {
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
@@ -351,10 +351,15 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 	err = apiextensionsv1.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 
-	ctx, cancel := context.WithCancel(context.TODO())
+	return mgr.GetClient(), clientset, mgr
+}
+
+func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
+	client, clientset, mgr := setupManagerNoControllers(manageCRDs, multiTenant, enterpriseCRDsExist)
 
 	// Setup all Controllers
-	err = controller.AddToManager(mgr, options.AddOptions{
+	ctx, cancel := context.WithCancel(context.TODO())
+	err := controller.AddToManager(mgr, options.AddOptions{
 		DetectedProvider:    operator.ProviderNone,
 		EnterpriseCRDExists: enterpriseCRDsExist,
 		ManageCRDs:          manageCRDs,
@@ -363,7 +368,8 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 		MultiTenant:         multiTenant,
 	})
 	Expect(err).NotTo(HaveOccurred())
-	return mgr.GetClient(), ctx, cancel, mgr
+
+	return client, ctx, cancel, mgr
 }
 
 func createAPIServer(c client.Client, mgr manager.Manager, ctx context.Context, spec *operator.APIServerSpec) {

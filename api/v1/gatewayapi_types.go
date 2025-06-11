@@ -24,13 +24,13 @@ import (
 
 // GatewayAPISpec has fields that can be used to customize our GatewayAPI support.
 type GatewayAPISpec struct {
-	// Reference to a custom EnvoyGateway resource to use as the base EnvoyGateway configuration
-	// for the gateway controller.  When specified, only the `kind`, `name` and `namespace`
-	// fields of the ObjectReference are significant, and they must identify an existing
-	// EnvoyGateway resource.  `kind` must be either ConfigMap - in which case the referenced
-	// resource is a ConfigMap that wraps an EnvoyGateway, like the default
-	// `envoy-gateway-config` ConfigMap - or EnvoyGateway - in which case the referenced
-	// resource must be an EnvoyGateway resource.
+	// Reference to a custom EnvoyGateway YAML to use as the base EnvoyGateway configuration for
+	// the gateway controller.  When specified, only the `name` and `namespace` fields of the
+	// ObjectReference are significant, and they must identify an existing ConfigMap resource
+	// with an "envoy-gateway.yaml" key whose value is the desired EnvoyGateway YAML
+	// (i.e. following the same pattern as the default `envoy-gateway-config` ConfigMap).
+	// Please note, it is not possible to create an EnvoyGateway resource outside of a ConfigMap
+	// because the EnvoyGateway type does not include name or namespace fields.
 	//
 	// When not specified, the Tigera operator uses the `envoy-gateway-config` from the Envoy
 	// Gateway helm chart as its base.
@@ -55,7 +55,7 @@ type GatewayAPISpec struct {
 	// GatewayClassSpec for more detail.  If GatewayClasses is nil, the Tigera operator
 	// configures a single GatewayClass named "tigera-gateway-class" without any of the
 	// enhanced customizations that are allowed by GatewayClassSpec.
-	GatewayClasses []GatewayClassSpec
+	GatewayClasses []GatewayClassSpec `json:"gatewayClasses,omitempty"`
 
 	// Allow optional customization of the gateway controller deployment.
 	GatewayControllerDeployment *GatewayControllerDeployment `json:"gatewayControllerDeployment,omitempty"`
@@ -86,7 +86,7 @@ type GatewayAPISpec struct {
 
 type GatewayClassSpec struct {
 	// The name of this GatewayClass.
-	Name string
+	Name string `json:"name,omitempty"`
 
 	// Reference to a custom EnvoyProxy resource to use as the base EnvoyProxy configuration for
 	// this GatewayClass.  When specified, only the `name` and `namespace` fields of the
@@ -335,6 +335,11 @@ type GatewayDeployment struct {
 // For customization of the pod template see GatewayDeploymentPodTemplate.
 //
 // For customization of the deployment strategy see GatewayDeploymentStrategy.
+//
+// If GatewayKind is set to "DaemonSet", gateways (in the relevant GatewayClass) are deployed as
+// Kubernetes DaemonSets instead of as Deployments.  Note, GatewayKind is ignored when a custom
+// EnvoyProxy is specified and that EnvoyProxy already indicates whether to deploy as a DaemonSet or
+// as a Deployment.
 type GatewayDeploymentSpec struct {
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
@@ -346,7 +351,17 @@ type GatewayDeploymentSpec struct {
 	// +optional
 	// +patchStrategy=retainKeys
 	Strategy *GatewayDeploymentStrategy `json:"strategy,omitempty" patchStrategy:"retainKeys" protobuf:"bytes,4,opt,name=strategy"`
+
+	// +optional
+	GatewayKind *GatewayKind `json:"gatewayKind,omitempty"`
 }
+
+type GatewayKind string
+
+const (
+	GatewayKindDeployment GatewayKind = "Deployment"
+	GatewayKindDaemonSet  GatewayKind = "DaemonSet"
+)
 
 // GatewayDeploymentPodTemplate allows customization of the pod template of gateway deployments.
 //

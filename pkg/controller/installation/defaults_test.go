@@ -337,7 +337,9 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
-	It("should correct missing slashes on registry", func() {
+	It("should not change user provided registry", func() {
+		// Older versions of the operator would update the registry such that it would always
+		// end with a slash. This test ensures that we do not change the user provided registry.
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
 				Registry: "test-reg",
@@ -345,10 +347,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		}
 		err := fillDefaults(instance, nil)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(instance.Spec.Registry).To(Equal("test-reg/"))
+		Expect(instance.Spec.Registry).To(Equal("test-reg"))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 
-		// But "UseDefault" should not be modified.
+		// "UseDefault" should not be modified.
 		instance.Spec.Registry = components.UseDefault
 		err = fillDefaults(instance, nil)
 		Expect(err).NotTo(HaveOccurred())

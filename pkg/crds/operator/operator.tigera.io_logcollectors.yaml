@@ -80,11 +80,6 @@ spec:
                     Configuration for exporting flow, audit, and DNS logs
                     to external storage.
                   properties:
-                    nonClusterLogsOnly:
-                      description:
-                        If true, only logs from NonClusterHost instances
-                        will be forwarded to additional log stores defined in this spec.
-                      type: boolean
                     s3:
                       description:
                         If specified, enables exporting of flow, audit, and
@@ -95,6 +90,14 @@ spec:
                           type: string
                         bucketPath:
                           description: Path in the S3 bucket where to send logs
+                          type: string
+                        hostScope:
+                          description:
+                            The set of hosts that will forward their logs
+                            to this store.
+                          enum:
+                            - All
+                            - NonClusterOnly
                           type: string
                         region:
                           description: AWS Region of the S3 bucket
@@ -114,6 +117,14 @@ spec:
                             Location for splunk's http event collector end
                             point. example `https://1.2.3.4:8088`
                           type: string
+                        hostScope:
+                          description:
+                            The set of hosts that will forward their logs
+                            to this store
+                          enum:
+                            - All
+                            - NonClusterOnly
+                          type: string
                       required:
                         - endpoint
                       type: object
@@ -132,6 +143,14 @@ spec:
                           type: string
                         endpoint:
                           description: "Location of the syslog server. example: tcp://1.2.3.4:601"
+                          type: string
+                        hostScope:
+                          description:
+                            The set of hosts that will forward their logs
+                            to this store.
+                          enum:
+                            - All
+                            - NonClusterOnly
                           type: string
                         logTypes:
                           description: |-

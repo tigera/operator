@@ -17,6 +17,8 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
+	"strconv"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -41,6 +43,8 @@ import (
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
 	"github.com/tigera/operator/pkg/url"
 )
+
+type ForwardingDestination string
 
 const (
 	LogCollectorNamespace      = "tigera-fluentd"
@@ -99,6 +103,10 @@ const (
 
 	PacketCaptureAPIRole        = "packetcapture-api-role"
 	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
+
+	ForwardingDestinationS3     ForwardingDestination = "S3"
+	ForwardingDestinationSyslog ForwardingDestination = "Syslog"
+	ForwardingDestinationSplunk ForwardingDestination = "Splunk"
 )
 
 var FluentdSourceEntityRule = v3.EntityRule{
@@ -673,10 +681,6 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 	}
 
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil {
-		if c.cfg.NonClusterHost != nil && c.cfg.LogCollector.Spec.AdditionalStores.NonClusterLogsOnly {
-			envs = append(envs, corev1.EnvVar{Name: "ONLY_FORWARD_NON_CLUSTER_FLOWS", Value: "true"})
-		}
-
 		s3 := c.cfg.LogCollector.Spec.AdditionalStores.S3
 		if s3 != nil {
 			envs = append(envs,
@@ -708,6 +712,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				corev1.EnvVar{Name: "S3_BUCKET_PATH", Value: s3.BucketPath},
 				corev1.EnvVar{Name: "S3_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
 			)
+
+			hostScopeEnvVars := envVarsForHostScope(s3.HostScope, ForwardingDestinationS3)
+			envs = append(envs, hostScopeEnvVars...)
 		}
 		syslog := c.cfg.LogCollector.Spec.AdditionalStores.Syslog
 		if syslog != nil {
@@ -779,6 +786,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					)
 				}
 			}
+
+			hostScopeEnvVars := envVarsForHostScope(syslog.HostScope, ForwardingDestinationSyslog)
+			envs = append(envs, hostScopeEnvVars...)
 		}
 		splunk := c.cfg.LogCollector.Spec.AdditionalStores.Splunk
 		if splunk != nil {
@@ -803,6 +813,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				corev1.EnvVar{Name: "SPLUNK_PROTOCOL", Value: proto},
 				corev1.EnvVar{Name: "SPLUNK_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
 			)
+
+			hostScopeEnvVars := envVarsForHostScope(splunk.HostScope, ForwardingDestinationSplunk)
+			envs = append(envs, hostScopeEnvVars...)
 		}
 	}
 
@@ -1317,5 +1330,21 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 			Ingress:                ingressRules,
 			Egress:                 egressRules,
 		},
+	}
+}
+
+func envVarsForHostScope(hostScope operatorv1.HostScope, destination ForwardingDestination) []corev1.EnvVar {
+	var forwardClusterLogs, forwardNonClusterLogs bool
+	if hostScope == operatorv1.HostScopeNonClusterOnly {
+		forwardClusterLogs = false
+		forwardNonClusterLogs = true
+	} else {
+		forwardClusterLogs = true
+		forwardNonClusterLogs = true
+	}
+
+	return []corev1.EnvVar{
+		{Name: fmt.Sprintf("FORWARD_CLUSTER_LOGS_TO_%s", strings.ToUpper(string(destination))), Value: strconv.FormatBool(forwardClusterLogs)},
+		{Name: fmt.Sprintf("FORWARD_NON_CLUSTER_LOGS_TO_%s", strings.ToUpper(string(destination))), Value: strconv.FormatBool(forwardNonClusterLogs)},
 	}
 }

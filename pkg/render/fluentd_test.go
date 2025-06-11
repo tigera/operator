@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -1182,87 +1183,101 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(volumeMounts).To(ContainElement(corev1.VolumeMount{Name: "linseed-token", MountPath: "/var/run/secrets/tigera.io/linseed/"}))
 	})
 
-	It("should render with a valid configuration for non-cluster host", func() {
-		By("establishing the base case with no non-cluster host options")
-		expectedResources := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
-		}
+	DescribeTable("should render with a valid configuration for non-cluster host and forwarding enabled",
+		func(destination render.ForwardingDestination) {
+			additionalStoreSpecAllHosts := additionalStoreSpecForDestinationAndScope(destination, operatorv1.HostScopeAll)
+			additionalStoreSpecNonClusterHosts := additionalStoreSpecForDestinationAndScope(destination, operatorv1.HostScopeNonClusterOnly)
+			clusterLogEnvVarName := "FORWARD_CLUSTER_LOGS_TO_" + strings.ToUpper(string(destination))
+			nonClusterLogEnvVarName := "FORWARD_NON_CLUSTER_LOGS_TO_" + strings.ToUpper(string(destination))
 
-		cfg.PacketCapture = &operatorv1.PacketCaptureAPI{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "tigera-secure",
-			},
-		}
+			By("establishing the base case with no non-cluster hosts or forwarding options")
+			expectedResources := []client.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
+				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
+			}
+			cfg.PacketCapture = &operatorv1.PacketCaptureAPI{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-secure",
+				},
+			}
 
-		resources, _ := render.Fluentd(cfg).Objects()
-		rtest.ExpectResources(resources, expectedResources)
-		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		envs := ds.Spec.Template.Spec.Containers[0].Env
-		Expect(envs).ToNot(ContainElement(corev1.EnvVar{
-			Name:  "ONLY_FORWARD_NON_CLUSTER_FLOWS",
-			Value: "true",
-		}))
+			resources, _ := render.Fluentd(cfg).Objects()
+			rtest.ExpectResources(resources, expectedResources)
+			ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			envs := ds.Spec.Template.Spec.Containers[0].Env
+			Expect(forwardingEnvVarCount(envs)).To(Equal(0))
 
-		By("enabling non-cluster log forwarding only")
-		cfg.NonClusterHost = &operatorv1.NonClusterHost{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "tigera-secure",
-			},
-			Spec: operatorv1.NonClusterHostSpec{
-				Endpoint: "https://1.2.3.4:5678",
-			},
-		}
-		expectedResources = append(expectedResources, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdInputService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}})
+			By("enabling non-cluster hosts and forwarding from all hosts")
+			cfg.NonClusterHost = &operatorv1.NonClusterHost{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-secure",
+				},
+				Spec: operatorv1.NonClusterHostSpec{
+					Endpoint: "https://1.2.3.4:5678",
+				},
+			}
+			cfg.LogCollector.Spec.AdditionalStores = additionalStoreSpecAllHosts
+			expectedResources = append(expectedResources, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdInputService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}})
 
-		// Should render the correct resources.
-		resources, _ = render.Fluentd(cfg).Objects()
-		rtest.ExpectResources(resources, expectedResources)
+			// Should render the correct resources.
+			resources, _ = render.Fluentd(cfg).Objects()
+			rtest.ExpectResources(resources, expectedResources)
 
-		// Service is rendered as expected.
-		ms := rtest.GetResource(resources, render.FluentdInputService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
-		Expect(ms.Spec.Selector).To(Equal(map[string]string{"k8s-app": render.FluentdNodeName}))
-		Expect(ms.Spec.Ports).To(HaveLen(1))
-		Expect(ms.Spec.Ports[0].Port).To(BeNumerically("==", render.FluentdInputPort))
-		Expect(ms.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt32(render.FluentdInputPort)))
-		Expect(ms.Spec.Ports[0].Protocol).To(Equal(corev1.ProtocolTCP))
+			// Service is rendered as expected.
+			ms := rtest.GetResource(resources, render.FluentdInputService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
+			Expect(ms.Spec.Selector).To(Equal(map[string]string{"k8s-app": render.FluentdNodeName}))
+			Expect(ms.Spec.Ports).To(HaveLen(1))
+			Expect(ms.Spec.Ports[0].Port).To(BeNumerically("==", render.FluentdInputPort))
+			Expect(ms.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt32(render.FluentdInputPort)))
+			Expect(ms.Spec.Ports[0].Protocol).To(Equal(corev1.ProtocolTCP))
 
-		// Should still not contain the env var
-		rtest.ExpectResources(resources, expectedResources)
-		ds = rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		envs = ds.Spec.Template.Spec.Containers[0].Env
-		Expect(envs).ToNot(ContainElement(corev1.EnvVar{
-			Name:  "ONLY_FORWARD_NON_CLUSTER_FLOWS",
-			Value: "true",
-		}))
+			// Should contain the env vars with all forwarding enabled.
+			rtest.ExpectResources(resources, expectedResources)
+			ds = rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			envs = ds.Spec.Template.Spec.Containers[0].Env
+			Expect(forwardingEnvVarCount(envs)).To(Equal(2))
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name:  clusterLogEnvVarName,
+				Value: "true",
+			}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name:  nonClusterLogEnvVarName,
+				Value: "true",
+			}))
 
-		By("enabling forwarding of only non-cluster logs")
-		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
-			NonClusterLogsOnly: true,
-		}
-		resources, _ = render.Fluentd(cfg).Objects()
-		rtest.ExpectResources(resources, expectedResources)
+			By("enabling forwarding of only non-cluster logs")
+			cfg.LogCollector.Spec.AdditionalStores = additionalStoreSpecNonClusterHosts
+			resources, _ = render.Fluentd(cfg).Objects()
+			rtest.ExpectResources(resources, expectedResources)
 
-		// Should now contain the env var
-		rtest.ExpectResources(resources, expectedResources)
-		ds = rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		envs = ds.Spec.Template.Spec.Containers[0].Env
-		Expect(envs).To(ContainElement(corev1.EnvVar{
-			Name:  "ONLY_FORWARD_NON_CLUSTER_FLOWS",
-			Value: "true",
-		}))
-	})
+			// Should contain the env vars with only non-cluster forwarding enabled.
+			rtest.ExpectResources(resources, expectedResources)
+			ds = rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+			envs = ds.Spec.Template.Spec.Containers[0].Env
+			Expect(forwardingEnvVarCount(envs)).To(Equal(2))
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name:  clusterLogEnvVarName,
+				Value: "false",
+			}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name:  nonClusterLogEnvVarName,
+				Value: "true",
+			}))
+		},
+		Entry("S3", render.ForwardingDestinationS3),
+		Entry("Syslog", render.ForwardingDestinationSyslog),
+		Entry("Splunk", render.ForwardingDestinationSplunk))
 
 	Context("allow-tigera rendering", func() {
 		policyName := types.NamespacedName{Name: "allow-tigera.allow-fluentd-node", Namespace: "tigera-fluentd"}
@@ -1360,4 +1375,45 @@ func getExpectedResourcesForEKS() []client.Object {
 		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: render.LogCollectorNamespace}},
 		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 	}
+}
+
+func forwardingEnvVarCount(envVars []corev1.EnvVar) (count int) {
+	for _, envVar := range envVars {
+		if strings.HasPrefix(envVar.Name, "FORWARD_") {
+			count++
+		}
+	}
+	return count
+}
+
+func additionalStoreSpecForDestinationAndScope(destination render.ForwardingDestination, scope operatorv1.HostScope) *operatorv1.AdditionalLogStoreSpec {
+	var spec operatorv1.AdditionalLogStoreSpec
+	switch destination {
+	case render.ForwardingDestinationS3:
+		spec.S3 = &operatorv1.S3StoreSpec{
+			Region:     "anyplace",
+			BucketName: "thebucket",
+			BucketPath: "bucketpath",
+			HostScope:  scope,
+		}
+	case render.ForwardingDestinationSyslog:
+		var ps int32 = 180
+		spec.Syslog = &operatorv1.SyslogStoreSpec{
+			Endpoint:   "tcp://1.2.3.4:80",
+			PacketSize: &ps,
+			LogTypes: []operatorv1.SyslogLogType{
+				operatorv1.SyslogLogDNS,
+				operatorv1.SyslogLogFlows,
+				operatorv1.SyslogLogIDSEvents,
+			},
+			HostScope: scope,
+		}
+	case render.ForwardingDestinationSplunk:
+		spec.Splunk = &operatorv1.SplunkStoreSpec{
+			Endpoint:  "https://1.2.3.4:8088",
+			HostScope: scope,
+		}
+	}
+
+	return &spec
 }

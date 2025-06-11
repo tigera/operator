@@ -114,6 +114,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.IntrusionDetectionManagedClustersWatchRoleBindingName, Namespace: render.IntrusionDetectionNamespace}},
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
@@ -188,11 +189,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		clusterRole := rtest.GetResource(resources, "intrusion-detection-controller", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ContainElements(
 			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			rbacv1.PolicyRule{
 				APIGroups: []string{"authentication.k8s.io"},
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
@@ -245,6 +241,17 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				Namespace: render.IntrusionDetectionNamespace,
 			},
 		))
+
+		roleBindingWatchManagedClusters := rtest.GetResource(resources, render.IntrusionDetectionManagedClustersWatchRoleBindingName, render.IntrusionDetectionNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(roleBindingWatchManagedClusters.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
+		Expect(roleBindingWatchManagedClusters.Subjects).To(ConsistOf([]rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      render.IntrusionDetectionName,
+				Namespace: render.IntrusionDetectionNamespace,
+			},
+		}))
+
 	})
 
 	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {
@@ -285,6 +292,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.IntrusionDetectionManagedClustersWatchRoleBindingName, Namespace: render.IntrusionDetectionNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
@@ -358,6 +366,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.IntrusionDetectionManagedClustersWatchRoleBindingName, Namespace: render.IntrusionDetectionNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
@@ -682,6 +691,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.IntrusionDetectionManagedClustersWatchRoleBindingName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-intrusion-detection-managed-cluster-access", Namespace: tenantANamespace}},

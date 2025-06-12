@@ -687,7 +687,9 @@ func GuardianService(clusterDomain string) string {
 	return fmt.Sprintf("https://%s.%s.svc.%s:%d", GuardianServiceName, GuardianNamespace, clusterDomain, 443)
 }
 
-func AddClusterRoleRulesForManagementBackendRequest(isManagedCluster, isOpenShift bool, tenant *operatorv1.Tenant) []rbacv1.PolicyRule {
+// rulesForManagementClusterRequests returns the set of RBAC rules needed by Guardian in order to 
+// satisfy requests from the management cluster over the tunnel.
+func rulesForManagementClusterRequests(isManagedCluster, isOpenShift bool, tenant *operatorv1.Tenant) []rbacv1.PolicyRule {
 
 	// Sort ap
 	// General rules need for more than one of the following managemen cluster backend components

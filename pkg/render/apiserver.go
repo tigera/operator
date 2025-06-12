@@ -287,10 +287,10 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalEnterpriseObjects = append(globalEnterpriseObjects,
 			c.tigeraUserClusterRole(),
 			c.tigeraNetworkAdminClusterRole(),
+			c.managedClusterWatchClusterRole(),
 		)
 	}
 
-	globalEnterpriseObjects = append(globalEnterpriseObjects, c.managedClusterClusterRoles()...)
 	if c.cfg.ManagementCluster != nil {
 		if c.cfg.MultiTenant {
 			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
@@ -2294,10 +2294,9 @@ func (c *apiServerComponent) multiTenantManagedClusterAccessClusterRoles() []cli
 	return objects
 }
 
-// managedClusterClusterRoles creates ClusterRoles for accessing the ManagedCluster API
-func (c *apiServerComponent) managedClusterClusterRoles() []client.Object {
-	var objects []client.Object
-	objects = append(objects, &rbacv1.ClusterRole{
+// managedClusterWatchClusterRole creates a ClusterRole for watching the ManagedCluster API
+func (c *apiServerComponent) managedClusterWatchClusterRole() client.Object {
+	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: ManagedClustersWatchClusterRoleName},
 		Rules: []rbacv1.PolicyRule{
@@ -2309,9 +2308,7 @@ func (c *apiServerComponent) managedClusterClusterRoles() []client.Object {
 				},
 			},
 		},
-	})
-
-	return objects
+	}
 }
 
 func (c *apiServerComponent) getDeprecatedResources() []client.Object {

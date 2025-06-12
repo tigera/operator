@@ -246,9 +246,8 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs,
 		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
 		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
+		c.managedClustersWatchRoleBinding(),
 	)
-
-	objs = append(objs, c.managedClustersWatchRoleBinding()...)
 	objs = append(objs, c.managedClustersUpdateRBAC()...)
 	if c.cfg.Tenant.MultiTenant() {
 		objs = append(objs, c.multiTenantManagedClustersAccess()...)
@@ -723,10 +722,8 @@ func managerClusterRoleBinding(tenant *operatorv1.Tenant, namespaces, calicoName
 	return rcomponents.ClusterRoleBinding(bindingName, roleName, ManagerServiceAccount, chosenNamespaces)
 }
 
-func (c *managerComponent) managedClustersWatchRoleBinding() []client.Object {
-	return []client.Object{
-		rcomponents.RoleBinding(ManagerManagedClustersWatchClusterRoleBindingName, ManagedClustersWatchClusterRoleName, ManagerServiceAccount, c.cfg.Namespace),
-	}
+func (c *managerComponent) managedClustersWatchRoleBinding() client.Object {
+	return rcomponents.RoleBinding(ManagerManagedClustersWatchClusterRoleBindingName, ManagedClustersWatchClusterRoleName, ManagerServiceAccount, c.cfg.Namespace)
 }
 
 func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {

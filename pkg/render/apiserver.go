@@ -52,7 +52,7 @@ type ContainerName string
 const (
 	APIServerPort       = 5443
 	APIServerPortName   = "apiserver"
-	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cnx-apiserver-access"
+	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "apiserver-access"
 
 	auditLogsVolumeName   = "tigera-audit-logs"
 	auditPolicyVolumeName = "tigera-audit-policy"

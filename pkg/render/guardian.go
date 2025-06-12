@@ -891,7 +891,7 @@ func rulesForManagementClusterRequests(isManagedCluster, isOpenShift bool, tenan
 
 	// End of manager rules
 
-	// Rules needed  by guardian to handle policy recommendation request
+	// Rules needed  by guardian to handle policy recommendation requests
 	rules = append(rules,
 		rbacv1.PolicyRule{
 			APIGroups: []string{""},

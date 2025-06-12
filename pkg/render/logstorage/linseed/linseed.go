@@ -57,7 +57,6 @@ const (
 	ClusterRoleName                                        = "tigera-linseed"
 	MultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-linseed-managed-cluster-access"
 	ManagedClustersWatchRoleBindingName                    = "tigera-linseed-managed-cluster-watch"
-	ManagedClustersWatchClusterRoleName                    = "tigera-managed-cluster-watch"
 )
 
 func Linseed(c *Config) render.Component {
@@ -253,7 +252,7 @@ func (l *linseed) linseedClusterRoleBinding(namespaces []string) client.Object {
 }
 
 func (l *linseed) linseedManagedClustersWatchRoleBinding() client.Object {
-	return rcomponents.RoleBinding(ManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, ServiceAccountName, l.cfg.Namespace)
+	return rcomponents.RoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, ServiceAccountName, l.cfg.Namespace)
 }
 
 func (l *linseed) multiTenantManagedClustersAccess() []client.Object {

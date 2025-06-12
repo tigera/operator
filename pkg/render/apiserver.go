@@ -2292,6 +2292,7 @@ func (c *apiServerComponent) multiTenantManagedClusterAccessClusterRoles() []cli
 	return objects
 }
 
+// managedClusterClusterRoles creates ClusterRoles for accessing the ManagedCluster API
 func (c *apiServerComponent) managedClusterClusterRoles() []client.Object {
 	var objects []client.Object
 	objects = append(objects, &rbacv1.ClusterRole{

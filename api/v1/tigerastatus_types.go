@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -141,4 +141,16 @@ const (
 
 func init() {
 	SchemeBuilder.Register(&TigeraStatus{}, &TigeraStatusList{})
+}
+
+// Available returns true if the TigeraStatus has a condition of type "Available" with status "True".
+func (ts *TigeraStatus) Available() bool {
+	if ts != nil && ts.Status.Conditions != nil {
+		for _, condition := range ts.Status.Conditions {
+			if condition.Type == ComponentAvailable && condition.Status == ConditionTrue {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -168,7 +168,7 @@
         "destination": {
           "services": {
             "name": "tigera-api",
-            "namespace": "tigera-system"
+            "namespace": "calico-system"
           }
         }
       },

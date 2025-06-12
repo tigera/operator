@@ -52,16 +52,17 @@ type ContainerName string
 const (
 	APIServerPort       = 5443
 	APIServerPortName   = "apiserver"
-	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "cnx-apiserver-access"
+	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "apiserver-access"
 
 	auditLogsVolumeName   = "tigera-audit-logs"
 	auditPolicyVolumeName = "tigera-audit-policy"
 )
 
 const (
+	APIServerResourceName  = "apiserver"
 	QueryServerPort        = 8080
 	QueryServerPortName    = "queryserver"
-	QueryserverNamespace   = "tigera-system"
+	QueryserverNamespace   = "calico-system"
 	QueryserverServiceName = "tigera-api"
 
 	// Use the same API server container name for both OSS and Enterprise.
@@ -149,6 +150,7 @@ type APIServerConfiguration struct {
 	MultiTenant                 bool
 	KeyValidatorConfig          authentication.KeyValidatorConfig
 	KubernetesVersion           *common.VersionInfo
+	CanCleanupOlderResources    bool
 }
 
 type apiServerComponent struct {
@@ -2325,6 +2327,16 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 				Name: "tigera-tier-getter",
 			},
 		})
+
+		// Delete the older namespace for enterprise
+		if c.cfg.CanCleanupOlderResources {
+			renamedRscList = append(renamedRscList, &corev1.Namespace{
+				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-system",
+				},
+			})
+		}
 	}
 
 	return renamedRscList

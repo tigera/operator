@@ -898,7 +898,7 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 		},
 	}))
 	roleBinding := rtest.GetResource(resources, ManagedClustersWatchRoleBindingName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-	Expect(roleBinding.RoleRef.Name).To(Equal(ManagedClustersWatchClusterRoleName))
+	Expect(roleBinding.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
 	Expect(roleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 		{
 			Kind:      "ServiceAccount",

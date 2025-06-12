@@ -281,7 +281,6 @@ var _ = Describe("Rendering tests", func() {
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: common.KubeControllersDeploymentName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: common.KubeControllersDeploymentName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ManagedClustersWatchRoleBindingName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.ManagedClustersWriteAccessRoleBindingName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers-metrics", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 

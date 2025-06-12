@@ -57,6 +57,7 @@ const (
 	IntrusionDetectionControllerPolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + IntrusionDetectionControllerName
 	IntrusionDetectionInstallerPolicyName                  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
 	MultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-intrusion-detection-managed-cluster-access"
+	IntrusionDetectionManagedClustersWatchRoleBindingName  = "tigera-intrusion-detection-managed-cluster-watch"
 
 	ADAPIObjectName                 = "anomaly-detection-api"
 	IntrusionDetectionTLSSecretName = "intrusion-detection-tls"
@@ -172,6 +173,9 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		c.intrusionDetectionDeployment(),
 	)
 
+	if !c.cfg.ManagedCluster {
+		objs = append(objs, c.managedClustersWatchRoleBinding())
+	}
 	if c.cfg.Tenant.MultiTenant() {
 		objs = append(objs, c.multiTenantManagedClustersAccess()...)
 	}
@@ -332,11 +336,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 	if !c.cfg.ManagedCluster {
 		managementRule := []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			{
 				APIGroups: []string{"authentication.k8s.io"},
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
@@ -418,6 +417,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 
 func (c *intrusionDetectionComponent) intrusionDetectionClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return rcomponents.ClusterRoleBinding(IntrusionDetectionName, IntrusionDetectionName, IntrusionDetectionName, c.cfg.BindNamespaces)
+}
+
+func (c *intrusionDetectionComponent) managedClustersWatchRoleBinding() client.Object {
+	return rcomponents.RoleBinding(IntrusionDetectionManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, IntrusionDetectionName, c.cfg.Namespace)
 }
 
 func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
@@ -1079,7 +1082,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchAllowTigera
 
 // adComponentsToDelete returns a list of objects to delete. Anomaly detection used to be installed here,
 // but has since been removed. This function is kept around to clean up any old objects that may be left.
-func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
+func (c *intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 	objs := []client.Object{
 		&corev1.ServiceAccount{
 			TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},

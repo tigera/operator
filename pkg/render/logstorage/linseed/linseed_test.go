@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -76,6 +76,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			{render.LinseedServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
 			{ClusterRoleName, "", &rbacv1.ClusterRole{}, nil},
 			{ClusterRoleName, "", &rbacv1.ClusterRoleBinding{}, nil},
+			{ManagedClustersWatchRoleBindingName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
 			{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 			{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
 		}
@@ -882,11 +883,6 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			Verbs:     []string{"create"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"managedclusters"},
-			Verbs:     []string{"list", "watch"},
-		},
-		{
 			APIGroups: []string{""},
 			Resources: []string{"secrets"},
 			Verbs:     []string{"get", "list", "watch"},
@@ -895,6 +891,15 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	clusterRoleBinding := rtest.GetResource(resources, ClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 	Expect(clusterRoleBinding.RoleRef.Name).To(Equal(ClusterRoleName))
 	Expect(clusterRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
+		{
+			Kind:      "ServiceAccount",
+			Name:      ServiceAccountName,
+			Namespace: render.ElasticsearchNamespace,
+		},
+	}))
+	roleBinding := rtest.GetResource(resources, ManagedClustersWatchRoleBindingName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+	Expect(roleBinding.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
+	Expect(roleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 		{
 			Kind:      "ServiceAccount",
 			Name:      ServiceAccountName,

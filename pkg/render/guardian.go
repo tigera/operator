@@ -707,7 +707,7 @@ func rulesForManagementClusterRequests(isManagedCluster, isOpenShift bool, tenan
 		Verbs:     []string{"get", "list", "watch"},
 	})
 
-	// Rules needed by guardian to handle manager request
+	// Rules needed by guardian to handle manager requests
 	rules = append(rules,
 		rbacv1.PolicyRule{
 			APIGroups: []string{""},

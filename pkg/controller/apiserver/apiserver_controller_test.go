@@ -325,7 +325,7 @@ var _ = Describe("apiserver controller tests", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(1))
-			Expect(policies.Items[0].Name).To(Equal("allow-tigera.cnx-apiserver-access"))
+			Expect(policies.Items[0].Name).To(Equal("allow-tigera.apiserver-access"))
 		})
 
 		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {

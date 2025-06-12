@@ -2,7 +2,7 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.cnx-apiserver-access",
+    "name": "allow-tigera.apiserver-access",
     "namespace": "calico-system"
   },
   "spec": {

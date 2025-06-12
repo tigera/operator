@@ -342,7 +342,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(19))
+		Expect(clusterRole.Rules).To(HaveLen(20))
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -369,7 +369,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.ManagedClustersWatchRoleBindingName, ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: kubecontrollers.ManagedClustersWriteAccessRoleBindingName, ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
@@ -510,7 +509,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.ManagedClustersWatchRoleBindingName, ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-			{name: kubecontrollers.ManagedClustersWriteAccessRoleBindingName, ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: kubecontrollers.EsKubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: kubecontrollers.ElasticsearchKubeControllersUserSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: kubecontrollers.EsKubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
@@ -555,7 +553,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(19))
+		Expect(clusterRole.Rules).To(HaveLen(20))
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -577,16 +575,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				Namespace: common.CalicoNamespace,
 			},
 		}))
-		roleBindingWrite := rtest.GetResource(resources, kubecontrollers.ManagedClustersWriteAccessRoleBindingName, common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(roleBindingWrite.RoleRef.Name).To(Equal(render.ManagedClustersWriteAccessClusterRoleName))
-		Expect(roleBindingWrite.Subjects).To(ConsistOf([]rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      kubecontrollers.KubeControllerServiceAccount,
-				Namespace: common.CalicoNamespace,
-			},
-		}))
-
 	})
 
 	It("should render clusterInformation policy for es-calico-kube-controllers using TigeraSecureEnterprise and ClusterType is Managed", func() {
@@ -1247,7 +1235,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 				{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 				{name: kubecontrollers.ManagedClustersWatchRoleBindingName, ns: tenant.Namespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
-				{name: kubecontrollers.ManagedClustersWriteAccessRoleBindingName, ns: tenant.Namespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 				{name: kubecontrollers.EsKubeController, ns: tenant.Namespace, group: "apps", version: "v1", kind: "Deployment"},
 				{name: kubecontrollers.EsKubeControllerMetrics, ns: tenant.Namespace, group: "", version: "v1", kind: "Service"},
 			}
@@ -1324,6 +1311,11 @@ var _ = Describe("kube-controllers rendering tests", func() {
 						fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, common.CalicoNamespace),
 					},
 				},
+				{
+					APIGroups: []string{"projectcalico.org"},
+					Resources: []string{"managedclusters"},
+					Verbs:     []string{"update"},
+				},
 			}
 			Expect(cr.Rules).To(ContainElements(expectedRules))
 
@@ -1352,15 +1344,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			roleBindingWatch := rtest.GetResource(resources, kubecontrollers.ManagedClustersWatchRoleBindingName, tenant.Namespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
 			Expect(roleBindingWatch.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
 			Expect(roleBindingWatch.Subjects).To(ConsistOf([]rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      kubecontrollers.KubeControllerServiceAccount,
-					Namespace: tenant.Namespace,
-				},
-			}))
-			roleBindingWrite := rtest.GetResource(resources, kubecontrollers.ManagedClustersWriteAccessRoleBindingName, tenant.Namespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-			Expect(roleBindingWrite.RoleRef.Name).To(Equal(render.ManagedClustersWriteAccessClusterRoleName))
-			Expect(roleBindingWrite.Subjects).To(ConsistOf([]rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
 					Name:      kubecontrollers.KubeControllerServiceAccount,

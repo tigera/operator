@@ -515,8 +515,8 @@ func (c *dpiComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      linseed,
-				Namespace: render.ElasticsearchNamespace,
+				Name:      render.GuardianServiceAccountName,
+				Namespace: render.GuardianNamespace,
 			},
 		},
 	}

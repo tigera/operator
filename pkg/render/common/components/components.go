@@ -548,6 +548,27 @@ func ClusterRoleBinding(name, clusterRole, sa string, namespaces []string) *rbac
 	}
 }
 
+// RoleBinding returns a role binding with the given name, that binds the given cluster role
+// to the service account in each of the provided namespaces.
+func RoleBinding(name, clusterRole, sa string, namespace string) *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     clusterRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      sa,
+				Namespace: namespace,
+			},
+		},
+	}
+}
+
 // ApplyEnvoyProxyOverrides applies the overrides to the given EnvoyProxy.
 // Note: overrides must not be nil pointer.
 func ApplyEnvoyProxyOverrides(ep *envoyapi.EnvoyProxy, overrides any) {

@@ -697,7 +697,7 @@ func rulesForManagementClusterRequests(isManagedCluster, isOpenShift bool, tenan
 
 	rules := []rbacv1.PolicyRule{}
 
-	// Rules needed  by guardian to handle linseed request
+	// Rules needed  by guardian to handle linseed requests
 
 	// This permission allows Linseed to watch for namespace creation and existence in the managed cluster
 	// before attempting to copy the Linseed token into those namespaces.

@@ -306,6 +306,11 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Enumerate existing GatewayClasses, in case some of them will need to be cleaned up.
+	// Note, this is referring to scenarios where the GatewayAPI CR continues to exist but its
+	// GatewayClasses field is updated so as to configure the provision of new custom gateway
+	// classes.  If the configuration for a previously named gateway class is removed, it is
+	// assumed that the corresponding GatewayClass and its EnvoyProxy are no longer wanted, and
+	// so should be cleaned up.
 	var gcList gapi.GatewayClassList
 	err = r.client.List(ctx, &gcList)
 	if err != nil {

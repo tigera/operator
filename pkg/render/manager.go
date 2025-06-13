@@ -83,7 +83,7 @@ const (
 	KibanaTLSHashAnnotation                                       = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation                               = "hash.operator.tigera.io/elasticsearch-user"
 	ManagerMultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-manager-managed-cluster-access"
-	ManagerManagedClustersWatchClusterRoleBindingName             = "tigera-manager-managed-cluster-watch"
+	ManagerManagedClustersWatchRoleBindingName                    = "tigera-manager-managed-cluster-watch"
 	ManagerManagedClustersUpdateRBACName                          = "tigera-manager-managed-cluster-write-access"
 )
 
@@ -723,14 +723,50 @@ func managerClusterRoleBinding(tenant *operatorv1.Tenant, namespaces, calicoName
 }
 
 func (c *managerComponent) managedClustersWatchRoleBinding() client.Object {
-	return rcomponents.RoleBinding(ManagerManagedClustersWatchClusterRoleBindingName, ManagedClustersWatchClusterRoleName, ManagerServiceAccount, c.cfg.Namespace)
+	if c.cfg.Tenant.MultiTenant() {
+		return rcomponents.RoleBinding(ManagerManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, ManagerServiceAccount, c.cfg.Namespace)
+	} else {
+		return rcomponents.ClusterRoleBinding(ManagerManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, ManagerServiceAccount, []string{c.cfg.Namespace})
+	}
 }
 
 func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
+	if c.cfg.Tenant.MultiTenant() {
+		return []client.Object{
+			&rbacv1.Role{
+				TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: ManagerManagedClustersUpdateRBACName, Namespace: c.cfg.Namespace},
+				Rules: []rbacv1.PolicyRule{
+					{
+						APIGroups: []string{"projectcalico.org"},
+						Resources: []string{"managedclusters"},
+						Verbs:     []string{"update"},
+					},
+				},
+			},
+			&rbacv1.RoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: ManagerManagedClustersUpdateRBACName, Namespace: c.cfg.Namespace},
+				RoleRef: rbacv1.RoleRef{
+					APIGroup: "rbac.authorization.k8s.io",
+					Kind:     "Role",
+					Name:     ManagerManagedClustersUpdateRBACName,
+				},
+				Subjects: []rbacv1.Subject{
+					{
+						Kind:      "ServiceAccount",
+						Name:      ManagerServiceName,
+						Namespace: c.cfg.Namespace,
+					},
+				},
+			},
+		}
+	}
+
 	return []client.Object{
-		&rbacv1.Role{
-			TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: ManagerManagedClustersUpdateRBACName, Namespace: c.cfg.Namespace},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerManagedClustersUpdateRBACName},
 			Rules: []rbacv1.PolicyRule{
 				{
 					APIGroups: []string{"projectcalico.org"},
@@ -739,9 +775,9 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 				},
 			},
 		},
-		&rbacv1.RoleBinding{
-			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: ManagerManagedClustersUpdateRBACName, Namespace: c.cfg.Namespace},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerManagedClustersUpdateRBACName},
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: "rbac.authorization.k8s.io",
 				Kind:     "Role",
@@ -756,7 +792,6 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 			},
 		},
 	}
-
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.

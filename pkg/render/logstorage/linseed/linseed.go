@@ -159,7 +159,7 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedService())
 	toCreate = append(toCreate, l.linseedClusterRole())
 	toCreate = append(toCreate, l.linseedClusterRoleBinding(l.cfg.BindNamespaces))
-	toCreate = append(toCreate, l.linseedManagedClustersWatchRoleBinding())
+	toCreate = append(toCreate, l.linseedManagedClustersWatchRoleBindings())
 	if l.cfg.Tenant != nil {
 		toCreate = append(toCreate, l.multiTenantManagedClustersAccess()...)
 	}
@@ -251,8 +251,12 @@ func (l *linseed) linseedClusterRoleBinding(namespaces []string) client.Object {
 	return rcomponents.ClusterRoleBinding(ClusterRoleName, ClusterRoleName, ServiceAccountName, namespaces)
 }
 
-func (l *linseed) linseedManagedClustersWatchRoleBinding() client.Object {
-	return rcomponents.RoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, ServiceAccountName, l.cfg.Namespace)
+func (l *linseed) linseedManagedClustersWatchRoleBindings() client.Object {
+	if l.cfg.Tenant.MultiTenant() {
+		return rcomponents.RoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, ServiceAccountName, l.cfg.Namespace)
+	}
+
+	return rcomponents.ClusterRoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, ServiceAccountName, []string{l.cfg.Namespace})
 }
 
 func (l *linseed) multiTenantManagedClustersAccess() []client.Object {

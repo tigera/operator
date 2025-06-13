@@ -16,6 +16,7 @@ package test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -39,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
+	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 )
 
 var _ = Describe("GatewayAPI tests", func() {
@@ -280,7 +282,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		gatewayAPI.Spec.GatewayClasses = []operator.GatewayClassSpec{{
 			Name: "custom-gc",
-			EnvoyProxyRef: &corev1.ObjectReference{
+			EnvoyProxyRef: &operator.NamespacedName{
 				Namespace: "default",
 				Name:      "custom-ep",
 			},
@@ -310,9 +312,128 @@ var _ = Describe("GatewayAPI tests", func() {
 		By("Checking that EnvoyProxy in tigera-gateway namespace gets the additional level")
 		Eventually(getEPLoggingLevels, "10s").Should(HaveKeyWithValue(envoyapi.LogComponentConnection, envoyapi.LogLevelDebug))
 	})
+
+	It("watches the custom EnvoyGateway ConfigMap", func() {
+		By("Creating Installation")
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operator.InstallationSpec{
+				Registry: "myregistry.io/",
+				Variant:  operator.TigeraSecureEnterprise,
+			},
+		}
+		err := c.Create(shutdownContext, instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Read it back again.
+		err = c.Get(shutdownContext, utils.DefaultInstanceKey, instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Update the status to set variant to Enterprise.
+		instance.Status.Variant = operator.TigeraSecureEnterprise
+		err = c.Status().Update(shutdownContext, instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Creating GatewayAPI, with EnvoyGatewayConfigRef that doesn't exist yet")
+		gatewayAPI := &operator.GatewayAPI{
+			TypeMeta:   metav1.TypeMeta{Kind: "GatewayAPI", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operator.GatewayAPISpec{
+				EnvoyGatewayConfigRef: &operator.NamespacedName{
+					Namespace: "default",
+					Name:      "my-envoy-gateway",
+				},
+			},
+		}
+		err = c.Create(shutdownContext, gatewayAPI)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Verifying the gatewayapi status is degraded")
+		Eventually(func() error {
+			ts, err := getTigeraStatus(c, "gatewayapi")
+			if err != nil {
+				return err
+			}
+			return assertDegraded(ts)
+		}, 10*time.Second).Should(BeNil())
+
+		By("Now creating the custom EnvoyGateway")
+		envoyGateway := &envoyapi.EnvoyGateway{
+			EnvoyGatewaySpec: envoyapi.EnvoyGatewaySpec{
+				Telemetry: &envoyapi.EnvoyGatewayTelemetry{
+					Metrics: &envoyapi.EnvoyGatewayMetrics{
+						Sinks: []envoyapi.EnvoyGatewayMetricSink{{
+							Type: envoyapi.MetricSinkTypeOpenTelemetry,
+						}},
+					},
+				},
+				ExtensionAPIs: &envoyapi.ExtensionAPISettings{
+					EnableEnvoyPatchPolicy: true,
+					EnableBackend:          true,
+				},
+			},
+		}
+		envoyGatewayYAML, err := yaml.Marshal(*envoyGateway)
+		Expect(err).NotTo(HaveOccurred())
+		envoyGatewayConfigMap := &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "ConfigMap",
+				APIVersion: "v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-envoy-gateway",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				"envoy-gateway.yaml": string(envoyGatewayYAML),
+			},
+		}
+		Expect(c.Create(shutdownContext, envoyGatewayConfigMap)).NotTo(HaveOccurred())
+
+		By("Verifying the gatewayapi status is no longer degraded")
+		Eventually(func() error {
+			ts, err := getTigeraStatus(c, "gatewayapi")
+			if err != nil {
+				return err
+			}
+			_, degraded, _ := readStatus(ts)
+			if degraded {
+				return errors.New("still degraded")
+			}
+			return nil
+		}, 10*time.Second).Should(BeNil())
+
+		By("Verifying the expected envoy-gateway-config")
+		Eventually(func() error {
+			var eg corev1.ConfigMap
+			err := c.Get(shutdownContext, types.NamespacedName{Name: "envoy-gateway-config", Namespace: "tigera-gateway"}, &eg)
+			if err != nil {
+				return err
+			}
+			if !strings.Contains(eg.Data["envoy-gateway.yaml"], "type: OpenTelemetry") {
+				return errors.New("envoy-gateway-config does not contain expected text")
+			}
+			return nil
+		}, 10*time.Second).ShouldNot(HaveOccurred())
+	})
 })
 
 func cleanupGatewayResources(c client.Client) {
+	By("Cleaning up custom EnvoyGateway")
+	Eventually(func() error {
+		var eg corev1.ConfigMap
+		err := c.Get(context.Background(), types.NamespacedName{Name: "my-envoy-gateway", Namespace: "default"}, &eg)
+		if err == nil {
+			By(fmt.Sprintf("Deleting EnvoyGateway %s", eg.Name))
+			err = c.Delete(context.Background(), &eg)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}, 30*time.Second).ShouldNot(HaveOccurred())
+
 	By("Cleaning up GatewayAPIs")
 	Eventually(func() error {
 		objs := &operator.GatewayAPIList{}

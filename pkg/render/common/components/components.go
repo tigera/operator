@@ -567,7 +567,7 @@ func ClusterRoleBinding(name, clusterRole, sa string, namespaces []string) *rbac
 
 // ApplyEnvoyProxyOverrides applies the overrides to the given EnvoyProxy.
 // Note: overrides must not be nil pointer.
-func ApplyEnvoyProxyOverrides(ep *envoyapi.EnvoyProxy, overrides *operator.GatewayDeployment) {
+func ApplyEnvoyProxyOverrides(ep *envoyapi.EnvoyProxy, overrides any) {
 	// Catch if caller passes in an explicit nil.
 	if overrides == nil {
 		return
@@ -648,36 +648,6 @@ func ApplyEnvoyProxyOverrides(ep *envoyapi.EnvoyProxy, overrides *operator.Gatew
 		}
 		if !reflect.DeepEqual(r.podTemplateSpec.Spec.Containers[0].Resources, corev1.ResourceRequirements{}) {
 			ep.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Resources = &r.podTemplateSpec.Spec.Containers[0].Resources
-		}
-	}
-
-	if overrides.Service != nil {
-		if ep.Spec.Provider.Kubernetes.EnvoyService == nil {
-			ep.Spec.Provider.Kubernetes.EnvoyService = &envoyapi.KubernetesServiceSpec{}
-		}
-		if overrides.Service.Metadata != nil {
-			if len(overrides.Service.Metadata.Labels) > 0 {
-				ep.Spec.Provider.Kubernetes.EnvoyService.Labels = common.MapExistsOrInitialize(ep.Spec.Provider.Kubernetes.EnvoyService.Labels)
-				common.MergeMaps(overrides.Service.Metadata.Labels, ep.Spec.Provider.Kubernetes.EnvoyService.Labels)
-			}
-			if len(overrides.Service.Metadata.Annotations) > 0 {
-				ep.Spec.Provider.Kubernetes.EnvoyService.Annotations = common.MapExistsOrInitialize(ep.Spec.Provider.Kubernetes.EnvoyService.Annotations)
-				common.MergeMaps(overrides.Service.Metadata.Annotations, ep.Spec.Provider.Kubernetes.EnvoyService.Annotations)
-			}
-		}
-		if overrides.Service.Spec != nil {
-			if overrides.Service.Spec.LoadBalancerClass != nil {
-				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerClass = overrides.Service.Spec.LoadBalancerClass
-			}
-			if overrides.Service.Spec.AllocateLoadBalancerNodePorts != nil {
-				ep.Spec.Provider.Kubernetes.EnvoyService.AllocateLoadBalancerNodePorts = overrides.Service.Spec.AllocateLoadBalancerNodePorts
-			}
-			if overrides.Service.Spec.LoadBalancerSourceRanges != nil {
-				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerSourceRanges = overrides.Service.Spec.LoadBalancerSourceRanges
-			}
-			if overrides.Service.Spec.LoadBalancerIP != nil {
-				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP = overrides.Service.Spec.LoadBalancerIP
-			}
 		}
 	}
 }

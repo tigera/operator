@@ -23,6 +23,7 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -431,8 +432,8 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		objs = append(objs, resource.DeepCopyObject().(client.Object))
 	}
 
-	// Prepare EnvoyGateway, either from upstream or from a custom EnvoyGatewayRef provided by
-	// the user.
+	// Prepare EnvoyGateway, either from upstream or from a custom EnvoyGatewayConfigRef
+	// provided by the user.
 	envoyGatewayConfig := resources.envoyGatewayConfig.DeepCopyObject().(*envoyapi.EnvoyGateway)
 	if pr.cfg.CustomEnvoyGateway != nil {
 		// In this case we don't need to worry about modification because the next Reconcile
@@ -548,7 +549,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		className := pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name
 
 		// The EnvoyProxy config.
-		proxyConfig := pr.envoyProxyConfig(className, pr.cfg.CustomEnvoyProxies[className], pr.cfg.GatewayAPI.Spec.GatewayClasses[i].GatewayDeployment)
+		proxyConfig := pr.envoyProxyConfig(className, pr.cfg.CustomEnvoyProxies[className], &(pr.cfg.GatewayAPI.Spec.GatewayClasses[i]))
 		objs = append(objs, proxyConfig)
 		currentEPNames.Insert(className)
 
@@ -587,7 +588,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	return objs, objsToDelete
 }
 
-func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(defaultName string, envoyProxy *envoyapi.EnvoyProxy, classOverrides *operatorv1.GatewayDeployment) *envoyapi.EnvoyProxy {
+func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(defaultName string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {
 	// Ensure the minimal structure that we need for basic correctness and for the following
 	// customizations.  Note, we always create the running EnvoyProxy in our own namespace, even
 	// if it's based on a custom resource from another namespace.
@@ -626,16 +627,9 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(defaultName string
 	// If the EnvoyProxy itself doesn't already indicate DaemonSet or Deployment, and our
 	// customization structs indicate deploying as a DaemonSet, set that up.
 	if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet == nil && envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment == nil {
-		if classOverrides != nil && classOverrides.Spec != nil && classOverrides.Spec.GatewayKind != nil {
-			if *classOverrides.Spec.GatewayKind == operatorv1.GatewayKindDaemonSet {
+		if classSpec != nil && classSpec.GatewayKind != nil {
+			if *classSpec.GatewayKind == operatorv1.GatewayKindDaemonSet {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet = &envoyapi.KubernetesDaemonSetSpec{}
-			}
-		} else {
-			commonOverrides := pr.cfg.GatewayAPI.Spec.GatewayDeployment
-			if commonOverrides != nil && commonOverrides.Spec != nil && commonOverrides.Spec.GatewayKind != nil {
-				if *commonOverrides.Spec.GatewayKind == operatorv1.GatewayKindDaemonSet {
-					envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet = &envoyapi.KubernetesDaemonSetSpec{}
-				}
 			}
 		}
 	}
@@ -668,10 +662,22 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(defaultName string
 	}
 
 	// Apply common overrides.
-	rcomp.ApplyEnvoyProxyOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayDeployment)
+	if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
+		rcomp.ApplyEnvoyProxyOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayDaemonSet)
+	} else {
+		rcomp.ApplyEnvoyProxyOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayDeployment)
+	}
+	ApplyEnvoyProxyServiceOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayService)
 
-	// Apply class-specific overrides.
-	rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classOverrides)
+	if classSpec != nil {
+		// Apply class-specific overrides.
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
+			rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classSpec.GatewayDaemonSet)
+		} else {
+			rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classSpec.GatewayDeployment)
+		}
+		ApplyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
+	}
 
 	return envoyProxy
 }
@@ -703,4 +709,38 @@ type GatewayAPIImplementationConfigInterface interface {
 
 func (pr *gatewayAPIImplementationComponent) GetConfig() *GatewayAPIImplementationConfig {
 	return pr.cfg
+}
+
+// ApplyEnvoyProxyServiceOverrides applies the overrides to the given EnvoyProxy.
+// Note: overrides must not be nil pointer.
+func ApplyEnvoyProxyServiceOverrides(ep *envoyapi.EnvoyProxy, overrides *operatorv1.GatewayService) {
+	if overrides != nil {
+		if ep.Spec.Provider.Kubernetes.EnvoyService == nil {
+			ep.Spec.Provider.Kubernetes.EnvoyService = &envoyapi.KubernetesServiceSpec{}
+		}
+		if overrides.Metadata != nil {
+			if len(overrides.Metadata.Labels) > 0 {
+				ep.Spec.Provider.Kubernetes.EnvoyService.Labels = common.MapExistsOrInitialize(ep.Spec.Provider.Kubernetes.EnvoyService.Labels)
+				common.MergeMaps(overrides.Metadata.Labels, ep.Spec.Provider.Kubernetes.EnvoyService.Labels)
+			}
+			if len(overrides.Metadata.Annotations) > 0 {
+				ep.Spec.Provider.Kubernetes.EnvoyService.Annotations = common.MapExistsOrInitialize(ep.Spec.Provider.Kubernetes.EnvoyService.Annotations)
+				common.MergeMaps(overrides.Metadata.Annotations, ep.Spec.Provider.Kubernetes.EnvoyService.Annotations)
+			}
+		}
+		if overrides.Spec != nil {
+			if overrides.Spec.LoadBalancerClass != nil {
+				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerClass = overrides.Spec.LoadBalancerClass
+			}
+			if overrides.Spec.AllocateLoadBalancerNodePorts != nil {
+				ep.Spec.Provider.Kubernetes.EnvoyService.AllocateLoadBalancerNodePorts = overrides.Spec.AllocateLoadBalancerNodePorts
+			}
+			if overrides.Spec.LoadBalancerSourceRanges != nil {
+				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerSourceRanges = overrides.Spec.LoadBalancerSourceRanges
+			}
+			if overrides.Spec.LoadBalancerIP != nil {
+				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP = overrides.Spec.LoadBalancerIP
+			}
+		}
+	}
 }

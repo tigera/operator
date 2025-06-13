@@ -17,6 +17,7 @@ package gatewayapi
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -82,8 +83,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("gatewayapi-controller failed to watch Tigera network resource: %v", err)
 	}
 
-	watchedEnvoyProxies := make(map[types.NamespacedName]struct{})
-	r.watchEnvoyProxy = func(namespacedName types.NamespacedName) error {
+	watchedEnvoyProxies := make(map[operatorv1.NamespacedName]struct{})
+	r.watchEnvoyProxy = func(namespacedName operatorv1.NamespacedName) error {
 		if _, alreadyWatching := watchedEnvoyProxies[namespacedName]; !alreadyWatching {
 			if err = utils.AddNamespacedWatch(c, &envoyapi.EnvoyProxy{
 				ObjectMeta: metav1.ObjectMeta{
@@ -95,6 +96,23 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 				return fmt.Errorf("gatewayapi-controller failed to watch EnvoyProxy resource: %v", err)
 			}
 			watchedEnvoyProxies[namespacedName] = struct{}{}
+		}
+		return nil
+	}
+
+	watchedEnvoyGateways := make(map[operatorv1.NamespacedName]struct{})
+	r.watchEnvoyGateway = func(namespacedName operatorv1.NamespacedName) error {
+		if _, alreadyWatching := watchedEnvoyGateways[namespacedName]; !alreadyWatching {
+			if err = utils.AddNamespacedWatch(c, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: namespacedName.Namespace,
+					Name:      namespacedName.Name,
+				},
+			}, &handler.EnqueueRequestForObject{}); err != nil {
+				log.V(5).Info("Failed to create EnvoyGateway watch", "err", err)
+				return fmt.Errorf("gatewayapi-controller failed to watch EnvoyGateway resource: %v", err)
+			}
+			watchedEnvoyGateways[namespacedName] = struct{}{}
 		}
 		return nil
 	}
@@ -115,7 +133,8 @@ type ReconcileGatewayAPI struct {
 	clusterDomain       string
 	multiTenant         bool
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
-	watchEnvoyProxy     func(namespacedName types.NamespacedName) error
+	watchEnvoyProxy     func(namespacedName operatorv1.NamespacedName) error
+	watchEnvoyGateway   func(namespacedName operatorv1.NamespacedName) error
 }
 
 // Reconcile reads that state of the cluster for a GatewayAPI object and makes changes based on the state read
@@ -142,6 +161,36 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 
 	// SetMetaData in the TigeraStatus such as observedGenerations.
 	defer r.status.SetMetaData(&gatewayAPI.ObjectMeta)
+
+	// Get the Installation, for private registry and pull secret config.
+	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if variant == "" {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
+	if variant == operatorv1.Calico {
+		reqLogger.Info("Variant is Calico")
+		if unsupportedFields := checkEnterpriseOnlyFields(gatewayAPI); len(unsupportedFields) > 0 {
+			err = fmt.Errorf("unsupported fields are %v", strings.Join(unsupportedFields, ","))
+			r.status.SetDegraded(
+				operatorv1.InvalidConfigurationError,
+				"GatewayAPI is using fields that are only supported in Calico Enterprise",
+				err,
+				reqLogger,
+			)
+			return reconcile.Result{}, err
+		}
+	}
 
 	// Render CRDs.  Note, we do this as early as possible so as to enable the following
 	// controller code that reads GatewayClasses and EnvoyProxies (which depends on the CRDs
@@ -194,22 +243,6 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	// Get the Installation, for private registry and pull secret config.
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	if variant == "" {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
-
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
@@ -224,13 +257,17 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		CurrentGatewayClasses: make(map[string]string),
 	}
 
-	if gatewayAPI.Spec.EnvoyGatewayRef != nil {
+	if gatewayAPI.Spec.EnvoyGatewayConfigRef != nil {
+		if err = r.watchEnvoyGateway(*gatewayAPI.Spec.EnvoyGatewayConfigRef); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error watching EnvoyGatewayConfigRef", err, log)
+			return reconcile.Result{}, err
+		}
 		configMap := &corev1.ConfigMap{}
 		err = r.client.Get(
 			ctx,
 			types.NamespacedName{
-				Namespace: gatewayAPI.Spec.EnvoyGatewayRef.Namespace,
-				Name:      gatewayAPI.Spec.EnvoyGatewayRef.Name,
+				Namespace: gatewayAPI.Spec.EnvoyGatewayConfigRef.Namespace,
+				Name:      gatewayAPI.Spec.EnvoyGatewayConfigRef.Name,
 			},
 			configMap,
 		)
@@ -244,25 +281,24 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 			err = yaml.Unmarshal([]byte(configMap.Data[render.EnvoyGatewayConfigKey]), gatewayConfig.CustomEnvoyGateway)
 		}
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyGatewayRef", err, log)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyGatewayConfigRef", err, log)
 			return reconcile.Result{}, err
 		}
 	}
 
 	for i := range gatewayAPI.Spec.GatewayClasses {
 		if gatewayAPI.Spec.GatewayClasses[i].EnvoyProxyRef != nil {
-			namespacedName := types.NamespacedName{
-				Namespace: gatewayAPI.Spec.GatewayClasses[i].EnvoyProxyRef.Namespace,
-				Name:      gatewayAPI.Spec.GatewayClasses[i].EnvoyProxyRef.Name,
-			}
-			envoyProxy := &envoyapi.EnvoyProxy{}
-			err = r.client.Get(ctx, namespacedName, envoyProxy)
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyProxyRef", err, log)
+			if err = r.watchEnvoyProxy(*gatewayAPI.Spec.GatewayClasses[i].EnvoyProxyRef); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error watching EnvoyProxyRef", err, log)
 				return reconcile.Result{}, err
 			}
-			if err = r.watchEnvoyProxy(namespacedName); err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Error watching EnvoyProxyRef", err, log)
+			envoyProxy := &envoyapi.EnvoyProxy{}
+			err = r.client.Get(ctx, types.NamespacedName{
+				Namespace: gatewayAPI.Spec.GatewayClasses[i].EnvoyProxyRef.Namespace,
+				Name:      gatewayAPI.Spec.GatewayClasses[i].EnvoyProxyRef.Name,
+			}, envoyProxy)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyProxyRef", err, log)
 				return reconcile.Result{}, err
 			}
 			gatewayConfig.CustomEnvoyProxies[gatewayAPI.Spec.GatewayClasses[i].Name] = envoyProxy
@@ -334,4 +370,40 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 		}
 	}
 	return resource, "", nil
+}
+
+func checkEnterpriseOnlyFields(gatewayAPI *operatorv1.GatewayAPI) (unsupportedFields []string) {
+	noteField := func(field string) {
+		unsupportedFields = append(unsupportedFields, field)
+	}
+	if gatewayAPI.Spec.EnvoyGatewayConfigRef != nil {
+		noteField("EnvoyGatewayConfigRef")
+	}
+	if gatewayAPI.Spec.GatewayClasses != nil {
+		noteField("GatewayClasses")
+	}
+	if gatewayAPI.Spec.GatewayDaemonSet != nil {
+		noteField("GatewayDaemonSet")
+	}
+	if gatewayAPI.Spec.GatewayService != nil {
+		noteField("GatewayService")
+	}
+	if gatewayAPI.Spec.GatewayControllerDeployment != nil &&
+		gatewayAPI.Spec.GatewayControllerDeployment.Spec != nil {
+		if gatewayAPI.Spec.GatewayControllerDeployment.Spec.Replicas != nil {
+			noteField("GatewayControllerDeployment.Spec.Replicas")
+		}
+		if gatewayAPI.Spec.GatewayControllerDeployment.Spec.Template != nil &&
+			gatewayAPI.Spec.GatewayControllerDeployment.Spec.Template.Spec != nil &&
+			gatewayAPI.Spec.GatewayControllerDeployment.Spec.Template.Spec.TopologySpreadConstraints != nil {
+			noteField("GatewayControllerDeployment.Spec.Template.Spec.TopologySpreadConstraints")
+		}
+	}
+	if gatewayAPI.Spec.GatewayDeployment != nil &&
+		gatewayAPI.Spec.GatewayDeployment.Spec != nil {
+		if gatewayAPI.Spec.GatewayDeployment.Spec.Replicas != nil {
+			noteField("GatewayDeployment.Spec.Replicas")
+		}
+	}
+	return
 }

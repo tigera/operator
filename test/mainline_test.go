@@ -290,8 +290,7 @@ func getTigeraStatus(client client.Client, name string) (*operator.TigeraStatus,
 	return ts, err
 }
 
-func assertAvailable(ts *operator.TigeraStatus) error {
-	var available, degraded, progressing bool
+func readStatus(ts *operator.TigeraStatus) (available, degraded, progressing bool) {
 	for _, condition := range ts.Status.Conditions {
 		if condition.Type == operator.ComponentAvailable {
 			available = condition.Status == operator.ConditionTrue
@@ -301,6 +300,11 @@ func assertAvailable(ts *operator.TigeraStatus) error {
 			progressing = condition.Status == operator.ConditionTrue
 		}
 	}
+	return
+}
+
+func assertAvailable(ts *operator.TigeraStatus) error {
+	available, degraded, progressing := readStatus(ts)
 
 	if progressing {
 		return fmt.Errorf("TigeraStatus is still progressing")
@@ -308,6 +312,19 @@ func assertAvailable(ts *operator.TigeraStatus) error {
 		return fmt.Errorf("TigeraStatus is degraded")
 	} else if !available {
 		return fmt.Errorf("TigeraStatus is not available")
+	}
+	return nil
+}
+
+func assertDegraded(ts *operator.TigeraStatus) error {
+	available, degraded, progressing := readStatus(ts)
+
+	if progressing {
+		return fmt.Errorf("TigeraStatus is still progressing")
+	} else if !degraded {
+		return fmt.Errorf("TigeraStatus is not degraded")
+	} else if available {
+		return fmt.Errorf("TigeraStatus is available")
 	}
 	return nil
 }

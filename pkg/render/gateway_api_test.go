@@ -29,7 +29,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
@@ -486,8 +485,6 @@ var _ = Describe("Gateway API rendering tests", func() {
 		f := false
 		lbClass := "upper"
 		lbIP := "10.4.10.4"
-		two := intstr.FromInt(2)
-		three := intstr.FromInt(3)
 		resourceRequirements := &corev1.ResourceRequirements{
 			Claims: []corev1.ResourceClaim{{
 				Name: "whatnot",
@@ -498,37 +495,29 @@ var _ = Describe("Gateway API rendering tests", func() {
 			Spec: operatorv1.GatewayAPISpec{
 				GatewayClasses: []operatorv1.GatewayClassSpec{{
 					Name: "custom-class-1",
-					EnvoyProxyRef: &corev1.ObjectReference{
+					EnvoyProxyRef: &operatorv1.NamespacedName{
 						Namespace: "default",
 						Name:      "my-proxy-1",
 					},
-					GatewayDeployment: &operatorv1.GatewayDeployment{
-						Service: &operatorv1.GatewayService{
-							Metadata: &operatorv1.Metadata{
-								Annotations: map[string]string{
-									"service.beta.kubernetes.io/aws-load-balancer-type":            "external",
-									"service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "instance",
-									"service.beta.kubernetes.io/aws-load-balancer-scheme":          "internet-facing",
-								},
+					GatewayService: &operatorv1.GatewayService{
+						Metadata: &operatorv1.Metadata{
+							Annotations: map[string]string{
+								"service.beta.kubernetes.io/aws-load-balancer-type":            "external",
+								"service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "instance",
+								"service.beta.kubernetes.io/aws-load-balancer-scheme":          "internet-facing",
 							},
 						},
 					},
 				}, {
 					Name: "custom-class-2",
-					EnvoyProxyRef: &corev1.ObjectReference{
+					EnvoyProxyRef: &operatorv1.NamespacedName{
 						Namespace: "default",
 						Name:      "my-proxy-2", // Daemonset instead of Deployment
 					},
-					GatewayDeployment: &operatorv1.GatewayDeployment{
-						Spec: &operatorv1.GatewayDeploymentSpec{
-							Strategy: &operatorv1.GatewayDeploymentStrategy{
-								RollingUpdate: &appsv1.RollingUpdateDeployment{
-									MaxUnavailable: &two,
-									MaxSurge:       &three,
-								},
-							},
-							Template: &operatorv1.GatewayDeploymentPodTemplate{
-								Spec: &operatorv1.GatewayDeploymentPodSpec{
+					GatewayDaemonSet: &operatorv1.GatewayDaemonSet{
+						Spec: &operatorv1.GatewayDaemonSetSpec{
+							Template: &operatorv1.GatewayDaemonSetPodTemplate{
+								Spec: &operatorv1.GatewayDaemonSetPodSpec{
 									TopologySpreadConstraints: topologySpreadConstraints,
 								},
 							},
@@ -557,30 +546,30 @@ var _ = Describe("Gateway API rendering tests", func() {
 								},
 							},
 						},
-						Service: &operatorv1.GatewayService{
-							Spec: &operatorv1.GatewayServiceSpec{
-								LoadBalancerClass: &lbClass,
-								LoadBalancerSourceRanges: []string{
-									"182.98.44.55/24",
-								},
-								LoadBalancerIP: &lbIP,
+					},
+					GatewayService: &operatorv1.GatewayService{
+						Spec: &operatorv1.GatewayServiceSpec{
+							LoadBalancerClass: &lbClass,
+							LoadBalancerSourceRanges: []string{
+								"182.98.44.55/24",
 							},
+							LoadBalancerIP: &lbIP,
 						},
 					},
 				}, {
 					Name: "custom-class-4",
 					// Same as custom-class-3 but with DaemonSet.
-					GatewayDeployment: &operatorv1.GatewayDeployment{
-						Spec: &operatorv1.GatewayDeploymentSpec{
-							GatewayKind: &daemonSet,
-							Template: &operatorv1.GatewayDeploymentPodTemplate{
+					GatewayKind: &daemonSet,
+					GatewayDaemonSet: &operatorv1.GatewayDaemonSet{
+						Spec: &operatorv1.GatewayDaemonSetSpec{
+							Template: &operatorv1.GatewayDaemonSetPodTemplate{
 								Metadata: &operatorv1.Metadata{
 									Labels: map[string]string{
 										"envoy-proxy": "standard",
 									},
 								},
-								Spec: &operatorv1.GatewayDeploymentPodSpec{
-									Containers: []operatorv1.GatewayDeploymentContainer{{
+								Spec: &operatorv1.GatewayDaemonSetPodSpec{
+									Containers: []operatorv1.GatewayDaemonSetContainer{{
 										Name:      "envoy",
 										Resources: resourceRequirements,
 									}},
@@ -590,14 +579,14 @@ var _ = Describe("Gateway API rendering tests", func() {
 								},
 							},
 						},
-						Service: &operatorv1.GatewayService{
-							Spec: &operatorv1.GatewayServiceSpec{
-								LoadBalancerClass: &lbClass,
-								LoadBalancerSourceRanges: []string{
-									"182.98.44.55/24",
-								},
-								LoadBalancerIP: &lbIP,
+					},
+					GatewayService: &operatorv1.GatewayService{
+						Spec: &operatorv1.GatewayServiceSpec{
+							LoadBalancerClass: &lbClass,
+							LoadBalancerSourceRanges: []string{
+								"182.98.44.55/24",
 							},
+							LoadBalancerIP: &lbIP,
 						},
 					},
 				}},
@@ -613,15 +602,26 @@ var _ = Describe("Gateway API rendering tests", func() {
 							},
 						},
 					},
-					Service: &operatorv1.GatewayService{
-						Metadata: &operatorv1.Metadata{
-							Annotations: map[string]string{
-								"customization": "common",
+				},
+				GatewayDaemonSet: &operatorv1.GatewayDaemonSet{
+					Spec: &operatorv1.GatewayDaemonSetSpec{
+						Template: &operatorv1.GatewayDaemonSetPodTemplate{
+							Metadata: &operatorv1.Metadata{
+								Labels: map[string]string{
+									"provisioned-by": "tigera-operator",
+								},
 							},
 						},
-						Spec: &operatorv1.GatewayServiceSpec{
-							AllocateLoadBalancerNodePorts: &f,
+					},
+				},
+				GatewayService: &operatorv1.GatewayService{
+					Metadata: &operatorv1.Metadata{
+						Annotations: map[string]string{
+							"customization": "common",
 						},
+					},
+					Spec: &operatorv1.GatewayServiceSpec{
+						AllocateLoadBalancerNodePorts: &f,
 					},
 				},
 			},

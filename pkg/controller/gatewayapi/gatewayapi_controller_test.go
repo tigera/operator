@@ -33,7 +33,6 @@ import (
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
@@ -100,7 +99,8 @@ var _ = Describe("Gateway API controller tests", func() {
 			scheme:              scheme,
 			status:              mockStatus,
 			newComponentHandler: FakeComponentHandler,
-			watchEnvoyProxy:     func(namespacedName types.NamespacedName) error { return nil },
+			watchEnvoyProxy:     func(namespacedName operatorv1.NamespacedName) error { return nil },
+			watchEnvoyGateway:   func(namespacedName operatorv1.NamespacedName) error { return nil },
 		}
 	})
 
@@ -171,6 +171,46 @@ var _ = Describe("Gateway API controller tests", func() {
 		)
 	})
 
+	It("does not support Enterprise-only fields when the variant is OSS Calico", func() {
+		installation.Spec.Variant = operatorv1.Calico
+		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+		// Read it back again.
+		err := c.Get(ctx, utils.DefaultInstanceKey, installation)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Update the status to set variant to Enterprise.
+		installation.Status.Variant = operatorv1.Calico
+		err = c.Status().Update(ctx, installation)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("applying the GatewayAPI CR to the fake cluster")
+		gwapi := &operatorv1.GatewayAPI{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayService: &operatorv1.GatewayService{
+					Metadata: &operatorv1.Metadata{
+						Annotations: map[string]string{
+							"service.beta.kubernetes.io/aws-load-balancer-type": "external",
+						},
+					},
+				},
+			},
+		}
+		Expect(c.Create(ctx, gwapi)).NotTo(HaveOccurred())
+
+		By("triggering a reconcile")
+		mockStatus.On(
+			"SetDegraded",
+			operatorv1.InvalidConfigurationError,
+			"GatewayAPI is using fields that are only supported in Calico Enterprise",
+			"unsupported fields are GatewayService",
+			mock.Anything,
+		).Return()
+		_, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).Should(HaveOccurred())
+	})
+
 	It("handles a custom EnvoyGateway", func() {
 		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
@@ -211,7 +251,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		gwapi := &operatorv1.GatewayAPI{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Spec: operatorv1.GatewayAPISpec{
-				EnvoyGatewayRef: &corev1.ObjectReference{
+				EnvoyGatewayConfigRef: &operatorv1.NamespacedName{
 					Namespace: "default",
 					Name:      "my-envoy-gateway",
 				},
@@ -234,14 +274,14 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(*gatewayAPIImplementationConfig.CustomEnvoyGateway).To(Equal(*envoyGateway))
 	})
 
-	It("handles when a custom EnvoyGateway is referenced but does not exist", func() {
+	It("handles when a custom EnvoyGateway is referenced but does not exist yet, then created later", func() {
 		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
 		By("applying the GatewayAPI CR to the fake cluster")
 		gwapi := &operatorv1.GatewayAPI{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Spec: operatorv1.GatewayAPISpec{
-				EnvoyGatewayRef: &corev1.ObjectReference{
+				EnvoyGatewayConfigRef: &operatorv1.NamespacedName{
 					Namespace: "default",
 					Name:      "my-envoy-gateway",
 				},
@@ -253,12 +293,55 @@ var _ = Describe("Gateway API controller tests", func() {
 		mockStatus.On(
 			"SetDegraded",
 			operatorv1.ResourceReadError,
-			"Error reading EnvoyGatewayRef",
+			"Error reading EnvoyGatewayConfigRef",
 			"configmaps \"my-envoy-gateway\" not found",
 			mock.Anything,
 		).Return()
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).Should(HaveOccurred())
+
+		By("now creating the custom EnvoyGateway")
+		envoyGateway := &envoyapi.EnvoyGateway{
+			EnvoyGatewaySpec: envoyapi.EnvoyGatewaySpec{
+				Telemetry: &envoyapi.EnvoyGatewayTelemetry{
+					Metrics: &envoyapi.EnvoyGatewayMetrics{
+						Sinks: []envoyapi.EnvoyGatewayMetricSink{{
+							Type: envoyapi.MetricSinkTypeOpenTelemetry,
+						}},
+					},
+				},
+				ExtensionAPIs: &envoyapi.ExtensionAPISettings{
+					EnableEnvoyPatchPolicy: true,
+					EnableBackend:          true,
+				},
+			},
+		}
+		envoyGatewayYAML, err := yaml.Marshal(*envoyGateway)
+		Expect(err).NotTo(HaveOccurred())
+		envoyGatewayConfigMap := &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "ConfigMap",
+				APIVersion: "v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-envoy-gateway",
+				Namespace: "default",
+			},
+			Data: map[string]string{
+				"envoy-gateway.yaml": string(envoyGatewayYAML),
+			},
+		}
+		Expect(c.Create(ctx, envoyGatewayConfigMap)).NotTo(HaveOccurred())
+
+		By("triggering a reconcile")
+		fakeComponentHandlers = nil
+		_, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("checking that the custom EnvoyGateway was passed through")
+		gatewayAPIImplementationConfig := fakeComponentHandlers[1].lastComponent.(render.GatewayAPIImplementationConfigInterface).GetConfig()
+		Expect(gatewayAPIImplementationConfig.CustomEnvoyGateway).NotTo(BeNil())
+		Expect(*gatewayAPIImplementationConfig.CustomEnvoyGateway).To(Equal(*envoyGateway))
 	})
 
 	It("handles when a custom EnvoyGateway is referenced and exists but does not have the right key", func() {
@@ -284,7 +367,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		gwapi := &operatorv1.GatewayAPI{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Spec: operatorv1.GatewayAPISpec{
-				EnvoyGatewayRef: &corev1.ObjectReference{
+				EnvoyGatewayConfigRef: &operatorv1.NamespacedName{
 					Namespace: "default",
 					Name:      "my-envoy-gateway",
 				},
@@ -296,7 +379,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		mockStatus.On(
 			"SetDegraded",
 			operatorv1.ResourceReadError,
-			"Error reading EnvoyGatewayRef",
+			"Error reading EnvoyGatewayConfigRef",
 			"missing 'envoy-gateway.yaml' key",
 			mock.Anything,
 		).Return()
@@ -327,7 +410,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		gwapi := &operatorv1.GatewayAPI{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Spec: operatorv1.GatewayAPISpec{
-				EnvoyGatewayRef: &corev1.ObjectReference{
+				EnvoyGatewayConfigRef: &operatorv1.NamespacedName{
 					Namespace: "default",
 					Name:      "my-envoy-gateway",
 				},
@@ -339,7 +422,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		mockStatus.On(
 			"SetDegraded",
 			operatorv1.ResourceReadError,
-			"Error reading EnvoyGatewayRef",
+			"Error reading EnvoyGatewayConfigRef",
 			"error unmarshaling JSON: while decoding JSON: json: cannot unmarshal string into Go value of type v1alpha1.EnvoyGateway",
 			mock.Anything,
 		).Return()
@@ -403,13 +486,13 @@ var _ = Describe("Gateway API controller tests", func() {
 			Spec: operatorv1.GatewayAPISpec{
 				GatewayClasses: []operatorv1.GatewayClassSpec{{
 					Name: "custom-class-1",
-					EnvoyProxyRef: &corev1.ObjectReference{
+					EnvoyProxyRef: &operatorv1.NamespacedName{
 						Namespace: "default",
 						Name:      "my-proxy-1",
 					},
 				}, {
 					Name: "custom-class-2",
-					EnvoyProxyRef: &corev1.ObjectReference{
+					EnvoyProxyRef: &operatorv1.NamespacedName{
 						Namespace: "default",
 						Name:      "my-proxy-2",
 					},
@@ -465,13 +548,13 @@ var _ = Describe("Gateway API controller tests", func() {
 			Spec: operatorv1.GatewayAPISpec{
 				GatewayClasses: []operatorv1.GatewayClassSpec{{
 					Name: "custom-class-1",
-					EnvoyProxyRef: &corev1.ObjectReference{
+					EnvoyProxyRef: &operatorv1.NamespacedName{
 						Namespace: "default",
 						Name:      "my-proxy-1",
 					},
 				}, {
 					Name: "custom-class-2",
-					EnvoyProxyRef: &corev1.ObjectReference{
+					EnvoyProxyRef: &operatorv1.NamespacedName{
 						Namespace: "default",
 						Name:      "my-proxy-2",
 					},

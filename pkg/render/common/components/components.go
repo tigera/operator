@@ -40,6 +40,7 @@ var log = logf.Log.WithName("components")
 type replicatedPodResource struct {
 	labels             map[string]string
 	annotations        map[string]string
+	replicas           *int32
 	minReadySeconds    *int32
 	podTemplateSpec    *corev1.PodTemplateSpec
 	deploymentStrategy *appsv1.DeploymentStrategy // Deployments only
@@ -51,6 +52,14 @@ func GetMetadata(overrides any) *operator.Metadata {
 		return nil
 	}
 	return value.Interface().(*operator.Metadata)
+}
+
+func GetReplicas(overrides any) *int32 {
+	value := getField(overrides, "Spec", "Replicas")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(*int32)
 }
 
 func GetMinReadySeconds(overrides any) *int32 {
@@ -244,6 +253,12 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 		}
 	}
 
+	// If `overrides` has a Spec.Replicas field. and it's non-nil, it sets
+	// `r.replicas`.
+	if replicas := GetReplicas(overrides); replicas != nil {
+		r.replicas = replicas
+	}
+
 	// If `overrides` has a Spec.MinReadySeconds field. and it's non-nil, it sets
 	// `r.minReadySeconds`.
 	if minReadySeconds := GetMinReadySeconds(overrides); minReadySeconds != nil {
@@ -373,10 +388,11 @@ func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides any) {
 		return
 	}
 
-	// Pull out the data we'll override from the DaemonSet.
+	// Pull out the data we'll override from the Deployment.
 	r := &replicatedPodResource{
 		labels:             d.Labels,
 		annotations:        d.Annotations,
+		replicas:           d.Spec.Replicas,
 		minReadySeconds:    &d.Spec.MinReadySeconds,
 		podTemplateSpec:    &d.Spec.Template,
 		deploymentStrategy: &d.Spec.Strategy,
@@ -384,9 +400,10 @@ func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides any) {
 	// Apply the overrides.
 	applyReplicatedPodResourceOverrides(r, overrides)
 
-	// Set the possibly new fields back onto the DaemonSet.
+	// Set the possibly new fields back onto the Deployment.
 	d.Labels = r.labels
 	d.Annotations = r.annotations
+	d.Spec.Replicas = r.replicas
 	d.Spec.MinReadySeconds = *r.minReadySeconds
 	d.Spec.Template = *r.podTemplateSpec
 	d.Spec.Strategy = *r.deploymentStrategy

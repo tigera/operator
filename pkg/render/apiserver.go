@@ -269,8 +269,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise), c.cfg.Installation.KubernetesProvider, PSSPrivileged, c.cfg.Installation.Azure),
-		CreateOperatorSecretsRoleBinding(rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)),
 		c.tigeraApiServerClusterRole(),
 		c.tigeraApiServerClusterRoleBinding(),
 		c.uisettingsgroupGetterClusterRole(),

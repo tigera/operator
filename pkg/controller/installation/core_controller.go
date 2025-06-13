@@ -1243,7 +1243,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Installation: &instance.Spec,
 		PullSecrets:  pullSecrets,
 	}
-	// Render namespaces for Calico.
+	// Render namespaces for Calico and Enterprise components.
 	components = append(components, render.Namespaces(namespaceCfg))
 
 	if newActiveCM != nil && !installationMarkedForDeletion {

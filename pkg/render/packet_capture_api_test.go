@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -38,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -194,14 +194,14 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				Image:           fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
 				ImagePullPolicy: render.ImagePullPolicy(),
 				SecurityContext: &corev1.SecurityContext{
-					AllowPrivilegeEscalation: ptr.BoolToPtr(false),
+					AllowPrivilegeEscalation: ptr.To(false),
 					Capabilities: &corev1.Capabilities{
 						Drop: []corev1.Capability{"ALL"},
 					},
-					Privileged:   ptr.BoolToPtr(false),
-					RunAsGroup:   ptr.Int64ToPtr(10001),
-					RunAsNonRoot: ptr.BoolToPtr(true),
-					RunAsUser:    ptr.Int64ToPtr(10001),
+					Privileged:   ptr.To(false),
+					RunAsGroup:   ptr.To(int64(10001)),
+					RunAsNonRoot: ptr.To(true),
+					RunAsUser:    ptr.To(int64(10001)),
 					SeccompProfile: &corev1.SeccompProfile{
 						Type: corev1.SeccompProfileTypeRuntimeDefault,
 					},
@@ -250,7 +250,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  render.PacketCaptureServerCert,
-						DefaultMode: ptr.Int32ToPtr(420),
+						DefaultMode: ptr.To(int32(420)),
 					},
 				},
 			})

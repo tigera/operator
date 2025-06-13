@@ -21,15 +21,17 @@ import (
 	"net/netip"
 	"strings"
 
-	configv1 "github.com/openshift/api/config/v1"
-	operator "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-	"github.com/tigera/operator/pkg/ptr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	configv1 "github.com/openshift/api/config/v1"
+
+	operator "github.com/tigera/operator/api/v1"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 )
 
 var (
@@ -184,7 +186,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 				pool.NodeSelector = operator.NodeSelectorDefault
 			}
 			if pool.BlockSize == nil {
-				pool.BlockSize = ptr.ToPtr[int32](26)
+				pool.BlockSize = ptr.To(int32(26))
 			}
 		} else if err == nil && addr.To16() != nil {
 			// This is an IPv6 pool.
@@ -198,12 +200,12 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 				pool.NodeSelector = operator.NodeSelectorDefault
 			}
 			if pool.BlockSize == nil {
-				pool.BlockSize = ptr.ToPtr[int32](122)
+				pool.BlockSize = ptr.To(int32(122))
 			}
 		}
 
 		if pool.DisableNewAllocations == nil {
-			pool.DisableNewAllocations = ptr.ToPtr(false)
+			pool.DisableNewAllocations = ptr.To(false)
 		}
 
 		// Default the name if it's not set.

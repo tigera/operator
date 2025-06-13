@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/google/go-cmp/cmp"
@@ -42,7 +43,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/logstorage"
@@ -611,11 +611,11 @@ func expectedContainers() []corev1.Container {
 			ImagePullPolicy: render.ImagePullPolicy(),
 			SecurityContext: &corev1.SecurityContext{
 				Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
-				AllowPrivilegeEscalation: ptr.BoolToPtr(false),
-				Privileged:               ptr.BoolToPtr(false),
-				RunAsNonRoot:             ptr.BoolToPtr(true),
-				RunAsGroup:               ptr.Int64ToPtr(10001),
-				RunAsUser:                ptr.Int64ToPtr(10001),
+				AllowPrivilegeEscalation: ptr.To(false),
+				Privileged:               ptr.To(false),
+				RunAsNonRoot:             ptr.To(true),
+				RunAsGroup:               ptr.To(int64(10001)),
+				RunAsUser:                ptr.To(int64(10001)),
 				SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 			},
 			Env: []corev1.EnvVar{

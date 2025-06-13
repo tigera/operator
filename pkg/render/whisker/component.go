@@ -20,6 +20,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
+	"k8s.io/utils/ptr"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -28,7 +29,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -206,7 +206,7 @@ func (c *Component) deployment() *appsv1.Deployment {
 			Namespace: WhiskerNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: ptr.ToPtr(int32(1)),
+			Replicas: ptr.To(int32(1)),
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -236,8 +236,8 @@ func (c *Component) networkPolicy() *netv1.NetworkPolicy {
 				},
 			},
 			Ports: []netv1.NetworkPolicyPort{{
-				Protocol: ptr.ToPtr(corev1.ProtocolTCP),
-				Port:     ptr.ToPtr(intstr.FromInt32(GoldmaneServicePort)),
+				Protocol: ptr.To(corev1.ProtocolTCP),
+				Port:     ptr.To(intstr.FromInt32(GoldmaneServicePort)),
 			}},
 		},
 	}

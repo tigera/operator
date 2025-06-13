@@ -17,6 +17,8 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
+	"strconv"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -42,6 +44,8 @@ import (
 	"github.com/tigera/operator/pkg/url"
 )
 
+type ForwardingDestination string
+
 const (
 	LogCollectorNamespace      = "tigera-fluentd"
 	FluentdFilterConfigMapName = "fluentd-filters"
@@ -57,8 +61,11 @@ const (
 	FluentdPrometheusTLSSecretName           = "tigera-fluentd-prometheus-tls"
 	FluentdMetricsService                    = "fluentd-metrics"
 	FluentdMetricsServiceWindows             = "fluentd-metrics-windows"
+	FluentdInputService                      = "fluentd-http-input"
 	FluentdMetricsPortName                   = "fluentd-metrics-port"
 	FluentdMetricsPort                       = 9081
+	FluentdInputPortName                     = "fluentd-http-input-port"
+	FluentdInputPort                         = 9880
 	FluentdPolicyName                        = networkpolicy.TigeraComponentPolicyPrefix + "allow-fluentd-node"
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
@@ -96,6 +103,10 @@ const (
 
 	PacketCaptureAPIRole        = "packetcapture-api-role"
 	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
+
+	ForwardingDestinationS3     ForwardingDestination = "S3"
+	ForwardingDestinationSyslog ForwardingDestination = "Syslog"
+	ForwardingDestinationSplunk ForwardingDestination = "Splunk"
 )
 
 var FluentdSourceEntityRule = v3.EntityRule{
@@ -172,6 +183,8 @@ type FluentdConfiguration struct {
 	EKSLogForwarderKeyPair certificatemanagement.KeyPairInterface
 
 	PacketCapture *operatorv1.PacketCaptureAPI
+
+	NonClusterHost *operatorv1.NonClusterHost
 }
 
 type fluentdComponent struct {
@@ -319,7 +332,37 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs, c.daemonset())
 
+	if c.cfg.NonClusterHost != nil && c.cfg.OSType == rmeta.OSTypeLinux {
+		objs = append(objs, c.nonClusterHostInputService())
+	}
+
 	return objs, toDelete
+}
+
+func (c *fluentdComponent) nonClusterHostInputService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      FluentdInputService,
+			Namespace: LogCollectorNamespace,
+			Labels:    map[string]string{"k8s-app": c.fluentdNodeName()},
+		},
+		// We do not treat this service as a headless service, as we want to ensure traffic is load-balanced. This is because:
+		// - We have no guarantee that the client (voltron) will perform load balancing across the returned records. The
+		//   golang dialer implementation appears to prefer the first record returned (see dialSerial in the go SDK)
+		// - We have no guarantee that the DNS server will perform load-balancing or randomize the order of records returned
+		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"k8s-app": c.fluentdNodeName()},
+			Ports: []corev1.ServicePort{
+				{
+					Name:       FluentdInputPortName,
+					Port:       int32(FluentdInputPort),
+					TargetPort: intstr.FromInt(FluentdInputPort),
+					Protocol:   corev1.ProtocolTCP,
+				},
+			},
+		},
+	}
 }
 
 func (c *fluentdComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
@@ -669,6 +712,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				corev1.EnvVar{Name: "S3_BUCKET_PATH", Value: s3.BucketPath},
 				corev1.EnvVar{Name: "S3_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
 			)
+
+			hostScopeEnvVars := envVarsForHostScope(s3.HostScope, ForwardingDestinationS3)
+			envs = append(envs, hostScopeEnvVars...)
 		}
 		syslog := c.cfg.LogCollector.Spec.AdditionalStores.Syslog
 		if syslog != nil {
@@ -740,6 +786,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 					)
 				}
 			}
+
+			hostScopeEnvVars := envVarsForHostScope(syslog.HostScope, ForwardingDestinationSyslog)
+			envs = append(envs, hostScopeEnvVars...)
 		}
 		splunk := c.cfg.LogCollector.Spec.AdditionalStores.Splunk
 		if splunk != nil {
@@ -764,6 +813,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 				corev1.EnvVar{Name: "SPLUNK_PROTOCOL", Value: proto},
 				corev1.EnvVar{Name: "SPLUNK_FLUSH_INTERVAL", Value: fluentdDefaultFlush},
 			)
+
+			hostScopeEnvVars := envVarsForHostScope(splunk.HostScope, ForwardingDestinationSplunk)
+			envs = append(envs, hostScopeEnvVars...)
 		}
 	}
 
@@ -1196,6 +1248,14 @@ func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
 }
 
 func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
+	multiTenant := false
+	tenantNamespace := ""
+	if c.cfg.Tenant != nil {
+		multiTenant = true
+		tenantNamespace = c.cfg.Tenant.Namespace
+	}
+	policyHelper := networkpolicy.Helper(multiTenant, tenantNamespace)
+
 	egressRules := []v3.Rule{}
 	if c.cfg.ManagedCluster {
 		egressRules = append(egressRules, v3.Rule{
@@ -1235,6 +1295,28 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 		Action: v3.Allow,
 	})
 
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   networkpolicy.PrometheusSourceEntityRule,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(FluentdMetricsPort),
+			},
+		},
+	}
+
+	if c.cfg.NonClusterHost != nil {
+		ingressRules = append(ingressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   policyHelper.ManagerSourceEntityRule(),
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(FluentdInputPort),
+			},
+		})
+	}
+
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1247,17 +1329,24 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 			Selector:               networkpolicy.KubernetesAppSelector(FluentdNodeName, fluentdNodeWindowsName),
 			ServiceAccountSelector: "",
 			Types:                  []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source:   networkpolicy.PrometheusSourceEntityRule,
-					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(FluentdMetricsPort),
-					},
-				},
-			},
-			Egress: egressRules,
+			Ingress:                ingressRules,
+			Egress:                 egressRules,
 		},
+	}
+}
+
+func envVarsForHostScope(hostScope *operatorv1.HostScope, destination ForwardingDestination) []corev1.EnvVar {
+	var forwardClusterLogs, forwardNonClusterLogs bool
+	if hostScope == nil || *hostScope != operatorv1.HostScopeNonClusterOnly {
+		forwardClusterLogs = true
+		forwardNonClusterLogs = true
+	} else {
+		forwardClusterLogs = false
+		forwardNonClusterLogs = true
+	}
+
+	return []corev1.EnvVar{
+		{Name: fmt.Sprintf("FORWARD_CLUSTER_LOGS_TO_%s", strings.ToUpper(string(destination))), Value: strconv.FormatBool(forwardClusterLogs)},
+		{Name: fmt.Sprintf("FORWARD_NON_CLUSTER_LOGS_TO_%s", strings.ToUpper(string(destination))), Value: strconv.FormatBool(forwardNonClusterLogs)},
 	}
 }

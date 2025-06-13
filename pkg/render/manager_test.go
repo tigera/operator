@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -1003,7 +1004,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
 				expectedPolicy := getExpectedPolicy(scenario)
 				if expectedPolicy != nil {
-					// Check fields individuall before checking the entire struct so that we get
+					// Check fields individually before checking the entire struct so that we get
 					// more useful failure messages.
 					Expect(policy.ObjectMeta).To(Equal(expectedPolicy.ObjectMeta))
 					Expect(policy.Spec.Ingress).To(ConsistOf(expectedPolicy.Spec.Ingress))
@@ -1020,6 +1021,45 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
 			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
 		)
+
+		It("should render allow-tigera policy for the non-cluster-host scenario", func() {
+			renderCfg := renderConfig{
+				openshift:               false,
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              compliance,
+				complianceFeatureActive: true,
+				ns:                      render.ManagerNamespace,
+			}
+			resourcesWithoutNonClusterHosts := renderObjects(renderCfg)
+			renderCfg.nonClusterHost = &operatorv1.NonClusterHost{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "tigera-secure",
+				},
+				Spec: operatorv1.NonClusterHostSpec{
+					Endpoint: "https://1.2.3.4:5678",
+				},
+			}
+			resourcesWithNonClusterHosts := renderObjects(renderCfg)
+			policyWithNonClusterHosts := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesWithNonClusterHosts)
+			policyWithoutNonClusterHosts := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesWithoutNonClusterHosts)
+
+			// Validate that we have a single egress rule added for the fluentd service.
+			Expect(policyWithoutNonClusterHosts.Spec.Ingress).To(Equal(policyWithNonClusterHosts.Spec.Ingress))
+			Expect(len(policyWithoutNonClusterHosts.Spec.Egress)).To(Equal(len(policyWithNonClusterHosts.Spec.Egress) - 1))
+			Expect(len(policyWithNonClusterHosts.Spec.Egress)).To(Equal(11))
+			Expect(policyWithNonClusterHosts.Spec.Egress[8]).To(Equal(v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Services: &v3.ServiceMatch{
+						Namespace: render.LogCollectorNamespace,
+						Name:      render.FluentdInputService,
+					},
+				},
+			}))
+		})
 	})
 
 	Context("multi-tenant rendering", func() {

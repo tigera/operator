@@ -110,9 +110,18 @@ func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {
+
+	var objs []client.Object
+
+	// Guardian has RBAC permissions to handle policy recommendation requests in managed clusters,
+	// so clean up the resources left behind in older clusters during upgrade.
+	if pr.cfg.ManagedCluster {
+		return objs, pr.deprecatedObjects()
+	}
+
 	// Management and managed clusters need API access to the resources defined in the policy
 	// recommendation cluster role
-	objs := []client.Object{
+	objs = []client.Object{
 		CreateNamespace(pr.cfg.Namespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted, pr.cfg.Installation.Azure),
 		CreateOperatorSecretsRoleBinding(pr.cfg.Namespace),
 
@@ -441,6 +450,23 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Ingress:  []v3.Rule{},
 			Egress:   egressRules,
+		},
+	}
+}
+
+func (pr *policyRecommendationComponent) deprecatedObjects() []client.Object {
+	return []client.Object{
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationNamespace},
+		},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
 		},
 	}
 }

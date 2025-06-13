@@ -149,13 +149,6 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		objs = append(objs,
-			// Add tigera-manager service account for impersonation. In managed clusters, the tigera-manager
-			// service account is always within the tigera-manager namespace - regardless of (multi)tenancy mode.
-			CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
-			managerServiceAccount(ManagerNamespace),
-			managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil),
-			managerClusterRoleBinding(nil, []string{ManagerNamespace}, []string{}),
-
 			// Install default UI settings for this managed cluster.
 			managerClusterWideSettingsGroup(),
 			managerUserSpecificSettingsGroup(),
@@ -238,6 +231,8 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"users", "groups", "serviceaccounts"},
 			Verbs:     []string{"impersonate"},
 		})
+
+		policyRules = append(policyRules, rulesForManagementClusterRequests(c.cfg.OpenShift)...)
 
 		if c.cfg.OpenShift {
 			policyRules = append(policyRules, rbacv1.PolicyRule{
@@ -690,6 +685,292 @@ func GuardianService(clusterDomain string) string {
 	return fmt.Sprintf("https://%s.%s.svc.%s:%d", GuardianServiceName, GuardianNamespace, clusterDomain, 443)
 }
 
+// rulesForManagementClusterRequests returns the set of RBAC rules needed by Guardian in order to
+// satisfy requests from the management cluster over the tunnel.
+func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
+
+	rules := []rbacv1.PolicyRule{
+		// Common rules required to handle requests from multiple components in the management cluster.
+		{
+			// ID uses read-only permissions and KubeController uses both read and write verbs.
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"create", "delete", "get", "list", "update", "watch"},
+		},
+		{
+			// Allows Linseed to watch namespaces before copying its token.
+			// Also enables PolicyRecommendation to watch namespaces,
+			// and Manager/KubeController to list them.
+			APIGroups: []string{""},
+			Resources: []string{"namespaces"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			// KubeController watches Nodes to monitor for deletions.
+			// Manager performs a list operation on Nodes.
+			APIGroups: []string{""},
+			Resources: []string{"nodes"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			// KubeController watches Pods to verify existence for IPAM garbage collection.
+			// Manager performs get operations on Pods.
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			// The Federated Services Controller needs access to the remote kubeconfig secret
+			// in order to create a remote syncer.
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			// Manager uses list; KubeController uses 'get', 'list', 'watch', 'update'.
+			APIGroups: []string{""},
+			Resources: []string{"services"},
+			Verbs:     []string{"get", "list", "update", "watch"},
+		},
+		{
+			// Needed by KubeController to validate licenses; also used by ID.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"licensekeys"},
+			Verbs:     []string{"get", "watch"},
+		},
+		{
+			// Manager uses list; PolicyRecommendation & ID uses all verbs.
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"globalnetworksets",
+				"networkpolicies",
+				"tier.networkpolicies",
+				"stagednetworkpolicies",
+				"tier.stagednetworkpolicies",
+			},
+			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+		},
+		{
+			// Manager uses list; PolicyRecommendation uses all verbs.
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"tiers"},
+			Verbs:     []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+		},
+
+		// Rules needed by guardian to handle manager requests.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"events"},
+			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"serviceaccounts"},
+			Verbs:     []string{"impersonate", "list"},
+		},
+		{
+			// When a request is made in the manager UI, they are proxied through the Voltron backend server. If the
+			// request is targeting a k8s api or when it is targeting a managed cluster, Voltron will authenticate the
+			// user based on the auth header and then impersonate the user.
+			APIGroups: []string{""},
+			Resources: []string{"groups", "users"},
+			Verbs:     []string{"impersonate"},
+		},
+		{
+			// Allow query server talk to Prometheus via the manager user.
+			APIGroups: []string{""},
+			Resources: []string{"services/proxy"},
+			ResourceNames: []string{
+				"calico-node-prometheus:9090",
+				"https:tigera-api:8080",
+			},
+			Verbs: []string{"create", "get"},
+		},
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"daemonsets", "replicasets", "statefulsets"},
+			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups: []string{"authentication.k8s.io"},
+			Resources: []string{"tokenreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups: []string{"authorization.k8s.io"},
+			Resources: []string{"subjectaccessreviews"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups: []string{"networking.k8s.io"},
+			Resources: []string{"networkpolicies"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"policy.networking.k8s.io"},
+			Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
+			Verbs:     []string{"list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"alertexceptions"},
+			Verbs:     []string{"get", "list", "update"},
+		},
+		{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"felixconfigurations"},
+			ResourceNames: []string{"default"},
+			Verbs:         []string{"get"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"globalnetworkpolicies",
+				"networksets",
+				"stagedglobalnetworkpolicies",
+				"stagedkubernetesnetworkpolicies",
+				"tier.globalnetworkpolicies",
+				"tier.stagedglobalnetworkpolicies",
+			},
+			Verbs: []string{"list"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"hostendpoints"},
+			Verbs:     []string{"list"},
+		},
+
+		// Rules needed by guardian to handle policy recommendation requests.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"policyrecommendationscopes",
+				"policyrecommendationscopes/status",
+			},
+			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+		},
+
+		// Rules needed by guardian to handle calico-kube-controller requests.
+		{
+			// Nodes are watched to monitor for deletions.
+			APIGroups: []string{""},
+			Resources: []string{"endpoints"},
+			Verbs:     []string{"create", "delete", "get", "list", "update", "watch"},
+		},
+		{
+			APIGroups: []string{""},
+			Resources: []string{"services/status"},
+			Verbs:     []string{"get", "list", "update", "watch"},
+		},
+		{
+			// Needs to manage hostendpoints.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"hostendpoints"},
+			Verbs:     []string{"create", "delete", "get", "list", "update", "watch"},
+		},
+		{
+			// Needs access to update clusterinformations.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"clusterinformations"},
+			Verbs:     []string{"create", "get", "list", "update", "watch"},
+		},
+		{
+			// Needs to manipulate kubecontrollersconfiguration, which contains its config.
+			// It creates a default if none exists, and updates status as well.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"kubecontrollersconfigurations"},
+			Verbs:     []string{"create", "get", "list", "update", "watch"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"tiers"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org", "projectcalico.org"},
+			Resources: []string{"deeppacketinspections"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"deeppacketinspections/status"},
+			Verbs:     []string{"update"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"packetcaptures"},
+			Verbs:     []string{"get", "list", "update"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"remoteclusterconfigurations"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"licensekeys"},
+			Verbs:     []string{"create", "get", "list", "update", "watch"},
+		},
+		{
+			// Grant permissions to access ClusterInformation resources in managed clusters.
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"clusterinformations"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"usage.tigera.io"},
+			Resources: []string{"licenseusagereports"},
+			Verbs:     []string{"create", "delete", "get", "list", "update", "watch"},
+		},
+
+		// Rules needed by guardian to handle Intrusion detection requests.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"podtemplates"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"alertexceptions"},
+			Verbs:     []string{"get", "list"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"securityeventwebhooks"},
+			Verbs:     []string{"get", "list", "update", "watch"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"globalalerts",
+				"globalalerts/status",
+				"globalthreatfeeds",
+				"globalthreatfeeds/status",
+			},
+			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
+		},
+	}
+
+	// Rules needed by policy recommendation in openshift.
+	if isOpenShift {
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				APIGroups:     []string{"security.openshift.io"},
+				Resources:     []string{"securitycontextconstraints"},
+				Verbs:         []string{"use"},
+				ResourceNames: []string{securitycontextconstraints.HostNetworkV2},
+			},
+		)
+	}
+
+	return rules
+}
+
 func deprecatedObjects() []client.Object {
 	return []client.Object{
 		// All the Guardian objects were moved to "calico-system" circa Calico v3.30, and so the legacy tigera-guardian
@@ -707,6 +988,24 @@ func deprecatedObjects() []client.Object {
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-guardian"},
+		},
+
+		// Remove manager namespace objects since the guardian identity is responsible for handling manager requests
+		&corev1.ServiceAccount{
+			TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerServiceAccount, Namespace: ManagerNamespace},
+		},
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerNamespace},
+		},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},
 		},
 	}
 }

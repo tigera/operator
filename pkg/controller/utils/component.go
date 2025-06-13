@@ -64,12 +64,14 @@ type ComponentHandler interface {
 
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
 // this is useful for CRD management so that they are not removed automatically.
-func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
+func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
 	return &componentHandler{
-		client: client,
-		scheme: scheme,
-		cr:     cr,
-		log:    log,
+		client:          cli,
+		scheme:          scheme,
+		cr:              cr,
+		log:             log,
+		generationCache: make(map[objectAndKind]int64),
+		objectCache:     make(map[objectAndKind]client.Object),
 	}
 }
 
@@ -79,10 +81,93 @@ type componentHandler struct {
 	cr         metav1.Object
 	log        logr.Logger
 	createOnly bool
+
+	// Track the generation of each object that we create or update so that we can avoid
+	// unnecessary updates.
+	generationCache map[objectAndKind]int64
+	objectCache     map[objectAndKind]client.Object
+}
+
+type objectAndKind struct {
+	Object client.ObjectKey
+	Kind   schema.GroupKind
 }
 
 func (c *componentHandler) SetCreateOnly() {
 	c.createOnly = true
+}
+
+func (c *componentHandler) create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	// Make a deep copy of the object, so we can stash away the original object in the cache.
+	cached := obj.DeepCopyObject().(client.Object)
+
+	// Pass to the client.
+	err := c.client.Create(ctx, obj, opts...)
+	if err != nil {
+		return err
+	}
+
+	// Update the caches so that we don't try to update the object on subsequent reconciliations.
+	c.generationCache[c.cacheKey(obj)] = obj.GetGeneration()
+	c.objectCache[c.cacheKey(obj)] = cached
+	return nil
+}
+
+func (c *componentHandler) update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	if !c.needsUpdate(ctx, obj) {
+		// The object does not need to be updated, so we can skip it.
+		logCtx := ContextLoggerForResource(c.log, obj)
+		logCtx.Info("Object does not need to be updated, skipping")
+		return nil
+	}
+
+	// Make a deep copy of the object, so we can stash away the original object in the cache.
+	cached := obj.DeepCopyObject().(client.Object)
+
+	// Pass to the client.
+	err := c.client.Update(ctx, obj, opts...)
+	if err != nil {
+		return err
+	}
+
+	// Update the caches so that we don't try to update the object on subsequent reconciliations.
+	c.generationCache[c.cacheKey(obj)] = obj.GetGeneration()
+	c.objectCache[c.cacheKey(obj)] = cached
+	return nil
+}
+
+func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) bool {
+	key := client.ObjectKeyFromObject(obj)
+	cur := obj.DeepCopyObject().(client.Object)
+	err := c.client.Get(ctx, key, cur)
+	if err != nil {
+		// If we can't get the object, assume it needs to be created or updated.
+		return true
+	}
+
+	// Only update the object if one of the following is true:
+	// - the object is not in the generation cache. This means we have not created this object before.
+	// - the generation on the cluster is newer than the generation we have cached. This means that the object has been updated on the cluster.
+	// - the object differs from the last cached version. This means the operator wants to update the object.
+	// This helps prevent us from updating objects unnecessarily.
+	if cachedGen, ok := c.generationCache[c.cacheKey(obj)]; !ok || cachedGen >= cur.GetGeneration() {
+		// The object is not in the cache, or the cached generation is newer than the current generation.
+		// Check if the object has changed since we last cached it.
+		if cachedObj, ok := c.objectCache[c.cacheKey(obj)]; ok {
+			// The object is in the cache, check if it has changed.
+			if reflect.DeepEqual(cachedObj, obj) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func (c *componentHandler) cacheKey(obj client.Object) objectAndKind {
+	return objectAndKind{
+		Object: client.ObjectKeyFromObject(obj),
+		Kind:   obj.GetObjectKind().GroupVersionKind().GroupKind(),
+	}
 }
 
 func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
@@ -144,6 +229,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			// Anything other than "Not found" we should retry.
+			delete(c.generationCache, c.cacheKey(obj))
 			return err
 		}
 
@@ -173,11 +259,14 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			delete(labels, common.MultipleOwnersLabel)
 			om.GetObjectMeta().SetLabels(labels)
 		}
-		err = c.client.Create(ctx, obj)
+		err = c.create(ctx, obj)
 		if err != nil {
 			logCtx.WithValues("key", key).Error(err, "Failed to create object.")
 			return err
 		}
+
+		// Update the generation cache so that we don't try to update the object on subsequent reconciliations.
+		c.generationCache[c.cacheKey(obj)] = obj.GetGeneration()
 		return nil
 	}
 
@@ -212,7 +301,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 
 			// Do the Create() with the merged object so that we preserve external labels/annotations.
 			resetMetadataForCreate(mobj)
-			if err := c.client.Create(ctx, mobj); err != nil {
+			if err := c.create(ctx, mobj); err != nil {
 				logCtx.WithValues("key", key).Error(err, "Failed to create Job.")
 				return err
 			}
@@ -231,7 +320,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 
 				// Do the Create() with the merged object so that we preserve external labels/annotations.
 				resetMetadataForCreate(mobj)
-				if err := c.client.Create(ctx, mobj); err != nil {
+				if err := c.create(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to create Secret.")
 					return err
 				}
@@ -251,7 +340,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 
 				// Do the Create() with the merged object so that we preserve external labels/annotations.
 				resetMetadataForCreate(mobj)
-				if err := c.client.Create(ctx, mobj); err != nil {
+				if err := c.create(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to recreate service.", "obj", obj)
 					return err
 				}
@@ -269,7 +358,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 
 				// Do the Create() with the merged object so that we preserve external labels/annotations.
 				resetMetadataForCreate(mobj)
-				if err = c.client.Create(ctx, mobj); err != nil {
+				if err = c.create(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to recreate RoleBinding")
 					return err
 				}
@@ -287,14 +376,14 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 
 				// Do the Create() with the merged object so that we preserve external labels/annotations.
 				resetMetadataForCreate(mobj)
-				if err = c.client.Create(ctx, mobj); err != nil {
+				if err = c.create(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to recreate ClusterRoleBinding")
 					return err
 				}
 				return nil
 			}
 		}
-		if err := c.client.Update(ctx, mobj); err != nil {
+		if err := c.update(ctx, mobj); err != nil {
 			logCtx.WithValues("key", key).Info("Failed to update object.")
 			return err
 		}

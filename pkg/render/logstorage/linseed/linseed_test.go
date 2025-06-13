@@ -76,7 +76,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			{render.LinseedServiceName, render.ElasticsearchNamespace, &corev1.Service{}, nil},
 			{ClusterRoleName, "", &rbacv1.ClusterRole{}, nil},
 			{ClusterRoleName, "", &rbacv1.ClusterRoleBinding{}, nil},
-			{ManagedClustersWatchRoleBindingName, render.ElasticsearchNamespace, &rbacv1.RoleBinding{}, nil},
+			{ManagedClustersWatchRoleBindingName, "", &rbacv1.ClusterRoleBinding{}, nil},
 			{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
 			{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
 		}
@@ -554,6 +554,21 @@ var _ = Describe("Linseed rendering tests", func() {
 			}))
 		})
 
+		It("should render managed cluster permissions as part of tigera-linseed-managed-clusters-watch ClusterRole", func() {
+			component := Linseed(cfg)
+			Expect(component).NotTo(BeNil())
+			resources, _ := component.Objects()
+			roleBinding := rtest.GetResource(resources, ManagedClustersWatchRoleBindingName, tenant.Namespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+			Expect(roleBinding.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
+			Expect(roleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      ServiceAccountName,
+					Namespace: tenant.Namespace,
+				},
+			}))
+		})
+
 		It("should render multi-tenant environment variables", func() {
 			cfg.ManagementCluster = true
 			component := Linseed(cfg)
@@ -897,7 +912,7 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 			Namespace: render.ElasticsearchNamespace,
 		},
 	}))
-	roleBinding := rtest.GetResource(resources, ManagedClustersWatchRoleBindingName, render.ElasticsearchNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+	roleBinding := rtest.GetResource(resources, ManagedClustersWatchRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 	Expect(roleBinding.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
 	Expect(roleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 		{

@@ -726,8 +726,14 @@ func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.Clust
 
 func (c *kubeControllersComponent) managedClusterRoleBindings() []client.Object {
 	if c.cfg.ManagementCluster != nil {
-		return []client.Object{
-			rcomp.RoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, c.cfg.Namespace),
+		if c.cfg.Tenant.MultiTenant() {
+			return []client.Object{
+				rcomp.RoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, c.cfg.Namespace),
+			}
+		} else {
+			return []client.Object{
+				rcomp.ClusterRoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, []string{c.cfg.Namespace}),
+			}
 		}
 	}
 	return []client.Object{}

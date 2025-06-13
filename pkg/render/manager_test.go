@@ -84,9 +84,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchClusterRoleBindingName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
@@ -408,7 +408,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Verbs: []string{"dismiss", "delete"},
 			},
 		}))
-		roleBindingWatchManagedClusters := rtest.GetResource(resources, render.ManagerManagedClustersWatchClusterRoleBindingName, render.ManagerNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		roleBindingWatchManagedClusters := rtest.GetResource(resources, render.ManagerManagedClustersWatchRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(roleBindingWatchManagedClusters.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
 		Expect(roleBindingWatchManagedClusters.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
@@ -417,14 +417,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Namespace: render.ManagerNamespace,
 			},
 		}))
-		roleUpdateManagedClusters := rtest.GetResource(resources, render.ManagerManagedClustersUpdateRBACName, render.ManagerNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		roleUpdateManagedClusters := rtest.GetResource(resources, render.ManagerManagedClustersUpdateRBACName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(roleUpdateManagedClusters.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"update"},
 			}}))
-		roleBindingUpdateManagedClusters := rtest.GetResource(resources, render.ManagerManagedClustersUpdateRBACName, render.ManagerNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		roleBindingUpdateManagedClusters := rtest.GetResource(resources, render.ManagerManagedClustersUpdateRBACName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(roleBindingUpdateManagedClusters.RoleRef.Name).To(Equal(render.ManagerManagedClustersUpdateRBACName))
 		Expect(roleBindingWatchManagedClusters.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
@@ -532,9 +532,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchClusterRoleBindingName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
@@ -808,9 +808,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchClusterRoleBindingName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
@@ -1091,7 +1091,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchClusterRoleBindingName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchRoleBindingName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerMultiTenantManagedClustersAccessClusterRoleBindingName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -1124,7 +1124,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchClusterRoleBindingName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchRoleBindingName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerMultiTenantManagedClustersAccessClusterRoleBindingName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},

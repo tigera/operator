@@ -239,7 +239,11 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 }
 
 func (pr *policyRecommendationComponent) managedClustersWatchRoleBinding() client.Object {
-	return rcomponents.RoleBinding(PolicyRecommendationManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, PolicyRecommendationName, pr.cfg.Namespace)
+	if pr.cfg.Tenant.MultiTenant() {
+		return rcomponents.RoleBinding(PolicyRecommendationManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, PolicyRecommendationName, pr.cfg.Namespace)
+	}
+
+	return rcomponents.ClusterRoleBinding(PolicyRecommendationManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, PolicyRecommendationName, []string{pr.cfg.Namespace})
 }
 
 func (pr *policyRecommendationComponent) multiTenantManagedClustersAccess() []client.Object {

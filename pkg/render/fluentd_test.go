@@ -382,8 +382,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(linseedRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      render.LinseedServiceName,
-				Namespace: render.ElasticsearchNamespace,
+				Name:      render.GuardianServiceAccountName,
+				Namespace: render.GuardianNamespace,
 			},
 		}))
 
@@ -493,8 +493,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Expect(linseedRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      render.LinseedServiceName,
-				Namespace: render.ElasticsearchNamespace,
+				Name:      render.GuardianServiceAccountName,
+				Namespace: render.GuardianNamespace,
 			},
 		}))
 

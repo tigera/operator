@@ -993,19 +993,19 @@ func deprecatedObjects() []client.Object {
 		// Remove manager namespace objects since the guardian identity is responsible for handling manager requests
 		&corev1.ServiceAccount{
 			TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: ManagerServiceAccount, Namespace: ManagerNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"},
 		},
 		&corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: ManagerNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"},
 		},
 		&rbacv1.ClusterRole{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-role"},
 		},
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRoleBinding},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"},
 		},
 	}
 }

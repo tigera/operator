@@ -1394,7 +1394,7 @@ func additionalStoreSpecForDestinationAndScope(destination render.ForwardingDest
 			Region:     "anyplace",
 			BucketName: "thebucket",
 			BucketPath: "bucketpath",
-			HostScope:  scope,
+			HostScope:  &scope,
 		}
 	case render.ForwardingDestinationSyslog:
 		var ps int32 = 180
@@ -1406,12 +1406,12 @@ func additionalStoreSpecForDestinationAndScope(destination render.ForwardingDest
 				operatorv1.SyslogLogFlows,
 				operatorv1.SyslogLogIDSEvents,
 			},
-			HostScope: scope,
+			HostScope: &scope,
 		}
 	case render.ForwardingDestinationSplunk:
 		spec.Splunk = &operatorv1.SplunkStoreSpec{
 			Endpoint:  "https://1.2.3.4:8088",
-			HostScope: scope,
+			HostScope: &scope,
 		}
 	}
 

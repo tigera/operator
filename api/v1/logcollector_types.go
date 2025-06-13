@@ -111,7 +111,7 @@ type S3StoreSpec struct {
 
 	// The set of hosts that will forward their logs to this store.
 	// +optional
-	HostScope HostScope `json:"hostScope"`
+	HostScope *HostScope `json:"hostScope,omitempty"`
 }
 
 // SyslogLogType represents the allowable log types for syslog.
@@ -174,7 +174,7 @@ type SyslogStoreSpec struct {
 
 	// The set of hosts that will forward their logs to this store.
 	// +optional
-	HostScope HostScope `json:"hostScope"`
+	HostScope *HostScope `json:"hostScope,omitempty"`
 }
 
 // SplunkStoreSpec defines configuration for exporting logs to splunk.
@@ -184,7 +184,7 @@ type SplunkStoreSpec struct {
 
 	// The set of hosts that will forward their logs to this store
 	// +optional
-	HostScope HostScope `json:"hostScope"`
+	HostScope *HostScope `json:"hostScope,omitempty"`
 }
 
 // EksConfigSpec defines configuration for fetching EKS audit logs.

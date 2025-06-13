@@ -1333,13 +1333,13 @@ func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
 	}
 }
 
-func envVarsForHostScope(hostScope operatorv1.HostScope, destination ForwardingDestination) []corev1.EnvVar {
+func envVarsForHostScope(hostScope *operatorv1.HostScope, destination ForwardingDestination) []corev1.EnvVar {
 	var forwardClusterLogs, forwardNonClusterLogs bool
-	if hostScope == operatorv1.HostScopeNonClusterOnly {
-		forwardClusterLogs = false
+	if hostScope == nil || *hostScope != operatorv1.HostScopeNonClusterOnly {
+		forwardClusterLogs = true
 		forwardNonClusterLogs = true
 	} else {
-		forwardClusterLogs = true
+		forwardClusterLogs = false
 		forwardNonClusterLogs = true
 	}
 

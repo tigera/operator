@@ -60,6 +60,7 @@ type resourceTestObj struct {
 }
 
 var _ = Describe("Linseed rendering tests", func() {
+	const TestPullSecretName = "tigera-pull-secret"
 	Context("single-tenant rendering", func() {
 		var installation *operatorv1.InstallationSpec
 		var replicas int32
@@ -78,6 +79,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			{ClusterRoleName, "", &rbacv1.ClusterRoleBinding{}, nil},
 			{ManagedClustersWatchRoleBindingName, "", &rbacv1.ClusterRoleBinding{}, nil},
 			{ServiceAccountName, render.ElasticsearchNamespace, &corev1.ServiceAccount{}, nil},
+			{TestPullSecretName, render.ElasticsearchNamespace, &corev1.Secret{}, nil},
 			{DeploymentName, render.ElasticsearchNamespace, &appsv1.Deployment{}, nil},
 		}
 
@@ -107,7 +109,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			cfg = &Config{
 				Installation: installation,
 				PullSecrets: []*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+					{ObjectMeta: metav1.ObjectMeta{Name: TestPullSecretName}},
 				},
 				KeyPair:                        kp,
 				TokenKeyPair:                   tokenKP,
@@ -233,7 +235,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			cfg = &Config{
 				Installation: installation,
 				PullSecrets: []*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+					{ObjectMeta: metav1.ObjectMeta{Name: TestPullSecretName}},
 				},
 				KeyPair:         kp,
 				TokenKeyPair:    tokenKP,
@@ -496,7 +498,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			cfg = &Config{
 				Installation: installation,
 				PullSecrets: []*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+					{ObjectMeta: metav1.ObjectMeta{Name: TestPullSecretName}},
 				},
 				KeyPair:         kp,
 				TokenKeyPair:    tokenKP,
@@ -729,7 +731,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			cfg = &Config{
 				Installation: installation,
 				PullSecrets: []*corev1.Secret{
-					{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
+					{ObjectMeta: metav1.ObjectMeta{Name: TestPullSecretName}},
 				},
 				KeyPair:         kp,
 				TokenKeyPair:    tokenKP,

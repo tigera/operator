@@ -382,8 +382,8 @@ func (c *fluentdComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tigera-linseed",
-				Namespace: ElasticsearchNamespace,
+				Name:      GuardianServiceAccountName,
+				Namespace: GuardianNamespace,
 			},
 		},
 	}

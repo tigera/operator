@@ -78,7 +78,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 
 		go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
-			{Name: render.APIServerPolicyName, Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)},
+			{Name: render.APIServerPolicyName, Namespace: render.APIServerNamespace},
 		})
 	}
 
@@ -139,7 +139,7 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 		}
 
-		for _, namespace := range []string{common.OperatorNamespace(), rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)} {
+		for _, namespace := range []string{common.OperatorNamespace(), render.APIServerNamespace} {
 			for _, secretName := range []string{render.VoltronTunnelSecretName, render.ManagerTLSSecretName} {
 				if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
 					return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
@@ -156,10 +156,10 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	}
 
 	// Watch for the namespace(s) managed by this controller.
-	if err = c.WatchObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: rmeta.APIServerNamespace(operatorv1.Calico)}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerNamespace}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
 	}
-	if err = c.WatchObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise)}}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerNamespace}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
 	}
 
@@ -261,7 +261,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	ns := rmeta.APIServerNamespace(installationSpec.Variant)
 
 	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
@@ -277,7 +276,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	certificateManager.AddToStatusManager(r.status, ns)
+	certificateManager.AddToStatusManager(r.status, render.APIServerNamespace)
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installationSpec, r.client)
 	if err != nil {

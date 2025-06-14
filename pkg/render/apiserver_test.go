@@ -84,7 +84,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Variant:              operatorv1.TigeraSecureEnterprise,
 		}
 		apiserver = &operatorv1.APIServerSpec{}
-		dnsNames = dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
+		dnsNames = dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), APIServerNamespace, clusterDomain)
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 
@@ -146,7 +146,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
 
-		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
+		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), APIServerNamespace, clusterDomain)
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
 		cfg.TLSKeyPair = kp
@@ -1192,7 +1192,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create and add the TLS keypair so the initContainer is rendered.
-			dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
+			dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), APIServerNamespace, clusterDomain)
 			kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 			cfg.TLSKeyPair = kp
@@ -1791,7 +1791,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		var err error
 		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
-		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
+		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), APIServerNamespace, clusterDomain)
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
 		replicas = 2
@@ -1826,7 +1826,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			&netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"}},
 		}
 
-		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
+		dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), APIServerNamespace, clusterDomain)
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 		Expect(err).NotTo(HaveOccurred())
 		cfg.TLSKeyPair = kp
@@ -2219,7 +2219,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create and add the TLS keypair so the initContainer is rendered.
-			dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), rmeta.APIServerNamespace(instance.Variant), clusterDomain)
+			dnsNames := dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(instance.Variant), APIServerNamespace, clusterDomain)
 			kp, err := certificateManager.GetOrCreateKeyPair(cli, render.ProjectCalicoAPIServerTLSSecretName(instance.Variant), common.OperatorNamespace(), dnsNames)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 			cfg.TLSKeyPair = kp

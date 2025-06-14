@@ -52,7 +52,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/authentication"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -270,7 +269,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// We need separate certificates for OSS vs Enterprise.
 	secretName := render.ProjectCalicoAPIServerTLSSecretName(installationSpec.Variant)
-	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(installationSpec.Variant), rmeta.APIServerNamespace(installationSpec.Variant), r.clusterDomain))
+	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(installationSpec.Variant), render.APIServerNamespace, r.clusterDomain))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create tls key pair", err, reqLogger)
 		return reconcile.Result{}, err
@@ -459,7 +458,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	components = append(components,
 		component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       rmeta.APIServerNamespace(installationSpec.Variant),
+			Namespace:       render.APIServerNamespace,
 			ServiceAccounts: []string{render.APIServerServiceAccountName(installationSpec.Variant)},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
@@ -514,11 +513,7 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 // prior to the CNI plugin being removed.
 func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver client.Object) error {
 	// These objects require graceful termination before the CNI plugin is torn down.
-	_, spec, err := utils.GetInstallation(context.Background(), r.client)
-	if err != nil {
-		return err
-	}
-	apiServerNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: rmeta.APIServerNamespace(spec.Variant)}}
+	apiServerNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, apiserver, render.APIServerFinalizer, apiServerNamespace)
 }
 

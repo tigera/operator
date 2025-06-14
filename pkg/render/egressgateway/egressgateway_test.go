@@ -153,6 +153,8 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		}
 
 		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Replicas).NotTo(BeNil())
+		Expect(*dep.Spec.Replicas).To(BeNumerically("==", 2))
 		Expect(len(dep.Spec.Template.Spec.Containers)).To(Equal(1))
 		Expect(len(dep.Spec.Template.Spec.InitContainers)).To(Equal(1))
 		Expect(len(dep.Spec.Template.Spec.Volumes)).To(Equal(1))

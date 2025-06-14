@@ -290,8 +290,7 @@ func getTigeraStatus(client client.Client, name string) (*operator.TigeraStatus,
 	return ts, err
 }
 
-func assertAvailable(ts *operator.TigeraStatus) error {
-	var available, degraded, progressing bool
+func readStatus(ts *operator.TigeraStatus) (available, degraded, progressing bool) {
 	for _, condition := range ts.Status.Conditions {
 		if condition.Type == operator.ComponentAvailable {
 			available = condition.Status == operator.ConditionTrue
@@ -301,6 +300,11 @@ func assertAvailable(ts *operator.TigeraStatus) error {
 			progressing = condition.Status == operator.ConditionTrue
 		}
 	}
+	return
+}
+
+func assertAvailable(ts *operator.TigeraStatus) error {
+	available, degraded, progressing := readStatus(ts)
 
 	if progressing {
 		return fmt.Errorf("TigeraStatus is still progressing")
@@ -312,12 +316,25 @@ func assertAvailable(ts *operator.TigeraStatus) error {
 	return nil
 }
 
+func assertDegraded(ts *operator.TigeraStatus) error {
+	available, degraded, progressing := readStatus(ts)
+
+	if progressing {
+		return fmt.Errorf("TigeraStatus is still progressing")
+	} else if !degraded {
+		return fmt.Errorf("TigeraStatus is not degraded")
+	} else if available {
+		return fmt.Errorf("TigeraStatus is available")
+	}
+	return nil
+}
+
 func newNonCachingClient(config *rest.Config, options client.Options) (client.Client, error) {
 	options.Cache = nil
 	return client.New(config, options)
 }
 
-func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
+func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, *kubernetes.Clientset, manager.Manager) {
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
@@ -351,10 +368,15 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 	err = apiextensionsv1.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 
-	ctx, cancel := context.WithCancel(context.TODO())
+	return mgr.GetClient(), clientset, mgr
+}
+
+func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
+	client, clientset, mgr := setupManagerNoControllers(manageCRDs, multiTenant, enterpriseCRDsExist)
 
 	// Setup all Controllers
-	err = controller.AddToManager(mgr, options.AddOptions{
+	ctx, cancel := context.WithCancel(context.TODO())
+	err := controller.AddToManager(mgr, options.AddOptions{
 		DetectedProvider:    operator.ProviderNone,
 		EnterpriseCRDExists: enterpriseCRDsExist,
 		ManageCRDs:          manageCRDs,
@@ -363,7 +385,8 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 		MultiTenant:         multiTenant,
 	})
 	Expect(err).NotTo(HaveOccurred())
-	return mgr.GetClient(), ctx, cancel, mgr
+
+	return client, ctx, cancel, mgr
 }
 
 func createAPIServer(c client.Client, mgr manager.Manager, ctx context.Context, spec *operator.APIServerSpec) {

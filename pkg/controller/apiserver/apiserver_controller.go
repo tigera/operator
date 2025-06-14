@@ -439,7 +439,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		MultiTenant:                 r.multiTenant,
 		KeyValidatorConfig:          keyValidatorConfig,
 		KubernetesVersion:           r.kubernetesVersion,
-		CanCleanupOlderResources:    r.canCleanupLegacyNamespace(ctx, reqLogger),
+		CanCleanupOlderResources:    r.canCleanupLegacyNamespace(ctx, installationSpec.Variant, reqLogger),
 	}
 
 	var components []render.Component
@@ -529,12 +529,16 @@ func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver cl
 // - The new API server deployment in "calico-system" exists and is available.
 // - The old API server deployment in "tigera-system" is either removed or inactive.
 // - Both the APIServer custom resource and the TigeraStatus for 'apiserver' are in the Ready state
-func (r *ReconcileAPIServer) canCleanupLegacyNamespace(ctx context.Context, logger logr.Logger) bool {
-	const (
-		newNamespace   = "calico-system"
-		oldNamespace   = "tigera-system"
-		deploymentName = "tigera-apiserver"
-	)
+func (r *ReconcileAPIServer) canCleanupLegacyNamespace(ctx context.Context, variant operatorv1.ProductVariant, logger logr.Logger) bool {
+
+	newNamespace := "calico-system"
+	oldNamespace := "tigera-system"
+	deploymentName := "tigera-apiserver"
+
+	if variant == operatorv1.Calico {
+		oldNamespace = "calico-apiserver"
+		deploymentName = "calico-apiserver"
+	}
 
 	// Fetch the new API server deployment in calico-system
 	newDeploy := &appsv1.Deployment{}

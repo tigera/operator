@@ -321,29 +321,13 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}})
 	}
 
-	podSecurityNamespaceLabel := PodSecurityStandard(PSSRestricted)
-	if c.hostNetwork() {
-		podSecurityNamespaceLabel = PSSPrivileged
-	}
-	// Global OSS-only objects.
-	globalCalicoObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider, podSecurityNamespaceLabel, c.cfg.Installation.Azure),
-		CreateOperatorSecretsRoleBinding(rmeta.APIServerNamespace(operatorv1.Calico)),
-	}
-
 	// Compile the final arrays based on the variant.
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Create any enterprise specific objects.
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
 		namespacedObjects = append(namespacedObjects, namespacedEnterpriseObjects...)
 
-		// Explicitly delete any global OSS objects.
-		// Namespaced objects will be handled by namespace deletion.
-		objsToDelete = append(objsToDelete, globalCalicoObjects...)
 	} else {
-		// Create any Calico-only objects
-		globalObjects = append(globalObjects, globalCalicoObjects...)
-
 		// Add in a NetworkPolicy.
 		namespacedObjects = append(namespacedObjects, c.networkPolicy())
 
@@ -2344,16 +2328,25 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 				Name: "tigera-tier-getter",
 			},
 		})
+	}
 
-		// Delete the older namespace for enterprise
-		if c.cfg.CanCleanupOlderResources {
-			renamedRscList = append(renamedRscList, &corev1.Namespace{
-				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tigera-system",
-				},
-			})
-		}
+	// Delete the older namespace for OSS and EE.
+	// this is to support older version OSS update to newer EE and vice versa.
+	// CanCleanupOlderResources ensure the newdeployment is up and running in calico-system in both variant.
+	if c.cfg.CanCleanupOlderResources {
+		renamedRscList = append(renamedRscList, &corev1.Namespace{
+			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "calico-apiserver",
+			},
+		})
+
+		renamedRscList = append(renamedRscList, &corev1.Namespace{
+			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "tigera-system",
+			},
+		})
 	}
 
 	return renamedRscList

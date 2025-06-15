@@ -20,7 +20,6 @@ import (
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -109,14 +108,6 @@ func SecretsAnnotationHash(secrets ...*corev1.Secret) string {
 	}
 
 	return AnnotationHash(annoteArr)
-}
-
-// APIServerNamespace returns the namespace to use for the API server component.
-func APIServerNamespace(v operatorv1.ProductVariant) string {
-	if v == operatorv1.Calico {
-		return "calico-apiserver"
-	}
-	return "calico-system"
 }
 
 // APIServerDeploymentName returns the deployment to use for the API server component.

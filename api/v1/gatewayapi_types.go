@@ -312,6 +312,7 @@ type GatewayCertgenJobContainer struct {
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
+// +kubebuilder:validation:Enum=Deployment;DaemonSet
 type GatewayKind string
 
 const (

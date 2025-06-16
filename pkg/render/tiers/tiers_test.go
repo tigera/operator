@@ -19,10 +19,8 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
@@ -82,7 +80,6 @@ var _ = Describe("Tiers rendering tests", func() {
 				render.PacketCaptureNamespace,
 				render.PolicyRecommendationNamespace,
 				common.TigeraPrometheusNamespace,
-				rmeta.APIServerNamespace(v1.TigeraSecureEnterprise),
 				"tigera-skraper",
 			},
 		}

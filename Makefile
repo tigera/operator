@@ -683,7 +683,7 @@ endif
 	$(info CALICO_ENTERPRISE_VERSION = $(CALICO_ENTERPRISE_VERSION) (source: $(origin CALICO_ENTERPRISE_VERSION))) 
 	$(info )
 	$(if $(filter-out file, $(origin CALICO_VERSION) $(origin CALICO_ENTERPRISE_VERSION)),,$(error Neither CALICO_VERSION nor CALICO_ENTERPRISE_VERSION were set, please set one or the other (or both) to a new version.))
-	$(if $(if $(GIT_PR_BRANCH_OVERRIDE),true,$(findstring release-v,$(GIT_PR_BRANCH_BASE))),,$(error Variable GIT_PR_BRANCH_BASE is not set to the name of a release branch. If you're certain you want to use this branch, set GIT_PR_BRANCH_OVERRIDE=true))
+	$(if $(if $(GIT_PR_BRANCH_OVERRIDE),true,$(findstring release-v,$(GIT_PR_BRANCH_BASE))),,$(error Variable GIT_PR_BRANCH_BASE is not set to the name of a release branch. You should only be running `release-prep` on a release branch! If you're certain you want to use this branch, set GIT_PR_BRANCH_OVERRIDE=true))
 ifndef CONFIRM
 	$(info If this is correct, add CONFIRM=true to the command line to continue)
 	$(info )

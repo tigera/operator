@@ -673,6 +673,9 @@ release-prep-prereqs:
 ifndef VERSION
 	$(error VERSION is undefined - specify VERSION=vX.Y.Z or set AUTO_VERSION to automatically use the detected version $(AUTO_VERSION_VERSION))
 endif
+ifndef GITHUB_TOKEN
+	$(error GITHUB_TOKEN is undefined - A github token is required to create a pull request and set labels. Please set GITHUB_TOKEN to a valid token with repo permissions.)
+endif
 	$(info Preparing for release of $(VERSION) with the following variables:)
 	$(info )
 	$(info GIT_PR_BRANCH_BASE        = $(GIT_PR_BRANCH_BASE))

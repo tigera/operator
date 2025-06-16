@@ -667,7 +667,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(defaultName string
 	} else {
 		rcomp.ApplyEnvoyProxyOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayDeployment)
 	}
-	ApplyEnvoyProxyServiceOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayService)
+	applyEnvoyProxyServiceOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayService)
 
 	if classSpec != nil {
 		// Apply class-specific overrides.
@@ -676,7 +676,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(defaultName string
 		} else {
 			rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classSpec.GatewayDeployment)
 		}
-		ApplyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
+		applyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
 	}
 
 	return envoyProxy
@@ -711,9 +711,9 @@ func (pr *gatewayAPIImplementationComponent) GetConfig() *GatewayAPIImplementati
 	return pr.cfg
 }
 
-// ApplyEnvoyProxyServiceOverrides applies the overrides to the given EnvoyProxy.
+// applyEnvoyProxyServiceOverrides applies the overrides to the given EnvoyProxy.
 // Note: overrides must not be nil pointer.
-func ApplyEnvoyProxyServiceOverrides(ep *envoyapi.EnvoyProxy, overrides *operatorv1.GatewayService) {
+func applyEnvoyProxyServiceOverrides(ep *envoyapi.EnvoyProxy, overrides *operatorv1.GatewayService) {
 	if overrides != nil {
 		if ep.Spec.Provider.Kubernetes.EnvoyService == nil {
 			ep.Spec.Provider.Kubernetes.EnvoyService = &envoyapi.KubernetesServiceSpec{}

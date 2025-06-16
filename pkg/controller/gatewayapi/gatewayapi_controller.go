@@ -17,7 +17,6 @@ package gatewayapi
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -176,19 +175,6 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	if variant == "" {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", nil, reqLogger)
 		return reconcile.Result{}, nil
-	}
-
-	if variant == operatorv1.Calico {
-		if unsupportedFields := checkEnterpriseOnlyFields(gatewayAPI); len(unsupportedFields) > 0 {
-			err = fmt.Errorf("unsupported fields are %v", strings.Join(unsupportedFields, ","))
-			r.status.SetDegraded(
-				operatorv1.InvalidConfigurationError,
-				"GatewayAPI is using fields that are only supported in Calico Enterprise",
-				err,
-				reqLogger,
-			)
-			return reconcile.Result{}, err
-		}
 	}
 
 	// Render CRDs.  Note, we do this as early as possible so as to enable the following
@@ -398,40 +384,4 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 		}
 	}
 	return resource, "", nil
-}
-
-func checkEnterpriseOnlyFields(gatewayAPI *operatorv1.GatewayAPI) (unsupportedFields []string) {
-	noteField := func(field string) {
-		unsupportedFields = append(unsupportedFields, field)
-	}
-	if gatewayAPI.Spec.EnvoyGatewayConfigRef != nil {
-		noteField("EnvoyGatewayConfigRef")
-	}
-	if gatewayAPI.Spec.GatewayClasses != nil {
-		noteField("GatewayClasses")
-	}
-	if gatewayAPI.Spec.GatewayDaemonSet != nil {
-		noteField("GatewayDaemonSet")
-	}
-	if gatewayAPI.Spec.GatewayService != nil {
-		noteField("GatewayService")
-	}
-	if gatewayAPI.Spec.GatewayControllerDeployment != nil &&
-		gatewayAPI.Spec.GatewayControllerDeployment.Spec != nil {
-		if gatewayAPI.Spec.GatewayControllerDeployment.Spec.Replicas != nil {
-			noteField("GatewayControllerDeployment.Spec.Replicas")
-		}
-		if gatewayAPI.Spec.GatewayControllerDeployment.Spec.Template != nil &&
-			gatewayAPI.Spec.GatewayControllerDeployment.Spec.Template.Spec != nil &&
-			gatewayAPI.Spec.GatewayControllerDeployment.Spec.Template.Spec.TopologySpreadConstraints != nil {
-			noteField("GatewayControllerDeployment.Spec.Template.Spec.TopologySpreadConstraints")
-		}
-	}
-	if gatewayAPI.Spec.GatewayDeployment != nil &&
-		gatewayAPI.Spec.GatewayDeployment.Spec != nil {
-		if gatewayAPI.Spec.GatewayDeployment.Spec.Replicas != nil {
-			noteField("GatewayDeployment.Spec.Replicas")
-		}
-	}
-	return
 }

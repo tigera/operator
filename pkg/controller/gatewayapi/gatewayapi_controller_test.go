@@ -171,46 +171,6 @@ var _ = Describe("Gateway API controller tests", func() {
 		)
 	})
 
-	It("does not support Enterprise-only fields when the variant is OSS Calico", func() {
-		installation.Spec.Variant = operatorv1.Calico
-		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
-
-		// Read it back again.
-		err := c.Get(ctx, utils.DefaultInstanceKey, installation)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Update the status to set variant to Enterprise.
-		installation.Status.Variant = operatorv1.Calico
-		err = c.Status().Update(ctx, installation)
-		Expect(err).NotTo(HaveOccurred())
-
-		By("applying the GatewayAPI CR to the fake cluster")
-		gwapi := &operatorv1.GatewayAPI{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-			Spec: operatorv1.GatewayAPISpec{
-				GatewayService: &operatorv1.GatewayService{
-					Metadata: &operatorv1.Metadata{
-						Annotations: map[string]string{
-							"service.beta.kubernetes.io/aws-load-balancer-type": "external",
-						},
-					},
-				},
-			},
-		}
-		Expect(c.Create(ctx, gwapi)).NotTo(HaveOccurred())
-
-		By("triggering a reconcile")
-		mockStatus.On(
-			"SetDegraded",
-			operatorv1.InvalidConfigurationError,
-			"GatewayAPI is using fields that are only supported in Calico Enterprise",
-			"unsupported fields are GatewayService",
-			mock.Anything,
-		).Return()
-		_, err = r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).Should(HaveOccurred())
-	})
-
 	It("handles a custom EnvoyGateway", func() {
 		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 

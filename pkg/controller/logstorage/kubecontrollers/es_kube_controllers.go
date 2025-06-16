@@ -357,6 +357,12 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	setup := render.NewSetup(&render.SetUpConfiguration{
+		Namespace:       helper.InstallNamespace(),
+		PullSecrets:     pullSecrets,
+		CreateNamespace: false,
+	})
+
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,
@@ -388,9 +394,21 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if err := hdler.CreateOrUpdateOrDelete(ctx, esKubeControllerComponents, nil); err != nil {
+	setupHandler := hdler
+	if tenant.MultiTenant() {
+		// In standard installs, the LogStorage CR owns all the objects. For multi-tenant, pull secrets are owned by the Tenant instance.
+		setupHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant)
+	}
+	if err := setupHandler.CreateOrUpdateOrDelete(ctx, setup, nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating  elasticsearch kube-controllers resource", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	for _, component := range []render.Component{esKubeControllerComponents} {
+		if err := hdler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating  elasticsearch kube-controllers resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	r.status.ReadyToMonitor()

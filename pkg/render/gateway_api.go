@@ -23,6 +23,7 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -33,6 +34,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/set"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
@@ -326,9 +328,12 @@ func GatewayAPICRDs(log logr.Logger) []client.Object {
 }
 
 type GatewayAPIImplementationConfig struct {
-	Installation *operatorv1.InstallationSpec
-	GatewayAPI   *operatorv1.GatewayAPI
-	PullSecrets  []*corev1.Secret
+	Installation          *operatorv1.InstallationSpec
+	GatewayAPI            *operatorv1.GatewayAPI
+	PullSecrets           []*corev1.Secret
+	CustomEnvoyGateway    *envoyapi.EnvoyGateway
+	CustomEnvoyProxies    map[string]*envoyapi.EnvoyProxy
+	CurrentGatewayClasses map[string]string // Map from GatewayClass name to EnvoyProxy name.
 }
 
 type gatewayAPIImplementationComponent struct {
@@ -427,27 +432,55 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		objs = append(objs, resource.DeepCopyObject().(client.Object))
 	}
 
-	// Add EnvoyProxy config that will apply our image configuration, pull secrets and overrides
-	// to gateway deployments.
-	proxyConfig := pr.envoyProxyConfig()
-	objs = append(objs, proxyConfig)
-
-	// Substitute possibly modified image names into the envoy-gateway-config.
+	// Prepare EnvoyGateway, either from upstream or from a custom EnvoyGatewayConfigRef
+	// provided by the user.
 	envoyGatewayConfig := resources.envoyGatewayConfig.DeepCopyObject().(*envoyapi.EnvoyGateway)
-	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container.Image = &pr.envoyRatelimitImage
-	envoyGatewayConfig.Provider.Kubernetes.ShutdownManager.Image = &pr.envoyGatewayImage
+	if pr.cfg.CustomEnvoyGateway != nil {
+		// In this case we don't need to worry about modification because the next Reconcile
+		// will read the custom resource again from scratch.
+		envoyGatewayConfig = pr.cfg.CustomEnvoyGateway
+	}
 
-	// Add pull secrets into the envoy-gateway-config.  (Note that these are at the pod level
-	// and so cover both the "ShutdownManager" and "RateLimit" images.)
+	// Ensure the minimal structure that we require for the following customizations.
+	if envoyGatewayConfig.Provider == nil {
+		envoyGatewayConfig.Provider = &envoyapi.EnvoyGatewayProvider{}
+	}
+	envoyGatewayConfig.Provider.Type = envoyapi.ProviderTypeKubernetes
+	if envoyGatewayConfig.Provider.Kubernetes == nil {
+		envoyGatewayConfig.Provider.Kubernetes = &envoyapi.EnvoyGatewayKubernetesProvider{}
+	}
+	if envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment == nil {
+		envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment = &envoyapi.KubernetesDeploymentSpec{}
+	}
 	if envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod == nil {
 		envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod = &envoyapi.KubernetesPodSpec{}
 	}
+	if envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container == nil {
+		envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container = &envoyapi.KubernetesContainerSpec{}
+	}
+	if envoyGatewayConfig.Provider.Kubernetes.ShutdownManager == nil {
+		envoyGatewayConfig.Provider.Kubernetes.ShutdownManager = &envoyapi.ShutdownManager{}
+	}
+	if envoyGatewayConfig.ExtensionAPIs == nil {
+		envoyGatewayConfig.ExtensionAPIs = &envoyapi.ExtensionAPISettings{}
+	}
+	if envoyGatewayConfig.Gateway == nil {
+		envoyGatewayConfig.Gateway = &envoyapi.Gateway{}
+	}
+	if envoyGatewayConfig.Gateway.ControllerName == "" {
+		envoyGatewayConfig.Gateway.ControllerName = resources.envoyGatewayConfig.Gateway.ControllerName
+	}
+
+	// Substitute possibly modified image names.
+	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container.Image = &pr.envoyRatelimitImage
+	envoyGatewayConfig.Provider.Kubernetes.ShutdownManager.Image = &pr.envoyGatewayImage
+
+	// Add in pull secrets.  (Note that these are at the pod level and cover both the
+	// "ShutdownManager" and "RateLimit" images.)
 	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
 
 	// Enable backend APIs.
-	envoyGatewayConfig.ExtensionAPIs = &envoyapi.ExtensionAPISettings{
-		EnableBackend: true,
-	}
+	envoyGatewayConfig.ExtensionAPIs.EnableBackend = true
 
 	// Rebuild the ConfigMap with those changes.
 	envoyGatewayConfigMap := resources.envoyGatewayConfigMap.DeepCopyObject().(*corev1.ConfigMap)
@@ -494,47 +527,168 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	objs = append(objs, certgenJob)
 
-	// Provision a GatewayClass that references the EnvoyProxy config and the controllerName
-	// that the gateway controller expects.
-	objs = append(objs, pr.gatewayClass(envoyGatewayConfig.Gateway.ControllerName, proxyConfig))
+	currentGCNames := set.New[string]()
+	currentEPNames := set.New[string]()
 
-	return objs, nil
-}
+	// Provision the default "tigera-gateway-class" GatewayClass.
+	if len(pr.cfg.GatewayAPI.Spec.GatewayClasses) == 0 {
+		className := "tigera-gateway-class"
 
-func (pr *gatewayAPIImplementationComponent) envoyProxyConfig() *envoyapi.EnvoyProxy {
-	envoyProxy := &envoyapi.EnvoyProxy{
-		TypeMeta: metav1.TypeMeta{Kind: "EnvoyProxy", APIVersion: "gateway.envoyproxy.io/v1alpha1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "envoy-proxy-config",
-			Namespace: "tigera-gateway",
-		},
-		Spec: envoyapi.EnvoyProxySpec{
-			Provider: &envoyapi.EnvoyProxyProvider{
-				Type: envoyapi.ProviderTypeKubernetes,
-				Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
-					EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
-						Pod: &envoyapi.KubernetesPodSpec{
-							ImagePullSecrets: secret.GetReferenceList(pr.cfg.PullSecrets),
-						},
-						Container: &envoyapi.KubernetesContainerSpec{
-							Image: &pr.envoyProxyImage,
-						},
-					},
-				},
-			},
-		},
+		// The EnvoyProxy config.
+		proxyConfig := pr.envoyProxyConfig("envoy-proxy-config", nil, nil)
+		objs = append(objs, proxyConfig)
+		currentEPNames.Insert("envoy-proxy-config")
+
+		// The GatewayClass using that EnvoyProxy config.
+		objs = append(objs, pr.gatewayClass(className, envoyGatewayConfig.Gateway.ControllerName, proxyConfig))
+		currentGCNames.Insert(className)
 	}
 
-	rcomp.ApplyEnvoyProxyOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayDeployment)
+	// Provision GatewayClasses based on the specifications in the GatewayAPI CR.
+	for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
+		className := pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name
+
+		// The EnvoyProxy config.
+		proxyConfig := pr.envoyProxyConfig(className, pr.cfg.CustomEnvoyProxies[className], &(pr.cfg.GatewayAPI.Spec.GatewayClasses[i]))
+		objs = append(objs, proxyConfig)
+		currentEPNames.Insert(className)
+
+		// The GatewayClass using that EnvoyProxy config.
+		objs = append(objs, pr.gatewayClass(className, envoyGatewayConfig.Gateway.ControllerName, proxyConfig))
+		currentGCNames.Insert(className)
+	}
+
+	objsToDelete := []client.Object(nil)
+	for gcName, epName := range pr.cfg.CurrentGatewayClasses {
+		if !currentGCNames.Has(gcName) {
+			objsToDelete = append(objsToDelete, &gapi.GatewayClass{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "GatewayClass",
+					APIVersion: "gateway.networking.k8s.io/v1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name: gcName,
+				},
+			})
+		}
+		if !currentEPNames.Has(epName) {
+			objsToDelete = append(objsToDelete, &envoyapi.EnvoyProxy{
+				TypeMeta: metav1.TypeMeta{
+					Kind:       "EnvoyProxy",
+					APIVersion: "gateway.envoyproxy.io/v1alpha1",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      epName,
+					Namespace: "tigera-gateway",
+				},
+			})
+		}
+	}
+
+	return objs, objsToDelete
+}
+
+func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(defaultName string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {
+	// Ensure the minimal structure that we need for basic correctness and for the following
+	// customizations.  Note, we always create the running EnvoyProxy in our own namespace, even
+	// if it's based on a custom resource from another namespace.
+	if envoyProxy == nil {
+		envoyProxy = &envoyapi.EnvoyProxy{}
+	} else {
+		// Copy over the important fields from the custom supplied, specifically avoiding
+		// the fields that must NOT be set when first creating an object.
+		envoyProxy = &envoyapi.EnvoyProxy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        envoyProxy.Name,
+				Labels:      envoyProxy.Labels,
+				Annotations: envoyProxy.Annotations,
+			},
+			Spec: envoyProxy.Spec,
+		}
+	}
+	if envoyProxy.Kind == "" {
+		envoyProxy.Kind = "EnvoyProxy"
+	}
+	if envoyProxy.APIVersion == "" {
+		envoyProxy.APIVersion = "gateway.envoyproxy.io/v1alpha1"
+	}
+	if envoyProxy.ObjectMeta.Name == "" {
+		envoyProxy.ObjectMeta.Name = defaultName
+	}
+	envoyProxy.ObjectMeta.Namespace = "tigera-gateway"
+	if envoyProxy.Spec.Provider == nil {
+		envoyProxy.Spec.Provider = &envoyapi.EnvoyProxyProvider{}
+	}
+	envoyProxy.Spec.Provider.Type = envoyapi.ProviderTypeKubernetes
+	if envoyProxy.Spec.Provider.Kubernetes == nil {
+		envoyProxy.Spec.Provider.Kubernetes = &envoyapi.EnvoyProxyKubernetesProvider{}
+	}
+
+	// If the EnvoyProxy itself doesn't already indicate DaemonSet or Deployment, and our
+	// customization structs indicate deploying as a DaemonSet, set that up.
+	if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet == nil && envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment == nil {
+		if classSpec != nil && classSpec.GatewayKind != nil {
+			if *classSpec.GatewayKind == operatorv1.GatewayKindDaemonSet {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet = &envoyapi.KubernetesDaemonSetSpec{}
+			}
+		}
+	}
+
+	// Add EnvoyProxy config that will apply our image configuration, pull secrets and overrides
+	// to gateway deployments.
+	if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
+		// Custom EnvoyProxy indicates deployment as a DaemonSet.
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod == nil {
+			envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod = &envoyapi.KubernetesPodSpec{}
+		}
+		envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Container == nil {
+			envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Container = &envoyapi.KubernetesContainerSpec{}
+		}
+		envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Container.Image = &pr.envoyProxyImage
+	} else {
+		// Deployment as a Deployment.
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment == nil {
+			envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment = &envoyapi.KubernetesDeploymentSpec{}
+		}
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod == nil {
+			envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod = &envoyapi.KubernetesPodSpec{}
+		}
+		envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container == nil {
+			envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container = &envoyapi.KubernetesContainerSpec{}
+		}
+		envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Image = &pr.envoyProxyImage
+	}
+
+	// Apply common overrides.
+	if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
+		rcomp.ApplyEnvoyProxyOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayDaemonSet)
+	} else {
+		rcomp.ApplyEnvoyProxyOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayDeployment)
+	}
+	applyEnvoyProxyServiceOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayService)
+
+	if classSpec != nil {
+		// Apply class-specific overrides.
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
+			rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classSpec.GatewayDaemonSet)
+		} else {
+			rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classSpec.GatewayDeployment)
+		}
+		applyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
+	}
 
 	return envoyProxy
 }
 
-func (pr *gatewayAPIImplementationComponent) gatewayClass(controllerName string, proxyConfig *envoyapi.EnvoyProxy) *gapi.GatewayClass {
+func (pr *gatewayAPIImplementationComponent) gatewayClass(className, controllerName string, proxyConfig *envoyapi.EnvoyProxy) *gapi.GatewayClass {
+	// Provision a GatewayClass that references the EnvoyProxy config and the controllerName
+	// that the gateway controller expects.
 	return &gapi.GatewayClass{
 		TypeMeta: metav1.TypeMeta{Kind: "GatewayClass", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-gateway-class",
+			Name:      className,
 			Namespace: "tigera-gateway",
 		},
 		Spec: gapi.GatewayClassSpec{
@@ -546,5 +700,47 @@ func (pr *gatewayAPIImplementationComponent) gatewayClass(controllerName string,
 				Namespace: (*gapi.Namespace)(&proxyConfig.Namespace),
 			},
 		},
+	}
+}
+
+type GatewayAPIImplementationConfigInterface interface {
+	GetConfig() *GatewayAPIImplementationConfig
+}
+
+func (pr *gatewayAPIImplementationComponent) GetConfig() *GatewayAPIImplementationConfig {
+	return pr.cfg
+}
+
+// applyEnvoyProxyServiceOverrides applies the overrides to the given EnvoyProxy.
+// Note: overrides must not be nil pointer.
+func applyEnvoyProxyServiceOverrides(ep *envoyapi.EnvoyProxy, overrides *operatorv1.GatewayService) {
+	if overrides != nil {
+		if ep.Spec.Provider.Kubernetes.EnvoyService == nil {
+			ep.Spec.Provider.Kubernetes.EnvoyService = &envoyapi.KubernetesServiceSpec{}
+		}
+		if overrides.Metadata != nil {
+			if len(overrides.Metadata.Labels) > 0 {
+				ep.Spec.Provider.Kubernetes.EnvoyService.Labels = common.MapExistsOrInitialize(ep.Spec.Provider.Kubernetes.EnvoyService.Labels)
+				common.MergeMaps(overrides.Metadata.Labels, ep.Spec.Provider.Kubernetes.EnvoyService.Labels)
+			}
+			if len(overrides.Metadata.Annotations) > 0 {
+				ep.Spec.Provider.Kubernetes.EnvoyService.Annotations = common.MapExistsOrInitialize(ep.Spec.Provider.Kubernetes.EnvoyService.Annotations)
+				common.MergeMaps(overrides.Metadata.Annotations, ep.Spec.Provider.Kubernetes.EnvoyService.Annotations)
+			}
+		}
+		if overrides.Spec != nil {
+			if overrides.Spec.LoadBalancerClass != nil {
+				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerClass = overrides.Spec.LoadBalancerClass
+			}
+			if overrides.Spec.AllocateLoadBalancerNodePorts != nil {
+				ep.Spec.Provider.Kubernetes.EnvoyService.AllocateLoadBalancerNodePorts = overrides.Spec.AllocateLoadBalancerNodePorts
+			}
+			if overrides.Spec.LoadBalancerSourceRanges != nil {
+				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerSourceRanges = overrides.Spec.LoadBalancerSourceRanges
+			}
+			if overrides.Spec.LoadBalancerIP != nil {
+				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP = overrides.Spec.LoadBalancerIP
+			}
+		}
 	}
 }

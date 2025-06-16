@@ -40,6 +40,7 @@ var log = logf.Log.WithName("components")
 type replicatedPodResource struct {
 	labels             map[string]string
 	annotations        map[string]string
+	replicas           *int32
 	minReadySeconds    *int32
 	podTemplateSpec    *corev1.PodTemplateSpec
 	deploymentStrategy *appsv1.DeploymentStrategy // Deployments only
@@ -51,6 +52,14 @@ func GetMetadata(overrides any) *operator.Metadata {
 		return nil
 	}
 	return value.Interface().(*operator.Metadata)
+}
+
+func GetReplicas(overrides any) *int32 {
+	value := getField(overrides, "Spec", "Replicas")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(*int32)
 }
 
 func GetMinReadySeconds(overrides any) *int32 {
@@ -244,6 +253,12 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 		}
 	}
 
+	// If `overrides` has a Spec.Replicas field. and it's non-nil, it sets
+	// `r.replicas`.
+	if replicas := GetReplicas(overrides); replicas != nil {
+		r.replicas = replicas
+	}
+
 	// If `overrides` has a Spec.MinReadySeconds field. and it's non-nil, it sets
 	// `r.minReadySeconds`.
 	if minReadySeconds := GetMinReadySeconds(overrides); minReadySeconds != nil {
@@ -373,10 +388,11 @@ func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides any) {
 		return
 	}
 
-	// Pull out the data we'll override from the DaemonSet.
+	// Pull out the data we'll override from the Deployment.
 	r := &replicatedPodResource{
 		labels:             d.Labels,
 		annotations:        d.Annotations,
+		replicas:           d.Spec.Replicas,
 		minReadySeconds:    &d.Spec.MinReadySeconds,
 		podTemplateSpec:    &d.Spec.Template,
 		deploymentStrategy: &d.Spec.Strategy,
@@ -384,9 +400,10 @@ func ApplyDeploymentOverrides(d *appsv1.Deployment, overrides any) {
 	// Apply the overrides.
 	applyReplicatedPodResourceOverrides(r, overrides)
 
-	// Set the possibly new fields back onto the DaemonSet.
+	// Set the possibly new fields back onto the Deployment.
 	d.Labels = r.labels
 	d.Annotations = r.annotations
+	d.Spec.Replicas = r.replicas
 	d.Spec.MinReadySeconds = *r.minReadySeconds
 	d.Spec.Template = *r.podTemplateSpec
 	d.Spec.Strategy = *r.deploymentStrategy
@@ -587,33 +604,71 @@ func ApplyEnvoyProxyOverrides(ep *envoyapi.EnvoyProxy, overrides any) {
 			},
 		},
 	}
+	if ep.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
+		// EnvoyProxy indicates deployment as a DaemonSet.
+		r.podTemplateSpec.Annotations = ep.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.Annotations
+		r.podTemplateSpec.Labels = ep.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.Labels
+	} else {
+		// Deployment as a Deployment.
+		r.podTemplateSpec.Annotations = ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Annotations
+		r.podTemplateSpec.Labels = ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels
+	}
 
 	// Apply the overrides.
 	applyReplicatedPodResourceOverrides(r, overrides)
 
 	// Merge overridden fields into the EnvoyProxy.
-	if r.deploymentStrategy != nil {
-		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Strategy = r.deploymentStrategy
-	}
-	if r.podTemplateSpec.Annotations != nil {
-		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Annotations = r.podTemplateSpec.Annotations
-	}
-	if r.podTemplateSpec.Labels != nil {
-		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels = r.podTemplateSpec.Labels
-	}
-	if r.podTemplateSpec.Spec.Affinity != nil {
-		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Affinity = r.podTemplateSpec.Spec.Affinity
-	}
-	if r.podTemplateSpec.Spec.Tolerations != nil {
-		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Tolerations = r.podTemplateSpec.Spec.Tolerations
-	}
-	if r.podTemplateSpec.Spec.NodeSelector != nil {
-		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.NodeSelector = r.podTemplateSpec.Spec.NodeSelector
-	}
-	if r.podTemplateSpec.Spec.TopologySpreadConstraints != nil {
-		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.TopologySpreadConstraints = r.podTemplateSpec.Spec.TopologySpreadConstraints
-	}
-	if !reflect.DeepEqual(r.podTemplateSpec.Spec.Containers[0].Resources, corev1.ResourceRequirements{}) {
-		ep.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Resources = &r.podTemplateSpec.Spec.Containers[0].Resources
+	if ep.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
+		// EnvoyProxy indicates deployment as a DaemonSet.
+		if r.podTemplateSpec.Annotations != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.Annotations = r.podTemplateSpec.Annotations
+		}
+		if r.podTemplateSpec.Labels != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.Labels = r.podTemplateSpec.Labels
+		}
+		if r.podTemplateSpec.Spec.Affinity != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.Affinity = r.podTemplateSpec.Spec.Affinity
+		}
+		if r.podTemplateSpec.Spec.Tolerations != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.Tolerations = r.podTemplateSpec.Spec.Tolerations
+		}
+		if r.podTemplateSpec.Spec.NodeSelector != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.NodeSelector = r.podTemplateSpec.Spec.NodeSelector
+		}
+		if r.podTemplateSpec.Spec.TopologySpreadConstraints != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.TopologySpreadConstraints = r.podTemplateSpec.Spec.TopologySpreadConstraints
+		}
+		if !reflect.DeepEqual(r.podTemplateSpec.Spec.Containers[0].Resources, corev1.ResourceRequirements{}) {
+			ep.Spec.Provider.Kubernetes.EnvoyDaemonSet.Container.Resources = &r.podTemplateSpec.Spec.Containers[0].Resources
+		}
+	} else {
+		// Deployment as a Deployment.
+		if r.replicas != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDeployment.Replicas = r.replicas
+		}
+		if r.deploymentStrategy != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDeployment.Strategy = r.deploymentStrategy
+		}
+		if r.podTemplateSpec.Annotations != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Annotations = r.podTemplateSpec.Annotations
+		}
+		if r.podTemplateSpec.Labels != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels = r.podTemplateSpec.Labels
+		}
+		if r.podTemplateSpec.Spec.Affinity != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Affinity = r.podTemplateSpec.Spec.Affinity
+		}
+		if r.podTemplateSpec.Spec.Tolerations != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Tolerations = r.podTemplateSpec.Spec.Tolerations
+		}
+		if r.podTemplateSpec.Spec.NodeSelector != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.NodeSelector = r.podTemplateSpec.Spec.NodeSelector
+		}
+		if r.podTemplateSpec.Spec.TopologySpreadConstraints != nil {
+			ep.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.TopologySpreadConstraints = r.podTemplateSpec.Spec.TopologySpreadConstraints
+		}
+		if !reflect.DeepEqual(r.podTemplateSpec.Spec.Containers[0].Resources, corev1.ResourceRequirements{}) {
+			ep.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Resources = &r.podTemplateSpec.Spec.Containers[0].Resources
+		}
 	}
 }

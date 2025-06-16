@@ -667,7 +667,8 @@ check-milestone: hack/bin/gh var-require-all-VERSION-GITHUB_TOKEN
 # the release process.
 #
 # Most notably: validate that VERSION is set, and that either CALICO_VERSION or CALICO_ENTERPRISE_VERSION is set
-# by the user. Then, ensure that CONFIRM is set, or tell the user they need to set it first.
+# by the user; next, ensure that GIT_PR_BRANCH_BASE is set to a release branch (or is overridden); finally,
+# ensure that CONFIRM is set, or tell the user they need to set it first.
 release-prep-prereqs:
 ifndef VERSION
 	$(error VERSION is undefined - specify VERSION=vX.Y.Z or set AUTO_VERSION to automatically use the detected version $(AUTO_VERSION_VERSION))
@@ -678,11 +679,12 @@ endif
 	$(info CALICO_VERSION            = $(CALICO_VERSION) (source: $(origin CALICO_VERSION)))
 	$(info CALICO_ENTERPRISE_VERSION = $(CALICO_ENTERPRISE_VERSION) (source: $(origin CALICO_ENTERPRISE_VERSION))) 
 	$(info )
-	$(if $(or $(filter-out file, $(origin CALICO_VERSION) $(origin CALICO_ENTERPRISE_VERSION))),,$(error "Neither CALICO_VERSION nor CALICO_ENTERPRISE_VERSION were set, please set one or the other (or both) to a new version."))
+	$(if $(filter-out file, $(origin CALICO_VERSION) $(origin CALICO_ENTERPRISE_VERSION)),,$(error Neither CALICO_VERSION nor CALICO_ENTERPRISE_VERSION were set, please set one or the other (or both) to a new version.))
+	$(if $(if $(GIT_PR_BRANCH_OVERRIDE),true,$(findstring release-v,$(GIT_PR_BRANCH_BASE))),,$(error Variable GIT_PR_BRANCH_BASE is not set to the name of a release branch. If you're certain you want to use this branch, set GIT_PR_BRANCH_OVERRIDE=true))
 ifndef CONFIRM
 	$(info If this is correct, add CONFIRM=true to the command line to continue)
 	$(info )
-	exit 1
+	@exit 1
 else
 	$(info Variable CONFIRM was specified, continuing with release preparation...)
 	$(info )

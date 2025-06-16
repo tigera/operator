@@ -179,7 +179,6 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if variant == operatorv1.Calico {
-		reqLogger.Info("Variant is Calico")
 		if unsupportedFields := checkEnterpriseOnlyFields(gatewayAPI); len(unsupportedFields) > 0 {
 			err = fmt.Errorf("unsupported fields are %v", strings.Join(unsupportedFields, ","))
 			r.status.SetDegraded(

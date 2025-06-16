@@ -602,7 +602,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Create a component handler to manage the rendered component.
-	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	defaultHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	var tenantHandler utils.ComponentHandler
+	if tenant.MultiTenant() {
+		// In standard installs, the Manager CR owns all the objects. For multi-tenant, pull secrets are owned by the Tenant instance.
+		tenantHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant)
+	}
 
 	// Set replicas to 1 for management or managed clusters.
 	// TODO Remove after MCM tigera-manager HA deployment is supported.
@@ -693,8 +698,17 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	setup := render.NewSetup(&render.SetUpConfiguration{
+		OpenShift:       r.provider.IsOpenShift(),
+		Installation:    installation,
+		PullSecrets:     pullSecrets,
+		Namespace:       helper.InstallNamespace(),
+		PSS:             render.PSSRestricted,
+		CreateNamespace: !tenant.MultiTenant(),
+	})
 	components := []render.Component{
 		// Install manager components.
+		setup,
 		component,
 
 		// Installs KeyPairs and trusted bundle (if not pre-installed)
@@ -717,6 +731,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	for _, component := range components {
+		componentHandler := utils.GetHandler(component, tenant.MultiTenant(), tenantHandler, defaultHandler)
 		if err := componentHandler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
 			return reconcile.Result{}, err

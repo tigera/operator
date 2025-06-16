@@ -626,7 +626,16 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	setUp := render.NewSetup(&render.SetUpConfiguration{
+		OpenShift:       r.provider.IsOpenShift(),
+		Installation:    installation,
+		PullSecrets:     pullSecrets,
+		Namespace:       render.LogCollectorNamespace,
+		PSS:             render.PSSPrivileged,
+		CreateNamespace: true,
+	})
 	components := []render.Component{
+		setUp,
 		comp,
 		rcertificatemanagement.CertificateManagement(&certificateComponent),
 	}

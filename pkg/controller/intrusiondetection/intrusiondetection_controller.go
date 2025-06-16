@@ -466,13 +466,19 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		ExternalElastic:              r.elasticExternal,
 		SyslogForwardingIsEnabled:    syslogForwardingIsEnabled(lc),
 	}
-	intrusionDetectionNamespaceComponent := render.IntrusionDetectionNamespaceComponent(&render.IntrusionDetectionNamespaceConfiguration{
-		KubernetesProvider:        network.KubernetesProvider,
-		Namespace:                 helper.InstallNamespace(),
-		Tenant:                    tenant,
-		HasNoLicense:              hasNoLicense,
-		SyslogForwardingIsEnabled: syslogForwardingIsEnabled(lc),
-		Azure:                     network.Azure,
+	intrusionDetectionNamespaceComponent := render.NewSetup(&render.SetUpConfiguration{
+		//KubernetesProvider:        network.KubernetesProvider,
+		OpenShift:    r.provider.IsOpenShift(),
+		Installation: network,
+		PullSecrets:  pullSecrets,
+		Namespace:    helper.InstallNamespace(),
+		PSS:          getPSS(lc),
+
+		CreateNamespace: shouldCreateNamespace(tenant, hasNoLicense),
+		//Tenant:                    tenant,
+		//HasNoLicense:              hasNoLicense,
+		//SyslogForwardingIsEnabled: syslogForwardingIsEnabled(lc),
+		//Azure:                     network.Azure,
 	})
 	intrusionDetectionComponent := render.IntrusionDetection(intrusionDetectionCfg)
 
@@ -593,6 +599,25 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func shouldCreateNamespace(tenant *operatorv1.Tenant, hasNoLicense bool) bool {
+	if hasNoLicense || tenant.MultiTenant() {
+		return false
+	}
+	return true
+}
+
+func getPSS(logCollector *operatorv1.LogCollector) render.PodSecurityStandard {
+	// Configure pod security standard. If syslog forwarding is enabled, we
+	// need hostpath volumes which require a privileged PSS.
+	pss := render.PSSRestricted
+
+	if syslogForwardingIsEnabled(logCollector) {
+		pss = render.PSSPrivileged
+	}
+
+	return render.PodSecurityStandard(pss)
 }
 
 // Determine whether this component's configuration has syslog forwarding enabled or not.

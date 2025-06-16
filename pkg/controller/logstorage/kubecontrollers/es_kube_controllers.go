@@ -357,6 +357,11 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	setup := render.NewSetup(&render.SetUpConfiguration{
+		PullSecrets:     pullSecrets,
+		CreateNamespace: false,
+	})
+
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,
@@ -388,9 +393,11 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if err := hdler.CreateOrUpdateOrDelete(ctx, esKubeControllerComponents, nil); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating  elasticsearch kube-controllers resource", err, reqLogger)
-		return reconcile.Result{}, err
+	for _, component := range []render.Component{setup, esKubeControllerComponents} {
+		if err := hdler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating  elasticsearch kube-controllers resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	r.status.ReadyToMonitor()

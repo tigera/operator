@@ -142,10 +142,20 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	clusterConfig := relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
+	setup := render.NewSetup(&render.SetUpConfiguration{
+		OpenShift:       r.provider.IsOpenShift(),
+		Installation:    install,
+		PullSecrets:     pullSecrets,
+		Namespace:       render.ElasticsearchNamespace,
+		PSS:             render.PSSBaseline,
+		CreateNamespace: true,
+	})
 	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets, r.multiTenant)
-	if err := hdler.CreateOrUpdateOrDelete(ctx, externalElasticsearch, r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-		return reconcile.Result{}, err
+	for _, component := range []render.Component{setup, externalElasticsearch} {
+		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	r.status.ReadyToMonitor()

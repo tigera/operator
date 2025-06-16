@@ -340,7 +340,12 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	// Create a component handler to manage the rendered component.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, policyRecommendation)
+	defaultHandler := utils.NewComponentHandler(log, r.client, r.scheme, policyRecommendation)
+	var tenantHandler utils.ComponentHandler
+	if tenant.MultiTenant() {
+		// In standard installs, the PolicyRecommendation CR owns all the objects. For multi-tenant, pull secrets are owned by the Tenant instance.
+		tenantHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant)
+	}
 
 	// Determine the namespaces to which we must bind the cluster role.
 	// For multi-tenant, the cluster role will be bind to the service account in the tenant namespace
@@ -458,10 +463,20 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
+	setUp := render.NewSetup(&render.SetUpConfiguration{
+		OpenShift:       r.provider.IsOpenShift(),
+		Installation:    installation,
+		PullSecrets:     pullSecrets,
+		Namespace:       helper.InstallNamespace(),
+		PSS:             render.PSSRestricted,
+		CreateNamespace: !tenant.MultiTenant(),
+	})
+
 	// Prepend PolicyRecommendation before certificate creation
-	components = append([]render.Component{component}, components...)
+	components = append([]render.Component{setUp, component}, components...)
 	for _, cmp := range components {
-		if err := handler.CreateOrUpdateOrDelete(context.Background(), cmp, r.status); err != nil {
+		h := utils.GetHandler(cmp, tenant.MultiTenant(), tenantHandler, defaultHandler)
+		if err := h.CreateOrUpdateOrDelete(context.Background(), cmp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
 			return reconcile.Result{}, err
 		}

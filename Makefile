@@ -686,7 +686,7 @@ release-prep: release-prep-prereqs check-milestone var-require-all-GIT_PR_BRANCH
 	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
 	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
 	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
-	git diff-index --quiet --cached HEAD -- && (echo "No changes were made to the repository when updating versions; did you specify a version to change?" && exit 1) || true
+	git diff-index --quiet --cached HEAD -- && (echo "\n*** No changes were made to the repository when updating versions; did you specify a version to change?\n" && exit 1)
 	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-pr-labels
 
 GIT_REMOTE?=origin

@@ -60,3 +60,9 @@ const (
 	CRDManagementReconcile      CRDManagement = "Reconcile"
 	CRDManagementPreferExisting CRDManagement = "PreferExisting"
 )
+
+// NamespacedName references an object of a known type in any namespace.
+type NamespacedName struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}

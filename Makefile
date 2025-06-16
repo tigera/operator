@@ -22,6 +22,8 @@ GIT       = echo [DRY RUN] $(GIT_CMD)
 CURL      = echo [DRY RUN] $(CURL_CMD)
 endif
 
+include hack/release-prep.mk
+
 # These values are used for fetching tools to run as part of the build process
 # and shouldn't vary based on the target we're building for
 NATIVE_ARCH := $(shell bash -c 'if [[ "$(shell uname -m)" == "x86_64" ]]; then echo amd64; else uname -m; fi')
@@ -660,11 +662,31 @@ check-milestone: hack/bin/gh var-require-all-VERSION-GITHUB_TOKEN
 	$(eval CLOSED_MILESTONE := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json title --jq '.[0].title' | grep $(VERSION)))
 	$(if $(CLOSED_MILESTONE),,$(error Milestone $(VERSION) is not closed))
 
-release-prep: check-milestone var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
+release-prep-prereqs:
+ifndef VERSION
+	$(error VERSION is undefined - specify VERSION=vX.Y.Z or set AUTO_VERSION to automatically use the detected version $(AUTO_VERSION_VERSION))
+endif
+	$(info Preparing for release of $(VERSION) with the following variables:)
+	$(info )
+	$(info GIT_PR_BRANCH_BASE        = $(GIT_PR_BRANCH_BASE))
+	$(info CALICO_VERSION            = $(CALICO_VERSION))
+	$(info CALICO_ENTERPRISE_VERSION = $(CALICO_ENTERPRISE_VERSION))
+	$(info )
+ifndef CONFIRM
+	$(info If this is correct, add CONFIRM=true to the command line to continue)
+	$(info )
+	exit 1
+else
+	$(info Variable CONFIRM was specified, continuing with release preparation...)
+	$(info )
+endif
+
+release-prep: release-prep-prereqs check-milestone var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-CALICO_ENTERPRISE_VERSION
 	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
 	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
 	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
 	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
+	git diff-index --quiet --cached HEAD -- && (echo "No changes were made to the repository when updating versions; did you specify a version to change?" && exit 1) || true
 	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-pr-labels
 
 GIT_REMOTE?=origin

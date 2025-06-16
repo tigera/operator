@@ -37,9 +37,13 @@ func handleNftables(c *components, install *operatorv1.Installation) error {
 	}
 
 	inFelixConfig := fc.Spec.NFTablesMode != nil && *fc.Spec.NFTablesMode == v1.NFTablesModeEnabled
-	inEnvVars := envMode != nil && strings.ToLower(*envMode) == "enabled"
+	enabledEnvVar := envMode != nil && strings.ToLower(*envMode) == "enabled"
 
-	if inFelixConfig || inEnvVars {
+	// A disabled env var will override any other configuration. It's possible to have a feature enabled in the FelixConfiguration
+	// but disabled via the environment variable as an override (although not recommended!)
+	disabledEnvVar := envMode != nil && strings.ToLower(*envMode) == "disabled"
+
+	if !disabledEnvVar && (inFelixConfig || enabledEnvVar) {
 		if install.Spec.CalicoNetwork == nil {
 			install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
 		}

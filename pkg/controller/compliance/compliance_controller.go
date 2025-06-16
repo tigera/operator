@@ -80,7 +80,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	installNS, _, watchNamespaces := tenancy.GetWatchNamespaces(opts.MultiTenant, render.PolicyRecommendationNamespace)
+	installNS, _, watchNamespaces := tenancy.GetWatchNamespaces(opts.MultiTenant, render.ComplianceNamespace)
 
 	go utils.WaitToAddLicenseKeyWatch(complianceController, opts.K8sClientset, log, licenseAPIReady)
 
@@ -428,6 +428,11 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	var tenantHandler utils.ComponentHandler
+	if tenant.MultiTenant() {
+		// In standard installs, the Compliance CR owns all the objects. For multi-tenant, pull secrets are owned by the Tenant instance.
+		tenantHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant)
+	}
 
 	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
 	if err != nil {
@@ -437,8 +442,14 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	reqLogger.V(3).Info("rendering components")
 
-	namespaceComp := render.NewPassthrough(render.CreateNamespace(helper.InstallNamespace(), network.KubernetesProvider, render.PSSPrivileged, network.Azure))
-	opSecretsRB := render.NewPassthrough(render.CreateOperatorSecretsRoleBinding(helper.InstallNamespace()))
+	setUp := render.NewSetup(&render.SetUpConfiguration{
+		OpenShift:       r.provider.IsOpenShift(),
+		Installation:    network,
+		PullSecrets:     pullSecrets,
+		Namespace:       helper.InstallNamespace(),
+		PSS:             render.PSSPrivileged,
+		CreateNamespace: !tenant.MultiTenant(),
+	})
 
 	hasNoLicense := !utils.IsFeatureActive(license, common.ComplianceFeature)
 	openshift := r.provider.IsOpenShift()
@@ -489,8 +500,9 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		TrustedBundle: bundleMaker,
 	})
 
-	for _, comp := range []render.Component{namespaceComp, opSecretsRB, certificateComponent, comp} {
-		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
+	for _, comp := range []render.Component{setUp, certificateComponent, comp} {
+		h := utils.GetHandler(comp, tenant.MultiTenant(), tenantHandler, handler)
+		if err := h.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}

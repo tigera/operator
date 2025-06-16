@@ -25,7 +25,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 // ExternalElasticsearch is used when Elasticsearch doesn't exist in this cluster, but we still need to set up resources
@@ -51,14 +50,9 @@ func (e externalElasticsearch) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (e externalElasticsearch) Objects() (toCreate, toDelete []client.Object) {
-	toCreate = append(toCreate, render.CreateNamespace(render.ElasticsearchNamespace, e.installation.KubernetesProvider, render.PSSBaseline, e.installation.Azure))
-	toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(render.ElasticsearchNamespace))
 	toCreate = append(toCreate, e.clusterConfig.ConfigMap())
 	toCreate = append(toCreate, e.oidcUserRole())
 	toCreate = append(toCreate, e.oidcUserRoleBinding())
-	if len(e.pullSecrets) > 0 {
-		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.pullSecrets...)...)...)
-	}
 
 	if !e.multiTenant {
 		// We need to allow to es-kube-controllers to managed secrets in the management clusters

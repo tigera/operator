@@ -133,8 +133,8 @@ type GatewayClassSpec struct {
 	EnvoyProxyRef *NamespacedName `json:"envoyProxyRef,omitempty"`
 
 	// Specifies whether Gateways in this class are deployed as Deployments (default) or as
-	// DaemonSets.  Note, GatewayKind is ignored when a custom EnvoyProxy is specified and that
-	// EnvoyProxy already indicates whether to deploy as a DaemonSet or as a Deployment.
+	// DaemonSets.  It is an error for GatewayKind to specify a choice that is incompatible with
+	// the custom EnvoyProxy, when EnvoyProxyRef is also specified.
 	// +optional
 	GatewayKind *GatewayKind `json:"gatewayKind,omitempty"`
 

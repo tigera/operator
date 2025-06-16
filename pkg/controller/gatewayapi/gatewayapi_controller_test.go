@@ -574,6 +574,67 @@ var _ = Describe("Gateway API controller tests", func() {
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).Should(HaveOccurred())
 	})
+
+	It("handles when both GatewayKind and an incompatible EnvoyProxy are specified", func() {
+		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+		By("creating custom EnvoyProxy")
+		three := int32(3)
+		envoyProxy1 := &envoyapi.EnvoyProxy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "EnvoyProxy",
+				APIVersion: "gateway.envoyproxy.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-proxy-1",
+				Namespace: "default",
+			},
+			Spec: envoyapi.EnvoyProxySpec{
+				Logging: envoyapi.ProxyLogging{
+					Level: map[envoyapi.ProxyLogComponent]envoyapi.LogLevel{
+						envoyapi.LogComponentAdmin: envoyapi.LogLevelWarn,
+					},
+				},
+				Provider: &envoyapi.EnvoyProxyProvider{
+					Type: envoyapi.ProviderTypeKubernetes,
+					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
+						EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
+							Replicas: &three,
+						},
+					},
+				},
+			},
+		}
+		Expect(c.Create(ctx, envoyProxy1)).NotTo(HaveOccurred())
+
+		By("applying the GatewayAPI CR to the fake cluster")
+		daemonSet := operatorv1.GatewayKindDaemonSet
+		gwapi := &operatorv1.GatewayAPI{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "custom-class-1",
+					EnvoyProxyRef: &operatorv1.NamespacedName{
+						Namespace: "default",
+						Name:      "my-proxy-1",
+					},
+					GatewayKind: &daemonSet,
+				}},
+			},
+		}
+		Expect(c.Create(ctx, gwapi)).NotTo(HaveOccurred())
+
+		By("triggering a reconcile")
+		mockStatus.On(
+			"SetDegraded",
+			operatorv1.ResourceReadError,
+			"Conflict between EnvoyProxyRef and GatewayKind",
+			"GatewayKind (for class 'custom-class-1') cannot be 'DaemonSet' when EnvoyProxyRef already indicates that gateways will be provisioned as a Deployment",
+			mock.Anything,
+		).Return()
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).Should(HaveOccurred())
+	})
 })
 
 var fakeComponentHandlers []*fakeComponentHandler

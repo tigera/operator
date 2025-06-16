@@ -300,6 +300,30 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyProxyRef", err, log)
 				return reconcile.Result{}, err
 			}
+			if gatewayAPI.Spec.GatewayClasses[i].GatewayKind != nil &&
+				envoyProxy.Spec.Provider != nil &&
+				envoyProxy.Spec.Provider.Kubernetes != nil {
+				if *gatewayAPI.Spec.GatewayClasses[i].GatewayKind == operatorv1.GatewayKindDaemonSet &&
+					envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {
+					err = fmt.Errorf(
+						"GatewayKind (for class '%v') cannot be 'DaemonSet' when EnvoyProxyRef already indicates "+
+							"that gateways will be provisioned as a Deployment",
+						gatewayAPI.Spec.GatewayClasses[i].Name,
+					)
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Conflict between EnvoyProxyRef and GatewayKind", err, log)
+					return reconcile.Result{}, err
+				}
+				if *gatewayAPI.Spec.GatewayClasses[i].GatewayKind == operatorv1.GatewayKindDeployment &&
+					envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
+					err = fmt.Errorf(
+						"GatewayKind (for class '%v') cannot be 'Deployment' when EnvoyProxyRef already indicates "+
+							"that gateways will be provisioned as a DaemonSet",
+						gatewayAPI.Spec.GatewayClasses[i].Name,
+					)
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Conflict between EnvoyProxyRef and GatewayKind", err, log)
+					return reconcile.Result{}, err
+				}
+			}
 			gatewayConfig.CustomEnvoyProxies[gatewayAPI.Spec.GatewayClasses[i].Name] = envoyProxy
 		}
 	}

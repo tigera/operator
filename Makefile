@@ -662,6 +662,12 @@ check-milestone: hack/bin/gh var-require-all-VERSION-GITHUB_TOKEN
 	$(eval CLOSED_MILESTONE := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json title --jq '.[0].title' | grep $(VERSION)))
 	$(if $(CLOSED_MILESTONE),,$(error Milestone $(VERSION) is not closed))
 
+# Handle some pre-validation of our release variables.
+# This is used to ensure that the variables are set correctly before we start
+# the release process.
+#
+# Most notably: validate that VERSION is set, and that either CALICO_VERSION or CALICO_ENTERPRISE_VERSION is set
+# by the user. Then, ensure that CONFIRM is set, or tell the user they need to set it first.
 release-prep-prereqs:
 ifndef VERSION
 	$(error VERSION is undefined - specify VERSION=vX.Y.Z or set AUTO_VERSION to automatically use the detected version $(AUTO_VERSION_VERSION))
@@ -669,9 +675,10 @@ endif
 	$(info Preparing for release of $(VERSION) with the following variables:)
 	$(info )
 	$(info GIT_PR_BRANCH_BASE        = $(GIT_PR_BRANCH_BASE))
-	$(info CALICO_VERSION            = $(CALICO_VERSION))
-	$(info CALICO_ENTERPRISE_VERSION = $(CALICO_ENTERPRISE_VERSION))
+	$(info CALICO_VERSION            = $(CALICO_VERSION) (source: $(origin CALICO_VERSION)))
+	$(info CALICO_ENTERPRISE_VERSION = $(CALICO_ENTERPRISE_VERSION) (source: $(origin CALICO_ENTERPRISE_VERSION))) 
 	$(info )
+	$(if $(or $(filter-out file, $(origin CALICO_VERSION) $(origin CALICO_ENTERPRISE_VERSION))),,$(error "Neither CALICO_VERSION nor CALICO_ENTERPRISE_VERSION were set, please set one or the other (or both) to a new version."))
 ifndef CONFIRM
 	$(info If this is correct, add CONFIRM=true to the command line to continue)
 	$(info )
@@ -686,7 +693,7 @@ release-prep: release-prep-prereqs check-milestone var-require-all-GIT_PR_BRANCH
 	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
 	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
 	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
-	git diff-index --quiet --cached HEAD -- && (echo "\n*** No changes were made to the repository when updating versions; did you specify a version to change?\n" && exit 1)
+	git diff-index --quiet HEAD -- config && (echo "\n*** No changes were made to the config/*_versions.yml files when updating versions; did you specify a version to change?\n" && exit 1)
 	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-pr-labels
 
 GIT_REMOTE?=origin

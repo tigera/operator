@@ -743,6 +743,12 @@ func (es *elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentV
 		"cluster.max_shards_per_node": 10000,
 		// Disable geoip downloader. This removes an error from the startup logs, because our network policy blocks it.
 		"ingest.geoip.downloader.enabled": false,
+		// (Dynamic, time unit value) How often index lifecycle management checks for indices that meet policy criteria.
+		// Defaults to 10m.
+		// In the case that a user is creating many shards with their setup, it can happen that ILM operations need more
+		// time to complete than the default interval setting. We increase the interval such that we will not encounter
+		// a build-up of ILM requests.
+		"indices.lifecycle.poll_interval": "60m",
 	}
 
 	if es.cfg.Installation.CertificateManagement != nil {

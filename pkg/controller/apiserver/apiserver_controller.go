@@ -21,6 +21,7 @@ import (
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 
+	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -155,9 +156,6 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	}
 
 	// Watch for the namespace(s) managed by this controller.
-	if err = c.WatchObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerNamespace}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
-	}
 	if err = c.WatchObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerNamespace}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
 	}
@@ -513,8 +511,8 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 // prior to the CNI plugin being removed.
 func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver client.Object) error {
 	// These objects require graceful termination before the CNI plugin is torn down.
-	apiServerNamespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerNamespace}}
-	return utils.MaintainInstallationFinalizer(ctx, r.client, apiserver, render.APIServerFinalizer, apiServerNamespace)
+	apiServerDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: render.APIServerNamespace}}
+	return utils.MaintainInstallationFinalizer(ctx, r.client, apiserver, render.APIServerFinalizer, &apiServerDeployment)
 }
 
 // canCleanupLegacyNamespace determines whether the legacy "tigera-system" namespace

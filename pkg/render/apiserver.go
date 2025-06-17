@@ -328,6 +328,8 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
 		namespacedObjects = append(namespacedObjects, namespacedEnterpriseObjects...)
 
+		objsToDelete = append(objsToDelete, c.cleanupDeployment())
+
 	} else {
 		// Add in a NetworkPolicy.
 		namespacedObjects = append(namespacedObjects, c.networkPolicy())
@@ -335,6 +337,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
+		objsToDelete = append(objsToDelete, c.cleanupDeployment())
 	}
 
 	// Explicitly delete any renamed/deprecated objects.
@@ -2405,4 +2408,17 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 	}
 
 	return l7AdmssCtrl
+}
+
+// Both Calico and Calico Enterprise, but different names.
+func (c *apiServerComponent) cleanupDeployment() client.Object {
+	// Determine names based on the configured variant.
+	_, nameToDelete := c.resourceNameBasedOnVariant("tigera-apiserver", "calico-apiserver")
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{Kind: "De", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nameToDelete,
+			Namespace: APIServerNamespace,
+		},
+	}
 }

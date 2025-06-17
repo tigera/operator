@@ -39,6 +39,7 @@ require (
 	k8s.io/apiserver v0.32.5
 	k8s.io/client-go v0.32.5
 	k8s.io/kube-aggregator v0.30.5
+	k8s.io/utils v0.0.0-20241210054802-24370beab758
 	sigs.k8s.io/controller-runtime v0.20.2
 	sigs.k8s.io/gateway-api v1.2.1
 	sigs.k8s.io/kind v0.24.0 // Do not remove, not used by code but used by build
@@ -122,7 +123,6 @@ require (
 	howett.net/plist v1.0.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20241212222426-2c72e554b1e7 // indirect
-	k8s.io/utils v0.0.0-20241210054802-24370beab758
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.5.0 // indirect
 )

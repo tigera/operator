@@ -328,7 +328,8 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
 		namespacedObjects = append(namespacedObjects, namespacedEnterpriseObjects...)
 
-		objsToDelete = append(objsToDelete, c.cleanupDeployment())
+		// Clean up the stale Calico API server deployment when switching between variants.
+		objsToDelete = append(objsToDelete, c.cleanupStaleAPIServerDeployment())
 
 	} else {
 		// Add in a NetworkPolicy.
@@ -337,7 +338,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
-		objsToDelete = append(objsToDelete, c.cleanupDeployment())
+
+		// Clean up the stale Calico API server deployment when switching between variants.
+		objsToDelete = append(objsToDelete, c.cleanupStaleAPIServerDeployment())
 	}
 
 	// Explicitly delete any renamed/deprecated objects.
@@ -2410,8 +2413,9 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 	return l7AdmssCtrl
 }
 
-// Both Calico and Calico Enterprise, but different names.
-func (c *apiServerComponent) cleanupDeployment() client.Object {
+// cleanupStaleAPIServerDeployment returns the API server Deployment object
+// that should be removed during a variant switch (OSS <-> EE).
+func (c *apiServerComponent) cleanupStaleAPIServerDeployment() client.Object {
 	// Determine the correct name based on the configured variant.
 	_, nameToDelete := c.resourceNameBasedOnVariant("tigera-apiserver", "calico-apiserver")
 	return &appsv1.Deployment{

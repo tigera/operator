@@ -247,10 +247,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				// Check that the expected config made it's way to the Elastic CR
 				Expect(nodeSet.Config.Data).Should(Equal(map[string]interface{}{
-					"node.roles":                      []string{"data", "ingest", "master", "remote_cluster_client"},
-					"cluster.max_shards_per_node":     10000,
-					"ingest.geoip.downloader.enabled": false,
-					"indices.lifecycle.poll_interval": "60m",
+					"node.roles":                              []string{"data", "ingest", "master", "remote_cluster_client"},
+					"cluster.max_shards_per_node":             10000,
+					"ingest.geoip.downloader.enabled":         false,
+					"xpack.eql.default_allow_partial_results": false,
+					"indices.lifecycle.poll_interval":         "60m",
 				}))
 			})
 
@@ -382,6 +383,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 					"cluster.max_shards_per_node":                     10000,
 					"ingest.geoip.downloader.enabled":                 false,
+					"xpack.eql.default_allow_partial_results":         false,
 					"indices.lifecycle.poll_interval":                 "60m",
 					"xpack.security.http.ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"},
 					"xpack.security.transport.ssl.key":                "/usr/share/elasticsearch/config/transport-certs/transport.tls.key",
@@ -1018,6 +1020,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
 						"indices.lifecycle.poll_interval":                 "60m",
 						"node.attr.zone":                                  "us-west-2a",
 						"cluster.routing.allocation.awareness.attributes": "zone",
@@ -1038,6 +1041,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
 						"indices.lifecycle.poll_interval":                 "60m",
 						"node.attr.zone":                                  "us-west-2b",
 						"cluster.routing.allocation.awareness.attributes": "zone",
@@ -1109,6 +1113,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
 						"indices.lifecycle.poll_interval":                 "60m",
 						"node.attr.zone":                                  "us-west-2a",
 						"node.attr.rack":                                  "rack1",
@@ -1139,6 +1144,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
 						"indices.lifecycle.poll_interval":                 "60m",
 						"node.attr.zone":                                  "us-west-2b",
 						"node.attr.rack":                                  "rack1",

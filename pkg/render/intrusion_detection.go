@@ -420,7 +420,12 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRoleBinding() *rb
 }
 
 func (c *intrusionDetectionComponent) managedClustersWatchRoleBinding() client.Object {
-	return rcomponents.RoleBinding(IntrusionDetectionManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, IntrusionDetectionName, c.cfg.Namespace)
+	if c.cfg.Tenant.MultiTenant() {
+		return rcomponents.RoleBinding(IntrusionDetectionManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, IntrusionDetectionName, c.cfg.Namespace)
+	} else {
+		return rcomponents.ClusterRoleBinding(IntrusionDetectionManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, IntrusionDetectionName, []string{c.cfg.Namespace})
+	}
+
 }
 
 func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
@@ -441,8 +446,8 @@ func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleB
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      linseed,
-				Namespace: ElasticsearchNamespace,
+				Name:      GuardianServiceAccountName,
+				Namespace: GuardianNamespace,
 			},
 		},
 	}

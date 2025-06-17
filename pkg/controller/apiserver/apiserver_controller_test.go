@@ -152,6 +152,7 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+		mockStatus.On("RemoveDeployments", mock.Anything)
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 		mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
@@ -836,7 +837,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
 			Expect(canCleanedUp).To(BeTrue())
 		})
 
@@ -856,7 +857,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
 			Expect(canCleanedUp).To(BeFalse())
 		})
 
@@ -882,7 +883,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
 			Expect(canCleanedUp).To(BeFalse())
 		})
 
@@ -916,7 +917,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
 			Expect(canCleanedUp).To(BeFalse())
 		})
 	})

@@ -330,6 +330,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					"node.ingest":                     "true",
 					"cluster.max_shards_per_node":     10000,
 					"ingest.geoip.downloader.enabled": false,
+					"indices.lifecycle.poll_interval": "60m",
 				}))
 				resultECK := rtest.GetResource(createResources, render.ECKOperatorName, render.ECKOperatorNamespace,
 					"apps", "v1", "StatefulSet").(*appsv1.StatefulSet)
@@ -645,11 +646,12 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					{Name: "elastic-internal-transport-certificates", MountPath: certificatemanagement.CSRCMountPath},
 				}, false)
 				Expect(resultES.Spec.NodeSets[0].Config).To(Equal(&v1.Config{Data: map[string]interface{}{
-					"node.data":                       "true",
-					"node.ingest":                     "true",
-					"node.master":                     "true",
-					"cluster.max_shards_per_node":     10000,
-					"ingest.geoip.downloader.enabled": false,
+					"node.data":                                       "true",
+					"node.ingest":                                     "true",
+					"node.master":                                     "true",
+					"cluster.max_shards_per_node":                     10000,
+					"ingest.geoip.downloader.enabled":                 false,
+					"indices.lifecycle.poll_interval":                 "60m",
 					"xpack.security.http.ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"},
 					"xpack.security.transport.ssl.key":                "/usr/share/elasticsearch/config/transport-certs/transport.tls.key",
 					"xpack.security.transport.ssl.certificate":        "/usr/share/elasticsearch/config/transport-certs/transport.tls.crt",
@@ -1323,6 +1325,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.ingest":                     "true",
 						"cluster.max_shards_per_node":     10000,
 						"ingest.geoip.downloader.enabled": false,
+						"indices.lifecycle.poll_interval": "60m",
 						"node.attr.zone":                  "us-west-2a",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
@@ -1344,6 +1347,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.ingest":                     "true",
 						"cluster.max_shards_per_node":     10000,
 						"ingest.geoip.downloader.enabled": false,
+						"indices.lifecycle.poll_interval": "60m",
 						"node.attr.zone":                  "us-west-2b",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
@@ -1416,6 +1420,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.ingest":                     "true",
 						"cluster.max_shards_per_node":     10000,
 						"ingest.geoip.downloader.enabled": false,
+						"indices.lifecycle.poll_interval": "60m",
 						"node.attr.zone":                  "us-west-2a",
 						"node.attr.rack":                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",
@@ -1447,6 +1452,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.ingest":                     "true",
 						"cluster.max_shards_per_node":     10000,
 						"ingest.geoip.downloader.enabled": false,
+						"indices.lifecycle.poll_interval": "60m",
 						"node.attr.zone":                  "us-west-2b",
 						"node.attr.rack":                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",

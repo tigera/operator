@@ -271,6 +271,30 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
+	if gatewayAPI.Spec.GatewayClasses == nil {
+		// Write back the default setup, which is to create a class named
+		// "tigera-gateway-class" without any customizations.
+		gatewayAPI.Spec.GatewayClasses = []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}}
+
+		// Patch that back into the datastore.
+		err = r.client.Patch(ctx, &operatorv1.GatewayAPI{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: gatewayAPI.Name,
+			},
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: gatewayAPI.Spec.GatewayClasses,
+			},
+		}, client.MergeFrom(&operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: nil,
+			},
+		}))
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to patch GatewayClasses field", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	for i := range gatewayAPI.Spec.GatewayClasses {
 		if gatewayAPI.Spec.GatewayClasses[i].EnvoyProxyRef != nil {
 			if err = r.watchEnvoyProxy(*gatewayAPI.Spec.GatewayClasses[i].EnvoyProxyRef); err != nil {

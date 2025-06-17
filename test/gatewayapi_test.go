@@ -187,7 +187,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		}
 
 		By("Checking for the default tigera-gateway-class and its EnvoyProxy")
-		Eventually(getGatewayClassNames, "10s").Should(ConsistOf("tigera-gateway-class:envoy-proxy-config"))
+		Eventually(getGatewayClassNames, "10s").Should(ConsistOf("tigera-gateway-class:tigera-gateway-class"))
 
 		By("Now configuring two custom classes")
 		err = c.Get(shutdownContext, utils.DefaultTSEEInstanceKey, gatewayAPI)
@@ -223,7 +223,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		By("Checking that we now only have the default tigera-gateway-class")
-		Eventually(getGatewayClassNames, "10s").Should(ConsistOf("tigera-gateway-class:envoy-proxy-config"))
+		Eventually(getGatewayClassNames, "10s").Should(ConsistOf("tigera-gateway-class:tigera-gateway-class"))
 	})
 
 	It("watches custom EnvoyProxy resources", func() {

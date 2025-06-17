@@ -49,43 +49,22 @@ type GatewayAPISpec struct {
 	// +optional
 	EnvoyGatewayConfigRef *NamespacedName `json:"envoyGatewayConfigRef,omitempty"`
 
-	// Allow customization of the GatewayClasses that will be available; please see
-	// GatewayClassSpec for more detail.  If GatewayClasses is nil, the Tigera operator
-	// configures a single GatewayClass named "tigera-gateway-class" without any of the
-	// enhanced customizations that are allowed by GatewayClassSpec.
+	// Configures the GatewayClasses that will be available; please see GatewayClassSpec for
+	// more detail.  If GatewayClasses is nil, the Tigera operator defaults to provisioning a
+	// single GatewayClass named "tigera-gateway-class", without any of the detailed
+	// customizations that are allowed within GatewayClassSpec.
 	// +optional
 	GatewayClasses []GatewayClassSpec `json:"gatewayClasses,omitempty"`
 
-	// Allow customization of the gateway controller deployment.
+	// Allows customization of the gateway controller deployment.
 	// +optional
 	GatewayControllerDeployment *GatewayControllerDeployment `json:"gatewayControllerDeployment,omitempty"`
 
-	// Allow customization of the gateway certgen job.
+	// Allows customization of the gateway certgen job.
 	// +optional
 	GatewayCertgenJob *GatewayCertgenJob `json:"gatewayCertgenJob,omitempty"`
 
-	// Allow customization of gateways when deployed as Kubernetes Deployments.  These
-	// customizations will apply to all of the GatewayClasses that the Tigera operator
-	// provisions.  GatewayClass-specific customizations can be specified in
-	// `GatewayClasses[*].GatewayDeployment`.
-	// +optional
-	GatewayDeployment *GatewayDeployment `json:"gatewayDeployment,omitempty"`
-
-	// Allow customization of gateways when deployed as Kubernetes DaemonSets.  These
-	// customizations will apply to all of the GatewayClasses that the Tigera operator
-	// provisions.  GatewayClass-specific customizations can be specified in
-	// `GatewayClasses[*].GatewayDaemonSet`.  Note, it is not possible for gateways in the
-	// default "tigera-gateway-class" to be deployed as DaemonSets.
-	// +optional
-	GatewayDaemonSet *GatewayDaemonSet `json:"gatewayDaemonSet,omitempty"`
-
-	// Allow customization of gateway services.  These customizations will apply to all
-	// of the GatewayClasses that the Tigera operator provisions.  GatewayClass-specific
-	// customizations can be specified in `GatewayClasses[*].GatewayService`.
-	// +optional
-	GatewayService *GatewayService `json:"gatewayService,omitempty"`
-
-	// Configure how to manage and update Gateway API CRDs.  The default behaviour - which is
+	// Configures how to manage and update Gateway API CRDs.  The default behaviour - which is
 	// used when this field is not set, or is set to "PreferExisting" - is that the Tigera
 	// operator will create the Gateway API CRDs if they do not already exist, but will not
 	// overwrite any existing Gateway API CRDs.  This setting may be preferable if the customer
@@ -117,11 +96,8 @@ type GatewayClassSpec struct {
 	// current Calico version, private registry and image set settings) and any pull secrets
 	// that are needed to pull that image.
 	//
-	// 2. It applies common customizations as specified by the `GatewayDeployment` field at the
-	// top level of this GatewayAPI resource's Spec.
-	//
-	// 3. It applies GatewayClass-specific customizations as specified by the following
-	// `GatewayDeployment` field.
+	// 2. It applies customizations as specified by the following `GatewayKind`,
+	// `GatewayDeployment`, `GatewayDaemonSet` and `GatewayService` fields.
 	//
 	// The resulting EnvoyProxy is provisioned in the `tigera-gateway` namespace, together with
 	// a GatewayClass that references it.
@@ -138,18 +114,17 @@ type GatewayClassSpec struct {
 	// +optional
 	GatewayKind *GatewayKind `json:"gatewayKind,omitempty"`
 
-	// Allows class-specific customization of Gateways when deployed as Kubernetes Deployments,
-	// for Gateways in this GatewayClass.
+	// Allows customization of Gateways when deployed as Kubernetes Deployments, for Gateways in
+	// this GatewayClass.
 	// +optional
 	GatewayDeployment *GatewayDeployment `json:"gatewayDeployment,omitempty"`
 
-	// Allows class-specific customization of Gateways when deployed as Kubernetes DaemonSets,
-	// for Gateways in this GatewayClass.
+	// Allows customization of Gateways when deployed as Kubernetes DaemonSets, for Gateways in
+	// this GatewayClass.
 	// +optional
 	GatewayDaemonSet *GatewayDaemonSet `json:"gatewayDaemonSet,omitempty"`
 
-	// Allows class-specific customization of gateway services, for Gateways in this
-	// GatewayClass.
+	// Allows customization of gateway services, for Gateways in this GatewayClass.
 	// +optional
 	GatewayService *GatewayService `json:"gatewayService,omitempty"`
 }

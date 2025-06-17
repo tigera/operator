@@ -595,6 +595,37 @@ var _ = Describe("Gateway API controller tests", func() {
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).Should(HaveOccurred())
 	})
+
+	It("writes back defaults to the GatewayAPI CR", func() {
+		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+		By("applying the GatewayAPI CR to the fake cluster")
+		gwapi := &operatorv1.GatewayAPI{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}
+		Expect(c.Create(ctx, gwapi)).NotTo(HaveOccurred())
+
+		By("triggering a reconcile")
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("re-reading the GatewayAPI")
+		err = c.Get(ctx, utils.DefaultTSEEInstanceKey, gwapi)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("checking default GatewayClasses")
+		Expect(gwapi.Spec.GatewayClasses).To(HaveLen(1))
+		Expect(gwapi.Spec.GatewayClasses[0].Name).To(Equal("tigera-gateway-class"))
+		Expect(gwapi.Spec.GatewayClasses[0].EnvoyProxyRef).To(BeNil())
+		Expect(gwapi.Spec.GatewayClasses[0].GatewayKind).To(BeNil())
+		Expect(gwapi.Spec.GatewayClasses[0].GatewayDeployment).To(BeNil())
+		Expect(gwapi.Spec.GatewayClasses[0].GatewayDaemonSet).To(BeNil())
+		Expect(gwapi.Spec.GatewayClasses[0].GatewayService).To(BeNil())
+
+		By("checking default CRDManagement")
+		Expect(gwapi.Spec.CRDManagement).NotTo(BeNil())
+		Expect(*gwapi.Spec.CRDManagement).To(Equal(operatorv1.CRDManagementReconcile))
+	})
 })
 
 var fakeComponentHandlers []*fakeComponentHandler

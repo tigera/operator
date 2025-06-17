@@ -4014,21 +4014,6 @@ func (in *GatewayAPISpec) DeepCopyInto(out *GatewayAPISpec) {
 		*out = new(GatewayCertgenJob)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.GatewayDeployment != nil {
-		in, out := &in.GatewayDeployment, &out.GatewayDeployment
-		*out = new(GatewayDeployment)
-		(*in).DeepCopyInto(*out)
-	}
-	if in.GatewayDaemonSet != nil {
-		in, out := &in.GatewayDaemonSet, &out.GatewayDaemonSet
-		*out = new(GatewayDaemonSet)
-		(*in).DeepCopyInto(*out)
-	}
-	if in.GatewayService != nil {
-		in, out := &in.GatewayService, &out.GatewayService
-		*out = new(GatewayService)
-		(*in).DeepCopyInto(*out)
-	}
 	if in.CRDManagement != nil {
 		in, out := &in.CRDManagement, &out.CRDManagement
 		*out = new(CRDManagement)

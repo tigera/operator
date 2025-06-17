@@ -432,13 +432,15 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		objs = append(objs, resource.DeepCopyObject().(client.Object))
 	}
 
-	// Prepare EnvoyGateway, either from upstream or from a custom EnvoyGatewayConfigRef
+	// Prepare EnvoyGateway config, either from upstream or from a custom EnvoyGatewayConfigRef
 	// provided by the user.
-	envoyGatewayConfig := resources.envoyGatewayConfig.DeepCopyObject().(*envoyapi.EnvoyGateway)
-	if pr.cfg.CustomEnvoyGateway != nil {
-		// In this case we don't need to worry about modification because the next Reconcile
-		// will read the custom resource again from scratch.
-		envoyGatewayConfig = pr.cfg.CustomEnvoyGateway
+	envoyGatewayConfig := pr.cfg.CustomEnvoyGateway
+	if envoyGatewayConfig == nil {
+		// In the upstream case, take a deepcopy of the default to make sure we don't
+		// accidentally modify the config loaded at start of day.  (In the custom case we
+		// don't need to do this because the next Reconcile will read the custom resource
+		// again from scratch.)
+		envoyGatewayConfig = resources.envoyGatewayConfig.DeepCopyObject().(*envoyapi.EnvoyGateway)
 	}
 
 	// Ensure the minimal structure that we require for the following customizations.
@@ -530,21 +532,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	currentGCNames := set.New[string]()
 	currentEPNames := set.New[string]()
 
-	// Provision the default "tigera-gateway-class" GatewayClass.
-	if len(pr.cfg.GatewayAPI.Spec.GatewayClasses) == 0 {
-		className := "tigera-gateway-class"
-
-		// The EnvoyProxy config.
-		proxyConfig := pr.envoyProxyConfig("envoy-proxy-config", nil, nil)
-		objs = append(objs, proxyConfig)
-		currentEPNames.Insert("envoy-proxy-config")
-
-		// The GatewayClass using that EnvoyProxy config.
-		objs = append(objs, pr.gatewayClass(className, envoyGatewayConfig.Gateway.ControllerName, proxyConfig))
-		currentGCNames.Insert(className)
-	}
-
-	// Provision GatewayClasses based on the specifications in the GatewayAPI CR.
+	// Provision GatewayClasses.
 	for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
 		className := pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name
 
@@ -627,7 +615,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(defaultName string
 	// If the EnvoyProxy itself doesn't already indicate DaemonSet or Deployment, and our
 	// customization structs indicate deploying as a DaemonSet, set that up.
 	if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet == nil && envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment == nil {
-		if classSpec != nil && classSpec.GatewayKind != nil {
+		if classSpec.GatewayKind != nil {
 			if *classSpec.GatewayKind == operatorv1.GatewayKindDaemonSet {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet = &envoyapi.KubernetesDaemonSetSpec{}
 			}
@@ -661,23 +649,13 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(defaultName string
 		envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Image = &pr.envoyProxyImage
 	}
 
-	// Apply common overrides.
+	// Apply overrides.
 	if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
-		rcomp.ApplyEnvoyProxyOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayDaemonSet)
+		rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classSpec.GatewayDaemonSet)
 	} else {
-		rcomp.ApplyEnvoyProxyOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayDeployment)
+		rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classSpec.GatewayDeployment)
 	}
-	applyEnvoyProxyServiceOverrides(envoyProxy, pr.cfg.GatewayAPI.Spec.GatewayService)
-
-	if classSpec != nil {
-		// Apply class-specific overrides.
-		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
-			rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classSpec.GatewayDaemonSet)
-		} else {
-			rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classSpec.GatewayDeployment)
-		}
-		applyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
-	}
+	applyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
 
 	return envoyProxy
 }

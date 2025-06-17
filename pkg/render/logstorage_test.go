@@ -382,6 +382,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 					"cluster.max_shards_per_node":                     10000,
 					"ingest.geoip.downloader.enabled":                 false,
+					"xpack.eql.default_allow_partial_results":         false,
 					"xpack.security.http.ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"},
 					"xpack.security.transport.ssl.key":                "/usr/share/elasticsearch/config/transport-certs/transport.tls.key",
 					"xpack.security.transport.ssl.certificate":        "/usr/share/elasticsearch/config/transport-certs/transport.tls.crt",

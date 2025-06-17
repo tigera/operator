@@ -48,6 +48,13 @@ import (
 
 const TLS_CIPHERS_ENV_VAR_NAME = "TLS_CIPHER_SUITES"
 
+// dCache is a global deduplication cache that is used to avoid unnecessary updates to objects. It is shared
+// across all component handlers to ensure that objects are only updated when necessary.
+//
+// Note: we could instead create a cache per component handler, but that would require controllers to
+// use the same handler across reconciles - which is a relatively big change to make.
+var dCache *objectCache = newCache()
+
 type ComponentHandler interface {
 	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
 
@@ -66,12 +73,10 @@ type ComponentHandler interface {
 // this is useful for CRD management so that they are not removed automatically.
 func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
 	return &componentHandler{
-		client:          cli,
-		scheme:          scheme,
-		cr:              cr,
-		log:             log,
-		generationCache: make(map[objectAndKind]int64),
-		objectCache:     make(map[objectAndKind]client.Object),
+		client: cli,
+		scheme: scheme,
+		cr:     cr,
+		log:    log,
 	}
 }
 
@@ -81,16 +86,6 @@ type componentHandler struct {
 	cr         metav1.Object
 	log        logr.Logger
 	createOnly bool
-
-	// Track the generation of each object that we create or update so that we can avoid
-	// unnecessary updates.
-	generationCache map[objectAndKind]int64
-	objectCache     map[objectAndKind]client.Object
-}
-
-type objectAndKind struct {
-	Object client.ObjectKey
-	Kind   schema.GroupKind
 }
 
 func (c *componentHandler) SetCreateOnly() {
@@ -108,18 +103,18 @@ func (c *componentHandler) create(ctx context.Context, obj client.Object, opts .
 	}
 
 	// Update the caches so that we don't try to update the object on subsequent reconciliations.
-	c.generationCache[c.cacheKey(obj)] = obj.GetGeneration()
-	c.objectCache[c.cacheKey(obj)] = cached
+	dCache.set(cached, obj.GetGeneration())
 	return nil
 }
 
 func (c *componentHandler) update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	logCtx := ContextLoggerForResource(c.log, obj)
 	if !c.needsUpdate(ctx, obj) {
 		// The object does not need to be updated, so we can skip it.
-		logCtx := ContextLoggerForResource(c.log, obj)
-		logCtx.Info("Object does not need to be updated, skipping")
+		logCtx.V(2).Info("Object does not need to be updated, skipping")
 		return nil
 	}
+	logCtx.Info("Object needs to be updated")
 
 	// Make a deep copy of the object, so we can stash away the original object in the cache.
 	cached := obj.DeepCopyObject().(client.Object)
@@ -131,8 +126,7 @@ func (c *componentHandler) update(ctx context.Context, obj client.Object, opts .
 	}
 
 	// Update the caches so that we don't try to update the object on subsequent reconciliations.
-	c.generationCache[c.cacheKey(obj)] = obj.GetGeneration()
-	c.objectCache[c.cacheKey(obj)] = cached
+	dCache.set(cached, obj.GetGeneration())
 	return nil
 }
 
@@ -144,30 +138,35 @@ func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) b
 		// If we can't get the object, assume it needs to be created or updated.
 		return true
 	}
+	logCtx := ContextLoggerForResource(c.log, obj)
 
 	// Only update the object if one of the following is true:
 	// - the object is not in the generation cache. This means we have not created this object before.
 	// - the generation on the cluster is newer than the generation we have cached. This means that the object has been updated on the cluster.
 	// - the object differs from the last cached version. This means the operator wants to update the object.
 	// This helps prevent us from updating objects unnecessarily.
-	if cachedGen, ok := c.generationCache[c.cacheKey(obj)]; !ok || cachedGen >= cur.GetGeneration() {
-		// The object is not in the cache, or the cached generation is newer than the current generation.
-		// Check if the object has changed since we last cached it.
-		if cachedObj, ok := c.objectCache[c.cacheKey(obj)]; ok {
-			// The object is in the cache, check if it has changed.
-			if reflect.DeepEqual(cachedObj, obj) {
-				return false
-			}
-		}
+	cachedObj, cachedGen, ok := dCache.get(obj)
+	if !ok {
+		// The object is not in the cache, so we need to update it.
+		return true
 	}
-	return true
-}
 
-func (c *componentHandler) cacheKey(obj client.Object) objectAndKind {
-	return objectAndKind{
-		Object: client.ObjectKeyFromObject(obj),
-		Kind:   obj.GetObjectKind().GroupVersionKind().GroupKind(),
+	// The object is in the cache, check if the generation is out of date.
+	if cachedGen < cur.GetGeneration() {
+		// The cached generation is older than the current generation in the cluster.
+		logCtx.Info("Object on cluster has been modified since last reconcile")
+		return true
 	}
+
+	// The cached generation is the same or newer than the current generation in the cluster.
+	// Check if the caller has updated the object since we last cached it.
+	if reflect.DeepEqual(cachedObj, obj) {
+		// No change to the object since we last cached it, so we don't need to update it.
+		return false
+	}
+
+	logCtx.Info("Controller has updated the object since last reconcile")
+	return true
 }
 
 func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
@@ -227,9 +226,11 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	// Check to see if the object exists or not - this determines whether we should create or update.
 	err := c.client.Get(ctx, key, cur)
 	if err != nil {
+		// Invalidate our cached object.
+		dCache.delete(obj)
+
 		if !errors.IsNotFound(err) {
 			// Anything other than "Not found" we should retry.
-			delete(c.generationCache, c.cacheKey(obj))
 			return err
 		}
 
@@ -264,9 +265,6 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			logCtx.WithValues("key", key).Error(err, "Failed to create object.")
 			return err
 		}
-
-		// Update the generation cache so that we don't try to update the object on subsequent reconciliations.
-		c.generationCache[c.cacheKey(obj)] = obj.GetGeneration()
 		return nil
 	}
 

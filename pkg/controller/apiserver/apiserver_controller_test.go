@@ -836,7 +836,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
 			Expect(canCleanedUp).To(BeTrue())
 		})
 
@@ -856,7 +856,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
 			Expect(canCleanedUp).To(BeFalse())
 		})
 
@@ -882,7 +882,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
 			Expect(canCleanedUp).To(BeFalse())
 		})
 
@@ -916,7 +916,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
 			Expect(canCleanedUp).To(BeFalse())
 		})
 	})

@@ -130,6 +130,21 @@ func (c *componentHandler) update(ctx context.Context, obj client.Object, opts .
 	return nil
 }
 
+func (c *componentHandler) delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	err := c.client.Delete(ctx, obj, opts...)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Remove the object from the cache if it was not found.
+			dCache.delete(obj)
+		}
+		return err
+	}
+
+	// Invalidate our cached object.
+	dCache.delete(obj)
+	return nil
+}
+
 func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) bool {
 	key := client.ObjectKeyFromObject(obj)
 	cur := obj.DeepCopyObject().(client.Object)
@@ -292,7 +307,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 		switch obj.(type) {
 		case *batchv1.Job:
 			// Jobs can't be updated, they can only be deleted then created
-			if err := c.client.Delete(ctx, obj); err != nil {
+			if err := c.delete(ctx, obj); err != nil {
 				logCtx.WithValues("key", key).Info("Failed to delete job for recreation.")
 				return err
 			}
@@ -311,7 +326,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			// object type is unset, it will result in SecretTypeOpaque, so this difference can be excluded.
 			if objSecret.Type != curSecret.Type &&
 				!(len(objSecret.Type) == 0 && curSecret.Type == v1.SecretTypeOpaque) {
-				if err := c.client.Delete(ctx, obj); err != nil {
+				if err := c.delete(ctx, obj); err != nil {
 					logCtx.WithValues("key", key).Info("Failed to delete secret for recreation.")
 					return err
 				}
@@ -331,7 +346,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 				// We don't want this service to have a cluster IP, but it has got one already.  Need to recreate
 				// the service to remove it.
 				logCtx.WithValues("key", key).Info("Service already exists and has unwanted ClusterIP, recreating service.")
-				if err := c.client.Delete(ctx, obj); err != nil {
+				if err := c.delete(ctx, obj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to delete Service for recreation.")
 					return err
 				}
@@ -349,7 +364,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			objRoleBinding := obj.(*rbacv1.RoleBinding)
 			if objRoleBinding.RoleRef.Name != curRoleBinding.RoleRef.Name {
 				// RoleRef field of RoleBinding can't be modified, so delete and recreate the entire RoleBinding
-				if err = c.client.Delete(ctx, obj); err != nil {
+				if err = c.delete(ctx, obj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to delete RoleBinding for recreation.")
 					return err
 				}
@@ -367,7 +382,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			objClusterRoleBinding := obj.(*rbacv1.ClusterRoleBinding)
 			if objClusterRoleBinding.RoleRef.Name != curClusterRoleBinding.RoleRef.Name {
 				// RoleRef field of ClusterRoleBinding can't be modified, so delete and recreate the entire ClusterRoleBinding
-				if err = c.client.Delete(ctx, obj); err != nil {
+				if err = c.delete(ctx, obj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to delete ClusterRoleBinding for recreation.")
 					return err
 				}
@@ -474,7 +489,7 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	}
 
 	for _, obj := range objsToDelete {
-		err := c.client.Delete(ctx, obj)
+		err := c.delete(ctx, obj)
 		if err != nil && !errors.IsNotFound(err) {
 			logCtx := ContextLoggerForResource(c.log, obj)
 			logCtx.Error(err, fmt.Sprintf("Error deleting object %v", obj))

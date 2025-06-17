@@ -91,35 +91,38 @@ var _ = Describe("Gateway API rendering tests", func() {
 						},
 					},
 				},
-				GatewayDeployment: &operatorv1.GatewayDeployment{
-					Spec: &operatorv1.GatewayDeploymentSpec{
-						Template: &operatorv1.GatewayDeploymentPodTemplate{
-							Metadata: &operatorv1.Metadata{
-								Labels: map[string]string{
-									"g-rural": "urban",
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "tigera-gateway-class",
+					GatewayDeployment: &operatorv1.GatewayDeployment{
+						Spec: &operatorv1.GatewayDeploymentSpec{
+							Template: &operatorv1.GatewayDeploymentPodTemplate{
+								Metadata: &operatorv1.Metadata{
+									Labels: map[string]string{
+										"g-rural": "urban",
+									},
+									Annotations: map[string]string{
+										"g-haste": "speed",
+									},
 								},
-								Annotations: map[string]string{
-									"g-haste": "speed",
+								Spec: &operatorv1.GatewayDeploymentPodSpec{
+									Affinity: affinity,
+									Containers: []operatorv1.GatewayDeploymentContainer{{
+										Name:      "envoy",
+										Resources: resourceRequirements,
+									}},
+									NodeSelector: map[string]string{
+										"g-fast": "slow",
+									},
+									Tolerations:               tolerations,
+									TopologySpreadConstraints: topologySpreadConstraints,
 								},
 							},
-							Spec: &operatorv1.GatewayDeploymentPodSpec{
-								Affinity: affinity,
-								Containers: []operatorv1.GatewayDeploymentContainer{{
-									Name:      "envoy",
-									Resources: resourceRequirements,
-								}},
-								NodeSelector: map[string]string{
-									"g-fast": "slow",
-								},
-								Tolerations:               tolerations,
-								TopologySpreadConstraints: topologySpreadConstraints,
+							Strategy: &operatorv1.GatewayDeploymentStrategy{
+								RollingUpdate: rollingUpdate,
 							},
-						},
-						Strategy: &operatorv1.GatewayDeploymentStrategy{
-							RollingUpdate: rollingUpdate,
 						},
 					},
-				},
+				}},
 				GatewayCertgenJob: &operatorv1.GatewayCertgenJob{
 					Metadata: &operatorv1.Metadata{
 						Labels: map[string]string{
@@ -180,7 +183,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
-			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "envoy-proxy-config", Namespace: "tigera-gateway"}},
+			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 		})
 
@@ -217,7 +220,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(job.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("job-fast", "slow"))
 		Expect(job.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
 
-		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "envoy-proxy-config", "tigera-gateway")
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("g-rural", "urban"))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Annotations).To(HaveKeyWithValue("g-haste", "speed"))
@@ -243,7 +246,11 @@ var _ = Describe("Gateway API rendering tests", func() {
 			Registry:         "myregistry.io/",
 			ImagePullSecrets: pullSecretRefs,
 		}
-		gatewayAPI := &operatorv1.GatewayAPI{}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
@@ -274,7 +281,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
-			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "envoy-proxy-config", Namespace: "tigera-gateway"}},
+			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 		})
@@ -295,7 +302,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		)))
 		Expect(job.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
 
-		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "envoy-proxy-config", "tigera-gateway")
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Image).To(Equal("myregistry.io/calico/envoy-proxy:" + components.ComponentCalicoEnvoyProxy.Version))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
@@ -329,7 +336,11 @@ var _ = Describe("Gateway API rendering tests", func() {
 			ImagePullSecrets: pullSecretRefs,
 			Variant:          operatorv1.TigeraSecureEnterprise,
 		}
-		gatewayAPI := &operatorv1.GatewayAPI{}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
@@ -360,7 +371,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
-			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "envoy-proxy-config", Namespace: "tigera-gateway"}},
+			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 		})
@@ -381,7 +392,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		)))
 		Expect(job.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
 
-		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "envoy-proxy-config", "tigera-gateway")
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Image).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
@@ -396,5 +407,316 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(*gatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container.Image).To(Equal("myregistry.io/tigera/envoy-ratelimit:" + components.ComponentGatewayAPIEnvoyRatelimit.Version))
 		Expect(gatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
 		Expect(*gatewayConfig.Provider.Kubernetes.ShutdownManager.Image).To(Equal("myregistry.io/tigera/envoy-gateway:" + components.ComponentGatewayAPIEnvoyGateway.Version))
+	})
+
+	It("honours gateway controller customizations", func() {
+		installation := &operatorv1.InstallationSpec{
+			Registry: "myregistry.io/",
+			Variant:  operatorv1.TigeraSecureEnterprise,
+		}
+		threeReplicas := int32(3)
+		topologySpreadConstraints := []corev1.TopologySpreadConstraint{{
+			MaxSkew:     2,
+			TopologyKey: "balanced",
+		}}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+				GatewayControllerDeployment: &operatorv1.GatewayControllerDeployment{
+					Spec: &operatorv1.GatewayControllerDeploymentSpec{
+						Replicas: &threeReplicas,
+						Template: &operatorv1.GatewayControllerDeploymentPodTemplate{
+							Metadata: &operatorv1.Metadata{},
+							Spec: &operatorv1.GatewayControllerDeploymentPodSpec{
+								TopologySpreadConstraints: topologySpreadConstraints,
+							},
+						},
+					},
+				},
+			},
+		}
+		customName := "my-gateway-controller"
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+			CustomEnvoyGateway: &envoyapi.EnvoyGateway{
+				EnvoyGatewaySpec: envoyapi.EnvoyGatewaySpec{
+					Provider: &envoyapi.EnvoyGatewayProvider{
+						Type: envoyapi.ProviderTypeKubernetes,
+						Kubernetes: &envoyapi.EnvoyGatewayKubernetesProvider{
+							RateLimitDeployment: &envoyapi.KubernetesDeploymentSpec{
+								Name: &customName,
+							},
+						},
+					},
+					ExtensionAPIs: &envoyapi.ExtensionAPISettings{
+						EnableEnvoyPatchPolicy: true,
+					},
+				},
+			},
+		})
+
+		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
+		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyGatewayImage).To(Equal("myregistry.io/tigera/envoy-gateway:" + components.ComponentGatewayAPIEnvoyGateway.Version))
+		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyRatelimitImage).To(Equal("myregistry.io/tigera/envoy-ratelimit:" + components.ComponentGatewayAPIEnvoyRatelimit.Version))
+		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
+
+		objsToCreate, objsToDelete := gatewayComp.Objects()
+		Expect(objsToDelete).To(HaveLen(0))
+
+		deploy, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, "envoy-gateway", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(deploy.Spec.Replicas).NotTo(BeNil())
+		Expect(*deploy.Spec.Replicas).To(BeNumerically("==", threeReplicas))
+		Expect(deploy.Spec.Template.Spec.TopologySpreadConstraints).NotTo(BeNil())
+		Expect(deploy.Spec.Template.Spec.TopologySpreadConstraints).To(Equal(topologySpreadConstraints))
+
+		gatewayCM, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, "envoy-gateway-config", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		gatewayConfig := &envoyapi.EnvoyGateway{}
+		Expect(yaml.Unmarshal([]byte(gatewayCM.Data[EnvoyGatewayConfigKey]), gatewayConfig)).NotTo(HaveOccurred())
+		Expect(gatewayConfig.Provider.Kubernetes.RateLimitDeployment).NotTo(BeNil())
+		Expect(gatewayConfig.Provider.Kubernetes.RateLimitDeployment.Name).NotTo(BeNil())
+		Expect(*gatewayConfig.Provider.Kubernetes.RateLimitDeployment.Name).To(Equal(customName))
+		Expect(*gatewayConfig.Provider.Kubernetes.ShutdownManager.Image).To(Equal("myregistry.io/tigera/envoy-gateway:" + components.ComponentCalicoEnvoyGateway.Version))
+		Expect(gatewayConfig.ExtensionAPIs).NotTo(BeNil())
+		Expect(gatewayConfig.ExtensionAPIs.EnableBackend).To(BeTrue())
+		Expect(gatewayConfig.ExtensionAPIs.EnableEnvoyPatchPolicy).To(BeTrue())
+	})
+
+	It("honours GatewayClass and EnvoyProxy customizations", func() {
+		installation := &operatorv1.InstallationSpec{
+			Registry: "myregistry.io/",
+			Variant:  operatorv1.TigeraSecureEnterprise,
+		}
+		twoReplicas := int32(2)
+		topologySpreadConstraints := []corev1.TopologySpreadConstraint{{
+			MaxSkew:     2,
+			TopologyKey: "balanced",
+		}}
+		lbClass := "upper"
+		lbIP := "10.4.10.4"
+		resourceRequirements := &corev1.ResourceRequirements{
+			Claims: []corev1.ResourceClaim{{
+				Name: "whatnot",
+			}},
+		}
+		daemonSet := operatorv1.GatewayKindDaemonSet
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "custom-class-1",
+					EnvoyProxyRef: &operatorv1.NamespacedName{
+						Namespace: "default",
+						Name:      "my-proxy-1",
+					},
+					GatewayService: &operatorv1.GatewayService{
+						Metadata: &operatorv1.Metadata{
+							Annotations: map[string]string{
+								"service.beta.kubernetes.io/aws-load-balancer-type":            "external",
+								"service.beta.kubernetes.io/aws-load-balancer-nlb-target-type": "instance",
+								"service.beta.kubernetes.io/aws-load-balancer-scheme":          "internet-facing",
+							},
+						},
+					},
+				}, {
+					Name: "custom-class-2",
+					EnvoyProxyRef: &operatorv1.NamespacedName{
+						Namespace: "default",
+						Name:      "my-proxy-2", // Daemonset instead of Deployment
+					},
+					GatewayDaemonSet: &operatorv1.GatewayDaemonSet{
+						Spec: &operatorv1.GatewayDaemonSetSpec{
+							Template: &operatorv1.GatewayDaemonSetPodTemplate{
+								Spec: &operatorv1.GatewayDaemonSetPodSpec{
+									TopologySpreadConstraints: topologySpreadConstraints,
+								},
+							},
+						},
+					},
+				}, {
+					Name: "custom-class-3",
+					// No custom EnvoyProxy for this class.
+					GatewayDeployment: &operatorv1.GatewayDeployment{
+						Spec: &operatorv1.GatewayDeploymentSpec{
+							Replicas: &twoReplicas,
+							Template: &operatorv1.GatewayDeploymentPodTemplate{
+								Metadata: &operatorv1.Metadata{
+									Labels: map[string]string{
+										"envoy-proxy": "standard",
+									},
+								},
+								Spec: &operatorv1.GatewayDeploymentPodSpec{
+									Containers: []operatorv1.GatewayDeploymentContainer{{
+										Name:      "envoy",
+										Resources: resourceRequirements,
+									}},
+									NodeSelector: map[string]string{
+										"east": "west",
+									},
+								},
+							},
+						},
+					},
+					GatewayService: &operatorv1.GatewayService{
+						Spec: &operatorv1.GatewayServiceSpec{
+							LoadBalancerClass: &lbClass,
+							LoadBalancerSourceRanges: []string{
+								"182.98.44.55/24",
+							},
+							LoadBalancerIP: &lbIP,
+						},
+					},
+				}, {
+					Name: "custom-class-4",
+					// Same as custom-class-3 but with DaemonSet.
+					GatewayKind: &daemonSet,
+					GatewayDaemonSet: &operatorv1.GatewayDaemonSet{
+						Spec: &operatorv1.GatewayDaemonSetSpec{
+							Template: &operatorv1.GatewayDaemonSetPodTemplate{
+								Metadata: &operatorv1.Metadata{
+									Labels: map[string]string{
+										"envoy-proxy": "standard",
+									},
+								},
+								Spec: &operatorv1.GatewayDaemonSetPodSpec{
+									Containers: []operatorv1.GatewayDaemonSetContainer{{
+										Name:      "envoy",
+										Resources: resourceRequirements,
+									}},
+									NodeSelector: map[string]string{
+										"east": "west",
+									},
+								},
+							},
+						},
+					},
+					GatewayService: &operatorv1.GatewayService{
+						Spec: &operatorv1.GatewayServiceSpec{
+							LoadBalancerClass: &lbClass,
+							LoadBalancerSourceRanges: []string{
+								"182.98.44.55/24",
+							},
+							LoadBalancerIP: &lbIP,
+						},
+					},
+				}},
+			},
+		}
+
+		envoyProxy1 := &envoyapi.EnvoyProxy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "EnvoyProxy",
+				APIVersion: "gateway.envoyproxy.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-proxy-1",
+				Namespace: "default",
+			},
+			Spec: envoyapi.EnvoyProxySpec{
+				Logging: envoyapi.ProxyLogging{
+					Level: map[envoyapi.ProxyLogComponent]envoyapi.LogLevel{
+						envoyapi.LogComponentAdmin: envoyapi.LogLevelWarn,
+					},
+				},
+			},
+		}
+		envoyProxy2 := &envoyapi.EnvoyProxy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "EnvoyProxy",
+				APIVersion: "gateway.envoyproxy.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-proxy-2",
+				Namespace: "default",
+			},
+			Spec: envoyapi.EnvoyProxySpec{
+				Provider: &envoyapi.EnvoyProxyProvider{
+					Type: envoyapi.ProviderTypeKubernetes,
+					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
+						EnvoyDaemonSet: &envoyapi.KubernetesDaemonSetSpec{
+							Pod: &envoyapi.KubernetesPodSpec{
+								NodeSelector: map[string]string{
+									"x": "y",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+			CustomEnvoyProxies: map[string]*envoyapi.EnvoyProxy{
+				"custom-class-1": envoyProxy1,
+				"custom-class-2": envoyProxy2,
+			},
+		})
+
+		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
+		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyGatewayImage).To(Equal("myregistry.io/tigera/envoy-gateway:" + components.ComponentGatewayAPIEnvoyGateway.Version))
+		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyRatelimitImage).To(Equal("myregistry.io/tigera/envoy-ratelimit:" + components.ComponentGatewayAPIEnvoyRatelimit.Version))
+		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
+
+		objsToCreate, objsToDelete := gatewayComp.Objects()
+		Expect(objsToDelete).To(HaveLen(0))
+
+		// The default GatewayClass should not exist.
+		_, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "tigera-gateway-class", "tigera-gateway")
+		Expect(err).To(HaveOccurred())
+
+		// Get the four expected GatewayClasses.
+		gc1, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "custom-class-1", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		gc2, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "custom-class-2", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		gc3, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "custom-class-3", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		gc4, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "custom-class-4", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Get their four EnvoyProxies.
+		Expect(gc1.Spec.ParametersRef).NotTo(BeNil())
+		ep1, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, gc1.Spec.ParametersRef.Name, string(*gc1.Spec.ParametersRef.Namespace))
+		Expect(err).NotTo(HaveOccurred())
+		ep2, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, gc2.Spec.ParametersRef.Name, string(*gc2.Spec.ParametersRef.Namespace))
+		Expect(err).NotTo(HaveOccurred())
+		ep3, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, gc3.Spec.ParametersRef.Name, string(*gc3.Spec.ParametersRef.Namespace))
+		Expect(err).NotTo(HaveOccurred())
+		ep4, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, gc4.Spec.ParametersRef.Name, string(*gc4.Spec.ParametersRef.Namespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		// Check customizations from custom EnvoyProxies.
+		Expect(ep1.Spec.Logging.Level).To(Equal(envoyProxy1.Spec.Logging.Level))
+
+		Expect(ep2.Spec.Provider.Kubernetes.EnvoyDaemonSet).NotTo(BeNil())
+		Expect(ep2.Spec.Provider.Kubernetes.EnvoyDeployment).To(BeNil())
+		Expect(ep2.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.NodeSelector).To(Equal(envoyProxy2.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.NodeSelector))
+		Expect(ep2.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.TopologySpreadConstraints).To(Equal(topologySpreadConstraints))
+
+		// Check customizations from class-specific customization structs.
+		Expect(ep1.Spec.Provider.Kubernetes.EnvoyService.Annotations).To(HaveKeyWithValue("service.beta.kubernetes.io/aws-load-balancer-type", "external"))
+		Expect(ep1.Spec.Provider.Kubernetes.EnvoyService.Annotations).To(HaveKeyWithValue("service.beta.kubernetes.io/aws-load-balancer-nlb-target-type", "instance"))
+		Expect(ep1.Spec.Provider.Kubernetes.EnvoyService.Annotations).To(HaveKeyWithValue("service.beta.kubernetes.io/aws-load-balancer-scheme", "internet-facing"))
+
+		Expect(ep3.Spec.Provider.Kubernetes.EnvoyDeployment).NotTo(BeNil())
+		Expect(*ep3.Spec.Provider.Kubernetes.EnvoyDeployment.Replicas).To(Equal(*gatewayAPI.Spec.GatewayClasses[2].GatewayDeployment.Spec.Replicas))
+		Expect(ep3.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("envoy-proxy", "standard"))
+		Expect(ep3.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Resources).To(Equal(resourceRequirements))
+		Expect(ep3.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.NodeSelector).To(HaveKeyWithValue("east", "west"))
+		Expect(*ep3.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerClass).To(Equal(lbClass))
+		Expect(ep3.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerSourceRanges).To(ConsistOf("182.98.44.55/24"))
+		Expect(*ep3.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP).To(Equal(lbIP))
+
+		Expect(ep4.Spec.Provider.Kubernetes.EnvoyDeployment).To(BeNil())
+		Expect(ep4.Spec.Provider.Kubernetes.EnvoyDaemonSet).NotTo(BeNil())
+		Expect(ep4.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.Labels).To(HaveKeyWithValue("envoy-proxy", "standard"))
+		Expect(ep4.Spec.Provider.Kubernetes.EnvoyDaemonSet.Container.Resources).To(Equal(resourceRequirements))
+		Expect(ep4.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.NodeSelector).To(HaveKeyWithValue("east", "west"))
+		Expect(*ep4.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerClass).To(Equal(lbClass))
+		Expect(ep4.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerSourceRanges).To(ConsistOf("182.98.44.55/24"))
+		Expect(*ep4.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP).To(Equal(lbIP))
 	})
 })

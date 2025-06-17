@@ -159,9 +159,6 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	if err = c.WatchObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerNamespace}}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
 	}
-	if err = c.WatchObject(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.APIServerNamespace}}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
-	}
 
 	for _, secretName := range []string{
 		"calico-apiserver-certs", "tigera-apiserver-certs",

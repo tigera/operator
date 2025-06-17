@@ -2332,7 +2332,7 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 	}
 
 	// Delete the older namespace for OSS and EE.
-	// this is to support older version OSS update to newer EE and vice versa.
+	// This supports upgrades from older OSS versions to newer EE versions, and vice versa.
 	// CanCleanupOlderResources ensure the newdeployment is up and running in calico-system in both variant.
 	if c.cfg.CanCleanupOlderResources {
 		renamedRscList = append(renamedRscList, &corev1.Namespace{

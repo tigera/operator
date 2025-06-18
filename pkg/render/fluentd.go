@@ -320,10 +320,10 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		c.fluentdClusterRoleBinding(),
 	)
 	if c.cfg.ManagedCluster {
-		objs = append(objs, c.externalLinseedExternalService())
+		objs = append(objs, c.externalLinseedService())
 		objs = append(objs, c.externalLinseedRoleBinding())
 	} else {
-		toDelete = append(toDelete, c.externalLinseedExternalService())
+		toDelete = append(toDelete, c.externalLinseedService())
 		toDelete = append(toDelete, c.externalLinseedRoleBinding())
 	}
 
@@ -391,7 +391,7 @@ func (c *fluentdComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 	}
 }
 
-func (c *fluentdComponent) externalLinseedExternalService() *corev1.Service {
+func (c *fluentdComponent) externalLinseedService() *corev1.Service {
 	// For managed clusters, we must create an external service for fluentd to forward the request to guardian.
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},

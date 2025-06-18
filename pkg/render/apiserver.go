@@ -60,6 +60,7 @@ const (
 
 const (
 	APIServerResourceName  = "apiserver"
+	APIServerNamespace     = common.CalicoNamespace
 	QueryServerPort        = 8080
 	QueryServerPortName    = "queryserver"
 	QueryserverNamespace   = "calico-system"
@@ -250,7 +251,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// deleted, since they will be garbage collected on namespace deletion.
 	namespacedObjects := []client.Object{}
 	// Add in image pull secrets.
-	secrets := secret.CopyToNamespace(rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.cfg.PullSecrets...)
+	secrets := secret.CopyToNamespace(APIServerNamespace, c.cfg.PullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
 	namespacedObjects = append(namespacedObjects,
@@ -321,35 +322,25 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}})
 	}
 
-	podSecurityNamespaceLabel := PodSecurityStandard(PSSRestricted)
-	if c.hostNetwork() {
-		podSecurityNamespaceLabel = PSSPrivileged
-	}
-	// Global OSS-only objects.
-	globalCalicoObjects := []client.Object{
-		CreateNamespace(rmeta.APIServerNamespace(operatorv1.Calico), c.cfg.Installation.KubernetesProvider, podSecurityNamespaceLabel, c.cfg.Installation.Azure),
-		CreateOperatorSecretsRoleBinding(rmeta.APIServerNamespace(operatorv1.Calico)),
-	}
-
 	// Compile the final arrays based on the variant.
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// Create any enterprise specific objects.
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
 		namespacedObjects = append(namespacedObjects, namespacedEnterpriseObjects...)
 
-		// Explicitly delete any global OSS objects.
-		// Namespaced objects will be handled by namespace deletion.
-		objsToDelete = append(objsToDelete, globalCalicoObjects...)
-	} else {
-		// Create any Calico-only objects
-		globalObjects = append(globalObjects, globalCalicoObjects...)
+		// Clean up the stale Calico API server deployment when switching between variants.
+		objsToDelete = append(objsToDelete, c.cleanupStaleAPIServerDeployment())
 
+	} else {
 		// Add in a NetworkPolicy.
 		namespacedObjects = append(namespacedObjects, c.networkPolicy())
 
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
+
+		// Clean up the stale Calico API server deployment when switching between variants.
+		objsToDelete = append(objsToDelete, c.cleanupStaleAPIServerDeployment())
 	}
 
 	// Explicitly delete any renamed/deprecated objects.
@@ -395,7 +386,7 @@ func (c *apiServerComponent) apiServerPodDisruptionBudget() *policyv1.PodDisrupt
 		TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+			Namespace: APIServerNamespace,
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
 			MaxUnavailable: &maxUnavailable,
@@ -421,7 +412,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 			GroupPriorityMinimum: 1500,
 			Service: &apiregv1.ServiceReference{
 				Name:      ProjectCalicoAPIServerServiceName(c.cfg.Installation.Variant),
-				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+				Namespace: APIServerNamespace,
 			},
 			Version:  "v3",
 			CABundle: cert,
@@ -446,7 +437,7 @@ func (c *apiServerComponent) delegateAuthClusterRoleBinding() (client.Object, cl
 				{
 					Kind:      "ServiceAccount",
 					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
-					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+					Namespace: APIServerNamespace,
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
@@ -484,7 +475,7 @@ func (c *apiServerComponent) authReaderRoleBinding() (client.Object, client.Obje
 				{
 					Kind:      "ServiceAccount",
 					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
-					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+					Namespace: APIServerNamespace,
 				},
 			},
 		}, &rbacv1.RoleBinding{
@@ -504,7 +495,7 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
-			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+			Namespace: APIServerNamespace,
 		},
 	}
 }
@@ -565,7 +556,7 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      APIServerPolicyName,
-			Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
+			Namespace: APIServerNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
@@ -717,7 +708,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRoleBinding() *rbacv1.C
 			{
 				Kind:      "ServiceAccount",
 				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
-				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+				Namespace: APIServerNamespace,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -827,7 +818,7 @@ func (c *apiServerComponent) multiTenantSecretsRBAC() []client.Object {
 				{
 					Kind:      "ServiceAccount",
 					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
-					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+					Namespace: APIServerNamespace,
 				},
 			},
 		},
@@ -859,7 +850,7 @@ func (c *apiServerComponent) secretsRBAC() []client.Object {
 			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      APIServerSecretsRBACName,
-				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+				Namespace: APIServerNamespace,
 			},
 			Rules: rules,
 		},
@@ -869,7 +860,7 @@ func (c *apiServerComponent) secretsRBAC() []client.Object {
 			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      APIServerSecretsRBACName,
-				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+				Namespace: APIServerNamespace,
 			},
 			RoleRef: rbacv1.RoleRef{
 				Kind:     "Role",
@@ -880,7 +871,7 @@ func (c *apiServerComponent) secretsRBAC() []client.Object {
 				{
 					Kind:      "ServiceAccount",
 					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
-					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+					Namespace: APIServerNamespace,
 				},
 			},
 		},
@@ -901,7 +892,7 @@ func (c *apiServerComponent) authClusterRoleBinding() (client.Object, client.Obj
 				{
 					Kind:      "ServiceAccount",
 					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
-					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+					Namespace: APIServerNamespace,
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
@@ -971,7 +962,7 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() (client.Object, c
 				{
 					Kind:      "ServiceAccount",
 					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
-					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+					Namespace: APIServerNamespace,
 				},
 			},
 			RoleRef: rbacv1.RoleRef{
@@ -1031,7 +1022,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ProjectCalicoAPIServerServiceName(c.cfg.Installation.Variant),
-			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+			Namespace: APIServerNamespace,
 			Labels:    map[string]string{"k8s-app": QueryserverServiceName},
 		},
 		Spec: corev1.ServiceSpec{
@@ -1090,7 +1081,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	var initContainers []corev1.Container
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
 		// Use the same CSR init container name for both OSS and Enterprise.
-		initContainer := c.cfg.TLSKeyPair.InitContainer(rmeta.APIServerNamespace(c.cfg.Installation.Variant))
+		initContainer := c.cfg.TLSKeyPair.InitContainer(APIServerNamespace)
 		initContainer.Name = fmt.Sprintf("%s-%s", calicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
 		initContainers = append(initContainers, initContainer)
 	}
@@ -1111,7 +1102,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
-			Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+			Namespace: APIServerNamespace,
 			Labels: map[string]string{
 				"apiserver": "true",
 			},
@@ -1125,7 +1116,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
-					Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+					Namespace: APIServerNamespace,
 					Labels: map[string]string{
 						"apiserver": "true",
 					},
@@ -1147,7 +1138,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
-		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(name, rmeta.APIServerNamespace(c.cfg.Installation.Variant))
+		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(name, APIServerNamespace)
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -1468,7 +1459,7 @@ func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
 	p := intstr.FromInt32(apiServerPort)
 	return &netv1.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant)},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
 		Spec: netv1.NetworkPolicySpec{
 			PodSelector: *c.deploymentSelector(),
 			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
@@ -1563,7 +1554,7 @@ func (c *apiServerComponent) tigeraApiServerClusterRoleBinding() *rbacv1.Cluster
 			{
 				Kind:      "ServiceAccount",
 				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
-				Namespace: rmeta.APIServerNamespace(c.cfg.Installation.Variant),
+				Namespace: APIServerNamespace,
 			},
 		},
 		RoleRef: rbacv1.RoleRef{
@@ -2261,7 +2252,7 @@ rules:
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			// This object is for Enterprise only, so pass it explicitly.
-			Namespace: rmeta.APIServerNamespace(operatorv1.TigeraSecureEnterprise),
+			Namespace: APIServerNamespace,
 			Name:      auditPolicyVolumeName,
 		},
 		Data: map[string]string{
@@ -2344,16 +2335,25 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 				Name: "tigera-tier-getter",
 			},
 		})
+	}
 
-		// Delete the older namespace for enterprise
-		if c.cfg.CanCleanupOlderResources {
-			renamedRscList = append(renamedRscList, &corev1.Namespace{
-				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tigera-system",
-				},
-			})
-		}
+	// Delete the older namespace for OSS and EE.
+	// This supports upgrades from older OSS versions to newer EE versions, and vice versa.
+	// CanCleanupOlderResources ensure the newdeployment is up and running in calico-system in both variant.
+	if c.cfg.CanCleanupOlderResources {
+		renamedRscList = append(renamedRscList, &corev1.Namespace{
+			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "calico-apiserver",
+			},
+		})
+
+		renamedRscList = append(renamedRscList, &corev1.Namespace{
+			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "tigera-system",
+			},
+		})
 	}
 
 	return renamedRscList
@@ -2411,4 +2411,21 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 	}
 
 	return l7AdmssCtrl
+}
+
+// cleanupStaleAPIServerDeployment returns the API server Deployment object
+// that should be removed during a variant switch (OSS <-> EE).
+func (c *apiServerComponent) cleanupStaleAPIServerDeployment() client.Object {
+	// Determine the correct name based on the configured variant.
+	_, nameToDelete := c.resourceNameBasedOnVariant("tigera-apiserver", "calico-apiserver")
+	return &appsv1.Deployment{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Deployment",
+			APIVersion: "apps/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nameToDelete,
+			Namespace: APIServerNamespace,
+		},
+	}
 }

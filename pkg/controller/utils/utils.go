@@ -89,7 +89,7 @@ func ContextLoggerForResource(log logr.Logger, obj client.Object) logr.Logger {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
-	return log.WithValues("Name", name, "Namespace", namespace, "Kind", gvk.Kind)
+	return log.WithValues("name", name, "namespace", namespace, "kind", gvk.Kind)
 }
 
 // IgnoreObject returns true if the object has been marked as ignored by the user,
@@ -1017,6 +1017,12 @@ func MaintainInstallationFinalizer(
 		// Add a finalizer indicating that the mainResource is still available.
 		SetInstallationFinalizer(installation, finalizer)
 	} else {
+		// Remove the finalizer. We can skip this check if the finalizer is already not present.
+		if !stringsutil.StringInSlice(finalizer, installation.GetFinalizers()) {
+			log.V(2).Info("Finalizer not present, skipping removal", "finalizer", finalizer)
+			return nil
+		}
+
 		// Check if the namespaced secondaryResources are still present.
 		// Keep track of all the secondary resources that the main resource creates.
 		// Only delete the finalizer if all of the secondary resources are deleted.

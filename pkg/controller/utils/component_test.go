@@ -69,8 +69,6 @@ var _ = Describe("Component handler tests", func() {
 	)
 
 	BeforeEach(func() {
-		log := logf.Log.WithName("test_utils_logger")
-
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
 		err := apis.AddToScheme(scheme)
@@ -90,7 +88,7 @@ var _ = Describe("Component handler tests", func() {
 			TypeMeta:   metav1.TypeMeta{Kind: "Manager", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		}
-		handler = NewComponentHandler(log, c, scheme, instance)
+		handler = NewComponentHandler(logf.Log, c, scheme, instance)
 	})
 
 	It("adds Owner references when Custom Resource is provided", func() {
@@ -615,7 +613,7 @@ var _ = Describe("Component handler tests", func() {
 										{
 											Image: "foo",
 											Env: []corev1.EnvVar{
-												corev1.EnvVar{
+												{
 													Name:  TLS_CIPHERS_ENV_VAR_NAME,
 													Value: "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
 												},
@@ -1991,13 +1989,14 @@ var _ = Describe("Mocked client Component handler tests", func() {
 	)
 
 	BeforeEach(func() {
-		log := logf.Log.WithName("test_utils_logger")
-
 		mc = mockClient{Info: make([]mockReturn, 0)}
 		c = &mc
 		ctx = context.Background()
 
-		handler = NewComponentHandler(log, c, runtime.NewScheme(), nil)
+		handler = NewComponentHandler(logf.Log, c, runtime.NewScheme(), nil)
+
+		// Use a new cache for each test.
+		dCache = newCache()
 	})
 
 	Context("Resource conflicts", func() {
@@ -2026,7 +2025,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			objs:            []client.Object{&ds},
 		}
 
-		It("if Updating a resource conflicts try the update again", func() {
+		It("if Updating a resource conflicts try the update again (retry OK))", func() {
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2041,11 +2040,16 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				Method:       "Get",
 				Return:       nil,
 				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method: "Get",
+				Return: nil,
 			})
 			mc.Info = append(mc.Info, mockReturn{
 				Method: "Update",
 				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
 			})
+
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2060,6 +2064,10 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				Method:       "Get",
 				Return:       nil,
 				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method: "Get",
+				Return: nil,
 			})
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Update",
@@ -2070,10 +2078,10 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
 
-			Expect(mc.Index).To(Equal(8))
+			Expect(mc.Index).To(Equal(10))
 		})
 
-		It("if Updating a resource conflicts try the update again", func() {
+		It("if Updating a resource conflicts try the update again (retry fails)", func() {
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2088,11 +2096,16 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				Method:       "Get",
 				Return:       nil,
 				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method: "Get",
+				Return: nil,
 			})
 			mc.Info = append(mc.Info, mockReturn{
 				Method: "Update",
 				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
 			})
+
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2107,16 +2120,19 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				Method:       "Get",
 				Return:       nil,
 				InputMutator: setToDS,
+			})
+			mc.Info = append(mc.Info, mockReturn{
+				Method: "Get",
+				Return: nil,
 			})
 			mc.Info = append(mc.Info, mockReturn{
 				Method: "Update",
-				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
+				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message 2")),
 			})
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
+			Expect(mc.Index).To(Equal(10))
 			Expect(err).NotTo(BeNil())
-
-			Expect(mc.Index).To(Equal(8))
 		})
 	})
 
@@ -2179,6 +2195,11 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			})
 
 			mc.Info = append(mc.Info, mockReturn{
+				Method: "Get",
+				Return: nil,
+			})
+
+			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Update",
 				Return:       nil,
 				InputMutator: setToBaseNP,
@@ -2186,7 +2207,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(2))
+			Expect(mc.Index).To(Equal(3))
 		})
 	})
 
@@ -2236,6 +2257,11 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			})
 
 			mc.Info = append(mc.Info, mockReturn{
+				Method: "Get",
+				Return: nil,
+			})
+
+			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Update",
 				Return:       nil,
 				InputMutator: setToBaseTier,
@@ -2243,7 +2269,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(2))
+			Expect(mc.Index).To(Equal(3))
 		})
 	})
 })
@@ -2345,7 +2371,6 @@ func (mc *mockClient) Update(ctx context.Context, obj client.Object, opts ...cli
 	if !ok {
 		panic(fmt.Sprintf("mockClient Info didn't have right type for entry %d for %s %v", mc.Index, funcName, client.ObjectKeyFromObject(obj)))
 	}
-
 	return v
 }
 

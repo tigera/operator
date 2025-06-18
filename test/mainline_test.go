@@ -490,7 +490,7 @@ func removeInstallation(ctx context.Context, c client.Client, name string) {
 
 func verifyAPIServerHasDeployed(c client.Client) {
 	By("Verifying API server was created")
-	apiserver := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-apiserver"}}
+	apiserver := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"}}
 	ExpectResourceCreated(c, apiserver)
 
 	By("Verifying the API server resources are ready")

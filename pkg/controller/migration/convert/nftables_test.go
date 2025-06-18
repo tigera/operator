@@ -62,6 +62,19 @@ var _ = Describe("convert nftables mode", func() {
 		Expect(i.Spec.CalicoNetwork).To(BeNil())
 	})
 
+	It("rejects migration if another dataplane is already set", func() {
+		nftMode := pcv1.NFTablesModeEnabled
+		f.Spec.NFTablesMode = &nftMode
+		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
+
+		// Set the Installation to already have a dataplane mode set.
+		bpf := operatorv1.LinuxDataplaneBPF
+		i.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &bpf}
+
+		err := handleNftables(&comps, i)
+		Expect(err).To(HaveOccurred())
+	})
+
 	It("check with no felixconfig", func() {
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM).Build()
 		err := handleNftables(&comps, i)

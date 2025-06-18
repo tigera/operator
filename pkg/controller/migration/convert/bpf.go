@@ -88,7 +88,7 @@ func handleBPF(c *components, install *operatorv1.Installation) error {
 		// If we hit this, it means that either there was conflicting configuration in the
 		// manifest, or that a dataplane combination exists that is not supported by the operator.
 		if install.Spec.CalicoNetwork.LinuxDataplane != nil {
-			return fmt.Errorf("cannot enabled bpf, already set to %s", *install.Spec.CalicoNetwork.LinuxDataplane)
+			return fmt.Errorf("cannot enable bpf, already set to %s", *install.Spec.CalicoNetwork.LinuxDataplane)
 		}
 
 		install.Spec.CalicoNetwork.LinuxDataplane = &bpf

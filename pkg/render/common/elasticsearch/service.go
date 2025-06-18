@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,13 +25,26 @@ const (
 	linseedEndpoint     = "https://tigera-linseed.%s.svc"
 	httpsFQDNEndpoint   = "https://tigera-secure-es-gateway-http.%s.svc.%s:9200"
 	linseedFQDNEndpoint = "https://tigera-linseed.%s.svc.%s"
+
+	// Handle for multi tenant
+	guardianEndpoint       = "https://guardian.calico-system.svc"
+	guardianFQDNEndpoint   = "https://guardian.calico-system.svc.%s"
+	fluentdLinseedEndpoint = "https://tigera-linseed"
 )
 
-func LinseedEndpoint(osType rmeta.OSType, clusterDomain, namespace string) string {
-	if osType == rmeta.OSTypeWindows {
+func LinseedEndpoint(osType rmeta.OSType, clusterDomain, namespace string, isManagedCluster bool, isFluentd bool) string {
+	switch {
+	case isManagedCluster && isFluentd:
+		return fluentdLinseedEndpoint
+	case isManagedCluster && osType == rmeta.OSTypeWindows:
+		return fmt.Sprintf(guardinaFQDNEndpoint, clusterDomain)
+	case isManagedCluster:
+		return guardianEndpoint
+	case osType == rmeta.OSTypeWindows:
 		return fmt.Sprintf(linseedFQDNEndpoint, namespace, clusterDomain)
+	default:
+		return fmt.Sprintf(linseedEndpoint, namespace)
 	}
-	return fmt.Sprintf(linseedEndpoint, namespace)
 }
 
 // GatewayEndpoint returns the endpoint for the Elasticsearch service. For

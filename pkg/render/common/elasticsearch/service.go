@@ -41,7 +41,7 @@ func LinseedEndpoint(osType rmeta.OSType, clusterDomain, namespace string, isMan
 	case isManagedCluster && isFluentd:
 		return fluentdLinseedEndpoint
 	case isManagedCluster && osType == rmeta.OSTypeWindows:
-		return fmt.Sprintf(guardinaFQDNEndpoint, clusterDomain)
+		return fmt.Sprintf(guardianFQDNEndpoint, clusterDomain)
 	case isManagedCluster:
 		return guardianEndpoint
 	case osType == rmeta.OSTypeWindows:

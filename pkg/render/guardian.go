@@ -142,9 +142,10 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.serviceAccount(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
+		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
+		// Create deployment after resources it depends on are created
 		c.deployment(),
 		c.service(),
-		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {

@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -408,13 +408,15 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (c *csiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs := []client.Object{
 		c.csiDriver(),
-		c.csiDaemonset(),
 		c.serviceAccount(),
 	}
 
 	if c.cfg.OpenShift {
 		objs = append(objs, c.role(), c.roleBinding())
 	}
+
+	// Objects are created in the order they are in the slice so create the DaemonSet after its dependent resources
+	objs = append(objs, c.csiDaemonset())
 
 	if c.cfg.Terminating || c.cfg.Installation.KubeletVolumePluginPath == "None" {
 		objsToDelete = objs

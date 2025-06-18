@@ -320,8 +320,10 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		c.fluentdClusterRoleBinding(),
 	)
 	if c.cfg.ManagedCluster {
+		objs = append(objs, c.externalLinseedExternalService())
 		objs = append(objs, c.externalLinseedRoleBinding())
 	} else {
+		toDelete = append(toDelete, c.externalLinseedExternalService())
 		toDelete = append(toDelete, c.externalLinseedRoleBinding())
 	}
 
@@ -385,6 +387,21 @@ func (c *fluentdComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 				Name:      GuardianServiceAccountName,
 				Namespace: GuardianNamespace,
 			},
+		},
+	}
+}
+
+func (c *fluentdComponent) externalLinseedExternalService() *corev1.Service {
+	// For managed clusters, we must create an external service for fluentd to forward the request to guardian.
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed",
+			Namespace: LogCollectorNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:         corev1.ServiceTypeExternalName,
+			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, c.cfg.ClusterDomain),
 		},
 	}
 }
@@ -664,7 +681,7 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "LINSEED_ENABLED", Value: "true"},
 		// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
 		// namespace. For multi-tenant management clusters, this may vary.
-		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant))},
+		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, true)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
 		{Name: "TLS_KEY_PATH", Value: c.keyPath()},
 		{Name: "TLS_CRT_PATH", Value: c.certPath()},
@@ -1046,7 +1063,7 @@ func (c *fluentdComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		{Name: "LINSEED_ENABLED", Value: "true"},
 		// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
 		// namespace. For multi-tenant management clusters, this may vary.
-		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant))},
+		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, true)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
 		{Name: "TLS_CRT_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountCertificateFilePath()},
 		{Name: "TLS_KEY_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountKeyFilePath()},

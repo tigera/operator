@@ -34,6 +34,10 @@ const (
 
 func LinseedEndpoint(osType rmeta.OSType, clusterDomain, namespace string, isManagedCluster bool, isFluentd bool) string {
 	switch {
+	// In a managed cluster, all Elasticsearch requests to Linseed are redirected via the Guardian service.
+	// Clients using the Linseed client are automatically configured with the correct SNI for certificate validation.
+	// Since Fluentd doesn't use the Linseed client, we expose an external service named "tigera-linseed" that redirects to Guardian.
+	// The Linseed certificate is already configured to accept connections with SNI set to "tigera-linseed".
 	case isManagedCluster && isFluentd:
 		return fluentdLinseedEndpoint
 	case isManagedCluster && osType == rmeta.OSTypeWindows:

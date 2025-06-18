@@ -94,7 +94,7 @@ func (c *componentHandler) SetCreateOnly() {
 
 func (c *componentHandler) create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	// Make a deep copy of the object, so we can stash away the original object in the cache.
-	cached := obj.DeepCopyObject().(client.Object)
+	cp := obj.DeepCopyObject().(client.Object)
 
 	// Pass to the client.
 	err := c.client.Create(ctx, obj, opts...)
@@ -103,7 +103,7 @@ func (c *componentHandler) create(ctx context.Context, obj client.Object, opts .
 	}
 
 	// Update the caches so that we don't try to update the object on subsequent reconciliations.
-	dCache.set(cached, obj.GetGeneration())
+	dCache.set(cp, obj.GetGeneration())
 	return nil
 }
 
@@ -114,10 +114,10 @@ func (c *componentHandler) update(ctx context.Context, obj client.Object, opts .
 		logCtx.V(2).Info("Object does not need to be updated, skipping")
 		return nil
 	}
-	logCtx.Info("Object needs to be updated")
+	logCtx.V(2).Info("Object needs to be updated")
 
 	// Make a deep copy of the object, so we can stash away the original object in the cache.
-	cached := obj.DeepCopyObject().(client.Object)
+	cp := obj.DeepCopyObject().(client.Object)
 
 	// Pass to the client.
 	err := c.client.Update(ctx, obj, opts...)
@@ -126,7 +126,7 @@ func (c *componentHandler) update(ctx context.Context, obj client.Object, opts .
 	}
 
 	// Update the caches so that we don't try to update the object on subsequent reconciliations.
-	dCache.set(cached, obj.GetGeneration())
+	dCache.set(cp, obj.GetGeneration())
 	return nil
 }
 
@@ -151,6 +151,11 @@ func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) b
 	err := c.client.Get(ctx, key, cur)
 	if err != nil {
 		// If we can't get the object, assume it needs to be created or updated.
+		if errors.IsNotFound(err) {
+			c.log.WithValues("key", key).V(2).Info("Object does not exist, we should create it")
+		} else {
+			c.log.WithValues("key", key, "error", err).Error(err, "Failed to get object")
+		}
 		return true
 	}
 	logCtx := ContextLoggerForResource(c.log, obj)
@@ -163,6 +168,7 @@ func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) b
 	cachedObj, cachedGen, ok := dCache.get(obj)
 	if !ok {
 		// The object is not in the cache, so we need to update it.
+		logCtx.V(3).Info("Object is not in the cache, we should create it")
 		return true
 	}
 

@@ -33,7 +33,7 @@ func handleNftables(c *components, install *operatorv1.Installation) error {
 
 	envMode, err := c.node.getEnv(ctx, c.client, containerCalicoNode, "FELIX_NFTABLESMODE")
 	if err != nil {
-		return fmt.Errorf("error reading FELIX_BPFENABLED env var %w", err)
+		return fmt.Errorf("error reading FELIX_NFTABLESMODE env var %w", err)
 	}
 
 	inFelixConfig := fc.Spec.NFTablesMode != nil && *fc.Spec.NFTablesMode == v1.NFTablesModeEnabled

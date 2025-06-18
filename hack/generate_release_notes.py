@@ -6,20 +6,32 @@ Raises:
 """
 import os
 import re
+import sys
 import datetime
 import yaml
-from github import Github, Auth, Issue  # https://github.com/PyGithub/PyGithub
+from github import Github, Auth  # https://github.com/PyGithub/PyGithub
+from github.Milestone import Milestone
+from github.Issue import Issue
+from github.PullRequest import PullRequest
 
 # Validate required environment variables
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-assert GITHUB_TOKEN, "GITHUB_TOKEN must be set"
+
+if GITHUB_TOKEN := os.environ.get("GITHUB_TOKEN"):
+    if not GITHUB_TOKEN.startswith("gh"):
+        raise ValueError("GITHUB_TOKEN must start with 'gh?_'")
+else:
+    raise ValueError("GITHUB_TOKEN must be set in the environment")
+
 # Version corresponds to the milestone in the GitHub repository
 VERSION = os.environ.get("VERSION")
-assert os.environ.get("VERSION"), "VERSION must be set"
-assert VERSION.startswith("v"), "VERSION must start with 'v'"
+if VERSION := os.environ.get("VERSION"):
+    if not VERSION.startswith("v"):
+        raise ValueError("VERSION string must start with 'v'")
+else:
+    raise ValueError("VERSION must be set in the environment")
 
 # First create a Github instance. Create a token through Github website - provide "repo" auth.
-auth = Auth.Token(os.environ.get("GITHUB_TOKEN"))
+auth = Auth.Token(GITHUB_TOKEN)
 g = Github(auth=auth)
 
 # The file where we'll store the release notes.
@@ -48,35 +60,48 @@ def issues_in_milestone() -> list:
     repo = g.get_repo("tigera/operator")
 
     # Find the milestone to get the id.
-    milestones = repo.get_milestones(state="all")
-    # Filter for the milestone we're interested in.
-    milestone = [m for m in milestones if m.title == VERSION]
-    m = milestone[0] if milestone else None
-    if not m:
-        raise ReleaseNoteError(f"milestone {VERSION} not found")
+    for m in repo.get_milestones(state="all"):
+        if m.title == VERSION:
+            print(f"Found matching milestone {m.title}: {m.html_url}")
+            milestone: Milestone = m
+            break
+
+    milestone: Milestone = milestone  # type: ignore # Fixes "possibly unbound" warnings
+
+    if milestone is None:
+        raise RuntimeError(f"Could not file milestone matching version {VERSION}")
+
     # Ensure the milestone is closed before generating release notes.
-    if m.state != "closed":
+    if milestone.state != "closed":
         raise ReleaseNoteError(
-            f"milestone {m.title} is not closed, please close it before generating release notes"
+            f"milestone {milestone.title} is not closed; please close it first!"
         )
-    print(f"  found milestone {m.title}")
     milestone_issues = repo.get_issues(
-        milestone=m, state="closed", labels=["release-note-required"]
+        milestone=milestone, state="closed", labels=["release-note-required"]
     )
-    # If there are no issues in the milestone, raise an error.
-    if milestone_issues.totalCount == 0:
-        raise ReleaseNoteError(f"no issues found for milestone {m.title}")
-    open_issues = [
-        issue for issue in milestone_issues if issue.as_pull_request().state == "open"
-    ]
+    # Fetch all of our "issues" as pull requests.
+    milestone_prs_list: list[PullRequest] = [issue.as_pull_request() for issue in milestone_issues]
+
+    open_prs = [pr for pr in milestone_prs_list if pr.state == "open"]
+
     # If there are open issues in the milestone, raise an error.
-    if len(open_issues) > 0:
+    if open_prs:
         raise ReleaseNoteError(
-            f"{len(open_issues)} PRs are still open, remove from milestone"
+            f"{len(open_prs)} PRs are still open, please move them to the next milestone or close them before generating release notes."  # pylint: disable=line-too-long
         )
 
+    # Now we get a list of all merged PRs (i.e. we filter out closed PRs)
+    merged_prs = [pr for pr in milestone_prs_list if pr.merged]
+
+    # If we didn't get any merged PRs, we need to print a warning, *BUT*
+    # it's possible that there just weren't any PRs merged in this milestone.
+    if not merged_prs:
+        print("", file=sys.stderr)
+        print("WARNING: No merged PRs found in the milestone.", file=sys.stderr)
+        print("         Please ensure that the milestone is correct!", file=sys.stderr)
+
     # Return only the merged PRs
-    return [issue for issue in milestone_issues if issue.as_pull_request().merged]
+    return merged_prs
 
 
 def extract_release_notes(issue: Issue) -> list:
@@ -89,15 +114,14 @@ def extract_release_notes(issue: Issue) -> list:
         list: Either the release notes from the issue, or the title.
     """
     # Look for a release note section in the body.
-    matches = None
+    matches: list[str] = []
     if issue.body:
         matches = re.findall(r"```release-note(.*?)```", str(issue.body), re.DOTALL)
 
     if matches:
         return [m.strip() for m in matches]
-    else:
-        # If no release notes explicitly declared, then use the PR title.
-        return [issue.title.strip()]
+    # If no release notes explicitly declared, then use the PR title.
+    return [issue.title.strip()]
 
 
 def kind(issue: Issue) -> str:
@@ -109,10 +133,10 @@ def kind(issue: Issue) -> str:
     Returns:
         str: enhancement, bug, or other
     """
-    for l in issue.labels:
-        if l.name == "kind/enhancement":
+    for label in issue.labels:
+        if label.name == "kind/enhancement":
             return "enhancement"
-        if l.name == "kind/bug":
+        if label.name == "kind/bug":
             return "bug"
     return "other"
 
@@ -126,8 +150,8 @@ def enterprise_feature(issue: Issue) -> bool:
     Returns:
         _bool_: True if the issue is an enterprise feature
     """
-    for l in issue.labels:
-        if l.name == "enterprise":
+    for label in issue.labels:
+        if label.name == "enterprise":
             return True
     return False
 
@@ -143,11 +167,11 @@ def print_issues_to_file(file, issues: list) -> None:
         for note in extract_release_notes(issue):
             if enterprise_feature(issue):
                 file.write(
-                    f" - [Calico Enterprise] {note} [#{issue.number}]({issue.html_url}) (@{issue.user.login})\n"  # pylint: disable=line-too-long
+                    f"- [Calico Enterprise] {note} [#{issue.number}]({issue.html_url}) (@{issue.user.login})\n"  # pylint: disable=line-too-long
                 )
             else:
                 file.write(
-                    f" - {note} [#{issue.number}]({issue.html_url}) (@{issue.user.login})\n"
+                    f"- {note} [#{issue.number}]({issue.html_url}) (@{issue.user.login})\n"
                 )
     file.write("\n")
 
@@ -158,7 +182,8 @@ def calico_version() -> str:
     Returns:
         str: calico version
     """
-    v = yaml.safe_load(open("config/calico_versions.yml", "r", encoding="utf-8"))
+    with open("config/calico_versions.yml", encoding="utf-8") as calico_versions:
+        v = yaml.safe_load(calico_versions)
     return v["title"]
 
 
@@ -168,7 +193,8 @@ def enterprise_version() -> str:
     Returns:
         str: calico enterprise version
     """
-    v = yaml.safe_load(open("config/enterprise_versions.yml", "r", encoding="utf-8"))
+    with open("config/enterprise_versions.yml", encoding="utf-8") as enterprise_versions:
+        v = yaml.safe_load(enterprise_versions)
     return v["title"]
 
 

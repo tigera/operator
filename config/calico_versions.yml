@@ -39,4 +39,3 @@ components:
     version: master
   calico/guardian:
     version: master
-

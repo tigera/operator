@@ -48,6 +48,13 @@ import (
 
 const TLS_CIPHERS_ENV_VAR_NAME = "TLS_CIPHER_SUITES"
 
+// dCache is a global deduplication cache that is used to avoid unnecessary updates to objects. It is shared
+// across all component handlers to ensure that objects are only updated when necessary.
+//
+// Note: we could instead create a cache per component handler, but that would require controllers to
+// use the same handler across reconciles - which is a relatively big change to make.
+var dCache *objectCache = newCache()
+
 type ComponentHandler interface {
 	CreateOrUpdateOrDelete(context.Context, render.Component, status.StatusManager) error
 
@@ -64,9 +71,9 @@ type ComponentHandler interface {
 
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
 // this is useful for CRD management so that they are not removed automatically.
-func NewComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
+func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
 	return &componentHandler{
-		client: client,
+		client: cli,
 		scheme: scheme,
 		cr:     cr,
 		log:    log,
@@ -83,6 +90,104 @@ type componentHandler struct {
 
 func (c *componentHandler) SetCreateOnly() {
 	c.createOnly = true
+}
+
+func (c *componentHandler) create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	// Make a deep copy of the object, so we can stash away the original object in the cache.
+	cp := obj.DeepCopyObject().(client.Object)
+
+	// Pass to the client.
+	err := c.client.Create(ctx, obj, opts...)
+	if err != nil {
+		return err
+	}
+
+	// Update the caches so that we don't try to update the object on subsequent reconciliations.
+	dCache.set(cp, obj.GetGeneration())
+	return nil
+}
+
+func (c *componentHandler) update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+	logCtx := ContextLoggerForResource(c.log, obj)
+	if !c.needsUpdate(ctx, obj) {
+		// The object does not need to be updated, so we can skip it.
+		logCtx.V(2).Info("Object does not need to be updated, skipping")
+		return nil
+	}
+	logCtx.V(2).Info("Object needs to be updated")
+
+	// Make a deep copy of the object, so we can stash away the original object in the cache.
+	cp := obj.DeepCopyObject().(client.Object)
+
+	// Pass to the client.
+	err := c.client.Update(ctx, obj, opts...)
+	if err != nil {
+		return err
+	}
+
+	// Update the caches so that we don't try to update the object on subsequent reconciliations.
+	dCache.set(cp, obj.GetGeneration())
+	return nil
+}
+
+func (c *componentHandler) delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	err := c.client.Delete(ctx, obj, opts...)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Remove the object from the cache if it was not found.
+			dCache.delete(obj)
+		}
+		return err
+	}
+
+	// Invalidate our cached object.
+	dCache.delete(obj)
+	return nil
+}
+
+func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) bool {
+	key := client.ObjectKeyFromObject(obj)
+	cur := obj.DeepCopyObject().(client.Object)
+	err := c.client.Get(ctx, key, cur)
+	if err != nil {
+		// If we can't get the object, assume it needs to be created or updated.
+		if errors.IsNotFound(err) {
+			c.log.WithValues("key", key).V(2).Info("Object does not exist, we should create it")
+		} else {
+			c.log.WithValues("key", key, "error", err).Error(err, "Failed to get object")
+		}
+		return true
+	}
+	logCtx := ContextLoggerForResource(c.log, obj)
+
+	// Only update the object if one of the following is true:
+	// - the object is not in the generation cache. This means we have not created this object before.
+	// - the generation on the cluster is newer than the generation we have cached. This means that the object has been updated on the cluster.
+	// - the object differs from the last cached version. This means the operator wants to update the object.
+	// This helps prevent us from updating objects unnecessarily.
+	cachedObj, cachedGen, ok := dCache.get(obj)
+	if !ok {
+		// The object is not in the cache, so we need to update it.
+		logCtx.V(3).Info("Object is not in the cache, we should create it")
+		return true
+	}
+
+	// The object is in the cache, check if the generation is out of date.
+	if cachedGen < cur.GetGeneration() {
+		// The cached generation is older than the current generation in the cluster.
+		logCtx.Info("Object on cluster has been modified since last reconcile")
+		return true
+	}
+
+	// The cached generation is the same or newer than the current generation in the cluster.
+	// Check if the caller has updated the object since we last cached it.
+	if reflect.DeepEqual(cachedObj, obj) {
+		// No change to the object since we last cached it, so we don't need to update it.
+		return false
+	}
+
+	logCtx.Info("Controller has updated the object since last reconcile")
+	return true
 }
 
 func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
@@ -142,6 +247,9 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	// Check to see if the object exists or not - this determines whether we should create or update.
 	err := c.client.Get(ctx, key, cur)
 	if err != nil {
+		// Invalidate our cached object.
+		dCache.delete(obj)
+
 		if !errors.IsNotFound(err) {
 			// Anything other than "Not found" we should retry.
 			return err
@@ -173,7 +281,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			delete(labels, common.MultipleOwnersLabel)
 			om.GetObjectMeta().SetLabels(labels)
 		}
-		err = c.client.Create(ctx, obj)
+		err = c.create(ctx, obj)
 		if err != nil {
 			logCtx.WithValues("key", key).Error(err, "Failed to create object.")
 			return err
@@ -205,14 +313,14 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 		switch obj.(type) {
 		case *batchv1.Job:
 			// Jobs can't be updated, they can only be deleted then created
-			if err := c.client.Delete(ctx, obj); err != nil {
+			if err := c.delete(ctx, obj); err != nil {
 				logCtx.WithValues("key", key).Info("Failed to delete job for recreation.")
 				return err
 			}
 
 			// Do the Create() with the merged object so that we preserve external labels/annotations.
 			resetMetadataForCreate(mobj)
-			if err := c.client.Create(ctx, mobj); err != nil {
+			if err := c.create(ctx, mobj); err != nil {
 				logCtx.WithValues("key", key).Error(err, "Failed to create Job.")
 				return err
 			}
@@ -224,14 +332,14 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			// object type is unset, it will result in SecretTypeOpaque, so this difference can be excluded.
 			if objSecret.Type != curSecret.Type &&
 				!(len(objSecret.Type) == 0 && curSecret.Type == v1.SecretTypeOpaque) {
-				if err := c.client.Delete(ctx, obj); err != nil {
+				if err := c.delete(ctx, obj); err != nil {
 					logCtx.WithValues("key", key).Info("Failed to delete secret for recreation.")
 					return err
 				}
 
 				// Do the Create() with the merged object so that we preserve external labels/annotations.
 				resetMetadataForCreate(mobj)
-				if err := c.client.Create(ctx, mobj); err != nil {
+				if err := c.create(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to create Secret.")
 					return err
 				}
@@ -244,14 +352,14 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 				// We don't want this service to have a cluster IP, but it has got one already.  Need to recreate
 				// the service to remove it.
 				logCtx.WithValues("key", key).Info("Service already exists and has unwanted ClusterIP, recreating service.")
-				if err := c.client.Delete(ctx, obj); err != nil {
+				if err := c.delete(ctx, obj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to delete Service for recreation.")
 					return err
 				}
 
 				// Do the Create() with the merged object so that we preserve external labels/annotations.
 				resetMetadataForCreate(mobj)
-				if err := c.client.Create(ctx, mobj); err != nil {
+				if err := c.create(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to recreate service.", "obj", obj)
 					return err
 				}
@@ -262,14 +370,14 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			objRoleBinding := obj.(*rbacv1.RoleBinding)
 			if objRoleBinding.RoleRef.Name != curRoleBinding.RoleRef.Name {
 				// RoleRef field of RoleBinding can't be modified, so delete and recreate the entire RoleBinding
-				if err = c.client.Delete(ctx, obj); err != nil {
+				if err = c.delete(ctx, obj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to delete RoleBinding for recreation.")
 					return err
 				}
 
 				// Do the Create() with the merged object so that we preserve external labels/annotations.
 				resetMetadataForCreate(mobj)
-				if err = c.client.Create(ctx, mobj); err != nil {
+				if err = c.create(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to recreate RoleBinding")
 					return err
 				}
@@ -280,21 +388,21 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			objClusterRoleBinding := obj.(*rbacv1.ClusterRoleBinding)
 			if objClusterRoleBinding.RoleRef.Name != curClusterRoleBinding.RoleRef.Name {
 				// RoleRef field of ClusterRoleBinding can't be modified, so delete and recreate the entire ClusterRoleBinding
-				if err = c.client.Delete(ctx, obj); err != nil {
+				if err = c.delete(ctx, obj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to delete ClusterRoleBinding for recreation.")
 					return err
 				}
 
 				// Do the Create() with the merged object so that we preserve external labels/annotations.
 				resetMetadataForCreate(mobj)
-				if err = c.client.Create(ctx, mobj); err != nil {
+				if err = c.create(ctx, mobj); err != nil {
 					logCtx.WithValues("key", key).Error(err, "Failed to recreate ClusterRoleBinding")
 					return err
 				}
 				return nil
 			}
 		}
-		if err := c.client.Update(ctx, mobj); err != nil {
+		if err := c.update(ctx, mobj); err != nil {
 			logCtx.WithValues("key", key).Info("Failed to update object.")
 			return err
 		}
@@ -387,7 +495,7 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	}
 
 	for _, obj := range objsToDelete {
-		err := c.client.Delete(ctx, obj)
+		err := c.delete(ctx, obj)
 		if err != nil && !errors.IsNotFound(err) {
 			logCtx := ContextLoggerForResource(c.log, obj)
 			logCtx.Error(err, fmt.Sprintf("Error deleting object %v", obj))

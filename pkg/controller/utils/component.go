@@ -175,7 +175,7 @@ func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) b
 	// The object is in the cache, check if the generation is out of date.
 	if cachedGen < cur.GetGeneration() {
 		// The cached generation is older than the current generation in the cluster.
-		logCtx.Info("Object on cluster has been modified since last reconcile")
+		logCtx.V(2).Info("Object on cluster has been modified since last reconcile")
 		return true
 	}
 
@@ -186,7 +186,7 @@ func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) b
 		return false
 	}
 
-	logCtx.Info("Controller has updated the object since last reconcile")
+	logCtx.V(2).Info("Controller has updated the object since last reconcile")
 	return true
 }
 

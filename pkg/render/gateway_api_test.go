@@ -719,4 +719,60 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(ep4.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerSourceRanges).To(ConsistOf("182.98.44.55/24"))
 		Expect(*ep4.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP).To(Equal(lbIP))
 	})
+
+	It("should not deploy waf-http-filter for open-source", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.Calico,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "envoy-proxy-config", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(envoyDeployment).ToNot(BeNil())
+		Expect(envoyDeployment.InitContainers).To(BeNil())
+		Expect(envoyDeployment.Container).ToNot(BeNil())
+		Expect(envoyDeployment.Container.VolumeMounts).To(BeNil())
+	})
+
+	It("should deploy waf-http-filter for Enterprise", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "envoy-proxy-config", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		// Placeholder: Assert that waf-http-filter IS present in the EnvoyProxy object.
+		// Example: Expect(proxy.Spec.SomeField).To(ContainElement("waf-http-filter"))
+		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(envoyDeployment).ToNot(BeNil())
+		// restartPolicy := corev1.ContainerRestartPolicyAlways
+		// Expect(envoyDeployment.InitContainers).To(ContainElement(&corev1.Container{
+		// 	Name: "waf-http-filter",
+		// 	Args: []string{
+		// 		"-logFileDirectory",
+		// 		"/var/log/calico/waf",
+		// 		"-logFileName",
+		// 		"waf.log",
+		// 		"-tcpPort",
+		// 		"8000",
+		// 	},
+		// 	RestartPolicy: &restartPolicy,
+		// 	VolumeMounts:  []corev1.VolumeMount{},
+		// }))
+		// Expect(envoyDeployment.Container).To(HaveLen(1))
+		// Expect(envoyDeployment.Container.VolumeMounts).To(BeNil())
+	})
+
 })

@@ -146,7 +146,7 @@ type InstallationSpec struct {
 	// +optional
 	ComponentResources []ComponentResource `json:"componentResources,omitempty"`
 
-	// CertificateManagement configures pods to submit a CertificateSigningRequest to the certificates.k8s.io/v1beta1 API in order
+	// CertificateManagement configures pods to submit a CertificateSigningRequest to the certificates.k8s.io/v1 API in order
 	// to obtain TLS certificates. This feature requires that you bring your own CSR signing and approval process, otherwise
 	// pods will be stuck during initialization.
 	// +optional

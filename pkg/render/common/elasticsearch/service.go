@@ -28,7 +28,7 @@ const (
 
 	// Handle for multi tenant
 	guardianEndpoint       = "https://guardian.calico-system.svc"
-	guardinaFQDNEndpoint   = "https://guardian.calico-system.svc.%s"
+	guardianFQDNEndpoint   = "https://guardian.calico-system.svc.%s"
 	fluentdLinseedEndpoint = "https://tigera-linseed"
 )
 

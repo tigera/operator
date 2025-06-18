@@ -584,18 +584,6 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		Context("Initial creation", func() {
 			It("creates Managed cluster logstorage components", func() {
 				expectedCreateResources := []client.Object{
-					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchNamespace}},
-					&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.ESGatewayServiceName, Namespace: render.ElasticsearchNamespace},
-						Spec: corev1.ServiceSpec{
-							Type: corev1.ServiceTypeExternalName, ExternalName: fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain),
-						},
-					},
-					&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.LinseedServiceName, Namespace: render.ElasticsearchNamespace},
-						Spec: corev1.ServiceSpec{
-							Type:         corev1.ServiceTypeExternalName,
-							ExternalName: fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain),
-						},
-					},
 					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-secrets"}},
 					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-configmaps"}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "calico-system"},
@@ -606,12 +594,14 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: "guardian", Namespace: "calico-system"}}},
 					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
-					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.ElasticsearchNamespace}},
 				}
 
 				expectedDeleteResources := []client.Object{
 					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-namespaces"}},
 					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed"}},
+					&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-elasticsearch"}},
+					&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure-es-gateway-http", Namespace: "tigera-elasticsearch"}},
+					&corev1.Namespace{TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
 				}
 
 				component := render.NewManagedClusterLogStorage(cfg)

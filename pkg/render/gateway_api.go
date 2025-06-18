@@ -481,8 +481,9 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// "ShutdownManager" and "RateLimit" images.)
 	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
 
-	// Enable backend APIs.
+	// Enable extension APIs.
 	envoyGatewayConfig.ExtensionAPIs.EnableBackend = true
+	envoyGatewayConfig.ExtensionAPIs.EnableEnvoyPatchPolicy = true
 
 	// Rebuild the ConfigMap with those changes.
 	envoyGatewayConfigMap := resources.envoyGatewayConfigMap.DeepCopyObject().(*corev1.ConfigMap)

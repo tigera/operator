@@ -122,6 +122,10 @@ func (c *componentHandler) update(ctx context.Context, obj client.Object, opts .
 	// Pass to the client.
 	err := c.client.Update(ctx, obj, opts...)
 	if err != nil {
+		if errors.IsNotFound(err) {
+			// Inlalidate our cached object if it was not found.
+			dCache.delete(obj)
+		}
 		return err
 	}
 
@@ -153,6 +157,9 @@ func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) b
 		// If we can't get the object, assume it needs to be created or updated.
 		if errors.IsNotFound(err) {
 			c.log.WithValues("key", key).V(2).Info("Object does not exist, we should create it")
+			// Invalidate our cached object if it was not found. Most likely the object is already not in the cache,
+			// but we do this anyway just to be safe.
+			dCache.delete(obj)
 		} else {
 			c.log.WithValues("key", key, "error", err).Error(err, "Failed to get object")
 		}

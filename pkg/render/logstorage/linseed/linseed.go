@@ -164,11 +164,12 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 		toCreate = append(toCreate, l.multiTenantManagedClustersAccess()...)
 	}
 	toCreate = append(toCreate, l.linseedServiceAccount())
-	toCreate = append(toCreate, l.linseedDeployment())
 	if l.cfg.ElasticClientSecret != nil {
 		// If using External ES, we need to copy the client certificates into Linseed's naespace to be mounted.
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(l.cfg.Namespace, l.cfg.ElasticClientSecret)...)...)
 	}
+	//Create deployment after resources it depends on are created
+	toCreate = append(toCreate, l.linseedDeployment())
 	return toCreate, toDelete
 }
 

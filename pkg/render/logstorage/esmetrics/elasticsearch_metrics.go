@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -95,11 +95,12 @@ func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Ob
 		e.allowTigeraPolicy(),
 	}
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...)...)
-	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount())
 
 	if e.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		toCreate = append(toCreate, e.metricsRole(), e.metricsRoleBinding())
 	}
+	// Create Deployment after resources it depends on are created.
+	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount())
 	return toCreate, objsToDelete
 }
 

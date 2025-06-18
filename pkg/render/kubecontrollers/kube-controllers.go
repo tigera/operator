@@ -300,7 +300,6 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.KubeControllersGatewaySecret)...)...)
 	}
 
-
 	// Create deployment after other resources it depends on have been created
 	if len(c.enabledControllers) > 0 {
 		// There's something to run, so create the deployment.

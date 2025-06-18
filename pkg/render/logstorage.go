@@ -1196,12 +1196,6 @@ func (m *managedClusterLogStorage) Objects() (objsToCreate []client.Object, objs
 	// to create token secrets in the managed cluster.
 	toCreate := []client.Object{}
 	roles, bindings := m.linseedExternalRolesAndBindings()
-	toCreate = append(toCreate,
-		CreateNamespace(ElasticsearchNamespace, m.cfg.Installation.KubernetesProvider, PSSPrivileged, m.cfg.Installation.Azure),
-		m.elasticsearchExternalService(),
-		m.linseedExternalService(),
-		CreateOperatorSecretsRoleBinding(ElasticsearchNamespace),
-	)
 
 	for _, r := range roles {
 		toCreate = append(toCreate, r)
@@ -1227,34 +1221,6 @@ func (m *managedClusterLogStorage) Ready() bool {
 
 func (m *managedClusterLogStorage) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
-}
-
-func (m *managedClusterLogStorage) linseedExternalService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      LinseedServiceName,
-			Namespace: ElasticsearchNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, m.cfg.ClusterDomain),
-		},
-	}
-}
-
-func (m *managedClusterLogStorage) elasticsearchExternalService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      ESGatewayServiceName,
-			Namespace: ElasticsearchNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, m.cfg.ClusterDomain),
-		},
-	}
 }
 
 // In managed clusters we need to provision roles and bindings for linseed to provide permissions
@@ -1391,6 +1357,27 @@ func (m *managedClusterLogStorage) deprecatedObjects() []client.Object {
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed"},
+		},
+		// Remove legacy ExternalName service pointing to Guardian for linseed
+		&corev1.Service{
+			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "tigera-linseed",
+				Namespace: "tigera-elasticsearch",
+			},
+		},
+		// Remove legacy ExternalName service pointing to Guardian for elasticsearch
+		&corev1.Service{
+			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "tigera-secure-es-gateway-http",
+				Namespace: "tigera-elasticsearch",
+			},
+		},
+		// Remove elasticsearch namespace in the managed cluster.
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"},
 		},
 	}
 }

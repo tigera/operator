@@ -402,7 +402,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		CreateNamespace(
 			resources.namespace.Name,
 			pr.cfg.Installation.KubernetesProvider,
-			PSSBaseline,
+			PSSPrivileged,
 			pr.cfg.Installation.Azure,
 		),
 	}

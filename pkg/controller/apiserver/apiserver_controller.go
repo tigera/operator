@@ -161,7 +161,7 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	}
 
 	for _, secretName := range []string{
-		"calico-apiserver-certs", "tigera-apiserver-certs",
+		"calico-apiserver-certs",
 		certificatemanagement.CASecretName, render.DexTLSSecretName, monitor.PrometheusClientTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {

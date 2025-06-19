@@ -162,11 +162,13 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	errMsgs := []string{}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
+		c.apiServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-apiserver:align_as", nil
+		//c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
-		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
+		//c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
+		c.queryServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-queryserver:align_as", nil
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -319,7 +321,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		namespacedObjects = append(namespacedObjects, namespacedEnterpriseObjects...)
 
 		// Clean up the stale Calico API server deployment when switching between variants.
-		objsToDelete = append(objsToDelete, c.cleanupStaleAPIServerDeployment())
+		//objsToDelete = append(objsToDelete, c.cleanupStaleAPIServerDeployment())
 
 	} else {
 		// Add in a NetworkPolicy.
@@ -330,7 +332,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
 
 		// Clean up the stale Calico API server deployment when switching between variants.
-		objsToDelete = append(objsToDelete, c.cleanupStaleAPIServerDeployment())
+		//objsToDelete = append(objsToDelete, c.cleanupStaleAPIServerDeployment())
 	}
 
 	// Explicitly delete any renamed/deprecated objects.
@@ -1681,7 +1683,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{""},
 			Resources: []string{"services/proxy"},
 			ResourceNames: []string{
-				"https:tigera-api:8080", "calico-node-prometheus:9090",
+				"https:calico-api:8080", "calico-node-prometheus:9090",
 			},
 			Verbs: []string{"get", "create"},
 		},
@@ -1888,7 +1890,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{""},
 			Resources: []string{"services/proxy"},
 			ResourceNames: []string{
-				"https:tigera-api:8080", "calico-node-prometheus:9090",
+				"https:calico-api:8080", "calico-node-prometheus:9090",
 			},
 			Verbs: []string{"get", "create"},
 		},

@@ -1362,22 +1362,22 @@ func (m *managedClusterLogStorage) deprecatedObjects() []client.Object {
 		&corev1.Service{
 			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      LinseedServiceName,
-				Namespace: ElasticsearchNamespace,
+				Name:      "tigera-linseed",
+				Namespace: "tigera-elasticsearch",
 			},
 		},
 		// Remove legacy ExternalName service pointing to Guardian for elasticsearch
 		&corev1.Service{
 			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      ESGatewayServiceName,
-				Namespace: ElasticsearchNamespace,
+				Name:      "tigera-secure-es-gateway-http",
+				Namespace: "tigera-elasticsearch",
 			},
 		},
 		// Remove elasticsearch namespace in the managed cluster.
 		&corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: ElasticsearchNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"},
 		},
 	}
 }

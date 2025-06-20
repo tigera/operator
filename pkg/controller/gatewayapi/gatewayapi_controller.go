@@ -143,13 +143,13 @@ type ReconcileGatewayAPI struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling GatewayAPI")
+	reqLogger.V(2).Info("Reconciling GatewayAPI")
 
 	// Get the GatewayAPI CR.
 	gatewayAPI, msg, err := GetGatewayAPI(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.Info("GatewayAPI object not found")
+			reqLogger.V(2).Info("GatewayAPI object not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}

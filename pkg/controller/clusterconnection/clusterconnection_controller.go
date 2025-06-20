@@ -195,7 +195,7 @@ type ReconcileConnection struct {
 // remove the work from the queue.
 func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling the management cluster connection")
+	reqLogger.V(2).Info("Reconciling the management cluster connection")
 	result := reconcile.Result{}
 
 	variant, instl, err := utils.GetInstallation(ctx, r.cli)
@@ -466,6 +466,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// We should create the Guardian deployment.
 	return result, nil
 }
+
 func (r *ReconcileConnection) maintainFinalizer(ctx context.Context, managementClusterConnection client.Object) error {
 	// These objects require graceful termination before the CNI plugin is torn down.
 	guardianDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}}

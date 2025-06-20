@@ -182,7 +182,7 @@ type reconcileCSR struct {
 
 func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling CSR Controller")
+	reqLogger.V(2).Info("Reconciling CSR Controller")
 	csrList := &certificatesv1.CertificateSigningRequestList{}
 
 	instance := &operatorv1.Installation{}

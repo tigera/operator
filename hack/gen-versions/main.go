@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	defaultCalicoRegistry     = "docker.io"
+	defaultCalicoRegistry     = "quay.io"
 	defaultEnterpriseRegistry = "quay.io"
 
 	eeVersionsTpl     = "enterprise.go.tpl"

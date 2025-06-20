@@ -210,6 +210,7 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	c.uiAPIsImage, err = components.GetReference(components.ComponentUIAPIs, reg, path, prefix, is)
+
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

@@ -150,13 +150,12 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	errMsgs := []string{}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		//c.apiServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-apiserver:align_as", nil
 		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
 		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
-		//c.queryServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-queryserver:align_as", nil
+
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -308,8 +307,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
 		namespacedObjects = append(namespacedObjects, namespacedEnterpriseObjects...)
 
-		// Clean up the stale Calico API server deployment when switching between variants.
-		//objsToDelete = append(objsToDelete, c.cleanupStaleAPIServerDeployment())
+		// Clean up cluster-scoped resources that were created with the 'tigera' prefix.
+		// The apiserver now uses consistent resource names with 'calico' prefix across both EE and OSS variants.
+		objsToDelete = append(objsToDelete, c.deprecatedResources()...)
 
 	} else {
 		// Add in a NetworkPolicy.
@@ -319,8 +319,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
 
-		// Clean up the stale Calico API server deployment when switching between variants.
-		//objsToDelete = append(objsToDelete, c.cleanupStaleAPIServerDeployment())
 	}
 
 	// Explicitly delete any renamed/deprecated objects.
@@ -342,21 +340,6 @@ func (c *apiServerComponent) deploymentSelector() *metav1.LabelSelector {
 			"apiserver": "true",
 		},
 	}
-}
-
-// Determine names based on the configured variant
-// It takes two name as parameters, enterpriseName and ossName, and returns name and nameToDelete.
-func (c *apiServerComponent) resourceNameBasedOnVariant(enterpriseName, ossName string) (string, string) {
-	var name, nameToDelete string
-	switch c.cfg.Installation.Variant {
-	case operatorv1.TigeraSecureEnterprise:
-		name = enterpriseName
-		nameToDelete = ossName
-	case operatorv1.Calico:
-		name = ossName
-		nameToDelete = enterpriseName
-	}
-	return name, nameToDelete
 }
 
 func (c *apiServerComponent) apiServerPodDisruptionBudget() *policyv1.PodDisruptionBudget {
@@ -2347,19 +2330,92 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 	return l7AdmssCtrl
 }
 
-// cleanupStaleAPIServerDeployment returns the API server Deployment object
-// that should be removed during a variant switch (OSS <-> EE).
-func (c *apiServerComponent) cleanupStaleAPIServerDeployment() client.Object {
-	// Determine the correct name based on the configured variant.
-	_, nameToDelete := c.resourceNameBasedOnVariant("tigera-apiserver", "calico-apiserver")
-	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "Deployment",
-			APIVersion: "apps/v1",
+// deprecatedResources removes legacy cluster-scoped resources created with the 'tigera' prefix (EE-only).
+// Moving forward, both EE and OSS variants standardize on the 'calico' prefix for all shared resources.
+// TODO to clean up the below deprecated logic with 14 resources in 3.25+
+func (c *apiServerComponent) deprecatedResources() []client.Object {
+	return []client.Object{
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-secrets-access"},
 		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      nameToDelete,
-			Namespace: APIServerNamespace,
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-secrets-access"},
+		},
+
+		// delegateAuthClusterRoleBinding
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-delegate-auth"},
+		},
+
+		// authClusterRole
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"},
+		},
+
+		//authClusterRoleBinding
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"},
+		},
+		// authReaderRoleBinding - need clean up in diff namespace kube-system
+		&rbacv1.RoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "tigera-auth-reader",
+				Namespace: "kube-system",
+			},
+		},
+		// webhookReaderClusterRole
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"},
+		},
+
+		//webhookReaderClusterRoleBinding
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"},
+		},
+
+		// calico-apiserver CR and CRB
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver"},
+		},
+
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettingsgroup-getter"},
+		},
+
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-tiered-policy-passthrough"},
+		},
+
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-uisettings-passthrough"},
 		},
 	}
 }

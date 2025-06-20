@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,17 +21,30 @@ import (
 )
 
 const (
-	httpsEndpoint       = "https://tigera-secure-es-gateway-http.%s.svc:9200"
-	linseedEndpoint     = "https://tigera-linseed.%s.svc"
-	httpsFQDNEndpoint   = "https://tigera-secure-es-gateway-http.%s.svc.%s:9200"
-	linseedFQDNEndpoint = "https://tigera-linseed.%s.svc.%s"
+	httpsEndpoint     = "https://tigera-secure-es-gateway-http.%s.svc:9200"
+	httpsFQDNEndpoint = "https://tigera-secure-es-gateway-http.%s.svc.%s:9200"
 )
 
-func LinseedEndpoint(osType rmeta.OSType, clusterDomain, namespace string) string {
-	if osType == rmeta.OSTypeWindows {
-		return fmt.Sprintf(linseedFQDNEndpoint, namespace, clusterDomain)
+func LinseedEndpoint(osType rmeta.OSType, clusterDomain, namespace string, isManagedCluster bool, isFluentd bool) string {
+	switch {
+	// In a managed cluster, all Elasticsearch requests to Linseed are redirected via the Guardian service.
+	// Clients using the Linseed client are automatically configured with the correct SNI for certificate validation.
+	// Since Fluentd doesn't use the Linseed client, we expose an external service named "tigera-linseed" that redirects to Guardian.
+	// The Linseed certificate is already configured to accept connections with SNI set to "tigera-linseed".
+	case isManagedCluster && isFluentd:
+		return "https://tigera-linseed"
+
+	// Non-Fluentd components in the managed cluster forward traffic to Guardian
+	case isManagedCluster && osType == rmeta.OSTypeWindows:
+		return fmt.Sprintf("https://guardian.calico-system.svc.%s", clusterDomain)
+	case isManagedCluster:
+		return "https://guardian.calico-system.svc"
+	// Linseed URL used by components in standalone and management cluster.
+	case osType == rmeta.OSTypeWindows:
+		return fmt.Sprintf("https://tigera-linseed.%s.svc.%s", namespace, clusterDomain)
+	default:
+		return fmt.Sprintf("https://tigera-linseed.%s.svc", namespace)
 	}
-	return fmt.Sprintf(linseedEndpoint, namespace)
 }
 
 // GatewayEndpoint returns the endpoint for the Elasticsearch service. For

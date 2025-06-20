@@ -636,7 +636,7 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 	envVars := []corev1.EnvVar{
 		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace),
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace, c.cfg.ManagedCluster, false),
 		},
 		{
 			Name:  "LINSEED_CA",
@@ -684,7 +684,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant)),
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, false),
 		},
 		{
 			Name:  "LINSEED_CA",

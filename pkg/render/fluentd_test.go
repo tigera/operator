@@ -301,6 +301,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdNodeName, Namespace: render.LogCollectorNamespace}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdNodeName, Namespace: render.LogCollectorNamespace}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
+			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 		}
 
 		// Should render the correct resources.
@@ -330,7 +331,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		Expect(envs).Should(ContainElements(
 			corev1.EnvVar{Name: "LINSEED_ENABLED", Value: "true"},
-			corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed"},
 			corev1.EnvVar{Name: "LINSEED_CA_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: "/tigera-fluentd-prometheus-tls/tls.key"},
 			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: "/tigera-fluentd-prometheus-tls/tls.crt"},
@@ -405,6 +406,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdNodeName, Namespace: render.LogCollectorNamespace}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
+			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 		}
 
 		pc := &operatorv1.PacketCaptureAPI{
@@ -441,7 +443,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 		Expect(envs).Should(ContainElements(
 			corev1.EnvVar{Name: "LINSEED_ENABLED", Value: "true"},
-			corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+			corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed"},
 			corev1.EnvVar{Name: "LINSEED_CA_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: "/tigera-fluentd-prometheus-tls/tls.key"},
 			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: "/tigera-fluentd-prometheus-tls/tls.crt"},
@@ -941,7 +943,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with EKS Cloudwatch Log", func() {
-		expectedResources := getExpectedResourcesForEKS()
+		expectedResources := getExpectedResourcesForEKS(false)
 		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
 		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		t := corev1.Toleration{
@@ -1115,7 +1117,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	It("should render with EKS Cloudwatch Log with multi tenant envvars", func() {
 
-		expectedResources := getExpectedResourcesForEKS()
+		expectedResources := getExpectedResourcesForEKS(false)
 		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
 		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		t := corev1.Toleration{
@@ -1152,7 +1154,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	It("should render with EKS Cloudwatch Log for managed cluster with linseed token volume", func() {
 
-		expectedResources := getExpectedResourcesForEKS()
+		expectedResources := getExpectedResourcesForEKS(true)
 
 		expectedResources = append(expectedResources,
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}})
@@ -1357,8 +1359,8 @@ func setupEKSCloudwatchLogConfig() *render.EksCloudwatchLogConfig {
 	}
 }
 
-func getExpectedResourcesForEKS() []client.Object {
-	return []client.Object{
+func getExpectedResourcesForEKS(isManagedcluster bool) []client.Object {
+	expectedResources := []client.Object{
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
 		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
 			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
@@ -1375,6 +1377,12 @@ func getExpectedResourcesForEKS() []client.Object {
 		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: render.LogCollectorNamespace}},
 		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 	}
+
+	if isManagedcluster {
+		expectedResources = append(expectedResources,
+			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}})
+	}
+	return expectedResources
 }
 
 func forwardingEnvVarCount(envVars []corev1.EnvVar) (count int) {

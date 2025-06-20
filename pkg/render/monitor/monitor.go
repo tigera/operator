@@ -657,7 +657,7 @@ func (mc *monitorComponent) prometheusClusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups:     []string{""},
 			Resources:     []string{"services/proxy"},
-			ResourceNames: []string{"https:tigera-api:8080"},
+			ResourceNames: []string{"https:calico-api:8080"},
 			Verbs:         []string{"get"},
 		},
 		{
@@ -1361,7 +1361,7 @@ func (mc *monitorComponent) externalPrometheusRole() client.Object {
 				APIGroups: []string{""},
 				Resources: []string{"services/proxy"},
 				ResourceNames: []string{
-					"https:tigera-api:8080", "calico-node-prometheus:9090",
+					"https:calico-api:8080", "calico-node-prometheus:9090",
 				},
 				Verbs: []string{"get", "create"},
 			},

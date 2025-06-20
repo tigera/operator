@@ -150,13 +150,13 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	errMsgs := []string{}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		//c.apiServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-apiserver:align_as", nil
-		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
+		c.apiServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-apiserver:align_as", nil
+		//c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
-		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
-		//c.queryServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-queryserver:align_as", nil
+		//c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
+		c.queryServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-queryserver:align_as", nil
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -1206,7 +1206,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	apiServer := corev1.Container{
 		Name:            string(APIServerContainerName),
 		Image:           c.apiServerImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		ImagePullPolicy: corev1.PullAlways,
 		Args:            c.startUpArgs(),
 		Env:             env,
 		VolumeMounts:    volumeMounts,
@@ -1312,7 +1312,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	container := corev1.Container{
 		Name:            string(TigeraAPIServerQueryServerContainerName),
 		Image:           c.queryServerImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		ImagePullPolicy: corev1.PullAlways,
 		Env:             env,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{

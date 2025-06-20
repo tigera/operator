@@ -126,7 +126,8 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
+		//c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
+		c.image, err = "gcr.io/tigera-dev/vara/tigera/guardian:align_as", nil
 	} else {
 		c.image, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
 	}
@@ -414,7 +415,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 		{
 			Name:            GuardianContainerName,
 			Image:           c.image,
-			ImagePullPolicy: ImagePullPolicy(),
+			ImagePullPolicy: corev1.PullAlways,
 			Env:             envVars,
 			VolumeMounts:    c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{

@@ -525,11 +525,10 @@ func (r *ReconcileAPIServer) canCleanupLegacyNamespace(ctx context.Context, vari
 
 	newNamespace := "calico-system"
 	oldNamespace := "tigera-system"
-	deploymentName := "tigera-apiserver"
+	deploymentName := "calico-apiserver"
 
 	if variant == operatorv1.Calico {
 		oldNamespace = "calico-apiserver"
-		deploymentName = "calico-apiserver"
 	}
 
 	// Fetch the new API server deployment in calico-system

@@ -150,13 +150,13 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	errMsgs := []string{}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.apiServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-apiserver:align_as", nil
-		//c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
+		//c.apiServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-apiserver:align_as", nil
+		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
-		//c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
-		c.queryServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-queryserver:align_as", nil
+		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
+		//c.queryServerImage, err = "gcr.io/tigera-dev/vara/tigera/cnx-queryserver:align_as", nil
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -1606,7 +1606,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 				"",
 			},
 			// Use both the networkpolicies and tier.networkpolicies resource types to ensure identical behavior
-			// irrespective of the Calico RBAC scheme (see the ClusterRole "tigera-tiered-policy-passthrough" for
+			// irrespective of the Calico RBAC scheme (see the ClusterRole "calico-tiered-policy-passthrough" for
 			// more details).  Similar for all tiered policy resource types.
 			Resources: []string{
 				"tiers",
@@ -2069,7 +2069,7 @@ func (c *apiServerComponent) tieredPolicyPassthruClusterRole() *rbacv1.ClusterRo
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-tiered-policy-passthrough",
+			Name: "calico-tiered-policy-passthrough",
 		},
 		// If tiered policy is enabled we allow all authenticated users to access the main tier resource, instead
 		// restricting access using the tier.xxx resource type. Kubernetes NetworkPolicy and the

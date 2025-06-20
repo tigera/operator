@@ -172,8 +172,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.Env).To(ContainElements([]corev1.EnvVar{
 			{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"},
 			{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST", Value: "true"},
-			{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: "https://tigera-api.calico-system.svc:8080"},
-			{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: "/api/v1/namespaces/calico-system/services/https:tigera-api:8080/proxy/"},
+			{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: "https://calico-api.calico-system.svc:8080"},
+			{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: "/api/v1/namespaces/calico-system/services/https:calico-api:8080/proxy/"},
 			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 		}))
 
@@ -380,7 +380,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{""},
 				Resources: []string{"services/proxy"},
 				ResourceNames: []string{
-					"https:tigera-api:8080", "calico-node-prometheus:9090",
+					"https:calico-api:8080", "calico-node-prometheus:9090",
 				},
 				Verbs: []string{"get", "create"},
 			},
@@ -687,7 +687,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{""},
 				Resources: []string{"services/proxy"},
 				ResourceNames: []string{
-					"https:tigera-api:8080", "calico-node-prometheus:9090",
+					"https:calico-api:8080", "calico-node-prometheus:9090",
 				},
 				Verbs: []string{"get", "create"},
 			},

@@ -112,10 +112,7 @@ func SecretsAnnotationHash(secrets ...*corev1.Secret) string {
 
 // APIServerDeploymentName returns the deployment to use for the API server component.
 func APIServerDeploymentName(v operatorv1.ProductVariant) string {
-	if v == operatorv1.Calico {
-		return "calico-apiserver"
-	}
-	return "tigera-apiserver"
+	return "calico-apiserver"
 }
 
 // GetResourceRequirements retrieves the component ResourcesRequirements from the installation. If it doesn't exist, it

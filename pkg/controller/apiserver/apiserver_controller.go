@@ -266,8 +266,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// We need separate certificates for OSS vs Enterprise.
-	secretName := render.ProjectCalicoAPIServerTLSSecretName(installationSpec.Variant)
-	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(installationSpec.Variant), render.APIServerNamespace, r.clusterDomain))
+	secretName := render.CalicoAPIServerTLSSecretName
+	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, r.clusterDomain))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create tls key pair", err, reqLogger)
 		return reconcile.Result{}, err
@@ -457,7 +457,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.APIServerNamespace,
-			ServiceAccounts: []string{render.APIServerServiceAccountName(installationSpec.Variant)},
+			ServiceAccounts: []string{render.APIServerServiceAccountName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelCAKeyPair, false, true),

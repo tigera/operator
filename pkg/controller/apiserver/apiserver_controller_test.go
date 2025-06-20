@@ -114,7 +114,7 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		cryptoCA, err := tls.MakeCA("byo-ca")
 		Expect(err).NotTo(HaveOccurred())
-		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "tigera-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(operatorv1.TigeraSecureEnterprise), "calico-system", dns.DefaultClusterDomain)...)
+		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "tigera-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.APIServerServiceName, "calico-system", dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &operatorv1.Authentication{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -265,7 +265,7 @@ var _ = Describe("apiserver controller tests", func() {
 		It("should not add OwnerReference to user-supplied apiserver TLS cert secrets", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
-			secretName := render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)
+			secretName := render.CalicoAPIServerTLSSecretName
 
 			Expect(cli.Create(ctx, apiSecret)).ShouldNot(HaveOccurred())
 

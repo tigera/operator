@@ -54,8 +54,8 @@ const (
 	APIServerPortName   = "apiserver"
 	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "apiserver-access"
 
-	auditLogsVolumeName   = "tigera-audit-logs"
-	auditPolicyVolumeName = "tigera-audit-policy"
+	auditLogsVolumeName   = "calico-audit-logs"
+	auditPolicyVolumeName = "calico-audit-policy"
 )
 
 const (
@@ -64,17 +64,19 @@ const (
 	QueryServerPort        = 8080
 	QueryServerPortName    = "queryserver"
 	QueryserverNamespace   = "calico-system"
-	QueryserverServiceName = "tigera-api"
+	QueryserverServiceName = "calico-api"
 
 	// Use the same API server container name for both OSS and Enterprise.
 	APIServerContainerName                  ContainerName = "calico-apiserver"
-	APIServerK8sAppName                                   = "calico-apiserver"
-	TigeraAPIServerQueryServerContainerName ContainerName = "tigera-queryserver"
+	TigeraAPIServerQueryServerContainerName ContainerName = "calico-queryserver"
 
-	calicoAPIServerTLSSecretName                                  = "calico-apiserver-certs"
-	APIServerSecretsRBACName                                      = "tigera-extension-apiserver-secrets-access"
-	MultiTenantManagedClustersAccessClusterRoleName               = "tigera-managed-cluster-access"
-	ManagedClustersWatchClusterRoleName                           = "tigera-managed-cluster-watch"
+	CalicoAPIServerTLSSecretName = "calico-apiserver-certs"
+	APIServerServiceName         = "calico-api"
+	APIServerServiceAccountName  = "calico-apiserver"
+
+	APIServerSecretsRBACName                                      = "calico-extension-apiserver-secrets-access"
+	MultiTenantManagedClustersAccessClusterRoleName               = "calico-managed-cluster-access"
+	ManagedClustersWatchClusterRoleName                           = "calico-managed-cluster-watch"
 	L7AdmissionControllerContainerName              ContainerName = "calico-l7-admission-controller"
 	L7AdmissionControllerPort                                     = 6443
 	L7AdmissionControllerPortName                                 = "l7admctrl"
@@ -101,20 +103,6 @@ var (
 		"deletecollection",
 	}
 )
-
-// The following functions are helpers for determining resource names based on
-// the configured product variant.
-func ProjectCalicoAPIServerTLSSecretName(v operatorv1.ProductVariant) string {
-	return calicoAPIServerTLSSecretName
-}
-
-func ProjectCalicoAPIServerServiceName(v operatorv1.ProductVariant) string {
-	return "calico-api"
-}
-
-func APIServerServiceAccountName(v operatorv1.ProductVariant) string {
-	return "calico-apiserver"
-}
 
 func APIServer(cfg *APIServerConfiguration) (Component, error) {
 	return &apiServerComponent{
@@ -402,7 +390,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 			VersionPriority:      200,
 			GroupPriorityMinimum: 1500,
 			Service: &apiregv1.ServiceReference{
-				Name:      ProjectCalicoAPIServerServiceName(c.cfg.Installation.Variant),
+				Name:      APIServerServiceName,
 				Namespace: APIServerNamespace,
 			},
 			Version:  "v3",
@@ -426,7 +414,7 @@ func (c *apiServerComponent) delegateAuthClusterRoleBinding() client.Object {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+				Name:      APIServerServiceAccountName,
 				Namespace: APIServerNamespace,
 			},
 		},
@@ -458,7 +446,7 @@ func (c *apiServerComponent) authReaderRoleBinding() client.Object {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+				Name:      APIServerServiceAccountName,
 				Namespace: APIServerNamespace,
 			},
 		},
@@ -472,7 +460,7 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+			Name:      APIServerServiceAccountName,
 			Namespace: APIServerNamespace,
 		},
 	}
@@ -685,7 +673,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRoleBinding() *rbacv1.C
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+				Name:      APIServerServiceAccountName,
 				Namespace: APIServerNamespace,
 			},
 		},
@@ -789,7 +777,7 @@ func (c *apiServerComponent) multiTenantSecretsRBAC() []client.Object {
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+					Name:      APIServerServiceAccountName,
 					Namespace: APIServerNamespace,
 				},
 			},
@@ -842,7 +830,7 @@ func (c *apiServerComponent) secretsRBAC() []client.Object {
 			Subjects: []rbacv1.Subject{
 				{
 					Kind:      "ServiceAccount",
-					Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+					Name:      APIServerServiceAccountName,
 					Namespace: APIServerNamespace,
 				},
 			},
@@ -862,7 +850,7 @@ func (c *apiServerComponent) authClusterRoleBinding() client.Object {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+				Name:      APIServerServiceAccountName,
 				Namespace: APIServerNamespace,
 			},
 		},
@@ -913,7 +901,7 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() client.Object {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+				Name:      APIServerServiceAccountName,
 				Namespace: APIServerNamespace,
 			},
 		},
@@ -960,8 +948,6 @@ func getContainerPort(cfg *APIServerConfiguration, containerName ContainerName) 
 }
 
 // apiServerService creates a service backed by the API server and - for enterprise - query server.
-//
-// Both Calico and Calico Enterprise, different namespaces.
 func (c *apiServerComponent) apiServerService() *corev1.Service {
 	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName)
 	queryServerTargetPort := getContainerPort(c.cfg, TigeraAPIServerQueryServerContainerName)
@@ -970,7 +956,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ProjectCalicoAPIServerServiceName(c.cfg.Installation.Variant),
+			Name:      APIServerServiceName,
 			Namespace: APIServerNamespace,
 			Labels:    map[string]string{"k8s-app": QueryserverServiceName},
 		},
@@ -1030,7 +1016,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
 		// Use the same CSR init container name for both OSS and Enterprise.
 		initContainer := c.cfg.TLSKeyPair.InitContainer(APIServerNamespace)
-		initContainer.Name = fmt.Sprintf("%s-%s", calicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
+		initContainer.Name = fmt.Sprintf("%s-%s", CalicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
 		initContainers = append(initContainers, initContainer)
 	}
 
@@ -1074,7 +1060,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 					DNSPolicy:          dnsPolicy,
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 					HostNetwork:        hostNetwork,
-					ServiceAccountName: APIServerServiceAccountName(c.cfg.Installation.Variant),
+					ServiceAccountName: APIServerServiceAccountName,
 					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					InitContainers:     initContainers,
@@ -1289,8 +1275,8 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", queryServerTargetPort)},
-		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
-		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", CalicoAPIServerTLSSecretName)},
+		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", CalicoAPIServerTLSSecretName)},
 	}
 	if c.cfg.TrustedBundle != nil {
 		env = append(env, corev1.EnvVar{Name: "TRUSTED_BUNDLE_PATH", Value: c.cfg.TrustedBundle.MountPath()})
@@ -1501,7 +1487,7 @@ func (c *apiServerComponent) tigeraApiServerClusterRoleBinding() *rbacv1.Cluster
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      APIServerServiceAccountName(c.cfg.Installation.Variant),
+				Name:      APIServerServiceAccountName,
 				Namespace: APIServerNamespace,
 			},
 		},
@@ -1563,7 +1549,7 @@ func (c *apiServerComponent) uisettingsgroupGetterClusterRole() *rbacv1.ClusterR
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-uisettingsgroup-getter",
+			Name: "calico-uisettingsgroup-getter",
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -1589,11 +1575,11 @@ func (c *apiServerComponent) kubeControllerMgrUisettingsgroupGetterClusterRoleBi
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-uisettingsgroup-getter",
+			Name: "calico-uisettingsgroup-getter",
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
-			Name:     "tigera-uisettingsgroup-getter",
+			Name:     "calico-uisettingsgroup-getter",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 		Subjects: []rbacv1.Subject{
@@ -1824,7 +1810,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"extensions",
 			},
 			// Use both the networkpolicies and tier.networkpolicies resource types to ensure identical behavior
-			// irrespective of the Calico RBAC scheme (see the ClusterRole "tigera-tiered-policy-passthrough" for
+			// irrespective of the Calico RBAC scheme (see the ClusterRole "calico-tiered-policy-passthrough" for
 			// more details).  Similar for all tiered policy resource types.
 			Resources: []string{
 				"tiers",
@@ -2105,7 +2091,7 @@ func (c *apiServerComponent) tieredPolicyPassthruClusterRolebinding() *rbacv1.Cl
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-tiered-policy-passthrough",
+			Name: "calico-tiered-policy-passthrough",
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -2116,7 +2102,7 @@ func (c *apiServerComponent) tieredPolicyPassthruClusterRolebinding() *rbacv1.Cl
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
-			Name:     "tigera-tiered-policy-passthrough",
+			Name:     "calico-tiered-policy-passthrough",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}
@@ -2130,7 +2116,7 @@ func (c *apiServerComponent) uiSettingsPassthruClusterRole() *rbacv1.ClusterRole
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-uisettings-passthrough",
+			Name: "calico-uisettings-passthrough",
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -2150,7 +2136,7 @@ func (c *apiServerComponent) uiSettingsPassthruClusterRolebinding() *rbacv1.Clus
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tigera-uisettings-passthrough",
+			Name: "calico-uisettings-passthrough",
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -2161,7 +2147,7 @@ func (c *apiServerComponent) uiSettingsPassthruClusterRolebinding() *rbacv1.Clus
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
-			Name:     "tigera-uisettings-passthrough",
+			Name:     "calico-uisettings-passthrough",
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}

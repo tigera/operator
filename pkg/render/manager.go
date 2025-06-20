@@ -204,14 +204,13 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	//c.voltronImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
-	c.voltronImage, err = "gcr.io/tigera-dev/vara/tigera/voltron:align_as", nil
+	c.voltronImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	//c.uiAPIsImage, err = components.GetReference(components.ComponentUIAPIs, reg, path, prefix, is)
-	c.uiAPIsImage, err = "gcr.io/tigera-dev/vara/tigera/ui-apis:align_as", nil
+	c.uiAPIsImage, err = components.GetReference(components.ComponentUIAPIs, reg, path, prefix, is)
+
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -599,7 +598,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	return corev1.Container{
 		Name:            VoltronName,
 		Image:           c.voltronImage,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: ImagePullPolicy(),
 		Env:             env,
 		VolumeMounts:    mounts,
 		LivenessProbe:   c.managerProxyProbe(),
@@ -663,7 +662,7 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "tigera-ui-apis",
 		Image:           c.uiAPIsImage,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: ImagePullPolicy(),
 		LivenessProbe:   c.managerUIAPIsProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
 		Env:             env,

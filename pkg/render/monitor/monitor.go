@@ -943,7 +943,7 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 }
 
 func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMonitor {
-	serverName := render.ProjectCalicoAPIServerServiceName(mc.cfg.Installation.Variant)
+	serverName := render.APIServerServiceName
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{

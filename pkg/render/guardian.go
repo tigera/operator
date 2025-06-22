@@ -782,7 +782,7 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			Resources: []string{"services/proxy"},
 			ResourceNames: []string{
 				"calico-node-prometheus:9090",
-				"https:tigera-api:8080",
+				"https:calico-api:8080",
 			},
 			Verbs: []string{"create", "get"},
 		},

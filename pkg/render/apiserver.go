@@ -342,21 +342,6 @@ func (c *apiServerComponent) deploymentSelector() *metav1.LabelSelector {
 	}
 }
 
-// Determine names based on the configured variant
-// It takes two name as parameters, enterpriseName and ossName, and returns name and nameToDelete.
-func (c *apiServerComponent) resourceNameBasedOnVariant(enterpriseName, ossName string) (string, string) {
-	var name, nameToDelete string
-	switch c.cfg.Installation.Variant {
-	case operatorv1.TigeraSecureEnterprise:
-		name = enterpriseName
-		nameToDelete = ossName
-	case operatorv1.Calico:
-		name = ossName
-		nameToDelete = enterpriseName
-	}
-	return name, nameToDelete
-}
-
 func (c *apiServerComponent) apiServerPodDisruptionBudget() *policyv1.PodDisruptionBudget {
 	maxUnavailable := intstr.FromInt(1)
 	return &policyv1.PodDisruptionBudget{

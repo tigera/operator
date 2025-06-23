@@ -28,7 +28,7 @@ type APIServerSpec struct {
 	// +optional
 	Logging *APIServerPodLogging `json:"logging,omitempty"`
 
-	// APIServerDeployment configures the calico-apiserver (or tigera-apiserver in Enterprise) Deployment. If
+	// APIServerDeployment configures the calico-apiserver Deployment. If
 	// used in conjunction with ControlPlaneNodeSelector or ControlPlaneTolerations, then these overrides
 	// take precedence.
 	APIServerDeployment *APIServerDeployment `json:"apiServerDeployment,omitempty"`

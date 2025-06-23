@@ -210,6 +210,7 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	c.uiAPIsImage, err = components.GetReference(components.ComponentUIAPIs, reg, path, prefix, is)
+
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -438,7 +439,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		// TODO: Prometheus URL will need to change.
 		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", common.TigeraPrometheusNamespace)},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
-		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/calico-system/services/https:tigera-api:8080/proxy"},
+		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/calico-system/services/https:calico-api:8080/proxy"},
 		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
 		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: fmt.Sprintf("/%s", KibanaBasePath)},
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
@@ -908,7 +909,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				APIGroups: []string{""},
 				Resources: []string{"services/proxy"},
 				ResourceNames: []string{
-					"https:tigera-api:8080", "calico-node-prometheus:9090",
+					"https:calico-api:8080", "calico-node-prometheus:9090",
 				},
 				Verbs: []string{"get", "create"},
 			},

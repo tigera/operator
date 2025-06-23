@@ -197,13 +197,6 @@ func (c *apiServerComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func populateLists(create []client.Object, dels []client.Object, f func() (client.Object, client.Object)) ([]client.Object, []client.Object) {
-	c, d := f()
-	create = append(create, c)
-	dels = append(dels, d)
-	return create, dels
-}
-
 func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Start with all of the cluster-scoped resources that are used for both Calico and Calico Enterprise.
 	// When switching between Calico / Enterprise, these objects are simply updated in-place.

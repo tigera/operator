@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -119,18 +119,17 @@ func (*dexComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
-
 	objs := []client.Object{
 		CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
 		c.allowTigeraNetworkPolicy(c.cfg.Installation.Variant),
 		networkpolicy.AllowTigeraDefaultDeny(DexNamespace),
 		CreateOperatorSecretsRoleBinding(DexNamespace),
 		c.serviceAccount(),
-		c.deployment(),
-		c.service(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.configMap(),
+		c.deployment(),
+		c.service(),
 	}
 
 	// TODO Some of the secrets created in the operator namespace are created by the customer (i.e. oidc credentials)

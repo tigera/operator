@@ -292,20 +292,21 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	)
 	objectsToCreate = append(objectsToCreate, c.managedClusterRoleBindings()...)
 
-	if len(c.enabledControllers) > 0 {
-		// There's something to run, so create the deployment.
-		objectsToCreate = append(objectsToCreate, c.controllersDeployment())
-	} else {
-		// No controllers are enabled, so delete the deployment.
-		objectsToDelete = append(objectsToDelete, c.controllersDeployment())
-	}
-
 	if c.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		objectsToCreate = append(objectsToCreate, c.controllersOCPFederationRoleBinding())
 	}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.KubeControllersGatewaySecret)...)...)
+	}
+
+	// Create deployment after other resources it depends on have been created
+	if len(c.enabledControllers) > 0 {
+		// There's something to run, so create the deployment.
+		objectsToCreate = append(objectsToCreate, c.controllersDeployment())
+	} else {
+		// No controllers are enabled, so delete the deployment.
+		objectsToDelete = append(objectsToDelete, c.controllersDeployment())
 	}
 
 	if c.cfg.MetricsPort != 0 {

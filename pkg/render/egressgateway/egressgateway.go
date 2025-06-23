@@ -119,6 +119,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objectsToDelete = append(objectsToDelete, c.egwRole(), c.egwRoleBinding())
 	}
 
+	// Create deployment after dependent resources are created
 	objectsToCreate = append(objectsToCreate, c.egwDeployment())
 	return objectsToCreate, objectsToDelete
 }

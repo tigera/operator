@@ -182,14 +182,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.config.envoyConfigMap)
 	}
 
-	// Envoy, Dikastes & L7 log collector Daemonset
-	// It always installed, even with sidecars enabled, the sidecars contain
-	// only envoy proxy inside them, and if only sidcar is enabled the
-	// daemonset will contain only Dikastes and L7 log collector to be
-	// prepared to do some action depending on the envoy inside application
-	// pod configuration.
-	objs = append(objs, c.daemonset())
-
 	if c.config.Installation.KubernetesProvider.IsDockerEE() {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
 	}
@@ -197,6 +189,14 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	if c.config.Installation.KubernetesProvider.IsOpenShift() {
 		objs = append(objs, c.role(), c.roleBinding())
 	}
+
+	// Envoy, Dikastes & L7 log collector Daemonset
+	// It always installed, even with sidecars enabled, the sidecars contain
+	// only envoy proxy inside them, and if only sidcar is enabled the
+	// daemonset will contain only Dikastes and L7 log collector to be
+	// prepared to do some action depending on the envoy inside application
+	// pod configuration.
+	objs = append(objs, c.daemonset())
 
 	return objs, nil
 }

@@ -161,20 +161,38 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	}
 
 	for _, secretName := range []string{
-		"calico-apiserver-certs", "tigera-apiserver-certs",
-		certificatemanagement.CASecretName, render.DexTLSSecretName, monitor.PrometheusClientTLSSecretName,
+		"calico-apiserver-certs",
+		"tigera-apiserver-certs",
+		certificatemanagement.CASecretName,
+		render.DexTLSSecretName,
+		monitor.PrometheusClientTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 		}
 	}
 
+	// Watch for changes to objects created by this controller.
+	if err = utils.AddDeploymentWatch(c, "tigera-apiserver", "calico-system"); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
+	}
+	if err = utils.AddDeploymentWatch(c, "calico-apiserver", "calico-apiserver"); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
+	}
+
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch ImageSet: %w", err)
 	}
+
 	// Watch for changes to TigeraStatus.
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch apiserver Tigerastatus: %w", err)
+	}
+
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("apiserver-controller failed to create periodic reconcile watch: %w", err)
 	}
 
 	log.V(5).Info("Controller created and Watches setup")
@@ -206,7 +224,7 @@ type ReconcileAPIServer struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling APIServer")
+	reqLogger.V(2).Info("Reconciling APIServer")
 
 	instance, msg, err := utils.GetAPIServer(ctx, r.client)
 	if err != nil {

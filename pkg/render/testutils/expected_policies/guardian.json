@@ -167,7 +167,7 @@
         "protocol": "TCP",
         "destination": {
           "services": {
-            "name": "tigera-api",
+            "name": "calico-api",
             "namespace": "calico-system"
           }
         }

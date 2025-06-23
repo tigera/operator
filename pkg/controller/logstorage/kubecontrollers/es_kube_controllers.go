@@ -304,6 +304,11 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	}
 
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
+	var tenantHandler utils.ComponentHandler
+	if tenant.MultiTenant() {
+		// In standard installs, the PolicyRecommendation CR owns all the objects. For multi-tenant, pull secrets are owned by the Tenant instance.
+		tenantHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant)
+	}
 
 	// Get the Authentication resource.
 	authentication, err := utils.GetAuthentication(ctx, r.client)
@@ -357,6 +362,12 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	setup := render.NewSetup(&render.SetUpConfiguration{
+		Namespace:       helper.InstallNamespace(),
+		PullSecrets:     pullSecrets,
+		CreateNamespace: false,
+	})
+
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,
@@ -388,9 +399,12 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if err := hdler.CreateOrUpdateOrDelete(ctx, esKubeControllerComponents, nil); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating  elasticsearch kube-controllers resource", err, reqLogger)
-		return reconcile.Result{}, err
+	for _, component := range []render.Component{setup, esKubeControllerComponents} {
+		h := utils.GetHandler(component, tenant.MultiTenant(), tenantHandler, hdler)
+		if err := h.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating  elasticsearch kube-controllers resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	r.status.ReadyToMonitor()

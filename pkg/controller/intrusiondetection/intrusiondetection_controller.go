@@ -437,6 +437,11 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	var tenantHandler utils.ComponentHandler
+	if tenant.MultiTenant() {
+		// In standard installs, the PolicyRecommendation CR owns all the objects. For multi-tenant, pull secrets are owned by the Tenant instance.
+		tenantHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant)
+	}
 
 	// Determine the namespaces to which we must bind the cluster role.
 	namespaces, err := helper.TenantNamespaces(r.client)
@@ -466,13 +471,13 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		ExternalElastic:              r.elasticExternal,
 		SyslogForwardingIsEnabled:    syslogForwardingIsEnabled(lc),
 	}
-	intrusionDetectionNamespaceComponent := render.IntrusionDetectionNamespaceComponent(&render.IntrusionDetectionNamespaceConfiguration{
-		KubernetesProvider:        network.KubernetesProvider,
-		Namespace:                 helper.InstallNamespace(),
-		Tenant:                    tenant,
-		HasNoLicense:              hasNoLicense,
-		SyslogForwardingIsEnabled: syslogForwardingIsEnabled(lc),
-		Azure:                     network.Azure,
+	setUp := render.NewSetup(&render.SetUpConfiguration{
+		OpenShift:       r.provider.IsOpenShift(),
+		Installation:    network,
+		PullSecrets:     pullSecrets,
+		Namespace:       helper.InstallNamespace(),
+		PSS:             getPSS(lc),
+		CreateNamespace: shouldCreateNamespace(tenant, hasNoLicense),
 	})
 	intrusionDetectionComponent := render.IntrusionDetection(intrusionDetectionCfg)
 
@@ -493,7 +498,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	components := []render.Component{
-		intrusionDetectionNamespaceComponent,
+		setUp,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       helper.InstallNamespace(),
 			TruthNamespace:  helper.TruthNamespace(),
@@ -566,7 +571,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	for _, comp := range components {
-		if err := handler.CreateOrUpdateOrDelete(context.Background(), comp, r.status); err != nil {
+		h := utils.GetHandler(comp, tenant.MultiTenant(), tenantHandler, handler)
+		if err := h.CreateOrUpdateOrDelete(context.Background(), comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}
@@ -593,6 +599,25 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+func shouldCreateNamespace(tenant *operatorv1.Tenant, hasNoLicense bool) bool {
+	if hasNoLicense || tenant.MultiTenant() {
+		return false
+	}
+	return true
+}
+
+func getPSS(logCollector *operatorv1.LogCollector) render.PodSecurityStandard {
+	// Configure pod security standard. If syslog forwarding is enabled, we
+	// need hostpath volumes which require a privileged PSS.
+	pss := render.PSSRestricted
+
+	if syslogForwardingIsEnabled(logCollector) {
+		pss = render.PSSPrivileged
+	}
+
+	return render.PodSecurityStandard(pss)
 }
 
 // Determine whether this component's configuration has syslog forwarding enabled or not.

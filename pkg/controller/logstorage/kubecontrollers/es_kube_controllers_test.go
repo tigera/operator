@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -130,6 +130,9 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 				ControlPlaneReplicas: &replicas,
 				Variant:              operatorv1.TigeraSecureEnterprise,
 				Registry:             "some.registry.org/",
+				ImagePullSecrets: []corev1.LocalObjectReference{{
+					Name: "tigera-pull-secret",
+				}},
 			},
 		}
 		Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
@@ -147,6 +150,11 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 		es.Namespace = render.ElasticsearchNamespace
 		es.Status.Phase = esv1.ElasticsearchReadyPhase
 		Expect(cli.Create(ctx, es)).ShouldNot(HaveOccurred())
+
+		pullSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()},
+		}
+		Expect(cli.Create(ctx, pullSecret)).NotTo(HaveOccurred())
 
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("Run").Return()
@@ -245,6 +253,30 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 			},
 		}
 		Expect(test.GetResource(cli, &dep)).To(BeNil())
+
+		// Expect operator role binding to be created
+		rb := rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{},
+		}
+		Expect(cli.Get(ctx, client.ObjectKey{
+			Name:      render.TigeraOperatorSecrets,
+			Namespace: render.ElasticsearchNamespace,
+		}, &rb)).NotTo(HaveOccurred())
+		Expect(rb.OwnerReferences).To(HaveLen(1))
+		ownerRoleBinding := rb.OwnerReferences[0]
+		Expect(ownerRoleBinding.Kind).To(Equal("LogStorage"))
+
+		// Expect pull secrets to be created
+		pullSecrets := corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		}
+		Expect(cli.Get(ctx, client.ObjectKey{
+			Name:      "tigera-pull-secret",
+			Namespace: common.CalicoNamespace,
+		}, &pullSecrets)).NotTo(HaveOccurred())
+		Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
+		pullSecret := pullSecrets.OwnerReferences[0]
+		Expect(pullSecret.Kind).To(Equal("LogStorage"))
 	})
 
 	It("should use images from ImageSet", func() {
@@ -339,6 +371,18 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 				},
 			}
 			Expect(test.GetResource(cli, &dep)).To(BeNil())
+
+			// Expect pull secrets to be created
+			pullSecrets := corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			}
+			Expect(cli.Get(ctx, client.ObjectKey{
+				Name:      "tigera-pull-secret",
+				Namespace: common.CalicoNamespace,
+			}, &pullSecrets)).NotTo(HaveOccurred())
+			Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
+			pullSecret := pullSecrets.OwnerReferences[0]
+			Expect(pullSecret.Kind).To(Equal("LogStorage"))
 		})
 	})
 
@@ -429,6 +473,29 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 				},
 			}
 			Expect(test.GetResource(cli, &dep)).To(BeNil())
+			// Expect operator role binding to be created
+			rb := rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{},
+			}
+			Expect(cli.Get(ctx, client.ObjectKey{
+				Name:      render.TigeraOperatorSecrets,
+				Namespace: tenantNS,
+			}, &rb)).NotTo(HaveOccurred())
+			Expect(rb.OwnerReferences).To(HaveLen(1))
+			ownerRoleBinding := rb.OwnerReferences[0]
+			Expect(ownerRoleBinding.Kind).To(Equal("Tenant"))
+
+			// Expect pull secrets to be created
+			pullSecrets := corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			}
+			Expect(cli.Get(ctx, client.ObjectKey{
+				Name:      "tigera-pull-secret",
+				Namespace: tenantNS,
+			}, &pullSecrets)).NotTo(HaveOccurred())
+			Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
+			pullSecret := pullSecrets.OwnerReferences[0]
+			Expect(pullSecret.Kind).To(Equal("Tenant"))
 		})
 	})
 })

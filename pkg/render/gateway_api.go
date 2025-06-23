@@ -371,7 +371,7 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 		if err != nil {
 			return err
 		}
-		pr.wafHTTPFilterImage, err = components.GetReference(components.ComponentWafHTTPFilter, reg, path, prefix, is)
+		pr.wafHTTPFilterImage, err = components.GetReference(components.ComponentWAFHTTPFilter, reg, path, prefix, is)
 		if err != nil {
 			return err
 		}

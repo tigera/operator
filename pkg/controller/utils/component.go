@@ -135,6 +135,17 @@ func (c *componentHandler) update(ctx context.Context, obj client.Object, opts .
 }
 
 func (c *componentHandler) delete(ctx context.Context, obj client.Object, opts ...client.DeleteOption) error {
+	// Do a lookup of the object using the client cache to see if we actually need to send the delete.
+	// This prevents us from sending lots of delete requests for objects that don't exist.
+	logCtx := ContextLoggerForResource(c.log, obj)
+	key := client.ObjectKeyFromObject(obj)
+	if err := c.client.Get(ctx, key, obj); errors.IsNotFound(err) {
+		logCtx.V(2).Info("Object does not exist, skipping delete call")
+		dCache.delete(obj)
+		return nil
+	}
+
+	// If the object is not in the cache, we can send the delete.
 	err := c.client.Delete(ctx, obj, opts...)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -150,21 +161,6 @@ func (c *componentHandler) delete(ctx context.Context, obj client.Object, opts .
 }
 
 func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) bool {
-	key := client.ObjectKeyFromObject(obj)
-	cur := obj.DeepCopyObject().(client.Object)
-	err := c.client.Get(ctx, key, cur)
-	if err != nil {
-		// If we can't get the object, assume it needs to be created or updated.
-		if errors.IsNotFound(err) {
-			c.log.WithValues("key", key).V(2).Info("Object does not exist, we should create it")
-			// Invalidate our cached object if it was not found. Most likely the object is already not in the cache,
-			// but we do this anyway just to be safe.
-			dCache.delete(obj)
-		} else {
-			c.log.WithValues("key", key, "error", err).Error(err, "Failed to get object")
-		}
-		return true
-	}
 	logCtx := ContextLoggerForResource(c.log, obj)
 
 	// Only update the object if one of the following is true:
@@ -180,7 +176,7 @@ func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) b
 	}
 
 	// The object is in the cache, check if the generation is out of date.
-	if cachedGen < cur.GetGeneration() {
+	if cachedGen < obj.GetGeneration() {
 		// The cached generation is older than the current generation in the cluster.
 		logCtx.V(2).Info("Object on cluster has been modified since last reconcile")
 		return true
@@ -571,6 +567,9 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 	if reflect.DeepEqual(desiredMeta.GetCreationTimestamp(), metav1.Time{}) {
 		desiredMeta.SetCreationTimestamp(currentMeta.GetCreationTimestamp())
 	}
+
+	// Update the generation on the desired object to match the current object.
+	desiredMeta.SetGeneration(currentMeta.GetGeneration())
 
 	// Merge annotations by reconciling the ones that components expect, but leaving everything else
 	// as-is.

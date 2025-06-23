@@ -750,7 +750,7 @@ func mergeProvider(cr *operator.Installation, provider operator.Provider) error 
 
 func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling Installation.operator.tigera.io")
+	reqLogger.V(2).Info("Reconciling Installation.operator.tigera.io")
 
 	newActiveCM, err := r.checkActive(reqLogger)
 	if err != nil {
@@ -1726,14 +1726,14 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
 		if *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables {
 			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
+			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeEnabled
 			nftablesMode := crdv1.NFTablesModeEnabled
 			fc.Spec.NFTablesMode = &nftablesMode
-			updated = true
 		} else {
 			// The operator is configured to use another dataplane. Disable nftables.
+			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeDisabled
 			nftablesMode := crdv1.NFTablesModeDisabled
 			fc.Spec.NFTablesMode = &nftablesMode
-			updated = true
 		}
 	}
 	if updated {

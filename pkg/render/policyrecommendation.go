@@ -122,9 +122,6 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	// Management and managed clusters need API access to the resources defined in the policy
 	// recommendation cluster role
 	objs = []client.Object{
-		CreateNamespace(pr.cfg.Namespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted, pr.cfg.Installation.Azure),
-		CreateOperatorSecretsRoleBinding(pr.cfg.Namespace),
-
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
@@ -139,8 +136,6 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 		// No further resources are needed for managed clusters
 		return objs, nil
 	}
-
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(pr.cfg.Namespace, pr.cfg.PullSecrets...)...)...)
 
 	// The deployment is created on management/standalone clusters only
 	objs = append(objs,

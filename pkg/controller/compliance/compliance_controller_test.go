@@ -106,6 +106,9 @@ var _ = Describe("Compliance controller tests", func() {
 			Spec: operatorv1.InstallationSpec{
 				Variant:  operatorv1.TigeraSecureEnterprise,
 				Registry: "some.registry.org/",
+				ImagePullSecrets: []corev1.LocalObjectReference{{
+					Name: "tigera-pull-secret",
+				}},
 			},
 			Status: operatorv1.InstallationStatus{
 				Variant: operatorv1.TigeraSecureEnterprise,
@@ -125,6 +128,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}, Status: operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{common.ComplianceFeature}}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}})).NotTo(HaveOccurred())
 
 		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
@@ -376,6 +380,45 @@ var _ = Describe("Compliance controller tests", func() {
 			Name: "tigera-compliance-reporter:csr-creator",
 		}, &crb)).NotTo(HaveOccurred())
 		Expect(crb.Subjects).To(HaveLen(1))
+	})
+
+	It("create namespace, operator secrets role and pull secrets", func() {
+		result, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+		// Expect namespace to be created
+		namespace := corev1.Namespace{
+			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+		}
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name: render.ComplianceNamespace,
+		}, &namespace)).NotTo(HaveOccurred())
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+		// Expect operator rolebinding to be created
+		rb := rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{},
+		}
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name:      render.TigeraOperatorSecrets,
+			Namespace: render.ComplianceNamespace,
+		}, &rb)).NotTo(HaveOccurred())
+		Expect(rb.OwnerReferences).To(HaveLen(1))
+		Expect(rb.OwnerReferences[0].Kind).To(Equal("Compliance"))
+
+		// Expect pull secrets to be created
+		pullSecrets := corev1.Secret{
+			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		}
+		Expect(c.Get(ctx, client.ObjectKey{
+			Name:      "tigera-pull-secret",
+			Namespace: render.ComplianceNamespace,
+		}, &pullSecrets)).NotTo(HaveOccurred())
+		Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
+		pullSecret := pullSecrets.OwnerReferences[0]
+		Expect(pullSecret.Kind).To(Equal("Compliance"))
 	})
 
 	Context("image reconciliation", func() {
@@ -854,6 +897,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 		})
+
 	})
 
 	Context("Multi-tenant/namespaced reconciliation", func() {
@@ -963,6 +1007,64 @@ var _ = Describe("Compliance controller tests", func() {
 
 			err = test.GetResource(c, &tenantBServiceAccount)
 			Expect(err).ShouldNot(HaveOccurred())
+		})
+
+		It("create operator secrets role and pull secrets", func() {
+			// Create the Tenant resources for tenant-a
+			tenantA := &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "default",
+					Namespace: tenantANamespace,
+				},
+				Spec: operatorv1.TenantSpec{ID: "tenant-a"},
+			}
+			Expect(c.Create(ctx, tenantA)).NotTo(HaveOccurred())
+
+			certificateManagerTenantA, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
+			trustedBundleWithSystemCAsTenantA, err := certificateManagerTenantA.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, trustedBundleWithSystemCAsTenantA.ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
+
+			linseedTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantANamespace, []string{render.TigeraLinseedSecret})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, linseedTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, &operatorv1.Compliance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-secure",
+					Namespace: tenantANamespace,
+				},
+			})).NotTo(HaveOccurred())
+
+			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			// Expect operator role binding to be created
+			rb := rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{},
+			}
+			Expect(c.Get(ctx, client.ObjectKey{
+				Name:      render.TigeraOperatorSecrets,
+				Namespace: tenantANamespace,
+			}, &rb)).NotTo(HaveOccurred())
+			Expect(rb.OwnerReferences).To(HaveLen(1))
+			ownerRoleBinding := rb.OwnerReferences[0]
+			Expect(ownerRoleBinding.Kind).To(Equal("Tenant"))
+
+			// Expect pull secrets to be created
+			pullSecrets := corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			}
+			Expect(c.Get(ctx, client.ObjectKey{
+				Name:      "tigera-pull-secret",
+				Namespace: tenantANamespace,
+			}, &pullSecrets)).NotTo(HaveOccurred())
+			Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
+			ownerPullSecrets := pullSecrets.OwnerReferences[0]
+			Expect(ownerPullSecrets.Kind).To(Equal("Tenant"))
 		})
 	})
 })

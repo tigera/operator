@@ -292,7 +292,7 @@ var _ = Describe("GatewayAPI tests", func() {
 
 		getEPLoggingLevels := func() (map[envoyapi.ProxyLogComponent]envoyapi.LogLevel, error) {
 			var ep envoyapi.EnvoyProxy
-			err = c.Get(shutdownContext, types.NamespacedName{Namespace: "tigera-gateway", Name: "custom-ep"}, &ep)
+			err = c.Get(shutdownContext, types.NamespacedName{Namespace: "tigera-gateway", Name: "custom-gc"}, &ep)
 			if err != nil {
 				return nil, err
 			}
@@ -311,6 +311,7 @@ var _ = Describe("GatewayAPI tests", func() {
 
 		By("Checking that EnvoyProxy in tigera-gateway namespace gets the additional level")
 		Eventually(getEPLoggingLevels, "10s").Should(HaveKeyWithValue(envoyapi.LogComponentConnection, envoyapi.LogLevelDebug))
+		Consistently(getEPLoggingLevels, "60s", "10s").Should(HaveKeyWithValue(envoyapi.LogComponentConnection, envoyapi.LogLevelDebug))
 	})
 
 	It("watches the custom EnvoyGateway ConfigMap", func() {

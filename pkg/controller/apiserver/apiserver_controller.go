@@ -267,7 +267,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// We need separate certificates for OSS vs Enterprise.
 	secretName := render.CalicoAPIServerTLSSecretName
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, r.clusterDomain))
 	if err != nil {

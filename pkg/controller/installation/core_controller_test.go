@@ -1547,7 +1547,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(policies.Items[1].Name).To(Equal("allow-tigera.kube-controller-access"))
 
 			defaultDenyPolicy := policies.Items[0]
-			Expect(defaultDenyPolicy.Spec.Selector).To(Equal("k8s-app != 'tigera-apiserver' && k8s-app != 'calico-apiserver'"))
+			Expect(defaultDenyPolicy.Spec.Selector).To(Equal("k8s-app != 'calico-apiserver'"))
 		})
 
 		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {

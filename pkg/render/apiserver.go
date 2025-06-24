@@ -67,8 +67,9 @@ const (
 	QueryserverServiceName = "calico-api"
 
 	// Use the same API server container name for both OSS and Enterprise.
+	APIServerName                                         = "calico-apiserver"
 	APIServerContainerName                  ContainerName = "calico-apiserver"
-	TigeraAPIServerQueryServerContainerName ContainerName = "calico-queryserver"
+	TigeraAPIServerQueryServerContainerName ContainerName = "tigera-queryserver"
 
 	CalicoAPIServerTLSSecretName = "calico-apiserver-certs"
 	APIServerServiceName         = "calico-api"
@@ -207,20 +208,18 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.kubeControllerMgrTierGetterClusterRoleBinding(),
 		c.calicoPolicyPassthruClusterRole(),
 		c.calicoPolicyPassthruClusterRolebinding(),
+		c.delegateAuthClusterRoleBinding(),
+		c.authClusterRole(),
+		c.authClusterRoleBinding(),
+		c.authReaderRoleBinding(),
+		c.webhookReaderClusterRole(),
+		c.webhookReaderClusterRoleBinding(),
 	}
 
-	// These objects are global, and have different names based on Calico or Calico Enterprise.
-	// We need to delete the object for the variant that we're not currently installilng.
 	objsToDelete := []client.Object{}
-	globalObjects = append(globalObjects, c.delegateAuthClusterRoleBinding())
-	globalObjects = append(globalObjects, c.authClusterRole())
-	globalObjects = append(globalObjects, c.authClusterRoleBinding())
-	globalObjects = append(globalObjects, c.authReaderRoleBinding())
-	globalObjects = append(globalObjects, c.webhookReaderClusterRole())
-	globalObjects = append(globalObjects, c.webhookReaderClusterRoleBinding())
 
-	// Namespaced objects that are common between Calico and Calico Enterprise. They don't need to be explicitly
-	// deleted, since they will be garbage collected on namespace deletion.
+	// Namespaced objects common to both Calico and Calico Enterprise.
+	// These objects will be updated when switching between the variants.
 	namespacedObjects := []client.Object{}
 	// Add in image pull secrets.
 	secrets := secret.CopyToNamespace(APIServerNamespace, c.cfg.PullSecrets...)
@@ -340,7 +339,7 @@ func (c *apiServerComponent) apiServerPodDisruptionBudget() *policyv1.PodDisrupt
 	return &policyv1.PodDisruptionBudget{
 		TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-apiserver",
+			Name:      APIServerName,
 			Namespace: APIServerNamespace,
 		},
 		Spec: policyv1.PodDisruptionBudgetSpec{
@@ -503,7 +502,7 @@ func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector("calico-apiserver"),
+			Selector: networkpolicy.KubernetesAppSelector(APIServerName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
 				{
@@ -1011,7 +1010,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "calico-apiserver",
+			Name:      APIServerName,
 			Namespace: APIServerNamespace,
 			Labels: map[string]string{
 				"apiserver": "true",
@@ -1025,7 +1024,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 			Selector: c.deploymentSelector(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "calico-apiserver",
+					Name:      APIServerName,
 					Namespace: APIServerNamespace,
 					Labels: map[string]string{
 						"apiserver": "true",
@@ -1048,7 +1047,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
-		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity("calico-apiserver", APIServerNamespace)
+		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(APIServerName, APIServerNamespace)
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -1444,7 +1443,7 @@ func (c *apiServerComponent) tigeraApiServerClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "calico-apiserver",
+			Name: APIServerName,
 		},
 		Rules: rules,
 	}
@@ -1458,7 +1457,7 @@ func (c *apiServerComponent) tigeraApiServerClusterRoleBinding() *rbacv1.Cluster
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "calico-apiserver",
+			Name: APIServerName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -1469,7 +1468,7 @@ func (c *apiServerComponent) tigeraApiServerClusterRoleBinding() *rbacv1.Cluster
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
-			Name:     "calico-apiserver",
+			Name:     APIServerName,
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}

@@ -248,7 +248,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
 
-		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("calico-queryserver"))
+		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
 		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal(
 			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentQueryServer.Image, components.ComponentQueryServer.Version),
 		))
@@ -1156,7 +1156,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 									Ports:     []operatorv1.APIServerDeploymentContainerPort{apiServerPort},
 								},
 								{
-									Name:      "calico-queryserver",
+									Name:      "tigera-queryserver",
 									Resources: &rr2,
 									Ports:     []operatorv1.APIServerDeploymentContainerPort{queryServerPort},
 								},
@@ -1238,7 +1238,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 					Expect(c.Args[0]).To(ContainSubstring(fmt.Sprintf("--secure-port=%d", apiServerPort.ContainerPort)))
 					containersFound++
-				} else if c.Name == "calico-queryserver" {
+				} else if c.Name == "tigera-queryserver" {
 					Expect(c.Resources).To(Equal(rr2))
 					Expect(c.Ports[0].Name).To(Equal(queryServerPort.Name))
 					Expect(c.Ports[0].ContainerPort).To(Equal(queryServerPort.ContainerPort))

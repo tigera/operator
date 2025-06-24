@@ -1020,3 +1020,20 @@ func (r *ReadyFlag) MarkAsReady() {
 	defer r.mu.Unlock()
 	r.isReady = true
 }
+
+func GetHandler(component render.Component, multiTenant bool, mtHandler ComponentHandler, defaultHandler ComponentHandler) ComponentHandler {
+	if multiTenant && isSetUpComponent(component) {
+		return mtHandler
+	}
+
+	return defaultHandler
+}
+
+func isSetUpComponent(component render.Component) bool {
+	switch component.(type) {
+	case *render.SetUpComponent:
+		return true
+	default:
+		return false
+	}
+}

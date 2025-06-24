@@ -191,7 +191,7 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentAPIServer.Image,
 					components.ComponentAPIServer.Version)))
-			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-queryserver")
+			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-queryserver")
 			Expect(qserver).ToNot(BeNil())
 			Expect(qserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -247,7 +247,7 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentAPIServer.Image,
 					"sha256:apiserverhash")))
-			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-queryserver")
+			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-queryserver")
 			Expect(qserver).ToNot(BeNil())
 			Expect(qserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",

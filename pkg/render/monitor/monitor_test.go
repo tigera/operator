@@ -420,7 +420,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusClusterRoleObj.Rules[2].Resources).To(HaveLen(1))
 		Expect(prometheusClusterRoleObj.Rules[2].Resources[0]).To(Equal("services/proxy"))
 		Expect(prometheusClusterRoleObj.Rules[2].ResourceNames).To(HaveLen(1))
-		Expect(prometheusClusterRoleObj.Rules[2].ResourceNames[0]).To(Equal("https:tigera-api:8080"))
+		Expect(prometheusClusterRoleObj.Rules[2].ResourceNames[0]).To(Equal("https:calico-api:8080"))
 		Expect(prometheusClusterRoleObj.Rules[2].Verbs).To(HaveLen(1))
 		Expect(prometheusClusterRoleObj.Rules[2].Verbs[0]).To(Equal("get"))
 		Expect(prometheusClusterRoleObj.Rules[3].NonResourceURLs).To(HaveLen(1))
@@ -545,10 +545,10 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal("https"))
 
-		servicemonitorObj, ok = rtest.GetResource(toCreate, "tigera-api", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
+		servicemonitorObj, ok = rtest.GetResource(toCreate, "calico-api", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(1))
-		Expect(servicemonitorObj.Spec.Selector.MatchLabels["k8s-app"]).To(Equal("tigera-api"))
+		Expect(servicemonitorObj.Spec.Selector.MatchLabels["k8s-app"]).To(Equal("calico-api"))
 		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("calico-system"))
 		Expect(servicemonitorObj.Spec.Endpoints).To(HaveLen(1))
@@ -1005,7 +1005,7 @@ func expectedBaseResources() []client.Object {
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-monitor", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "elasticsearch-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
-		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "tigera-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
+		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 	}

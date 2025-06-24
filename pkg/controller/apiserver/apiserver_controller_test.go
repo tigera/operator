@@ -117,7 +117,7 @@ var _ = Describe("apiserver controller tests", func() {
 		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "calico-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.APIServerServiceName, "calico-system", dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &operatorv1.Authentication{
-			ObjectMeta: metav1.ObjectMeta{Name: "calico-secure"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Spec: operatorv1.AuthenticationSpec{
 				ManagerDomain: "https://localhost:9443",
 				OIDC: &operatorv1.AuthenticationOIDC{
@@ -133,7 +133,7 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, dexSecret)).ToNot(HaveOccurred())
 		Expect(cli.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "calico-oidc-credentials", Namespace: common.OperatorNamespace()},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-oidc-credentials", Namespace: common.OperatorNamespace()},
 			Data: map[string][]byte{
 				render.ClientIDSecretField:     []byte("a"),
 				render.ClientSecretSecretField: []byte("a"),
@@ -191,7 +191,7 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentAPIServer.Image,
 					components.ComponentAPIServer.Version)))
-			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-queryserver")
+			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-queryserver")
 			Expect(qserver).ToNot(BeNil())
 			Expect(qserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -247,7 +247,7 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentAPIServer.Image,
 					"sha256:apiserverhash")))
-			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-queryserver")
+			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-queryserver")
 			Expect(qserver).ToNot(BeNil())
 			Expect(qserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",

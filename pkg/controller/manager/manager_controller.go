@@ -400,7 +400,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// and the bundle will simply use the root CA for the tenant. For single-tenant systems, we need to include these in case
 		// any of them haven't been signed by the root CA.
 		trustedSecretNames = []string{
-			render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
+			render.CalicoAPIServerTLSSecretName,
 			render.TigeraLinseedSecret,
 		}
 

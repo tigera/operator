@@ -123,7 +123,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
-	// For single-tenant, everything is installed in the tigera-manager namespace.
+	// For single-tenant, everything is installed in the tigera-elasticsearch namespace.
 	// Make a helper for determining which namespaces to use based on tenancy mode.
 	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
 
@@ -423,6 +423,11 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
+	setup := render.NewSetup(&render.SetUpConfiguration{
+		PullSecrets:     pullSecrets,
+		CreateNamespace: false,
+		Namespace:       helper.InstallNamespace(),
+	})
 	cfg := &linseed.Config{
 		Installation:                   install,
 		PullSecrets:                    pullSecrets,
@@ -457,9 +462,11 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	} else {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
 	}
-	if err := hdler.CreateOrUpdateOrDelete(ctx, linseedComponent, r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
-		return reconcile.Result{}, err
+	for _, component := range []render.Component{setup, linseedComponent} {
+		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	r.status.ReadyToMonitor()

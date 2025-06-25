@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package logcollector
 import (
 	"context"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -101,6 +102,9 @@ var _ = Describe("LogCollector controller tests", func() {
 				Spec: operatorv1.InstallationSpec{
 					Variant:  operatorv1.TigeraSecureEnterprise,
 					Registry: "some.registry.org/",
+					ImagePullSecrets: []corev1.LocalObjectReference{{
+						Name: "tigera-pull-secret",
+					}},
 				},
 				Status: operatorv1.InstallationStatus{
 					Variant: operatorv1.TigeraSecureEnterprise,
@@ -126,6 +130,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 		})).NotTo(HaveOccurred())
 
+		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}})).NotTo(HaveOccurred())
 		certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
@@ -787,6 +792,48 @@ var _ = Describe("LogCollector controller tests", func() {
 			}
 			Expect(len(modifiedFields)).To(Equal(0))
 			Expect(logCollector.Spec.AdditionalStores.Syslog.LogTypes).To(Equal(expectedLogTypes))
+		})
+	})
+
+	Context("Reconciliation", func() {
+		It("create namespace, operator secrets role and pull secrets", func() {
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			// Expect namespace to be created
+			namespace := corev1.Namespace{
+				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			}
+			Expect(c.Get(ctx, client.ObjectKey{
+				Name: render.LogCollectorNamespace,
+			}, &namespace)).NotTo(HaveOccurred())
+			Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
+			Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+			// Expect operator rolebinding to be created
+			rb := rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{},
+			}
+			Expect(c.Get(ctx, client.ObjectKey{
+				Name:      render.TigeraOperatorSecrets,
+				Namespace: render.LogCollectorNamespace,
+			}, &rb)).NotTo(HaveOccurred())
+			Expect(rb.OwnerReferences).To(HaveLen(1))
+			ownerRoleBinding := rb.OwnerReferences[0]
+			Expect(ownerRoleBinding.Kind).To(Equal("LogCollector"))
+
+			// Expect pull secrets to be created
+			pullSecrets := corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			}
+			Expect(c.Get(ctx, client.ObjectKey{
+				Name:      "tigera-pull-secret",
+				Namespace: render.LogCollectorNamespace,
+			}, &pullSecrets)).NotTo(HaveOccurred())
+			Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
+			pullSecret := pullSecrets.OwnerReferences[0]
+			Expect(pullSecret.Kind).To(Equal("LogCollector"))
 		})
 	})
 })

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@ package initializer
 import (
 	"context"
 	"reflect"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -36,12 +37,14 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 )
 
 func NewTestInitializer(
@@ -109,9 +112,13 @@ var _ = Describe("LogStorage Initializing controller", func() {
 				Spec: operatorv1.InstallationSpec{
 					ControlPlaneReplicas: &replicas,
 					Variant:              operatorv1.TigeraSecureEnterprise,
+					ImagePullSecrets: []corev1.LocalObjectReference{{
+						Name: "tigera-pull-secret",
+					}},
 				},
 			}
 			Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
+			Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}})).NotTo(HaveOccurred())
 
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("Run")
@@ -263,6 +270,85 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-secure"}, ls)).ShouldNot(HaveOccurred())
 			Expect(ls.Spec.ComponentResources).NotTo(BeNil())
 			Expect(reflect.DeepEqual(expectedComponentResources, ls.Spec.ComponentResources)).To(BeTrue())
+		})
+
+		It("create namespace, operator secrets role and pull secrets", func() {
+			ls := &operatorv1.LogStorage{}
+			ls.Name = "tigera-secure"
+			Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
+
+			// Run the reconciler. It should fill in defaults.
+			r, err := NewTestInitializer(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
+			Expect(err).ShouldNot(HaveOccurred())
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			// Expect namespace to be created
+			esNamespace := corev1.Namespace{
+				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			}
+			Expect(cli.Get(ctx, client.ObjectKey{
+				Name: render.ElasticsearchNamespace,
+			}, &esNamespace)).NotTo(HaveOccurred())
+			Expect(esNamespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
+			Expect(esNamespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+			// Expect operator rolebinding to be created
+			esRb := rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{},
+			}
+			Expect(cli.Get(ctx, client.ObjectKey{
+				Name:      render.TigeraOperatorSecrets,
+				Namespace: render.ElasticsearchNamespace,
+			}, &esRb)).NotTo(HaveOccurred())
+			Expect(esRb.OwnerReferences).To(HaveLen(1))
+			Expect(esRb.OwnerReferences[0].Kind).To(Equal("LogStorage"))
+
+			// Expect pull secrets to be created
+			esPullSecrets := corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			}
+			Expect(cli.Get(ctx, client.ObjectKey{
+				Name:      "tigera-pull-secret",
+				Namespace: render.ElasticsearchNamespace,
+			}, &esPullSecrets)).NotTo(HaveOccurred())
+			Expect(esPullSecrets.OwnerReferences).To(HaveLen(1))
+			pullSecret := esPullSecrets.OwnerReferences[0]
+			Expect(pullSecret.Kind).To(Equal("LogStorage"))
+
+			kbNamespace := corev1.Namespace{
+				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			}
+			Expect(cli.Get(ctx, client.ObjectKey{
+				Name: kibana.Namespace,
+			}, &kbNamespace)).NotTo(HaveOccurred())
+			Expect(esNamespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
+			Expect(esNamespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+			// Expect operator rolebinding to be created
+			rb := rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{},
+			}
+			Expect(cli.Get(ctx, client.ObjectKey{
+				Name:      render.TigeraOperatorSecrets,
+				Namespace: kibana.Namespace,
+			}, &rb)).NotTo(HaveOccurred())
+			Expect(rb.OwnerReferences).To(HaveLen(1))
+			ownerRoleBinding := rb.OwnerReferences[0]
+			Expect(ownerRoleBinding.Kind).To(Equal("LogStorage"))
+
+			// Expect pull secrets to be created
+			kbPullSecrets := corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			}
+			Expect(cli.Get(ctx, client.ObjectKey{
+				Name:      "tigera-pull-secret",
+				Namespace: kibana.Namespace,
+			}, &kbPullSecrets)).NotTo(HaveOccurred())
+			Expect(kbPullSecrets.OwnerReferences).To(HaveLen(1))
+			kbPullSecret := kbPullSecrets.OwnerReferences[0]
+			Expect(kbPullSecret.Kind).To(Equal("LogStorage"))
 		})
 	})
 

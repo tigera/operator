@@ -62,15 +62,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	if opts.ElasticExternal {
-		return nil
-	}
-
 	// Create the reconciler
 	r := &LogStorageInitializer{
 		client:      mgr.GetClient(),
 		scheme:      mgr.GetScheme(),
 		multiTenant: opts.MultiTenant,
+		externalES:  opts.ElasticExternal,
 		status:      status.New(mgr.GetClient(), TigeraStatusName, opts.KubernetesVersion),
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -103,6 +100,7 @@ type LogStorageInitializer struct {
 	status      status.StatusManager
 	provider    operatorv1.Provider
 	multiTenant bool
+	externalES  bool
 }
 
 // FillDefaults populates the default values onto an LogStorage object.
@@ -255,7 +253,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		Installation:    install,
 		PullSecrets:     pullSecrets,
 		Namespace:       render.ElasticsearchNamespace,
-		PSS:             render.PSSPrivileged,
+		PSS:             r.elasticsearchPSS(),
 		CreateNamespace: true,
 	})}
 
@@ -293,6 +291,13 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 	return reconcile.Result{}, nil
+}
+
+func (r *LogStorageInitializer) elasticsearchPSS() render.PodSecurityStandard {
+	if r.externalES {
+		return render.PSSBaseline
+	}
+	return render.PSSPrivileged
 }
 
 func (r *LogStorageInitializer) setConditionReady(ctx context.Context, ls *operatorv1.LogStorage, log logr.Logger) error {

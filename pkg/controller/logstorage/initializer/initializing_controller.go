@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -59,6 +59,10 @@ const (
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
 	if !opts.EnterpriseCRDExists {
+		return nil
+	}
+
+	if opts.ElasticExternal {
 		return nil
 	}
 
@@ -238,30 +242,37 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Before we can create secrets, we need to ensure the tigera-elasticsearch namespace exists.
-	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
-	esNamespace := render.CreateNamespace(render.ElasticsearchNamespace, install.KubernetesProvider, render.PSSPrivileged, install.Azure)
-	if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(esNamespace), r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurring while retrieving the pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	esRoleBinding := render.CreateOperatorSecretsRoleBinding(render.ElasticsearchNamespace)
-	if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(esRoleBinding), r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-		return reconcile.Result{}, err
-	}
+	// Before we can create secrets, we need to ensure the tigera-elasticsearch namespace exists.
+	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
+	components := []render.Component{render.NewSetup(&render.SetUpConfiguration{
+		OpenShift:       r.provider.IsOpenShift(),
+		Installation:    install,
+		PullSecrets:     pullSecrets,
+		Namespace:       render.ElasticsearchNamespace,
+		PSS:             render.PSSPrivileged,
+		CreateNamespace: true,
+	})}
 
 	// Multitenant clusters do not get kibana, so namespace creation can be skipped.
 	if !r.multiTenant {
-		kbNamespace := render.CreateNamespace(kibana.Namespace, install.KubernetesProvider, render.PSSBaseline, install.Azure)
-		if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(kbNamespace), r.status); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-			return reconcile.Result{}, err
-		}
+		components = append(components, render.NewSetup(&render.SetUpConfiguration{
+			OpenShift:       r.provider.IsOpenShift(),
+			Installation:    install,
+			PullSecrets:     pullSecrets,
+			Namespace:       kibana.Namespace,
+			PSS:             render.PSSBaseline,
+			CreateNamespace: true,
+		}))
+	}
 
-		kbRoleBinding := render.CreateOperatorSecretsRoleBinding(kibana.Namespace)
-		if err = hdler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(kbRoleBinding), r.status); err != nil {
+	for _, component := range components {
+		if err = hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
 		}

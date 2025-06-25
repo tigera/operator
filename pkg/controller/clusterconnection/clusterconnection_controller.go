@@ -94,8 +94,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		monitor.PrometheusServerTLSSecretName,
 		goldmane.GoldmaneKeyPairSecret,
 		certificatemanagement.TrustedBundleName("guardian", false),
-		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
-		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
+		render.CalicoAPIServerTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)

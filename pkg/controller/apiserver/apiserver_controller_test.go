@@ -114,7 +114,7 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		cryptoCA, err := tls.MakeCA("byo-ca")
 		Expect(err).NotTo(HaveOccurred())
-		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "tigera-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(operatorv1.TigeraSecureEnterprise), "calico-system", dns.DefaultClusterDomain)...)
+		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "calico-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.APIServerServiceName, "calico-system", dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &operatorv1.Authentication{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -179,7 +179,7 @@ var _ = Describe("apiserver controller tests", func() {
 			d := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-apiserver",
+					Name:      "calico-apiserver",
 					Namespace: "calico-system",
 				},
 			}
@@ -235,7 +235,7 @@ var _ = Describe("apiserver controller tests", func() {
 			d := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-apiserver",
+					Name:      "calico-apiserver",
 					Namespace: "calico-system",
 				},
 			}
@@ -265,7 +265,7 @@ var _ = Describe("apiserver controller tests", func() {
 		It("should not add OwnerReference to user-supplied apiserver TLS cert secrets", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
-			secretName := render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)
+			secretName := render.CalicoAPIServerTLSSecretName
 
 			Expect(cli.Create(ctx, apiSecret)).ShouldNot(HaveOccurred())
 
@@ -290,7 +290,7 @@ var _ = Describe("apiserver controller tests", func() {
 		It("should add OwnerReference apiserver cert operator managed secrets", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
-			secretName := "tigera-apiserver-certs"
+			secretName := "calico-apiserver-certs"
 
 			r := ReconcileAPIServer{
 				client:              cli,
@@ -410,7 +410,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			certSecret := corev1.Secret{}
-			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-apiserver-certs", Namespace: "calico-system"}, &certSecret)).ToNot(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "calico-apiserver-certs", Namespace: "calico-system"}, &certSecret)).ToNot(HaveOccurred())
 		})
 	})
 
@@ -739,7 +739,7 @@ var _ = Describe("apiserver controller tests", func() {
 				deployment := appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-apiserver",
+						Name:      "calico-apiserver",
 						Namespace: "calico-system",
 					},
 				}
@@ -778,7 +778,7 @@ var _ = Describe("apiserver controller tests", func() {
 				deployment := appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-apiserver",
+						Name:      "calico-apiserver",
 						Namespace: "calico-system",
 					},
 				}
@@ -809,13 +809,13 @@ var _ = Describe("apiserver controller tests", func() {
 
 		It("should return true when new deployment is ready, old one is gone, and TigeraStatus is healthy", func() {
 			err := cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "calico-system"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
 				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			err = cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "tigera-system"},
 				Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -843,7 +843,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 		It("should return false when new deployment is not ready", func() {
 			err := cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "calico-system"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
 				Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -863,13 +863,13 @@ var _ = Describe("apiserver controller tests", func() {
 
 		It("should return false when older deployment is still running", func() {
 			err := cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "calico-system"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
 				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			err = cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "tigera-system"},
 				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
 			})
 			Expect(err).NotTo(HaveOccurred())
@@ -889,13 +889,13 @@ var _ = Describe("apiserver controller tests", func() {
 
 		It("should return false when TigeraStatus is not healthy", func() {
 			err := cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "calico-system"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
 				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			err = cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver", Namespace: "tigera-system"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "tigera-system"},
 				Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
 			})
 			Expect(err).NotTo(HaveOccurred())

@@ -1038,6 +1038,16 @@ spec:
                     pending_policies field, offering a near-real-time view of policy changes across flows.
                     [Default: Continuous]
                   type: string
+                flowLogsPolicyScope:
+                  description: |-
+                    FlowLogsPolicyScope controls which policies are included in flow logs.
+                    AllPolicies - Processes both transit policies for the local node and
+                    endpoint policies derived from packet source/destination IPs. Provides comprehensive
+                    visibility into all policy evaluations but increases log volume.
+                    EndpointPolicies - Processes only policies for endpoints identified as the source
+                    or destination of the packet (whether workload or host endpoints).
+                    [Default: EndpointPolicies]
+                  type: string
                 flowLogsPositionFilePath:
                   description: |-
                     FlowLogsPositionFilePath is used specify the position of the external pipeline that reads flow logs. Default is /var/log/calico/flows.log.pos.

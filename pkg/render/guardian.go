@@ -69,7 +69,9 @@ const (
 	GuardianPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
 	GuardianKeyPairSecret = "guardian-key-pair"
 
-	GoldmaneDeploymentName = "goldmane"
+	GoldmaneDeploymentName         = "goldmane"
+	GuardianSecretsRole            = "calico-guardian-secrets"
+	GuardianSecretsRoleBindingName = "calico-guardian-secrets"
 )
 
 var (
@@ -142,6 +144,8 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.serviceAccount(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
+		c.Role(),
+		c.RoleBinding(),
 		c.deployment(),
 		c.service(),
 		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
@@ -301,6 +305,45 @@ func (c *GuardianComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
 			Name:     GuardianClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      GuardianServiceAccountName,
+				Namespace: GuardianNamespace,
+			},
+		},
+	}
+}
+
+func (c *GuardianComponent) Role() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GuardianSecretsRole,
+			Namespace: common.OperatorNamespace(),
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"create", "delete", "deletecollection", "update"},
+			},
+		},
+	}
+}
+
+func (c *GuardianComponent) RoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GuardianSecretsRoleBindingName,
+			Namespace: common.OperatorNamespace(),
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     GuardianSecretsRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{

@@ -352,6 +352,13 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 		Expect(serviceFound).To(Equal(2))
 
+		cr := rtest.GetResource(resources, "calico-tiered-policy-passthrough", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		var tieredPolicyRules []string
+		for _, rule := range cr.Rules {
+			tieredPolicyRules = append(tieredPolicyRules, rule.Resources...)
+		}
+		Expect(tieredPolicyRules).To(ContainElements("networkpolicies", "globalnetworkpolicies", "stagednetworkpolicies", "stagedglobalnetworkpolicies"))
+
 		apiserverClusterRole := rtest.GetResource(resources,
 			"calico-crds", "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(apiserverClusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
@@ -2338,13 +2345,6 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 			d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
-
-			cr := rtest.GetResource(resources, "calico-tiered-policy-passthrough", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			var tieredPolicyRules []string
-			for _, rule := range cr.Rules {
-				tieredPolicyRules = append(tieredPolicyRules, rule.Resources...)
-			}
-			Expect(tieredPolicyRules).To(ContainElements("networkpolicies", "globalnetworkpolicies", "stagednetworkpolicies", "stagedglobalnetworkpolicies"))
 		})
 	})
 

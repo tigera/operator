@@ -23,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/set"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 
@@ -85,6 +86,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	watchedEnvoyProxies := make(map[operatorv1.NamespacedName]struct{})
 	r.watchEnvoyProxy = func(namespacedName operatorv1.NamespacedName) error {
 		if _, alreadyWatching := watchedEnvoyProxies[namespacedName]; !alreadyWatching {
+			log.V(1).Info("Adding watch for EnvoyProxy", "namespacedName", namespacedName)
 			if err = utils.AddNamespacedWatch(c, &envoyapi.EnvoyProxy{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: namespacedName.Namespace,
@@ -102,6 +104,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	watchedEnvoyGateways := make(map[operatorv1.NamespacedName]struct{})
 	r.watchEnvoyGateway = func(namespacedName operatorv1.NamespacedName) error {
 		if _, alreadyWatching := watchedEnvoyGateways[namespacedName]; !alreadyWatching {
+			log.V(1).Info("Adding watch for EnvoyGateway ConfigMap", "namespacedName", namespacedName)
 			if err = utils.AddNamespacedWatch(c, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
 					Namespace: namespacedName.Namespace,
@@ -239,7 +242,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		PullSecrets:           pullSecrets,
 		GatewayAPI:            gatewayAPI,
 		CustomEnvoyProxies:    make(map[string]*envoyapi.EnvoyProxy),
-		CurrentGatewayClasses: make(map[string]string),
+		CurrentGatewayClasses: set.New[string](),
 	}
 
 	if gatewayAPI.Spec.EnvoyGatewayConfigRef != nil {
@@ -357,7 +360,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 		if operatorOwned {
-			gatewayConfig.CurrentGatewayClasses[gcList.Items[i].Name] = gcList.Items[i].Spec.ParametersRef.Name
+			gatewayConfig.CurrentGatewayClasses.Insert(gcList.Items[i].Name)
 		}
 	}
 

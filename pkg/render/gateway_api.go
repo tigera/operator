@@ -335,7 +335,7 @@ type GatewayAPIImplementationConfig struct {
 	PullSecrets           []*corev1.Secret
 	CustomEnvoyGateway    *envoyapi.EnvoyGateway
 	CustomEnvoyProxies    map[string]*envoyapi.EnvoyProxy
-	CurrentGatewayClasses map[string]string // Map from GatewayClass name to EnvoyProxy name.
+	CurrentGatewayClasses set.Set[string]
 }
 
 type gatewayAPIImplementationComponent struct {
@@ -537,9 +537,6 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	objs = append(objs, certgenJob)
 
-	currentGCNames := set.New[string]()
-	currentEPNames := set.New[string]()
-
 	// Provision GatewayClasses.
 	for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
 		className := pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name
@@ -547,17 +544,20 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		// The EnvoyProxy config.
 		proxyConfig := pr.envoyProxyConfig(className, pr.cfg.CustomEnvoyProxies[className], &(pr.cfg.GatewayAPI.Spec.GatewayClasses[i]))
 		objs = append(objs, proxyConfig)
-		currentEPNames.Insert(className)
 
 		// The GatewayClass using that EnvoyProxy config.
 		objs = append(objs, pr.gatewayClass(className, envoyGatewayConfig.Gateway.ControllerName, proxyConfig))
-		currentGCNames.Insert(className)
+
+		if pr.cfg.CurrentGatewayClasses.Has(className) {
+			pr.cfg.CurrentGatewayClasses.Delete(className)
+		}
 	}
 
 	objsToDelete := []client.Object(nil)
-	for gcName, epName := range pr.cfg.CurrentGatewayClasses {
-		if !currentGCNames.Has(gcName) {
-			objsToDelete = append(objsToDelete, &gapi.GatewayClass{
+	for _, gcName := range pr.cfg.CurrentGatewayClasses.UnsortedList() {
+		log.V(1).Info("Will delete GatewayClass and EnvoyProxy", "name", gcName)
+		objsToDelete = append(objsToDelete,
+			&gapi.GatewayClass{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "GatewayClass",
 					APIVersion: "gateway.networking.k8s.io/v1",
@@ -565,26 +565,25 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 				ObjectMeta: metav1.ObjectMeta{
 					Name: gcName,
 				},
-			})
-		}
-		if !currentEPNames.Has(epName) {
-			objsToDelete = append(objsToDelete, &envoyapi.EnvoyProxy{
+			},
+			&envoyapi.EnvoyProxy{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "EnvoyProxy",
 					APIVersion: "gateway.envoyproxy.io/v1alpha1",
 				},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      epName,
+					Name:      gcName,
 					Namespace: "tigera-gateway",
 				},
-			})
-		}
+			},
+		)
 	}
 
+	log.V(1).Info("GatewayAPI rendering", "num_current", len(objs), "num_delete", len(objsToDelete))
 	return objs, objsToDelete
 }
 
-func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(defaultName string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {
+func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {
 	// Ensure the minimal structure that we need for basic correctness and for the following
 	// customizations.  Note, we always create the running EnvoyProxy in our own namespace, even
 	// if it's based on a custom resource from another namespace.
@@ -608,9 +607,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(defaultName string
 	if envoyProxy.APIVersion == "" {
 		envoyProxy.APIVersion = "gateway.envoyproxy.io/v1alpha1"
 	}
-	if envoyProxy.ObjectMeta.Name == "" {
-		envoyProxy.ObjectMeta.Name = defaultName
-	}
+	envoyProxy.ObjectMeta.Name = className
 	envoyProxy.ObjectMeta.Namespace = "tigera-gateway"
 	if envoyProxy.Spec.Provider == nil {
 		envoyProxy.Spec.Provider = &envoyapi.EnvoyProxyProvider{}

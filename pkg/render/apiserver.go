@@ -32,6 +32,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -990,6 +991,10 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		// Use the same CSR init container name for both OSS and Enterprise.
 		initContainer := c.cfg.TLSKeyPair.InitContainer(APIServerNamespace)
 		initContainer.Name = fmt.Sprintf("%s-%s", CalicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
+
+		// Make it such that both users have permissions to the files created by the container.
+		initContainer.SecurityContext = securitycontext.NewRootContext(false)
+		initContainer.SecurityContext.RunAsUser = securitycontext.NewNonRootContext().RunAsUser
 		initContainers = append(initContainers, initContainer)
 	}
 

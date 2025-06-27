@@ -590,7 +590,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 	}
 	var initContainers []corev1.Container
 	if c.cfg.IntrusionDetectionCertSecret != nil && c.cfg.IntrusionDetectionCertSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.IntrusionDetectionCertSecret.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.IntrusionDetectionCertSecret.InitContainer(c.cfg.Namespace, intrusionDetectionContainer.SecurityContext))
 	}
 
 	containers := []corev1.Container{

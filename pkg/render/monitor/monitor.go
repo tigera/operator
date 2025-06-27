@@ -471,12 +471,13 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 }
 
 func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
+	sc := securitycontext.NewNonRootContext()
 	var initContainers []corev1.Container
 	if mc.cfg.ServerTLSSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, mc.cfg.ServerTLSSecret.InitContainer(common.TigeraPrometheusNamespace))
+		initContainers = append(initContainers, mc.cfg.ServerTLSSecret.InitContainer(common.TigeraPrometheusNamespace, sc))
 	}
 	if mc.cfg.ClientTLSSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, mc.cfg.ClientTLSSecret.InitContainer(common.TigeraPrometheusNamespace))
+		initContainers = append(initContainers, mc.cfg.ClientTLSSecret.InitContainer(common.TigeraPrometheusNamespace, sc))
 	}
 	env := []corev1.EnvVar{
 		{
@@ -575,7 +576,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 								},
 							},
 						},
-						SecurityContext: securitycontext.NewNonRootContext(),
+						SecurityContext: sc,
 					},
 				},
 				Image:            &mc.prometheusImage,

@@ -1325,6 +1325,16 @@ func (m *managedClusterLogStorage) deprecatedObjects() []client.Object {
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed"},
 		},
+
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-configmap"},
+		},
+		&rbacv1.RoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "calico-system"},
+		},
+
 		// Remove legacy ExternalName service pointing to Guardian for linseed
 		&corev1.Service{
 			TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},

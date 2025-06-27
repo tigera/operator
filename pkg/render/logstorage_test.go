@@ -595,6 +595,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				expectedDeleteResources := []client.Object{
 					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-namespaces"}},
 					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed"}},
+					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-configmap"}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "calico-system"}},
 					&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-elasticsearch"}},
 					&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure-es-gateway-http", Namespace: "tigera-elasticsearch"}},
 					&corev1.Namespace{TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},

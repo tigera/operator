@@ -538,7 +538,6 @@ func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver cl
 // - The old API server deployment in "tigera-system" is either removed or inactive.
 // - Both the APIServer custom resource and the TigeraStatus for 'apiserver' are in the Ready state
 func (r *ReconcileAPIServer) canCleanupLegacyNamespace(ctx context.Context, variant operatorv1.ProductVariant, logger logr.Logger) bool {
-
 	newNamespace := "calico-system"
 	oldNamespace := "tigera-system"
 	deploymentName := "calico-apiserver"
@@ -596,6 +595,6 @@ func (r *ReconcileAPIServer) canCleanupLegacyNamespace(ctx context.Context, vari
 		return false
 	}
 
-	logger.Info("Safe to clean up old namespace for apiserver.")
+	logger.V(2).Info("Safe to clean up old namespace for apiserver.")
 	return true
 }

@@ -996,14 +996,14 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 	var initContainers []corev1.Container
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		initContainerAS := c.cfg.TLSKeyPair.InitContainer(APIServerNamespace, c.apiServerContainer().SecurityContext)
-		initContainerAS.Name = fmt.Sprintf("%s-%s", CalicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
+		initContainerApiServer := c.cfg.TLSKeyPair.InitContainer(APIServerNamespace, c.apiServerContainer().SecurityContext)
+		initContainerApiServer.Name = fmt.Sprintf("%s-%s", CalicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
 
-		initContainerQS := c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.InitContainer(APIServerNamespace, c.queryServerContainer().SecurityContext)
+		initContainerQueryServer := c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.InitContainer(APIServerNamespace, c.queryServerContainer().SecurityContext)
 
 		annotations[c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.HashAnnotationKey()] = c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.HashAnnotationValue()
 
-		initContainers = append(initContainers, initContainerAS, initContainerQS)
+		initContainers = append(initContainers, initContainerApiServer, initContainerQueryServer)
 	}
 
 	containers := []corev1.Container{

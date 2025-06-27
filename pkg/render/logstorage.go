@@ -452,7 +452,7 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 				ReadOnly:  false,
 			},
 		}
-		csrInitContainerHTTP := es.cfg.ElasticsearchKeyPair.InitContainer(ElasticsearchNamespace)
+		csrInitContainerHTTP := es.cfg.ElasticsearchKeyPair.InitContainer(ElasticsearchNamespace, esContainer.SecurityContext)
 		csrInitContainerHTTP.Name = "key-cert-elastic"
 		csrInitContainerHTTP.VolumeMounts[0].Name = CSRVolumeNameHTTP
 		httpVolumemount := es.cfg.ElasticsearchKeyPair.VolumeMount(es.SupportedOSType())
@@ -468,7 +468,8 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			"transport.tls.key",
 			"transport.tls.crt",
 			dns.GetServiceDNSNames(ElasticsearchServiceName, ElasticsearchNamespace, es.cfg.ClusterDomain),
-			ElasticsearchNamespace)
+			ElasticsearchNamespace,
+			esContainer.SecurityContext)
 		csrInitContainerTransport.Name = "key-cert-elastic-transport"
 
 		initContainers = append(

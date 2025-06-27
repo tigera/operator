@@ -392,10 +392,10 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			}
 		}
 	}
-
+	sc := securitycontext.NewNonRootContext()
 	var initContainers []corev1.Container
 	if l.cfg.KeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))
+		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace, sc))
 	}
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
@@ -418,7 +418,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
 		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
 		if l.cfg.TokenKeyPair.UseCertificateManagement() {
-			initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace))
+			initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace, sc))
 		}
 		annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
 	}
@@ -446,7 +446,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
-					SecurityContext: securitycontext.NewNonRootContext(),
+					SecurityContext: sc,
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							Exec: &corev1.ExecAction{

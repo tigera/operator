@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -234,6 +234,11 @@ func (pc *packetCaptureApiComponent) deployment() *appsv1.Deployment {
 	if pc.cfg.Installation.KubernetesProvider.IsGKE() {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
+	container := pc.container()
+	var initContainers []corev1.Container
+	if pc.cfg.ServerCertSecret.UseCertificateManagement() {
+		initContainers = append(initContainers, pc.cfg.ServerCertSecret.InitContainer(PacketCaptureNamespace, container.SecurityContext))
+	}
 	d := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -256,8 +261,8 @@ func (pc *packetCaptureApiComponent) deployment() *appsv1.Deployment {
 					ServiceAccountName: PacketCaptureServiceAccountName,
 					Tolerations:        tolerations,
 					ImagePullSecrets:   secret.GetReferenceList(pc.cfg.PullSecrets),
-					InitContainers:     pc.initContainers(),
-					Containers:         []corev1.Container{pc.container()},
+					InitContainers:     initContainers,
+					Containers:         []corev1.Container{container},
 					Volumes:            pc.volumes(),
 				},
 			},
@@ -271,14 +276,6 @@ func (pc *packetCaptureApiComponent) deployment() *appsv1.Deployment {
 	}
 
 	return d
-}
-
-func (pc *packetCaptureApiComponent) initContainers() []corev1.Container {
-	var initContainers []corev1.Container
-	if pc.cfg.ServerCertSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, pc.cfg.ServerCertSecret.InitContainer(PacketCaptureNamespace))
-	}
-	return initContainers
 }
 
 func (pc *packetCaptureApiComponent) container() corev1.Container {

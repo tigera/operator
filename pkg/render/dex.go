@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -221,8 +221,9 @@ func (c *dexComponent) clusterRoleBinding() client.Object {
 
 func (c *dexComponent) deployment() client.Object {
 	var initContainers []corev1.Container
+	sc := securitycontext.NewNonRootContext()
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(DexNamespace))
+		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(DexNamespace, sc))
 	}
 
 	annotations := c.cfg.DexConfig.RequiredAnnotations()
@@ -273,7 +274,7 @@ func (c *dexComponent) deployment() client.Object {
 							ImagePullPolicy: ImagePullPolicy(),
 							Env:             envVars,
 							LivenessProbe:   c.probe(),
-							SecurityContext: securitycontext.NewNonRootContext(),
+							SecurityContext: sc,
 
 							Command: []string{"/usr/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"},
 

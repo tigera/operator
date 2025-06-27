@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,14 +19,13 @@ import (
 	"fmt"
 	"strings"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/render/common/securitycontext"
-
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 )
 
 const (
@@ -46,7 +45,8 @@ func CreateCSRInitContainer(
 	keyName string,
 	certName string,
 	dnsNames []string,
-	appNameLabel string) corev1.Container {
+	appNameLabel string,
+	securityContext *corev1.SecurityContext) corev1.Container {
 	return corev1.Container{
 		Name:  CSRInitContainerName,
 		Image: image,
@@ -85,7 +85,7 @@ func CreateCSRInitContainer(
 				},
 			}},
 		},
-		SecurityContext: securitycontext.NewNonRootContext(),
+		SecurityContext: securityContext,
 		Resources:       components.GetCSRContainerDefaultResources(),
 	}
 }

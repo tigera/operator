@@ -876,7 +876,7 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = nodeTerminationGracePeriodSeconds
 	var initContainers []corev1.Container
-
+	nodeContainer := c.nodeContainer()
 	annotations := c.cfg.TLS.TrustedBundle.HashAnnotations()
 	if len(c.cfg.BirdTemplates) != 0 {
 		annotations[birdTemplateHashAnnotation] = rmeta.AnnotationHash(c.cfg.BirdTemplates)
@@ -886,11 +886,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	}
 
 	if c.cfg.TLS.NodeSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace))
+		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace, nodeContainer.SecurityContext))
 	}
 
 	if c.cfg.PrometheusServerTLS != nil && c.cfg.PrometheusServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.PrometheusServerTLS.InitContainer(common.CalicoNamespace))
+		initContainers = append(initContainers, c.cfg.PrometheusServerTLS.InitContainer(common.CalicoNamespace, nodeContainer.SecurityContext))
 	}
 
 	if cniCfgMap != nil {
@@ -983,7 +983,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 					HostNetwork:                   true,
 					DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
 					InitContainers:                initContainers,
-					Containers:                    []corev1.Container{c.nodeContainer()},
+					Containers:                    []corev1.Container{nodeContainer},
 					Volumes:                       c.nodeVolumes(),
 				},
 			},

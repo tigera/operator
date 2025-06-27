@@ -246,6 +246,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 			MountPath: "/mnt/dummy-location/",
 		},
 	}
+	sc := securitycontext.NewNonRootContext()
 	if k.cfg.Installation.CertificateManagement != nil {
 		config["elasticsearch.ssl.certificateAuthorities"] = []string{"/mnt/elastic-internal/http-certs/ca.crt"}
 		automountToken = true
@@ -258,7 +259,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 			corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey,
 			dns.GetServiceDNSNames(ServiceName, Namespace, k.cfg.ClusterDomain),
-			Namespace)
+			Namespace,
+			sc)
 
 		initContainers = append(initContainers, csrInitContainer)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
@@ -349,7 +351,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 								},
 							},
 						},
-						SecurityContext: securitycontext.NewNonRootContext(),
+						SecurityContext: sc,
 						VolumeMounts:    volumeMounts,
 					}},
 					Volumes: volumes,

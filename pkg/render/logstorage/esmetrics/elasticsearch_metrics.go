@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -193,10 +193,11 @@ func (e *elasticsearchMetrics) metricsService() *corev1.Service {
 }
 
 func (e *elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
-	var initContainers []corev1.Container
+	sc := securitycontext.NewNonRootContext()
 	annotations := e.cfg.TrustedBundle.HashAnnotations()
+	var initContainers []corev1.Container
 	if e.cfg.ServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, e.cfg.ServerTLS.InitContainer(render.ElasticsearchNamespace))
+		initContainers = append(initContainers, e.cfg.ServerTLS.InitContainer(render.ElasticsearchNamespace, sc))
 	} else {
 		annotations[e.cfg.ServerTLS.HashAnnotationKey()] = e.cfg.ServerTLS.HashAnnotationValue()
 	}
@@ -231,7 +232,7 @@ func (e *elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 							Name:            ElasticsearchMetricsName,
 							Image:           e.esMetricsImage,
 							ImagePullPolicy: render.ImagePullPolicy(),
-							SecurityContext: securitycontext.NewNonRootContext(),
+							SecurityContext: sc,
 							Command:         []string{"/bin/elasticsearch_exporter"},
 							Args: []string{
 								"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",

@@ -91,7 +91,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to ClusterInformation, as Guardian needs to restart the tunnel
-	// if the cluster's CNX version changes.
+	// if the cluster's version changes.
 	go utils.WaitToAddClusterInformationWatch(c, opts.K8sClientset, log, clusterInfoWatchReady)
 
 	for _, secretName := range []string{

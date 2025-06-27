@@ -113,6 +113,9 @@ type GuardianConfiguration struct {
 	PodProxies []*httpproxy.Config
 
 	GuardianClientKeyPair certificatemanagement.KeyPairInterface
+
+	//CnxVersion stores the managed cluster's cnx Version information
+	CnxVersion string
 }
 
 type GuardianComponent struct {
@@ -454,6 +457,10 @@ func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 func (c *GuardianComponent) annotations() map[string]string {
 	annotations := c.cfg.TrustedCertBundle.HashAnnotations()
 	annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
+
+	if len(c.cfg.CnxVersion) != 0 {
+		annotations["hash.operator.tigera.io/cnx-version"] = rmeta.AnnotationHash([]byte(c.cfg.CnxVersion))
+	}
 	return annotations
 }
 

@@ -964,7 +964,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.CalicoAPIServerTLSSecretName, common.OperatorNamespace(), dnsNames)
+		qskp, err := certificateManager.GetOrCreateKeyPair(cli, render.CalicoAPIServerTLSSecretName, common.OperatorNamespace(), dnsNames)
 		cfg.TLSKeyPair = kp
+		cfg.QueryServerTLSKeyPairCertificateManagementOnly = qskp
 		Expect(err).NotTo(HaveOccurred())
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
@@ -1005,7 +1007,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(dep).ToNot(BeNil())
 		deploy, ok := dep.(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
-		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+		Expect(deploy.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal("calico-apiserver-certs-key-cert-provisioner"))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
 	})
@@ -1188,6 +1190,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 			cfg.TLSKeyPair = kp
 
+			qsKP, err := certificateManager.GetOrCreateKeyPair(cli, render.CalicoAPIServerTLSSecretName, common.OperatorNamespace(), dnsNames)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			cfg.QueryServerTLSKeyPairCertificateManagementOnly = qsKP
+
 			component, err := render.APIServer(cfg)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 			resources, _ := component.Objects()
@@ -1249,7 +1255,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			}
 			Expect(containersFound).To(Equal(3))
 
-			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 			Expect(d.Spec.Template.Spec.InitContainers[0].Name).To(Equal("calico-apiserver-certs-key-cert-provisioner"))
 			Expect(d.Spec.Template.Spec.InitContainers[0].Resources).To(Equal(rr2))
 
@@ -2203,6 +2209,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			kp, err := certificateManager.GetOrCreateKeyPair(cli, render.CalicoAPIServerTLSSecretName, common.OperatorNamespace(), dnsNames)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 			cfg.TLSKeyPair = kp
+			qskp, err := certificateManager.GetOrCreateKeyPair(cli, render.CalicoAPIServerTLSSecretName, common.OperatorNamespace(), dnsNames)
+			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+			cfg.QueryServerTLSKeyPairCertificateManagementOnly = qskp
 
 			component, err := render.APIServer(cfg)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
@@ -2242,7 +2251,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Expect(d.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(apiServerPort.ContainerPort))
 			Expect(d.Spec.Template.Spec.Containers[0].Args[0]).To(ContainSubstring(fmt.Sprintf("--secure-port=%d", apiServerPort.ContainerPort)))
 
-			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 			Expect(d.Spec.Template.Spec.InitContainers[0].Name).To(Equal("calico-apiserver-certs-key-cert-provisioner"))
 			Expect(d.Spec.Template.Spec.InitContainers[0].Resources).To(Equal(rr2))
 

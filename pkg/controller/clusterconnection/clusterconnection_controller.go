@@ -70,7 +70,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	tierWatchReady := &utils.ReadyFlag{}
-	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, tierWatchReady, opts)
+	clusterInfoWatchReady := &utils.ReadyFlag{}
+	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, tierWatchReady, clusterInfoWatchReady, opts)
 
 	// Create a new controller
 	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: reconciler})
@@ -82,6 +83,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// Watch for changes to License and Tier, as their status is used as input to determine whether network policy should be reconciled by this controller.
 		go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, nil)
 		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, tierWatchReady)
+
+		// Watch for changes to ClusterInformation, as Guardian needs to restart the tunnel
+		// if the cluster's CNX version changes.
+		go utils.WaitToAddClusterInformationWatch(c, opts.K8sClientset, log, clusterInfoWatchReady)
 
 		go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 			{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace},
@@ -159,15 +164,17 @@ func newReconciler(
 	statusMgr status.StatusManager,
 	p operatorv1.Provider,
 	tierWatchReady *utils.ReadyFlag,
+	clusterInfoWatchReady *utils.ReadyFlag,
 	opts options.AddOptions,
 ) *ReconcileConnection {
 	c := &ReconcileConnection{
-		cli:            cli,
-		scheme:         schema,
-		provider:       p,
-		status:         statusMgr,
-		clusterDomain:  opts.ClusterDomain,
-		tierWatchReady: tierWatchReady,
+		cli:                   cli,
+		scheme:                schema,
+		provider:              p,
+		status:                statusMgr,
+		clusterDomain:         opts.ClusterDomain,
+		tierWatchReady:        tierWatchReady,
+		clusterInfoWatchReady: clusterInfoWatchReady,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -184,6 +191,7 @@ type ReconcileConnection struct {
 	status                     status.StatusManager
 	clusterDomain              string
 	tierWatchReady             *utils.ReadyFlag
+	clusterInfoWatchReady      *utils.ReadyFlag
 	resolvedPodProxies         []*httpproxy.Config
 	lastAvailabilityTransition metav1.Time
 }
@@ -242,6 +250,12 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
+
+	// Validate that the cluster information watch is ready.
+	if !r.clusterInfoWatchReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for clusterInfoWatchReady watch to be established", err, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	if err := utils.ApplyDefaults(ctx, r.cli, managementClusterConnection); err != nil {
@@ -377,6 +391,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	r.lastAvailabilityTransition = currentAvailabilityTransition
 
 	var includeEgressNetworkPolicy bool
+	var cnxVersion string
 	if variant == operatorv1.TigeraSecureEnterprise {
 		// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 		if !r.tierWatchReady.IsReady() {
@@ -408,6 +423,15 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		// License becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from reconciliation
 		// and tolerate errors arising from the Tier not being created.
 		includeEgressNetworkPolicy = tierAvailable && licenseActive
+
+		clusterInformation, err := utils.FetchClusterInformation(ctx, r.cli)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying clusterInformation", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if len(clusterInformation.Spec.CNXVersion) != 0 {
+			cnxVersion = clusterInformation.Spec.CNXVersion
+		}
 	}
 
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, managementClusterConnection)
@@ -422,6 +446,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		TrustedCertBundle:           trustedBundle,
 		ManagementClusterConnection: managementClusterConnection,
 		GuardianClientKeyPair:       guardianKeyPair,
+		Version:                  cnxVersion,
 	}
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

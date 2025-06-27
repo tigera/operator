@@ -97,7 +97,10 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Expect(c.Create(ctx, &operatorv1.Monitor{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		}))
-		r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready)
+
+		Expect(c.Create(ctx, &v3.ClusterInformation{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
+
+		r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready, ready)
 		dpl = &appsv1.Deployment{
 			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -214,7 +217,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 	Context("image reconciliation", func() {
 		It("should use builtin images", func() {
-			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready)
+			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready, ready)
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -246,7 +249,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				},
 			})).ToNot(HaveOccurred())
 
-			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready)
+			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready, ready)
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -282,7 +285,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			}
 			Expect(c.Create(ctx, licenseKey)).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
-			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready)
+			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready, ready)
 		})
 
 		Context("IP-based management cluster address", func() {
@@ -314,7 +317,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 
-				r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, notReady)
+				r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, notReady, ready)
 				test.ExpectWaitForTierWatch(ctx, r, mockStatus)
 
 				policies := v3.NetworkPolicyList{}
@@ -359,7 +362,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 
-				r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, notReady)
+				r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, notReady, ready)
 				test.ExpectWaitForTierWatch(ctx, r, mockStatus)
 
 				policies := v3.NetworkPolicyList{}

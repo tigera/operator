@@ -225,6 +225,10 @@ func WaitToAddLicenseKeyWatch(controller ctrlruntime.Controller, c kubernetes.In
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}})
 }
 
+func WaitToAddClusterInformationWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.ClusterInformation{TypeMeta: metav1.TypeMeta{Kind: v3.KindClusterInformation}}})
+}
+
 func WaitToAddPolicyRecommendationScopeWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.PolicyRecommendationScope{TypeMeta: metav1.TypeMeta{Kind: v3.KindPolicyRecommendationScope}}})
 }
@@ -309,6 +313,13 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 // It will return an error if the license is not installed/cannot be read
 func FetchLicenseKey(ctx context.Context, cli client.Client) (v3.LicenseKey, error) {
 	instance := &v3.LicenseKey{}
+	err := cli.Get(ctx, DefaultInstanceKey, instance)
+	return *instance, err
+}
+
+// FetchClusterInformation fetches and returns the clusterinformation.
+func FetchClusterInformation(ctx context.Context, cli client.Client) (v3.ClusterInformation, error) {
+	instance := &v3.ClusterInformation{}
 	err := cli.Get(ctx, DefaultInstanceKey, instance)
 	return *instance, err
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -36,10 +36,11 @@ func NewReconcilerWithShims(
 	status status.StatusManager,
 	provider operatorv1.Provider,
 	tierWatchReady *utils.ReadyFlag,
+	clusterInfoWatchReady *utils.ReadyFlag,
 ) reconcile.Reconciler {
 	opts := options.AddOptions{
 		ShutdownContext: context.Background(),
 	}
 
-	return newReconciler(cli, schema, status, provider, tierWatchReady, opts)
+	return newReconciler(cli, schema, status, provider, tierWatchReady, clusterInfoWatchReady, opts)
 }

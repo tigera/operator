@@ -100,6 +100,11 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 	if err = utils.AddConfigMapWatch(c, "cloud-kibana-config", common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-external-es-controller failed to watch the ConfigMap resource: %w", err)
 	}
+
+	if err = utils.AddNamespaceWatch(c, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-external-es-controller failed to watch tigera-elasticsearch namespace: %w", err)
+	}
+
 	return nil
 }
 

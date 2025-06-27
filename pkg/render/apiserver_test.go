@@ -964,6 +964,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		kp, err := certificateManager.GetOrCreateKeyPair(cli, render.CalicoAPIServerTLSSecretName, common.OperatorNamespace(), dnsNames)
+		Expect(err).NotTo(HaveOccurred())
 		qskp, err := certificateManager.GetOrCreateKeyPair(cli, render.CalicoAPIServerTLSSecretName, common.OperatorNamespace(), dnsNames)
 		cfg.TLSKeyPair = kp
 		cfg.QueryServerTLSKeyPairCertificateManagementOnly = qskp

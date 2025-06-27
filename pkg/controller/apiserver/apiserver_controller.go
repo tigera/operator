@@ -274,6 +274,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	// Since apiserver and queryserver may have different UID:GID at run-time, we need to produce this secret in separate volumes and with different permissions.
+	var qsTLSSecretCertificateManagementOnly certificatemanagement.KeyPairInterface
+	if installationSpec.CertificateManagement != nil {
+		qsTLSSecretCertificateManagementOnly, err = certificateManager.GetOrCreateKeyPair(r.client, "query-server-tls", common.OperatorNamespace(), dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, r.clusterDomain))
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create tls key pair", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	certificateManager.AddToStatusManager(r.status, render.APIServerNamespace)
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installationSpec, r.client)
@@ -437,6 +447,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		KeyValidatorConfig:          keyValidatorConfig,
 		KubernetesVersion:           r.kubernetesVersion,
 		CanCleanupOlderResources:    r.canCleanupLegacyNamespace(ctx, installationSpec.Variant, reqLogger),
+		QueryServerTLSKeyPairCertificateManagementOnly: qsTLSSecretCertificateManagementOnly,
 	}
 
 	var components []render.Component

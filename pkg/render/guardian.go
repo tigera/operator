@@ -459,7 +459,7 @@ func (c *GuardianComponent) annotations() map[string]string {
 	annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
 
 	if len(c.cfg.CnxVersion) != 0 {
-		annotations["hash.operator.tigera.io/cnx-version"] = rmeta.AnnotationHash([]byte(c.cfg.CnxVersion))
+		annotations["hash.operator.tigera.io/version"] = rmeta.AnnotationHash([]byte(c.cfg.CnxVersion))
 	}
 	return annotations
 }

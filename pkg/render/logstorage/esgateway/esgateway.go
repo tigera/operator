@@ -208,10 +208,10 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 			},
 		}},
 	}
-
+	sc := securitycontext.NewNonRootContext()
 	var initContainers []corev1.Container
 	if e.cfg.ESGatewayKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, e.cfg.ESGatewayKeyPair.InitContainer(e.cfg.Namespace))
+		initContainers = append(initContainers, e.cfg.ESGatewayKeyPair.InitContainer(e.cfg.Namespace, sc))
 	}
 
 	volumes := []corev1.Volume{
@@ -262,7 +262,7 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 						},
 						InitialDelaySeconds: 10,
 					},
-					SecurityContext: securitycontext.NewNonRootContext(),
+					SecurityContext: sc,
 				},
 			},
 		},

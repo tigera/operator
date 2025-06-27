@@ -339,7 +339,7 @@ func (c *GuardianComponent) secretsRole() *rbacv1.Role {
 	}
 }
 
-func (c *GuardianComponent) RoleBinding() *rbacv1.RoleBinding {
+func (c *GuardianComponent) secretRoleBinding() *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

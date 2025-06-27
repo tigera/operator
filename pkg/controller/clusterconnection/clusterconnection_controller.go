@@ -446,7 +446,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		TrustedCertBundle:           trustedBundle,
 		ManagementClusterConnection: managementClusterConnection,
 		GuardianClientKeyPair:       guardianKeyPair,
-		CnxVersion:                  cnxVersion,
+		Version:                  cnxVersion,
 	}
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

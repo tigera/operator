@@ -114,8 +114,9 @@ type GuardianConfiguration struct {
 
 	GuardianClientKeyPair certificatemanagement.KeyPairInterface
 
-	//CnxVersion stores the managed cluster's cnx Version information
-	CnxVersion string
+	// Version stores the version of the cluster, as reported by the ClusterInformation object. It is used to restart
+	// guardian when the version changes, which triggers the management cluster to re-check for version skew.
+	Version string
 }
 
 type GuardianComponent struct {
@@ -458,8 +459,8 @@ func (c *GuardianComponent) annotations() map[string]string {
 	annotations := c.cfg.TrustedCertBundle.HashAnnotations()
 	annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
 
-	if len(c.cfg.CnxVersion) != 0 {
-		annotations["hash.operator.tigera.io/version"] = rmeta.AnnotationHash([]byte(c.cfg.CnxVersion))
+	if len(c.cfg.Version) != 0 {
+		annotations["hash.operator.tigera.io/version"] = c.cfg.Version
 	}
 	return annotations
 }

@@ -390,8 +390,19 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 	r.lastAvailabilityTransition = currentAvailabilityTransition
 
+	var managedClusterVersion string
+	clusterInformation, err := utils.FetchClusterInformation(ctx, r.cli)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying clusterInformation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if variant == operatorv1.TigeraSecureEnterprise {
+		managedClusterVersion = clusterInformation.Spec.CNXVersion
+	} else {
+		managedClusterVersion = clusterInformation.Spec.CalicoVersion
+	}
+
 	var includeEgressNetworkPolicy bool
-	var cnxVersion string
 	if variant == operatorv1.TigeraSecureEnterprise {
 		// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 		if !r.tierWatchReady.IsReady() {
@@ -424,14 +435,6 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		// and tolerate errors arising from the Tier not being created.
 		includeEgressNetworkPolicy = tierAvailable && licenseActive
 
-		clusterInformation, err := utils.FetchClusterInformation(ctx, r.cli)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying clusterInformation", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if len(clusterInformation.Spec.CNXVersion) != 0 {
-			cnxVersion = clusterInformation.Spec.CNXVersion
-		}
 	}
 
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, managementClusterConnection)
@@ -446,7 +449,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		TrustedCertBundle:           trustedBundle,
 		ManagementClusterConnection: managementClusterConnection,
 		GuardianClientKeyPair:       guardianKeyPair,
-		Version:                  cnxVersion,
+		Version:                     managedClusterVersion,
 	}
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{

@@ -140,19 +140,19 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
+
 	objs := []client.Object{
+		// common RBAC for EE and OSS
 		c.serviceAccount(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
-		c.Role(),
-		c.RoleBinding(),
-		c.deployment(),
-		c.service(),
-		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// Enterprise-specific RBAC and settings
 		objs = append(objs,
+			c.Role(),
+			c.RoleBinding(),
 			// Install default UI settings for this managed cluster.
 			managerClusterWideSettingsGroup(),
 			managerUserSpecificSettingsGroup(),
@@ -162,6 +162,12 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	} else {
 		objs = append(objs, c.networkPolicy())
 	}
+
+	objs = append(objs,
+		c.deployment(),
+		c.service(),
+		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
+	)
 
 	return objs, deprecatedObjects()
 }

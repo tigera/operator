@@ -197,7 +197,7 @@ var _ = Describe("apiserver controller tests", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentQueryServer.Image,
 					components.ComponentQueryServer.Version)))
-			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, "calico-apiserver-certs-key-cert-provisioner")
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(

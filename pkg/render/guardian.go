@@ -114,7 +114,7 @@ type GuardianConfiguration struct {
 
 	GuardianClientKeyPair certificatemanagement.KeyPairInterface
 
-	//CnxVersion stores the manged cluster's cnx Version information
+	//CnxVersion stores the managed cluster's cnx Version information
 	CnxVersion string
 }
 

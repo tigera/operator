@@ -1,4 +1,4 @@
-// Copyright (c) 2020,2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020,2024-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -108,5 +108,11 @@ func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.A
 	if err := kubecontrollers.Add(mgr, opts); err != nil {
 		return err
 	}
+
+	// This controller runs only on management clusters configured to use an external Elasticsearch cluster.
+	if err := elastic.AddExternalES(mgr, opts); err != nil {
+		return err
+	}
+
 	return nil
 }

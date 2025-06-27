@@ -105,7 +105,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	It("should render with a default configuration", func() {
 		expectedResources := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -114,7 +113,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 		}
 
 		cfg.PacketCapture = &operatorv1.PacketCaptureAPI{
@@ -127,11 +125,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		component := render.Fluentd(cfg)
 		resources, _ := component.Objects()
 		rtest.ExpectResources(resources, expectedResources)
-
-		// Check the namespace.
-		ns := rtest.GetResource(resources, "tigera-fluentd", "", "", "v1", "Namespace").(*corev1.Namespace)
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 		ds := rtest.GetResource(resources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
@@ -292,7 +285,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	It("should render with a configuration for a managed cluster", func() {
 		expectedResources := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.LogCollectorNamespace}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
@@ -300,7 +292,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdNodeName, Namespace: render.LogCollectorNamespace}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdNodeName, Namespace: render.LogCollectorNamespace}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 		}
 
@@ -318,11 +309,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		createResources, deleteResources := component.Objects()
 		rtest.ExpectResources(createResources, expectedResources)
 		Expect(deleteResources).To(BeEmpty())
-
-		// Check the namespace.
-		ns := rtest.GetResource(createResources, "tigera-fluentd", "", "", "v1", "Namespace").(*corev1.Namespace)
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 		ds := rtest.GetResource(createResources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
@@ -395,7 +381,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 	It("should render with a configuration for a managed cluster with packet capture", func() {
 		expectedResources := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.LogCollectorNamespace}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
@@ -405,7 +390,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdNodeName, Namespace: render.LogCollectorNamespace}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 		}
 
@@ -430,11 +414,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		createResources, deleteResources := component.Objects()
 		rtest.ExpectResources(createResources, expectedResources)
 		Expect(deleteResources).To(BeEmpty())
-
-		// Check the namespace.
-		ns := rtest.GetResource(createResources, "tigera-fluentd", "", "", "v1", "Namespace").(*corev1.Namespace)
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
-		Expect(ns.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 		ds := rtest.GetResource(createResources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
@@ -542,14 +521,12 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	It("should render for Windows nodes", func() {
 
 		expectedResources := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsServiceWindows, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-windows"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-windows"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node-windows", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node-windows", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 		}
 
 		cfg.OSType = rmeta.OSTypeWindows
@@ -636,7 +613,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		expectedResources := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "log-collector-s3-credentials", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
@@ -644,7 +620,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 		}
 
 		// Should render the correct resources.
@@ -691,14 +666,12 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	It("should render with Syslog configuration", func() {
 
 		expectedResources := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 		}
 
 		var ps int32 = 180
@@ -857,7 +830,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		expectedResources := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "logcollector-splunk-credentials", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
@@ -865,7 +837,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 		}
 
 		// Should render the correct resources.
@@ -917,7 +888,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		}
 
 		expectedResources := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-filters", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
@@ -925,7 +895,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 		}
 
 		// Should render the correct resources.
@@ -1194,7 +1163,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 
 			By("establishing the base case with no non-cluster hosts or forwarding options")
 			expectedResources := []client.Object{
-				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -1203,7 +1171,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: "tigera-fluentd"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
-				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 			}
 			cfg.PacketCapture = &operatorv1.PacketCaptureAPI{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1361,7 +1328,6 @@ func setupEKSCloudwatchLogConfig() *render.EksCloudwatchLogConfig {
 
 func getExpectedResourcesForEKS(isManagedcluster bool) []client.Object {
 	expectedResources := []client.Object{
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
 		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
 			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 
@@ -1375,7 +1341,6 @@ func getExpectedResourcesForEKS(isManagedcluster bool) []client.Object {
 		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder", Namespace: render.LogCollectorNamespace}},
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-eks-log-forwarder-secret", Namespace: render.LogCollectorNamespace}},
 		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: render.LogCollectorNamespace}},
-		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.LogCollectorNamespace}},
 	}
 
 	if isManagedcluster {

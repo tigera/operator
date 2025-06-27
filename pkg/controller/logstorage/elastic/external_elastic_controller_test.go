@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,19 +17,6 @@ package elastic
 import (
 	"context"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/logstorage"
-	"github.com/tigera/operator/pkg/tls"
-
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/secret"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -42,14 +29,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls"
 )
 
 var _ = Describe("External ES Controller", func() {
@@ -101,6 +98,10 @@ var _ = Describe("External ES Controller", func() {
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
 		})).NotTo(HaveOccurred())
 
+		Expect(cli.Create(ctx, &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchNamespace},
+		})).NotTo(HaveOccurred())
+
 		Expect(cli.Create(ctx, &v3.Tier{
 			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
 		})).NotTo(HaveOccurred())
@@ -116,6 +117,9 @@ var _ = Describe("External ES Controller", func() {
 			Spec: operatorv1.InstallationSpec{
 				Variant:  operatorv1.TigeraSecureEnterprise,
 				Registry: "some.registry.org/",
+				ImagePullSecrets: []corev1.LocalObjectReference{{
+					Name: "tigera-pull-secret",
+				}},
 			},
 		}
 		Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
@@ -173,6 +177,10 @@ var _ = Describe("External ES Controller", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
 			})).NotTo(HaveOccurred())
 
+		Expect(cli.Create(ctx,
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()},
+			})).NotTo(HaveOccurred())
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("Run").Return()
 		mockStatus.On("OnCRFound").Return()

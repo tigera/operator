@@ -20,10 +20,11 @@ import (
 	"errors"
 	"fmt"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
-	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 var ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
@@ -130,7 +131,7 @@ func (k *KeyPair) VolumeMount(osType rmeta.OSType) corev1.VolumeMount {
 }
 
 // InitContainer contains an init container for making a CSR. is only applicable when certificate management is enabled.
-func (k *KeyPair) InitContainer(namespace string) corev1.Container {
+func (k *KeyPair) InitContainer(namespace string, securityContext *corev1.SecurityContext) corev1.Container {
 	initContainer := CreateCSRInitContainer(
 		k.CertificateManagement,
 		k.Name,
@@ -140,7 +141,8 @@ func (k *KeyPair) InitContainer(namespace string) corev1.Container {
 		corev1.TLSPrivateKeyKey,
 		corev1.TLSCertKey,
 		k.DNSNames,
-		namespace)
+		namespace,
+		securityContext)
 	initContainer.Name = fmt.Sprintf("%s-%s", k.GetName(), initContainer.Name)
 	return initContainer
 }

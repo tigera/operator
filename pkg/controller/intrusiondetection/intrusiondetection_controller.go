@@ -472,7 +472,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		PullSecrets:     pullSecrets,
 		Namespace:       helper.InstallNamespace(),
 		PSS:             getPSS(lc),
-		CreateNamespace: shouldCreateNamespace(tenant, hasNoLicense),
+		CreateNamespace: !tenant.MultiTenant(),
 	})
 	intrusionDetectionComponent := render.IntrusionDetection(intrusionDetectionCfg)
 
@@ -602,13 +602,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
-}
-
-func shouldCreateNamespace(tenant *operatorv1.Tenant, hasNoLicense bool) bool {
-	if hasNoLicense || tenant.MultiTenant() {
-		return false
-	}
-	return true
 }
 
 func getPSS(logCollector *operatorv1.LogCollector) render.PodSecurityStandard {

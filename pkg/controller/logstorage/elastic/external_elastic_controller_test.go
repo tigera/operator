@@ -16,20 +16,6 @@ package elastic
 
 import (
 	"context"
-	"time"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/render/logstorage"
-	"github.com/tigera/operator/pkg/tls"
-
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/secret"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -43,14 +29,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls"
 )
 
 var _ = Describe("External ES Controller", func() {
@@ -100,6 +96,10 @@ var _ = Describe("External ES Controller", func() {
 		Expect(cli.Create(ctx, &operatorv1.APIServer{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
+		})).NotTo(HaveOccurred())
+
+		Expect(cli.Create(ctx, &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchNamespace},
 		})).NotTo(HaveOccurred())
 
 		Expect(cli.Create(ctx, &v3.Tier{
@@ -203,57 +203,6 @@ var _ = Describe("External ES Controller", func() {
 		Expect(result).Should(Equal(reconcile.Result{}))
 		mockStatus.AssertExpectations(GinkgoT())
 	})
-
-	It("create namespace, operator secrets role and pull secrets", func() {
-		CreateLogStorage(cli, &operatorv1.LogStorage{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-			Spec:       operatorv1.LogStorageSpec{},
-			Status:     operatorv1.LogStorageStatus{State: operatorv1.TigeraStatusReady},
-		})
-
-		// Run the reconciler and expect it to reach the end successfully.
-		mockStatus.On("ClearDegraded")
-		r, err := NewExternalESReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
-		Expect(err).ShouldNot(HaveOccurred())
-		result, err := r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
-
-		// Expect namespace to be created
-		namespace := corev1.Namespace{
-			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-		}
-		Expect(cli.Get(ctx, client.ObjectKey{
-			Name: render.ElasticsearchNamespace,
-		}, &namespace)).NotTo(HaveOccurred())
-		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("baseline"))
-		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
-
-		// Expect operator rolebinding to be created
-		rb := rbacv1.RoleBinding{
-			ObjectMeta: metav1.ObjectMeta{},
-		}
-		Expect(cli.Get(ctx, client.ObjectKey{
-			Name:      render.TigeraOperatorSecrets,
-			Namespace: render.ElasticsearchNamespace,
-		}, &rb)).NotTo(HaveOccurred())
-		Expect(rb.OwnerReferences).To(HaveLen(1))
-		ownerRoleBinding := rb.OwnerReferences[0]
-		Expect(ownerRoleBinding.Kind).To(Equal("LogStorage"))
-
-		// Expect pull secrets to be created
-		pullSecrets := corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		}
-		Expect(cli.Get(ctx, client.ObjectKey{
-			Name:      "tigera-pull-secret",
-			Namespace: render.ElasticsearchNamespace,
-		}, &pullSecrets)).NotTo(HaveOccurred())
-		Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
-		pullSecret := pullSecrets.OwnerReferences[0]
-		Expect(pullSecret.Kind).To(Equal("LogStorage"))
-	})
-
 })
 
 func NewExternalESReconcilerWithShims(

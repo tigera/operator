@@ -18,11 +18,19 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -31,13 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/logstorage/externalelasticsearch"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type ExternalESController struct {
@@ -132,6 +133,15 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
+	esNamespace, err := utils.GetIfExists[v1.Namespace](ctx, client.ObjectKey{Name: render.ElasticsearchNamespace}, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurring while retrieving elasticsearch namespace", err, reqLogger)
+		return reconcile.Result{}, err
+	} else if esNamespace == nil {
+		r.status.SetDegraded(operatorv1.ResourceNotFound, "Waiting for elasticsearch namespace to be created", err, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurring while retrieving pull secrets", err, reqLogger)
@@ -142,16 +152,8 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	clusterConfig := relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
-	setup := render.NewSetup(&render.SetUpConfiguration{
-		OpenShift:       r.provider.IsOpenShift(),
-		Installation:    install,
-		PullSecrets:     pullSecrets,
-		Namespace:       render.ElasticsearchNamespace,
-		PSS:             render.PSSBaseline,
-		CreateNamespace: true,
-	})
 	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets, r.multiTenant)
-	for _, component := range []render.Component{setup, externalElasticsearch} {
+	for _, component := range []render.Component{externalElasticsearch} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err

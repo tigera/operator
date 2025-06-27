@@ -322,7 +322,7 @@ func (c *GuardianComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	}
 }
 
-func (c *GuardianComponent) Role() *rbacv1.Role {
+func (c *GuardianComponent) secretsRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

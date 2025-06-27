@@ -69,7 +69,9 @@ const (
 	GuardianPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
 	GuardianKeyPairSecret = "guardian-key-pair"
 
-	GoldmaneDeploymentName = "goldmane"
+	GoldmaneDeploymentName         = "goldmane"
+	GuardianSecretsRole            = "calico-guardian-secrets"
+	GuardianSecretsRoleBindingName = "calico-guardian-secrets"
 )
 
 var (
@@ -138,17 +140,19 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
+
 	objs := []client.Object{
+		// common RBAC for EE and OSS
 		c.serviceAccount(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
-		c.deployment(),
-		c.service(),
-		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// Enterprise-specific RBAC and settings
 		objs = append(objs,
+			c.secretsRole(),
+			c.secretRoleBinding(),
 			// Install default UI settings for this managed cluster.
 			managerClusterWideSettingsGroup(),
 			managerUserSpecificSettingsGroup(),
@@ -158,6 +162,12 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	} else {
 		objs = append(objs, c.networkPolicy())
 	}
+
+	objs = append(objs,
+		c.deployment(),
+		c.service(),
+		secret.CopyToNamespace(GuardianNamespace, c.cfg.TunnelSecret)[0],
+	)
 
 	return objs, deprecatedObjects()
 }
@@ -301,6 +311,47 @@ func (c *GuardianComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
 			Name:     GuardianClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      GuardianServiceAccountName,
+				Namespace: GuardianNamespace,
+			},
+		},
+	}
+}
+
+// secretRole creates a Role that allows the management cluster to provision secrets to the tigera-operator Namespace.
+// This is used to push secrets used by the managed cluster to access / authenticate with the management cluster.
+func (c *GuardianComponent) secretsRole() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GuardianSecretsRole,
+			Namespace: common.OperatorNamespace(),
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"create", "delete", "deletecollection", "update"},
+			},
+		},
+	}
+}
+
+func (c *GuardianComponent) secretRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GuardianSecretsRoleBindingName,
+			Namespace: common.OperatorNamespace(),
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     GuardianSecretsRole,
 		},
 		Subjects: []rbacv1.Subject{
 			{

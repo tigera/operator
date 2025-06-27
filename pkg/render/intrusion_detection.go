@@ -37,7 +37,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -159,8 +158,6 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		// GlobalAlertTemplates are not used in multi-tenant management clusters.
 		objs = append(objs, c.globalAlertTemplates()...)
 	}
-
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
 
 	objs = append(objs,
 		c.intrusionDetectionControllerAllowTigeraPolicy(),
@@ -1285,57 +1282,4 @@ func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRoleBinding() 
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-psp"},
 	}
-}
-
-func IntrusionDetectionNamespaceComponent(cfg *IntrusionDetectionNamespaceConfiguration) Component {
-	return &intrusionDetectionNamespaceComponent{
-		cfg: cfg,
-	}
-}
-
-type intrusionDetectionNamespaceComponent struct {
-	cfg *IntrusionDetectionNamespaceConfiguration
-}
-
-func (c *intrusionDetectionNamespaceComponent) Ready() bool {
-	return true
-}
-
-type IntrusionDetectionNamespaceConfiguration struct {
-	Tenant                    *operatorv1.Tenant
-	SyslogForwardingIsEnabled bool
-	Namespace                 string
-	KubernetesProvider        operatorv1.Provider
-	HasNoLicense              bool
-	Azure                     *operatorv1.Azure
-}
-
-func (c *intrusionDetectionNamespaceComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	return nil
-}
-
-func (c *intrusionDetectionNamespaceComponent) SupportedOSType() rmeta.OSType {
-	return rmeta.OSTypeLinux
-}
-
-func (c *intrusionDetectionNamespaceComponent) Objects() ([]client.Object, []client.Object) {
-	// Configure pod security standard. If syslog forwarding is enabled, we
-	// need hostpath volumes which require a privileged PSS.
-	pss := PSSRestricted
-	if c.cfg.SyslogForwardingIsEnabled {
-		pss = PSSPrivileged
-	}
-
-	objs := []client.Object{}
-	if !c.cfg.Tenant.MultiTenant() {
-		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
-		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.KubernetesProvider, PodSecurityStandard(pss), c.cfg.Azure))
-		objs = append(objs, CreateOperatorSecretsRoleBinding(c.cfg.Namespace))
-	}
-
-	if c.cfg.HasNoLicense {
-		return nil, objs
-	}
-
-	return objs, nil
 }

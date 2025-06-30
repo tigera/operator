@@ -1209,11 +1209,15 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 		},
 	}
 
+	command := []string{CalicoNodeObjectName, "-init"}
+	if !c.cfg.Installation.BPFEnabled() {
+		command = append(command, "-skip-cgroup")
+	}
 	return corev1.Container{
 		Name:            "mount-bpffs",
 		Image:           c.nodeImage,
 		ImagePullPolicy: ImagePullPolicy(),
-		Command:         []string{CalicoNodeObjectName, "-init"},
+		Command:         command,
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    mounts,
 	}

@@ -23,6 +23,7 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -792,6 +793,130 @@ var _ = Describe("Gateway API rendering tests", func() {
 			Name:      "waf-http-filter",
 			MountPath: "/var/run/waf-http-filter",
 		}))
+	})
+
+	It("should deploy waf-http-filter for Enterprise when using a custom proxy", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "custom-class",
+					EnvoyProxyRef: &operatorv1.NamespacedName{
+						Namespace: "default",
+						Name:      "my-proxy",
+					},
+				}},
+			},
+		}
+		envoyProxy := &envoyapi.EnvoyProxy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "EnvoyProxy",
+				APIVersion: "gateway.envoyproxy.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-proxy",
+				Namespace: "default",
+			},
+			Spec: envoyapi.EnvoyProxySpec{
+				Provider: &envoyapi.EnvoyProxyProvider{
+					Type: envoyapi.ProviderTypeKubernetes,
+					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
+						EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
+							InitContainers: []corev1.Container{
+								{
+									Name:          "some-other-sidecar",
+									RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "some-other-volume",
+											MountPath: "/test",
+										},
+									},
+								},
+							},
+							Container: &envoyapi.KubernetesContainerSpec{
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      "some-other-volume",
+										MountPath: "/test",
+									},
+								},
+							},
+							Pod: &envoyapi.KubernetesPodSpec{
+								Volumes: []corev1.Volume{
+									{
+										Name: "some-other-volume",
+										VolumeSource: corev1.VolumeSource{
+											EmptyDir: &corev1.EmptyDirVolumeSource{},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+			CustomEnvoyProxies: map[string]*envoyapi.EnvoyProxy{
+				"custom-class": envoyProxy,
+			},
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Get the four expected GatewayClasses.
+		gc, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "custom-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Get their four EnvoyProxies.
+		Expect(gc.Spec.ParametersRef).NotTo(BeNil())
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, gc.Spec.ParametersRef.Name, string(*gc.Spec.ParametersRef.Namespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(envoyDeployment).ToNot(BeNil())
+
+		Expect(envoyDeployment.InitContainers).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers[0].Name).To(Equal("some-other-sidecar"))
+		Expect(envoyDeployment.InitContainers[1].Name).To(Equal("waf-http-filter"))
+		Expect(*envoyDeployment.InitContainers[1].RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
+		Expect(envoyDeployment.InitContainers[1].VolumeMounts).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers[1].VolumeMounts).To(ContainElements([]corev1.VolumeMount{
+			{
+				Name:      "waf-http-filter",
+				MountPath: "/var/run/waf-http-filter",
+			},
+			{
+				Name:      "var-log-calico",
+				MountPath: "/var/log/calico",
+			},
+		}))
+
+		Expect(envoyDeployment.Container).ToNot(BeNil())
+		Expect(envoyDeployment.Container.VolumeMounts).To(ContainElements(
+			corev1.VolumeMount{
+				Name:      "some-other-volume",
+				MountPath: "/test",
+			}, corev1.VolumeMount{
+				Name:      "waf-http-filter",
+				MountPath: "/var/run/waf-http-filter",
+			},
+		))
+
+		Expect(envoyDeployment.Pod).ToNot(BeNil())
+		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(3))
+		Expect(envoyDeployment.Pod.Volumes[0].Name).To(Equal("some-other-volume"))
+		Expect(envoyDeployment.Pod.Volumes[0].EmptyDir).ToNot(BeNil())
+		Expect(envoyDeployment.Pod.Volumes[1].Name).To(Equal("var-log-calico"))
+		Expect(envoyDeployment.Pod.Volumes[1].HostPath.Path).To(Equal("/var/log/calico"))
+		Expect(envoyDeployment.Pod.Volumes[2].Name).To(Equal("waf-http-filter"))
+		Expect(envoyDeployment.Pod.Volumes[2].EmptyDir).ToNot(BeNil())
+
 	})
 
 })

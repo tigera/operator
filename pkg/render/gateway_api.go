@@ -409,7 +409,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		CreateNamespace(
 			resources.namespace.Name,
 			pr.cfg.Installation.KubernetesProvider,
-			PSSPrivileged,
+			PSSPrivileged, // Needed for HostPath volume to write logs to
 			pr.cfg.Installation.Azure,
 		),
 	}

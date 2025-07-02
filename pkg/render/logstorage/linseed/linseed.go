@@ -56,6 +56,7 @@ const (
 	Port                                                   = 443
 	ClusterRoleName                                        = "tigera-linseed"
 	MultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-linseed-managed-cluster-access"
+	ManagedClustersWatchRoleBindingName                    = "tigera-linseed-managed-cluster-watch"
 )
 
 func Linseed(c *Config) render.Component {
@@ -158,6 +159,7 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, l.linseedService())
 	toCreate = append(toCreate, l.linseedClusterRole())
 	toCreate = append(toCreate, l.linseedClusterRoleBinding(l.cfg.BindNamespaces))
+	toCreate = append(toCreate, l.linseedManagedClustersWatchRoleBindings())
 	if l.cfg.Tenant != nil {
 		toCreate = append(toCreate, l.multiTenantManagedClustersAccess()...)
 	}
@@ -193,13 +195,6 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{"authentication.k8s.io"},
 			Resources: []string{"tokenreviews"},
 			Verbs:     []string{"create"},
-		},
-		{
-			// Need to be able to list managed clusters
-			// TODO: Move to namespaced role in multi-tenant.
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"managedclusters"},
-			Verbs:     []string{"list", "watch"},
 		},
 		// These permissions are necessary to allow the management cluster to monitor secrets that we want to propagate
 		// through to the managed cluster for identity verification such as the Voltron Linseed public certificate
@@ -254,6 +249,14 @@ func (l *linseed) linseedClusterRole() *rbacv1.ClusterRole {
 
 func (l *linseed) linseedClusterRoleBinding(namespaces []string) client.Object {
 	return rcomponents.ClusterRoleBinding(ClusterRoleName, ClusterRoleName, ServiceAccountName, namespaces)
+}
+
+func (l *linseed) linseedManagedClustersWatchRoleBindings() client.Object {
+	if l.cfg.Tenant.MultiTenant() {
+		return rcomponents.RoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, ServiceAccountName, l.cfg.Namespace)
+	}
+
+	return rcomponents.ClusterRoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, ServiceAccountName, []string{l.cfg.Namespace})
 }
 
 func (l *linseed) multiTenantManagedClustersAccess() []client.Object {
@@ -370,10 +373,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	replicas := l.cfg.Installation.ControlPlaneReplicas
 	if l.cfg.Tenant != nil {
-		if l.cfg.ExternalElastic {
-			// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
-			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
-		}
+		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
+		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
 
 		if l.cfg.Tenant.MultiTenant() {
 			// For clusters shared between multiple tenants, we need to configure Linseed with the correct namespace information for its tenant.

@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -82,6 +82,13 @@ func handleBPF(c *components, install *operatorv1.Installation) error {
 		}
 		if install.Spec.CalicoNetwork == nil {
 			install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
+		}
+
+		// Make sure dataplane mode isn't already set by another handler.
+		// If we hit this, it means that either there was conflicting configuration in the
+		// manifest, or that a dataplane combination exists that is not supported by the operator.
+		if install.Spec.CalicoNetwork.LinuxDataplane != nil {
+			return fmt.Errorf("cannot enable bpf, already set to %s", *install.Spec.CalicoNetwork.LinuxDataplane)
 		}
 
 		install.Spec.CalicoNetwork.LinuxDataplane = &bpf

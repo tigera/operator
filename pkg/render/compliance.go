@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -201,7 +201,6 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceAccessAllowTigeraNetworkPolicy(),
 			networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
 		)
-		complianceObjs = append(complianceObjs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
 		complianceObjs = append(complianceObjs,
 			c.complianceControllerServiceAccount(),
 			c.complianceControllerRole(),
@@ -725,8 +724,8 @@ func (c *complianceComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      linseed,
-				Namespace: ElasticsearchNamespace,
+				Name:      GuardianServiceAccountName,
+				Namespace: GuardianNamespace,
 			},
 		},
 	}

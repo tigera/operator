@@ -400,7 +400,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// and the bundle will simply use the root CA for the tenant. For single-tenant systems, we need to include these in case
 		// any of them haven't been signed by the root CA.
 		trustedSecretNames = []string{
-			render.ProjectCalicoAPIServerTLSSecretName(installation.Variant),
+			render.CalicoAPIServerTLSSecretName,
 			render.TigeraLinseedSecret,
 		}
 
@@ -602,7 +602,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Create a component handler to manage the rendered component.
-	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	defaultHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Set replicas to 1 for management or managed clusters.
 	// TODO Remove after MCM tigera-manager HA deployment is supported.
@@ -693,6 +693,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	setup := render.NewSetup(&render.SetUpConfiguration{
+		OpenShift:       r.provider.IsOpenShift(),
+		Installation:    installation,
+		PullSecrets:     pullSecrets,
+		Namespace:       helper.InstallNamespace(),
+		PSS:             render.PSSRestricted,
+		CreateNamespace: !tenant.MultiTenant(),
+	})
 	components := []render.Component{
 		// Install manager components.
 		component,
@@ -716,8 +724,18 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		components = append(components, tunnelSecretPassthrough)
 	}
 
+	setupHandler := defaultHandler
+	if tenant.MultiTenant() {
+		// In standard installs, the Manager CR owns all the objects. For multi-tenant, pull secrets are owned by the Tenant instance.
+		setupHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant)
+	}
+	if err := setupHandler.CreateOrUpdateOrDelete(ctx, setup, r.status); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
+		return reconcile.Result{}, err
+	}
+
 	for _, component := range components {
-		if err := componentHandler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+		if err := defaultHandler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
 			return reconcile.Result{}, err
 		}

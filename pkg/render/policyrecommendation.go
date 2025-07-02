@@ -52,6 +52,7 @@ const (
 
 	PolicyRecommendationTLSSecretName                                   = "policy-recommendation-tls"
 	PolicyRecommendationMultiTenantManagedClustersAccessRoleBindingName = "tigera-policy-recommendation-managed-cluster-access"
+	PolicyRecommendationManagedClustersWatchRoleBindingName             = "tigera-policy-recommendation-managed-cluster-watch"
 )
 
 // Register secret/certs that need Server and Client Key usage
@@ -109,15 +110,22 @@ func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {
+
+	var objs []client.Object
+
+	// Guardian has RBAC permissions to handle policy recommendation requests in managed clusters,
+	// so clean up the resources left behind in older clusters during upgrade.
+	if pr.cfg.ManagedCluster {
+		return objs, pr.deprecatedObjects()
+	}
+
 	// Management and managed clusters need API access to the resources defined in the policy
 	// recommendation cluster role
-	objs := []client.Object{
-		CreateNamespace(pr.cfg.Namespace, pr.cfg.Installation.KubernetesProvider, PSSRestricted, pr.cfg.Installation.Azure),
-		CreateOperatorSecretsRoleBinding(pr.cfg.Namespace),
-
+	objs = []client.Object{
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
+		pr.managedClustersWatchRoleBinding(),
 		networkpolicy.AllowTigeraDefaultDeny(pr.cfg.Namespace),
 	}
 	if pr.cfg.Tenant.MultiTenant() {
@@ -128,8 +136,6 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 		// No further resources are needed for managed clusters
 		return objs, nil
 	}
-
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(pr.cfg.Namespace, pr.cfg.PullSecrets...)...)...)
 
 	// The deployment is created on management/standalone clusters only
 	objs = append(objs,
@@ -179,7 +185,7 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 		rules = append(rules, []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"licensekeys", "managedclusters"},
+				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
@@ -236,6 +242,14 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 	return rcomponents.ClusterRoleBinding(PolicyRecommendationName, PolicyRecommendationName, PolicyRecommendationNamespace, pr.cfg.BindingNamespaces)
 }
 
+func (pr *policyRecommendationComponent) managedClustersWatchRoleBinding() client.Object {
+	if pr.cfg.Tenant.MultiTenant() {
+		return rcomponents.RoleBinding(PolicyRecommendationManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, PolicyRecommendationName, pr.cfg.Namespace)
+	}
+
+	return rcomponents.ClusterRoleBinding(PolicyRecommendationManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, PolicyRecommendationName, []string{pr.cfg.Namespace})
+}
+
 func (pr *policyRecommendationComponent) multiTenantManagedClustersAccess() []client.Object {
 	var objects []client.Object
 
@@ -283,7 +297,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		},
 		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain, LinseedNamespace(pr.cfg.Tenant)),
+			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain, LinseedNamespace(pr.cfg.Tenant), pr.cfg.ManagedCluster, false),
 		},
 		{
 			Name:  "LINSEED_CA",
@@ -435,6 +449,23 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Ingress:  []v3.Rule{},
 			Egress:   egressRules,
+		},
+	}
+}
+
+func (pr *policyRecommendationComponent) deprecatedObjects() []client.Object {
+	return []client.Object{
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationNamespace},
+		},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
 		},
 	}
 }

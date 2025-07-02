@@ -247,9 +247,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				// Check that the expected config made it's way to the Elastic CR
 				Expect(nodeSet.Config.Data).Should(Equal(map[string]interface{}{
-					"node.roles":                      []string{"data", "ingest", "master", "remote_cluster_client"},
-					"cluster.max_shards_per_node":     10000,
-					"ingest.geoip.downloader.enabled": false,
+					"node.roles":                              []string{"data", "ingest", "master", "remote_cluster_client"},
+					"cluster.max_shards_per_node":             10000,
+					"ingest.geoip.downloader.enabled":         false,
+					"xpack.eql.default_allow_partial_results": false,
+					"indices.lifecycle.poll_interval":         "60m",
 				}))
 			})
 
@@ -381,6 +383,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					},
 					"cluster.max_shards_per_node":                     10000,
 					"ingest.geoip.downloader.enabled":                 false,
+					"xpack.eql.default_allow_partial_results":         false,
+					"indices.lifecycle.poll_interval":                 "60m",
 					"xpack.security.http.ssl.certificate_authorities": []string{"/usr/share/elasticsearch/config/http-certs/ca.crt"},
 					"xpack.security.transport.ssl.key":                "/usr/share/elasticsearch/config/transport-certs/transport.tls.key",
 					"xpack.security.transport.ssl.certificate":        "/usr/share/elasticsearch/config/transport-certs/transport.tls.crt",
@@ -580,33 +584,28 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		Context("Initial creation", func() {
 			It("creates Managed cluster logstorage components", func() {
 				expectedCreateResources := []client.Object{
-					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchNamespace}},
-					&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.ESGatewayServiceName, Namespace: render.ElasticsearchNamespace},
-						Spec: corev1.ServiceSpec{
-							Type: corev1.ServiceTypeExternalName, ExternalName: fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain),
-						},
-					},
-					&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.LinseedServiceName, Namespace: render.ElasticsearchNamespace},
-						Spec: corev1.ServiceSpec{
-							Type:         corev1.ServiceTypeExternalName,
-							ExternalName: fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, dns.DefaultClusterDomain),
-						},
-					},
 					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-secrets"}},
-					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-configmaps"}},
-					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-namespaces"}},
-					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "calico-system"}},
-					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-operator"}},
-					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed"}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-operator"},
+						RoleRef:  rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "ClusterRole", Name: "tigera-linseed-secrets"},
+						Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: "guardian", Namespace: "calico-system"}}},
 					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
-					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.ElasticsearchNamespace}},
+				}
+
+				expectedDeleteResources := []client.Object{
+					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-namespaces"}},
+					&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed"}},
+					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-configmap"}},
+					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "calico-system"}},
+					&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-elasticsearch"}},
+					&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure-es-gateway-http", Namespace: "tigera-elasticsearch"}},
+					&corev1.Namespace{TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-elasticsearch"}},
 				}
 
 				component := render.NewManagedClusterLogStorage(cfg)
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
-				compareResources(deleteResources, []resourceTestObj{})
+				rtest.ExpectResources(deleteResources, expectedDeleteResources)
 			})
 		})
 
@@ -1009,6 +1008,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
+						"indices.lifecycle.poll_interval":                 "60m",
 						"node.attr.zone":                                  "us-west-2a",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
@@ -1028,6 +1029,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
+						"indices.lifecycle.poll_interval":                 "60m",
 						"node.attr.zone":                                  "us-west-2b",
 						"cluster.routing.allocation.awareness.attributes": "zone",
 					}))
@@ -1098,6 +1101,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
+						"indices.lifecycle.poll_interval":                 "60m",
 						"node.attr.zone":                                  "us-west-2a",
 						"node.attr.rack":                                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",
@@ -1127,6 +1132,8 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						"node.roles":                                      []string{"data", "ingest", "master", "remote_cluster_client"},
 						"cluster.max_shards_per_node":                     10000,
 						"ingest.geoip.downloader.enabled":                 false,
+						"xpack.eql.default_allow_partial_results":         false,
+						"indices.lifecycle.poll_interval":                 "60m",
 						"node.attr.zone":                                  "us-west-2b",
 						"node.attr.rack":                                  "rack1",
 						"cluster.routing.allocation.awareness.attributes": "zone,rack",

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import (
 	"time"
 
 	kerror "k8s.io/apimachinery/pkg/api/errors"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -113,7 +114,7 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		cryptoCA, err := tls.MakeCA("byo-ca")
 		Expect(err).NotTo(HaveOccurred())
-		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "tigera-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.ProjectCalicoAPIServerServiceName(operatorv1.TigeraSecureEnterprise), "tigera-system", dns.DefaultClusterDomain)...)
+		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "calico-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.APIServerServiceName, "calico-system", dns.DefaultClusterDomain)...)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &operatorv1.Authentication{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -151,6 +152,7 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+		mockStatus.On("RemoveDeployments", mock.Anything)
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 		mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
@@ -177,8 +179,8 @@ var _ = Describe("apiserver controller tests", func() {
 			d := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-apiserver",
-					Namespace: "tigera-system",
+					Name:      "calico-apiserver",
+					Namespace: "calico-system",
 				},
 			}
 			Expect(test.GetResource(cli, &d)).To(BeNil())
@@ -233,8 +235,8 @@ var _ = Describe("apiserver controller tests", func() {
 			d := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "tigera-apiserver",
-					Namespace: "tigera-system",
+					Name:      "calico-apiserver",
+					Namespace: "calico-system",
 				},
 			}
 			Expect(test.GetResource(cli, &d)).To(BeNil())
@@ -263,7 +265,7 @@ var _ = Describe("apiserver controller tests", func() {
 		It("should not add OwnerReference to user-supplied apiserver TLS cert secrets", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
-			secretName := render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)
+			secretName := render.CalicoAPIServerTLSSecretName
 
 			Expect(cli.Create(ctx, apiSecret)).ShouldNot(HaveOccurred())
 
@@ -288,7 +290,7 @@ var _ = Describe("apiserver controller tests", func() {
 		It("should add OwnerReference apiserver cert operator managed secrets", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
-			secretName := "tigera-apiserver-certs"
+			secretName := "calico-apiserver-certs"
 
 			r := ReconcileAPIServer{
 				client:              cli,
@@ -324,7 +326,7 @@ var _ = Describe("apiserver controller tests", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(1))
-			Expect(policies.Items[0].Name).To(Equal("allow-tigera.cnx-apiserver-access"))
+			Expect(policies.Items[0].Name).To(Equal("allow-tigera.apiserver-access"))
 		})
 
 		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {
@@ -408,7 +410,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			certSecret := corev1.Secret{}
-			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-apiserver-certs", Namespace: "tigera-system"}, &certSecret)).ToNot(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "calico-apiserver-certs", Namespace: "calico-system"}, &certSecret)).ToNot(HaveOccurred())
 		})
 	})
 
@@ -697,11 +699,11 @@ var _ = Describe("apiserver controller tests", func() {
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      render.VoltronTunnelSecretName,
-						Namespace: "tigera-system",
+						Namespace: "calico-system",
 					},
 				}
 
-				// Ensure that the tunnel secret was copied in tigera-system namespace
+				// Ensure that the tunnel secret was copied in calico-system namespace
 				err = test.GetResource(cli, &clusterConnectionInAppNs)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				Expect(clusterConnectionInAppNs.Data).Should(HaveKeyWithValue("tls.crt", []byte("certvalue")))
@@ -737,15 +739,15 @@ var _ = Describe("apiserver controller tests", func() {
 				deployment := appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-apiserver",
-						Namespace: "tigera-system",
+						Name:      "calico-apiserver",
+						Namespace: "calico-system",
 					},
 				}
 				clusterConnectionInAppNs := corev1.Secret{
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      render.VoltronTunnelSecretName,
-						Namespace: "tigera-system",
+						Namespace: "calico-system",
 					},
 				}
 
@@ -753,7 +755,7 @@ var _ = Describe("apiserver controller tests", func() {
 				err = test.GetResource(cli, &deployment)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 
-				// Ensure that the tunnel secret was copied in tigera-system namespace
+				// Ensure that the tunnel secret was copied in calico-system namespace
 				err = test.GetResource(cli, &clusterConnectionInAppNs)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 			})
@@ -776,15 +778,15 @@ var _ = Describe("apiserver controller tests", func() {
 				deployment := appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-apiserver",
-						Namespace: "tigera-system",
+						Name:      "calico-apiserver",
+						Namespace: "calico-system",
 					},
 				}
 				clusterConnectionInAppNs := corev1.Secret{
 					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      render.VoltronTunnelSecretName,
-						Namespace: "tigera-system",
+						Namespace: "calico-system",
 					},
 				}
 
@@ -799,4 +801,125 @@ var _ = Describe("apiserver controller tests", func() {
 
 		})
 	})
+
+	Context("check if older namespace can be cleaned up", func() {
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
+		})
+
+		It("should return true when new deployment is ready, old one is gone, and TigeraStatus is healthy", func() {
+			err := cli.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
+				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = cli.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "tigera-system"},
+				Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = cli.Create(ctx, &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "apiserver"},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionTrue}},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
+			Expect(canCleanedUp).To(BeTrue())
+		})
+
+		It("should return false when new deployment is not ready", func() {
+			err := cli.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
+				Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
+			Expect(canCleanedUp).To(BeFalse())
+		})
+
+		It("should return false when older deployment is still running", func() {
+			err := cli.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
+				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = cli.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "tigera-system"},
+				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
+			Expect(canCleanedUp).To(BeFalse())
+		})
+
+		It("should return false when TigeraStatus is not healthy", func() {
+			err := cli.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
+				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = cli.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "tigera-system"},
+				Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			err = cli.Create(ctx, &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "apiserver"},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionFalse}},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				provider:            operatorv1.ProviderNone,
+				enterpriseCRDsExist: true,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
+			Expect(canCleanedUp).To(BeFalse())
+		})
+	})
+
 })

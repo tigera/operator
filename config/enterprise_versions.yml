@@ -46,12 +46,12 @@ components:
     image: tigera/dex
     version: master
   eck-kibana:
-    version: 8.17.1
+    version: 8.18.1
   kibana:
     image: tigera/kibana
     version: master
   eck-elasticsearch:
-    version: 8.17.1
+    version: 8.18.1
   elasticsearch:
     image: tigera/elasticsearch
     version: master
@@ -106,7 +106,7 @@ components:
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
-    version: v2.54.1
+    version: v3.4.1
   prometheus:
     image: tigera/prometheus
     version: master

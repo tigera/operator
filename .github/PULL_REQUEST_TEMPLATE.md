@@ -9,6 +9,23 @@ Please include
 - links to issues that this PR addresses
 -->
 
+## Release Note
+
+<!-- Writing a release note:
+
+- By default, your PR will be set to require a release note and a docs PR!
+- If you do not need a release note, swap the `release-note-required` label for
+  the `release-note-not-required` label
+- Likewise, if you do not need a docs PR, swap `docs-pr-required` for `docs-not-required`
+- If you're not certain if you need a release note or docs PR, please check
+  with your reviewer or team lead.
+
+-->
+
+```release-note
+TBD
+```
+
 ## For PR author
 
 - [ ] Tests for change.

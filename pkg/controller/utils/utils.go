@@ -88,7 +88,7 @@ func ContextLoggerForResource(log logr.Logger, obj client.Object) logr.Logger {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
-	return log.WithValues("Name", name, "Namespace", namespace, "Kind", gvk.Kind)
+	return log.WithValues("name", name, "namespace", namespace, "kind", gvk.Kind)
 }
 
 // IgnoreObject returns true if the object has been marked as ignored by the user,
@@ -125,16 +125,16 @@ func AddNamespaceWatch(c ctrlruntime.Controller, name string) error {
 
 type MetaMatch func(metav1.ObjectMeta) bool
 
-func AddSecretsWatch(c ctrlruntime.Controller, name, namespace string, metaMatches ...MetaMatch) error {
-	return AddSecretsWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{}, metaMatches...)
+func AddSecretsWatch(c ctrlruntime.Controller, name, namespace string) error {
+	return AddSecretsWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{})
 }
 
-func AddSecretsWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler, metaMatches ...MetaMatch) error {
+func AddSecretsWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
 	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return AddNamespacedWatch(c, s, h, metaMatches...)
+	return AddNamespacedWatch(c, s, h)
 }
 
 func AddConfigMapWatch(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
@@ -224,6 +224,10 @@ func WaitToAddLicenseKeyWatch(controller ctrlruntime.Controller, c kubernetes.In
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}})
 }
 
+func WaitToAddClusterInformationWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.ClusterInformation{TypeMeta: metav1.TypeMeta{Kind: v3.KindClusterInformation}}})
+}
+
 func WaitToAddPolicyRecommendationScopeWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.PolicyRecommendationScope{TypeMeta: metav1.TypeMeta{Kind: v3.KindPolicyRecommendationScope}}})
 }
@@ -255,9 +259,8 @@ func WaitToAddTierWatch(tierName string, controller ctrlruntime.Controller, c ku
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
-func AddNamespacedWatch(c ctrlruntime.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
-	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
-	pred := createPredicateForObject(objMeta)
+func AddNamespacedWatch(c ctrlruntime.Controller, obj client.Object, h handler.EventHandler) error {
+	pred := createPredicateForObject(obj)
 	return c.WatchObject(obj, h, pred)
 }
 
@@ -309,6 +312,13 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 // It will return an error if the license is not installed/cannot be read
 func FetchLicenseKey(ctx context.Context, cli client.Client) (v3.LicenseKey, error) {
 	instance := &v3.LicenseKey{}
+	err := cli.Get(ctx, DefaultInstanceKey, instance)
+	return *instance, err
+}
+
+// FetchClusterInformation fetches and returns the clusterinformation.
+func FetchClusterInformation(ctx context.Context, cli client.Client) (v3.ClusterInformation, error) {
+	instance := &v3.ClusterInformation{}
 	err := cli.Get(ctx, DefaultInstanceKey, instance)
 	return *instance, err
 }
@@ -1017,6 +1027,12 @@ func MaintainInstallationFinalizer(
 		// Add a finalizer indicating that the mainResource is still available.
 		SetInstallationFinalizer(installation, finalizer)
 	} else {
+		// Remove the finalizer. We can skip this check if the finalizer is already not present.
+		if !stringsutil.StringInSlice(finalizer, installation.GetFinalizers()) {
+			log.V(2).Info("Finalizer not present, skipping removal", "finalizer", finalizer)
+			return nil
+		}
+
 		// Check if the namespaced secondaryResources are still present.
 		// Keep track of all the secondary resources that the main resource creates.
 		// Only delete the finalizer if all of the secondary resources are deleted.

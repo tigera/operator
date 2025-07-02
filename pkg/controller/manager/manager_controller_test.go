@@ -20,6 +20,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -225,7 +226,7 @@ var _ = Describe("Manager controller tests", func() {
 			linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, linseedKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
+			queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.CalicoAPIServerTLSSecretName, common.OperatorNamespace(), []string{render.CalicoAPIServerTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, queryServerKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			internalKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), expectedDNSNames)
@@ -469,6 +470,9 @@ var _ = Describe("Manager controller tests", func() {
 					ControlPlaneReplicas: &replicas,
 					Variant:              operatorv1.TigeraSecureEnterprise,
 					Registry:             "some.registry.org/",
+					ImagePullSecrets: []corev1.LocalObjectReference{{
+						Name: "tigera-pull-secret",
+					}},
 				},
 				Status: operatorv1.InstallationStatus{
 					Variant: operatorv1.TigeraSecureEnterprise,
@@ -476,10 +480,15 @@ var _ = Describe("Manager controller tests", func() {
 						Registry: "some.registry.org/",
 						// The test is provider agnostic.
 						KubernetesProvider: operatorv1.ProviderNone,
+						ImagePullSecrets: []corev1.LocalObjectReference{{
+							Name: "tigera-pull-secret",
+						}},
 					},
 				},
 			}
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			pullSecrets := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}}
+			Expect(c.Create(ctx, pullSecrets)).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
@@ -538,7 +547,7 @@ var _ = Describe("Manager controller tests", func() {
 				linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, linseedKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-				queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
+				queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.CalicoAPIServerTLSSecretName, common.OperatorNamespace(), []string{render.CalicoAPIServerTLSSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, queryServerKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 				internalCertKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
@@ -556,6 +565,45 @@ var _ = Describe("Manager controller tests", func() {
 				// Mark that watches were successful.
 				r.licenseAPIReady.MarkAsReady()
 				r.tierWatchReady.MarkAsReady()
+			})
+
+			It("should reconcile manager namespace, role bindings and pull secrets", func() {
+				result, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+				namespace := corev1.Namespace{
+					TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+				}
+				Expect(c.Get(ctx, client.ObjectKey{
+					Name: render.ManagerNamespace,
+				}, &namespace)).NotTo(HaveOccurred())
+				Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
+				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+				// Expect operator rolebinding to be created
+				rb := rbacv1.RoleBinding{
+					ObjectMeta: metav1.ObjectMeta{},
+				}
+				Expect(c.Get(ctx, client.ObjectKey{
+					Name:      render.TigeraOperatorSecrets,
+					Namespace: render.ManagerNamespace,
+				}, &rb)).NotTo(HaveOccurred())
+				Expect(rb.OwnerReferences).To(HaveLen(1))
+				ownerRoleBinding := rb.OwnerReferences[0]
+				Expect(ownerRoleBinding.Kind).To(Equal("Manager"))
+
+				// Expect pull secrets to be created
+				pullSecrets := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				}
+				Expect(c.Get(ctx, client.ObjectKey{
+					Name:      "tigera-pull-secret",
+					Namespace: render.ManagerNamespace,
+				}, &pullSecrets)).NotTo(HaveOccurred())
+				Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
+				pullSecret := pullSecrets.OwnerReferences[0]
+				Expect(pullSecret.Kind).To(Equal("Manager"))
 			})
 
 			Context("image reconciliation", func() {
@@ -667,7 +715,7 @@ var _ = Describe("Manager controller tests", func() {
 				})
 			})
 
-			Context("compliance reconciliation", func() {
+			Context("manager reconciliation", func() {
 				It("should degrade if license is not present", func() {
 					Expect(c.Delete(ctx, licenseKey)).NotTo(HaveOccurred())
 					mockStatus = &status.MockStatus{}
@@ -1382,7 +1430,7 @@ var _ = Describe("Manager controller tests", func() {
 					},
 					Spec: operatorv1.TLSTerminatedRouteSpec{
 						CABundle: &corev1.ConfigMapKeySelector{
-							Key: "tigera-ca-bundle.crt",
+							Key: certificatemanagement.TrustedCertConfigMapKeyName,
 							LocalObjectReference: corev1.LocalObjectReference{
 								Name: certificatemanagement.TrustedCertConfigMapNamePublic,
 							},
@@ -1428,6 +1476,39 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(tenantARoutes.Data).ToNot(BeEmpty())
 
 				Expect(kerror.IsNotFound(test.GetResource(c, &tenantBRoutes))).Should(BeTrue())
+			})
+
+			It("should reconcile pull secrets and rolebindings", func() {
+				_, err := r.Reconcile(ctx, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: tenantANamespace,
+					},
+				})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// Expect operator role binding to be created
+				rb := rbacv1.RoleBinding{
+					ObjectMeta: metav1.ObjectMeta{},
+				}
+				Expect(c.Get(ctx, client.ObjectKey{
+					Name:      render.TigeraOperatorSecrets,
+					Namespace: tenantANamespace,
+				}, &rb)).NotTo(HaveOccurred())
+				Expect(rb.OwnerReferences).To(HaveLen(1))
+				ownerRoleBinding := rb.OwnerReferences[0]
+				Expect(ownerRoleBinding.Kind).To(Equal("Tenant"))
+
+				// Expect pull secrets to be created
+				pullSecrets := corev1.Secret{
+					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+				}
+				Expect(c.Get(ctx, client.ObjectKey{
+					Name:      "tigera-pull-secret",
+					Namespace: tenantANamespace,
+				}, &pullSecrets)).NotTo(HaveOccurred())
+				Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
+				pullSecret := pullSecrets.OwnerReferences[0]
+				Expect(pullSecret.Kind).To(Equal("Tenant"))
 			})
 		})
 	})

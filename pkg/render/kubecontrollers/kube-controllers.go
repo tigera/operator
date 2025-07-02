@@ -61,6 +61,7 @@ const (
 	EsKubeControllerMetrics                         = "es-calico-kube-controllers-metrics"
 	EsKubeControllerNetworkPolicyName               = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
 	MultiTenantManagedClustersAccessRoleBindingName = "es-calico-kube-controllers-managed-cluster-access"
+	ManagedClustersWatchRoleBindingName             = "es-calico-kube-controllers-managed-cluster-watch"
 
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
@@ -184,14 +185,11 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Resources: []string{"elasticsearches"},
 				Verbs:     []string{"watch", "get", "list"},
 			},
-			// We need to allow to watch/get/list ManagedClusters resource in order to watch newly added managed clusters
-			// and configure them. Zero and single tenant bind this cluster role for service account
-			// calico-system/calico-kube-controllers for es-kube-controllers. A Multi-tenant setup will bind these rules
-			// to the same service account, but in the tenant namespace.
+			// Grant update permissions to allow updating the version information in ManagedCluster resources.
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
-				Verbs:     []string{"watch", "list", "get"},
+				Verbs:     []string{"update"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"rbac.authorization.k8s.io"},
@@ -207,11 +205,13 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	if !cfg.Tenant.MultiTenant() {
 		enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
 		if cfg.ManagementCluster != nil {
-			enabledControllers = append(enabledControllers, "managedcluster")
+			// The clusterinfo controller updates the managed cluster's version information
+			// in the ManagedCluster resource in an MCM setup.
+			enabledControllers = append(enabledControllers, "managedcluster", "clusterinfo")
 		}
 	} else if !cfg.Tenant.ManagedClusterIsCalico() {
 		// Calico OSS Managed clusters do not need the license controller.
-		enabledControllers = append(enabledControllers, "managedclusterlicensing")
+		enabledControllers = append(enabledControllers, "managedclusterlicensing", "clusterinfo")
 	}
 
 	return &kubeControllersComponent{
@@ -290,6 +290,8 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		c.controllersClusterRole(),
 		c.controllersClusterRoleBinding(),
 	)
+	objectsToCreate = append(objectsToCreate, c.managedClusterRoleBindings()...)
+
 	if len(c.enabledControllers) > 0 {
 		// There's something to run, so create the deployment.
 		objectsToCreate = append(objectsToCreate, c.controllersDeployment())
@@ -478,6 +480,12 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "create", "update", "list", "watch"},
+			},
+			// Grant permissions to access ClusterInformation resources in managed clusters.
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
 		)
 	}
@@ -714,6 +722,21 @@ func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.Clust
 		},
 		Subjects: subjects,
 	}
+}
+
+func (c *kubeControllersComponent) managedClusterRoleBindings() []client.Object {
+	if c.cfg.ManagementCluster != nil {
+		if c.cfg.Tenant.MultiTenant() {
+			return []client.Object{
+				rcomp.RoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, c.cfg.Namespace),
+			}
+		} else {
+			return []client.Object{
+				rcomp.ClusterRoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, []string{c.cfg.Namespace}),
+			}
+		}
+	}
+	return []client.Object{}
 }
 
 // prometheusService creates a Service which exposes an endpoint on kube-controllers for

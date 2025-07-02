@@ -97,36 +97,39 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				licenseAPIReady: &utils.ReadyFlag{},
 			}
 
-			Expect(c.Create(ctx, &crdv1.IPPool{ObjectMeta: metav1.ObjectMeta{Name: "ippool-1"}, Spec: crdv1.IPPoolSpec{
-				CIDR:             "1.2.3.0/24",
-				VXLANMode:        crdv1.VXLANModeAlways,
-				IPIPMode:         crdv1.IPIPModeNever,
-				NATOutgoing:      true,
-				Disabled:         false,
-				DisableBGPExport: true,
-				AWSSubnetID:      "aws-subnet-1",
-			},
+			Expect(c.Create(ctx, &crdv1.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Name: "ippool-1"}, Spec: crdv1.IPPoolSpec{
+					CIDR:             "1.2.3.0/24",
+					VXLANMode:        crdv1.VXLANModeAlways,
+					IPIPMode:         crdv1.IPIPModeNever,
+					NATOutgoing:      true,
+					Disabled:         false,
+					DisableBGPExport: true,
+					AWSSubnetID:      "aws-subnet-1",
+				},
 			})).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, &crdv1.IPPool{ObjectMeta: metav1.ObjectMeta{Name: "ippool-2"}, Spec: crdv1.IPPoolSpec{
-				CIDR:             "1.2.4.0/24",
-				VXLANMode:        crdv1.VXLANModeAlways,
-				IPIPMode:         crdv1.IPIPModeNever,
-				NATOutgoing:      true,
-				Disabled:         false,
-				DisableBGPExport: true,
-				AWSSubnetID:      "aws-subnet-2",
-			},
+			Expect(c.Create(ctx, &crdv1.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Name: "ippool-2"}, Spec: crdv1.IPPoolSpec{
+					CIDR:             "1.2.4.0/24",
+					VXLANMode:        crdv1.VXLANModeAlways,
+					IPIPMode:         crdv1.IPIPModeNever,
+					NATOutgoing:      true,
+					Disabled:         false,
+					DisableBGPExport: true,
+					AWSSubnetID:      "aws-subnet-2",
+				},
 			})).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, &crdv1.IPPool{ObjectMeta: metav1.ObjectMeta{Name: "ippool-4"}, Spec: crdv1.IPPoolSpec{
-				CIDR:             "1.2.5.0/24",
-				VXLANMode:        crdv1.VXLANModeAlways,
-				IPIPMode:         crdv1.IPIPModeNever,
-				NATOutgoing:      true,
-				Disabled:         false,
-				DisableBGPExport: true,
-			},
+			Expect(c.Create(ctx, &crdv1.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Name: "ippool-4"}, Spec: crdv1.IPPoolSpec{
+					CIDR:             "1.2.5.0/24",
+					VXLANMode:        crdv1.VXLANModeAlways,
+					IPIPMode:         crdv1.IPIPModeNever,
+					NATOutgoing:      true,
+					Disabled:         false,
+					DisableBGPExport: true,
+				},
 			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &crdv1.FelixConfiguration{
@@ -136,14 +139,16 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 			var routeTableIndex uint32 = 1
-			Expect(c.Create(ctx, &crdv1.ExternalNetwork{ObjectMeta: metav1.ObjectMeta{Name: "one"}, Spec: crdv1.ExternalNetworkSpec{
-				RouteTableIndex: &routeTableIndex,
-			},
+			Expect(c.Create(ctx, &crdv1.ExternalNetwork{
+				ObjectMeta: metav1.ObjectMeta{Name: "one"}, Spec: crdv1.ExternalNetworkSpec{
+					RouteTableIndex: &routeTableIndex,
+				},
 			})).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, &crdv1.ExternalNetwork{ObjectMeta: metav1.ObjectMeta{Name: "two"}, Spec: crdv1.ExternalNetworkSpec{
-				RouteTableIndex: &routeTableIndex,
-			},
+			Expect(c.Create(ctx, &crdv1.ExternalNetwork{
+				ObjectMeta: metav1.ObjectMeta{Name: "two"}, Spec: crdv1.ExternalNetworkSpec{
+					RouteTableIndex: &routeTableIndex,
+				},
 			})).NotTo(HaveOccurred())
 			// Mark that the watch for license key was successful.
 			r.licenseAPIReady.MarkAsReady()
@@ -157,7 +162,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			mockStatus.On("AddCronJobs", mock.Anything)
 			mockStatus.On("OnCRNotFound").Return()
 			mockStatus.On("ClearDegraded")
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("ReadyToMonitor")
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
@@ -396,7 +400,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				Expect(initContainer.Env).To(ContainElement(elem))
 				Expect(initContainer_blue.Env).To(ContainElement(elem))
 			}
-
 		})
 
 		It("should use a single scc when EGW is created in openshift", func() {
@@ -408,7 +411,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			mockStatus.On("AddCronJobs", mock.Anything)
 			mockStatus.On("OnCRNotFound").Return()
 			mockStatus.On("ClearDegraded")
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("ReadyToMonitor")
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
@@ -479,8 +481,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 		})
 
 		It("Should throw an error when ippool is not present", func() {
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "ippools.projectcalico.org \"ippool-3\" not found", mock.Anything, mock.Anything).Return()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "ippools.crd.projectcalico.org \"ippool-3\" not found", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			labels := map[string]string{"egress-code": "red"}
@@ -504,7 +505,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 		})
 
 		It("Should throw an error when CIDR does not match any IPPool", func() {
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "IPPool matching CIDR = 2.2.3.0/24 not present", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
@@ -529,7 +529,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 		})
 
 		It("Should throw an error when ippool name and CIRD do not match", func() {
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "IPPool CIDR does not match with name", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
@@ -551,11 +550,9 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
-
 		})
 
 		It("Should throw an error when elastic IPs are specified and native IP disabled", func() {
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "NativeIP must be enabled when elastic IPs are used", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
@@ -578,11 +575,9 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
-
 		})
 
 		It("Should throw an error when failure detection is specified without ICMP and HTTP probes", func() {
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "Either ICMP or HTTP probe must be configured", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
@@ -605,11 +600,9 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
-
 		})
 
 		It("Should throw an error when native IP is enabled and IPPool CIDR is not backed by aws subnet ID", func() {
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "AWS subnet ID must be set when NativeIP is enabled", mock.Anything, mock.Anything)
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
@@ -636,7 +629,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 		})
 
 		It("Should throw an error when native IP is enabled and IPPool name is not backed by aws subnet ID", func() {
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "AWS subnet ID must be set when NativeIP is enabled", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
@@ -663,7 +655,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 		})
 
 		It("Should throw an error when ICMP timeout is less than ICMP interval", func() {
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "ICMP probe timeout must be greater than interval", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
@@ -697,7 +688,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 		})
 
 		It("Should throw an error when HTTP timeout is less than HTTP interval", func() {
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "HTTP probe timeout must be greater than interval", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
@@ -729,12 +719,10 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
-
 		})
 
 		It("Should throw an error when externalNetworks are not present", func() {
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "externalnetworks.projectcalico.org \"three\" not found", mock.Anything, mock.Anything).Return()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "externalnetworks.crd.projectcalico.org \"three\" not found", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			labels := map[string]string{"egress-code": "red"}
@@ -757,7 +745,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
-
 		})
 
 		It("should wait for correct calico version before reconciling EGW", func() {
@@ -768,7 +755,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			mockStatus.On("AddCronJobs", mock.Anything)
 			mockStatus.On("OnCRNotFound").Return()
 			mockStatus.On("ClearDegraded")
-			mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
 			mockStatus.On("ReadyToMonitor")
 			installation.Status.CalicoVersion = "3.15"
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())

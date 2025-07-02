@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import (
 	"time"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -109,22 +108,6 @@ func SecretsAnnotationHash(secrets ...*corev1.Secret) string {
 	}
 
 	return AnnotationHash(annoteArr)
-}
-
-// APIServerNamespace returns the namespace to use for the API server component.
-func APIServerNamespace(v operatorv1.ProductVariant) string {
-	if v == operatorv1.Calico {
-		return "calico-apiserver"
-	}
-	return "tigera-system"
-}
-
-// APIServerDeploymentName returns the deployment to use for the API server component.
-func APIServerDeploymentName(v operatorv1.ProductVariant) string {
-	if v == operatorv1.Calico {
-		return "calico-apiserver"
-	}
-	return "tigera-apiserver"
 }
 
 // GetResourceRequirements retrieves the component ResourcesRequirements from the installation. If it doesn't exist, it

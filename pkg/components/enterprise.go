@@ -69,12 +69,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = Component{
-		Version:  "8.17.1",
+		Version:  "8.18.1",
 		Registry: "",
 	}
 
 	ComponentEckKibana = Component{
-		Version:  "8.17.1",
+		Version:  "8.18.1",
 		Registry: "",
 	}
 
@@ -222,7 +222,7 @@ var (
 	}
 
 	ComponentCoreOSPrometheus = Component{
-		Version:  "v2.54.1",
+		Version:  "v3.4.1",
 		Registry: "",
 	}
 

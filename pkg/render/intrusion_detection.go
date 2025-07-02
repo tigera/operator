@@ -37,7 +37,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -57,6 +56,7 @@ const (
 	IntrusionDetectionControllerPolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + IntrusionDetectionControllerName
 	IntrusionDetectionInstallerPolicyName                  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
 	MultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-intrusion-detection-managed-cluster-access"
+	IntrusionDetectionManagedClustersWatchRoleBindingName  = "tigera-intrusion-detection-managed-cluster-watch"
 
 	ADAPIObjectName                 = "anomaly-detection-api"
 	IntrusionDetectionTLSSecretName = "intrusion-detection-tls"
@@ -159,8 +159,6 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		objs = append(objs, c.globalAlertTemplates()...)
 	}
 
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.Namespace, c.cfg.PullSecrets...)...)...)
-
 	objs = append(objs,
 		c.intrusionDetectionControllerAllowTigeraPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
@@ -172,6 +170,9 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		c.intrusionDetectionDeployment(),
 	)
 
+	if !c.cfg.ManagedCluster {
+		objs = append(objs, c.managedClustersWatchRoleBinding())
+	}
 	if c.cfg.Tenant.MultiTenant() {
 		objs = append(objs, c.multiTenantManagedClustersAccess()...)
 	}
@@ -332,11 +333,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 	if !c.cfg.ManagedCluster {
 		managementRule := []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			{
 				APIGroups: []string{"authentication.k8s.io"},
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
@@ -420,6 +416,15 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRoleBinding() *rb
 	return rcomponents.ClusterRoleBinding(IntrusionDetectionName, IntrusionDetectionName, IntrusionDetectionName, c.cfg.BindNamespaces)
 }
 
+func (c *intrusionDetectionComponent) managedClustersWatchRoleBinding() client.Object {
+	if c.cfg.Tenant.MultiTenant() {
+		return rcomponents.RoleBinding(IntrusionDetectionManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, IntrusionDetectionName, c.cfg.Namespace)
+	} else {
+		return rcomponents.ClusterRoleBinding(IntrusionDetectionManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, IntrusionDetectionName, []string{c.cfg.Namespace})
+	}
+
+}
+
 func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 	// For managed clusters, we must create a role binding to allow Linseed to manage access token secrets
 	// in our namespace.
@@ -438,8 +443,8 @@ func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleB
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      linseed,
-				Namespace: ElasticsearchNamespace,
+				Name:      GuardianServiceAccountName,
+				Namespace: GuardianNamespace,
 			},
 		},
 	}
@@ -628,7 +633,7 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 	envVars := []corev1.EnvVar{
 		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace),
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace, c.cfg.ManagedCluster, false),
 		},
 		{
 			Name:  "LINSEED_CA",
@@ -676,7 +681,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant)),
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, false),
 		},
 		{
 			Name:  "LINSEED_CA",
@@ -1079,7 +1084,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchAllowTigera
 
 // adComponentsToDelete returns a list of objects to delete. Anomaly detection used to be installed here,
 // but has since been removed. This function is kept around to clean up any old objects that may be left.
-func (c intrusionDetectionComponent) adComponentsToDelete() []client.Object {
+func (c *intrusionDetectionComponent) adComponentsToDelete() []client.Object {
 	objs := []client.Object{
 		&corev1.ServiceAccount{
 			TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -1277,57 +1282,4 @@ func (c *intrusionDetectionComponent) intrusionDetectionPSPClusterRoleBinding() 
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-psp"},
 	}
-}
-
-func IntrusionDetectionNamespaceComponent(cfg *IntrusionDetectionNamespaceConfiguration) Component {
-	return &intrusionDetectionNamespaceComponent{
-		cfg: cfg,
-	}
-}
-
-type intrusionDetectionNamespaceComponent struct {
-	cfg *IntrusionDetectionNamespaceConfiguration
-}
-
-func (c *intrusionDetectionNamespaceComponent) Ready() bool {
-	return true
-}
-
-type IntrusionDetectionNamespaceConfiguration struct {
-	Tenant                    *operatorv1.Tenant
-	SyslogForwardingIsEnabled bool
-	Namespace                 string
-	KubernetesProvider        operatorv1.Provider
-	HasNoLicense              bool
-	Azure                     *operatorv1.Azure
-}
-
-func (c *intrusionDetectionNamespaceComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	return nil
-}
-
-func (c *intrusionDetectionNamespaceComponent) SupportedOSType() rmeta.OSType {
-	return rmeta.OSTypeLinux
-}
-
-func (c *intrusionDetectionNamespaceComponent) Objects() ([]client.Object, []client.Object) {
-	// Configure pod security standard. If syslog forwarding is enabled, we
-	// need hostpath volumes which require a privileged PSS.
-	pss := PSSRestricted
-	if c.cfg.SyslogForwardingIsEnabled {
-		pss = PSSPrivileged
-	}
-
-	objs := []client.Object{}
-	if !c.cfg.Tenant.MultiTenant() {
-		// In multi-tenant environments, the namespace is pre-created. So, only create it if we're not in a multi-tenant environment.
-		objs = append(objs, CreateNamespace(c.cfg.Namespace, c.cfg.KubernetesProvider, PodSecurityStandard(pss), c.cfg.Azure))
-		objs = append(objs, CreateOperatorSecretsRoleBinding(c.cfg.Namespace))
-	}
-
-	if c.cfg.HasNoLicense {
-		return nil, objs
-	}
-
-	return objs, nil
 }

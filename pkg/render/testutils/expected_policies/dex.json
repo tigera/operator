@@ -88,8 +88,8 @@
         },
         "protocol": "TCP",
         "source": {
-          "selector": "k8s-app == 'tigera-apiserver'",
-          "namespaceSelector": "projectcalico.org/name == 'tigera-system'"
+          "selector": "k8s-app == 'calico-apiserver'",
+          "namespaceSelector": "projectcalico.org/name == 'calico-system'"
         }
       }
     ],

@@ -639,9 +639,6 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Container = &envoyapi.KubernetesContainerSpec{}
 		}
 		envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Container.Image = &pr.envoyProxyImage
-
-		// The WAF HTTP filter is not supported when the envoy proxy is deployed as a DaemonSet
-		// as there is no support for init containers in a DaemonSet.
 	} else {
 		// Deployment as a Deployment.
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment == nil {
@@ -655,71 +652,6 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container = &envoyapi.KubernetesContainerSpec{}
 		}
 		envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Image = &pr.envoyProxyImage
-
-		if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-			// Update the envoy proxy deployment to include the WAF HTTP filter
-
-			// Update Pod volumes
-			if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes == nil {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = []corev1.Volume{
-					{
-						VolumeSource: corev1.VolumeSource{
-							HostPath: &corev1.HostPathVolumeSource{
-								Path: "/var/log/calico",
-								Type: ptr.ToPtr[corev1.HostPathType](corev1.HostPathDirectoryOrCreate),
-							},
-						},
-						Name: "var-log-calico",
-					},
-					{
-						VolumeSource: corev1.VolumeSource{
-							EmptyDir: &corev1.EmptyDirVolumeSource{},
-						},
-						Name: "waf-http-filter",
-					},
-				}
-			}
-
-			// Add the init container to the deployment
-			if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers == nil {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = []corev1.Container{
-					corev1.Container{
-						Name:  "waf-http-filter",
-						Image: pr.wafHTTPFilterImage,
-						Args: []string{
-							"-logFileDirectory",
-							"/var/log/calico/waf",
-							"-logFileName",
-							"waf.log",
-							"-socketPath",
-							"/var/run/waf-http-filter/extproc.sock",
-						},
-						RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "waf-http-filter",
-								MountPath: "/var/run/waf-http-filter",
-							},
-							{
-								Name:      "var-log-calico",
-								MountPath: "/var/log/calico",
-							},
-						},
-						SecurityContext: securitycontext.NewRootContext(true),
-					},
-				}
-			}
-
-			if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts == nil {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = []corev1.VolumeMount{
-					{
-						Name:      "waf-http-filter",
-						MountPath: "/var/run/waf-http-filter",
-					},
-				}
-			}
-
-		}
 	}
 
 	// Apply overrides.
@@ -729,6 +661,100 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 		rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classSpec.GatewayDeployment)
 	}
 	applyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
+
+	// Setup WAF HTTP Filter on Enterprise.
+	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// The WAF HTTP filter is not supported when the envoy proxy is deployed as a DaemonSet
+		// as there is no support for init containers in a DaemonSet.
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {
+			// Add or update the Init Container to the deployment
+			wafHTTPFilter := corev1.Container{
+				Name:  "waf-http-filter",
+				Image: pr.wafHTTPFilterImage,
+				Args: []string{
+					"-logFileDirectory",
+					"/var/log/calico/waf",
+					"-logFileName",
+					"waf.log",
+					"-socketPath",
+					"/var/run/waf-http-filter/extproc.sock",
+				},
+				RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "waf-http-filter",
+						MountPath: "/var/run/waf-http-filter",
+					},
+					{
+						Name:      "var-log-calico",
+						MountPath: "/var/log/calico",
+					},
+				},
+				SecurityContext: securitycontext.NewRootContext(true),
+			}
+			hasWAFHTTPFilter := false
+			for i, initContainer := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers {
+				if initContainer.Name == wafHTTPFilter.Name {
+					hasWAFHTTPFilter = true
+					// Handle update
+					if initContainer.Image != wafHTTPFilter.Image {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i] = wafHTTPFilter
+					}
+				}
+			}
+			if !hasWAFHTTPFilter {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, wafHTTPFilter)
+			}
+
+			// Add or update Container volume mount
+			socketVolumeMount := corev1.VolumeMount{
+				Name:      "waf-http-filter",
+				MountPath: "/var/run/waf-http-filter",
+			}
+			hasSocketVolumeMount := false
+			for _, volumeMount := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts {
+				if volumeMount.Name == socketVolumeMount.Name {
+					hasSocketVolumeMount = true
+				}
+			}
+			if !hasSocketVolumeMount {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, socketVolumeMount)
+			}
+
+			// Add or update Pod volumes
+			logsVolume := corev1.Volume{
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/var/log/calico",
+						Type: ptr.ToPtr(corev1.HostPathDirectoryOrCreate),
+					},
+				},
+				Name: "var-log-calico",
+			}
+			socketVolume := corev1.Volume{
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+				Name: "waf-http-filter",
+			}
+			hasLogsVolume := false
+			hasSocketVolume := false
+			for _, volume := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes {
+				if volume.Name == logsVolume.Name {
+					hasLogsVolume = true
+				}
+				if volume.Name == socketVolume.Name {
+					hasSocketVolume = true
+				}
+			}
+			if !hasLogsVolume {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, logsVolume)
+			}
+			if !hasSocketVolume {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, socketVolume)
+			}
+		}
+	}
 
 	return envoyProxy
 }

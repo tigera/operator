@@ -32,6 +32,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -149,6 +150,10 @@ type APIServerConfiguration struct {
 	MultiTenant                 bool
 	KeyValidatorConfig          authentication.KeyValidatorConfig
 	KubernetesVersion           *common.VersionInfo
+
+	// When certificate management is enabled, we need a separate init container to create a cert, running
+	// with the same permissions as query server.
+	QueryServerTLSKeyPairCertificateManagementOnly certificatemanagement.KeyPairInterface
 }
 
 type apiServerComponent struct {
@@ -1085,16 +1090,20 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		deploymentStrategyType = appsv1.RecreateDeploymentStrategyType
 	}
 
-	var initContainers []corev1.Container
-	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		// Use the same CSR init container name for both OSS and Enterprise.
-		initContainer := c.cfg.TLSKeyPair.InitContainer(rmeta.APIServerNamespace(c.cfg.Installation.Variant))
-		initContainer.Name = fmt.Sprintf("%s-%s", calicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
-		initContainers = append(initContainers, initContainer)
-	}
-
 	annotations := map[string]string{
 		c.cfg.TLSKeyPair.HashAnnotationKey(): c.cfg.TLSKeyPair.HashAnnotationValue(),
+	}
+
+	var initContainers []corev1.Container
+	if c.cfg.TLSKeyPair.UseCertificateManagement() {
+		initContainerApiServer := c.cfg.TLSKeyPair.InitContainer(rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.apiServerContainer().SecurityContext)
+		initContainerApiServer.Name = fmt.Sprintf("%s-%s", calicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
+
+		initContainerQueryServer := c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.InitContainer(rmeta.APIServerNamespace(c.cfg.Installation.Variant), c.queryServerContainer().SecurityContext)
+
+		annotations[c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.HashAnnotationKey()] = c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.HashAnnotationValue()
+
+		initContainers = append(initContainers, initContainerApiServer, initContainerQueryServer)
 	}
 
 	containers := []corev1.Container{
@@ -1345,11 +1354,17 @@ func (c *apiServerComponent) startUpArgs() []string {
 func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	queryServerTargetPort := getContainerPort(c.cfg, TigeraAPIServerQueryServerContainerName).ContainerPort
 
+	var tlsSecret certificatemanagement.KeyPairInterface
+	if c.cfg.QueryServerTLSKeyPairCertificateManagementOnly != nil {
+		tlsSecret = c.cfg.QueryServerTLSKeyPairCertificateManagementOnly
+	} else {
+		tlsSecret = c.cfg.TLSKeyPair
+	}
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", queryServerTargetPort)},
-		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
-		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", ProjectCalicoAPIServerTLSSecretName(c.cfg.Installation.Variant))},
+		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", tlsSecret.GetName())},
+		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", tlsSecret.GetName())},
 	}
 	if c.cfg.TrustedBundle != nil {
 		env = append(env, corev1.EnvVar{Name: "TRUSTED_BUNDLE_PATH", Value: c.cfg.TrustedBundle.MountPath()})
@@ -1376,7 +1391,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	}
 
 	volumeMounts := []corev1.VolumeMount{
-		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+		tlsSecret.VolumeMount(c.SupportedOSType()),
 	}
 	if c.cfg.TrustedBundle != nil {
 		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
@@ -1407,6 +1422,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 	volumes := []corev1.Volume{
 		c.cfg.TLSKeyPair.Volume(),
+	}
+	if c.cfg.QueryServerTLSKeyPairCertificateManagementOnly != nil {
+		volumes = append(volumes, c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.Volume())
 	}
 	hostPathType := corev1.HostPathDirectoryOrCreate
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {

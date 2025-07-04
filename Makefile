@@ -22,6 +22,8 @@ GIT       = echo [DRY RUN] $(GIT_CMD)
 CURL      = echo [DRY RUN] $(CURL_CMD)
 endif
 
+include hack/release-prep.mk
+
 # These values are used for fetching tools to run as part of the build process
 # and shouldn't vary based on the target we're building for
 NATIVE_ARCH := $(shell bash -c 'if [[ "$(shell uname -m)" == "x86_64" ]]; then echo amd64; else uname -m; fi')
@@ -660,7 +662,38 @@ check-milestone: hack/bin/gh var-require-all-VERSION-GITHUB_TOKEN
 	$(eval CLOSED_MILESTONE := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json title --jq '.[0].title' | grep $(VERSION)))
 	$(if $(CLOSED_MILESTONE),,$(error Milestone $(VERSION) is not closed))
 
-release-prep: check-milestone var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
+# Handle some pre-validation of our release variables.
+# This is used to ensure that the variables are set correctly before we start
+# the release process.
+#
+# Most notably: validate that VERSION is set, and that either CALICO_VERSION or CALICO_ENTERPRISE_VERSION is set
+# by the user; next, ensure that GIT_PR_BRANCH_BASE is set to a release branch (or is overridden); finally,
+# ensure that CONFIRM is set, or tell the user they need to set it first.
+release-prep-prereqs:
+ifndef VERSION
+	$(error VERSION is undefined - specify VERSION=vX.Y.Z or set AUTO_VERSION to automatically use the detected version $(AUTO_VERSION_VERSION))
+endif
+ifndef GITHUB_TOKEN
+	$(error GITHUB_TOKEN is undefined - A github token is required to create a pull request and set labels. Please set GITHUB_TOKEN to a valid token with repo permissions.)
+endif
+	$(info Preparing for release of $(VERSION) with the following variables:)
+	$(info )
+	$(info GIT_PR_BRANCH_BASE        = $(GIT_PR_BRANCH_BASE))
+	$(info CALICO_VERSION            = $(CALICO_VERSION) (source: $(origin CALICO_VERSION)))
+	$(info CALICO_ENTERPRISE_VERSION = $(CALICO_ENTERPRISE_VERSION) (source: $(origin CALICO_ENTERPRISE_VERSION))) 
+	$(info )
+	$(if $(filter-out file, $(origin CALICO_VERSION) $(origin CALICO_ENTERPRISE_VERSION)),,$(error Neither CALICO_VERSION nor CALICO_ENTERPRISE_VERSION were set, please set one or the other (or both) to a new version.))
+	$(if $(if $(GIT_PR_BRANCH_OVERRIDE),true,$(findstring release-v,$(GIT_PR_BRANCH_BASE))),,$(error Variable GIT_PR_BRANCH_BASE is not set to the name of a release branch. You should only be running `release-prep` on a release branch! If you're certain you want to use this branch, set GIT_PR_BRANCH_OVERRIDE=true))
+ifndef CONFIRM
+	$(info If this is correct, add CONFIRM=true to the command line to continue)
+	$(info )
+	@exit 1
+else
+	$(info Variable CONFIRM was specified, continuing with release preparation...)
+	$(info )
+endif
+
+release-prep: release-prep-prereqs check-milestone var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-CALICO_ENTERPRISE_VERSION
 	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
 	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
 	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go

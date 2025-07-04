@@ -487,7 +487,7 @@ func (c *fluentdComponent) daemonset() *appsv1.DaemonSet {
 	}
 	var initContainers []corev1.Container
 	if c.cfg.FluentdKeyPair != nil && c.cfg.FluentdKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.FluentdKeyPair.InitContainer(LogCollectorNamespace))
+		initContainers = append(initContainers, c.cfg.FluentdKeyPair.InitContainer(LogCollectorNamespace, c.container().SecurityContext))
 	}
 
 	podTemplate := &corev1.PodTemplateSpec{

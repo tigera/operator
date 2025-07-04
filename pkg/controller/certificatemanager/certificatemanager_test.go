@@ -453,7 +453,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(keyPair.HashAnnotationValue()).To(Equal(""))
 
 			By("verifying the init container")
-			initContainer := keyPair.InitContainer(appNs)
+			initContainer := keyPair.InitContainer(appNs, nil)
 			imageSet, err := imageset.GetImageSet(context.Background(), cli, installation.Variant)
 			Expect(err).NotTo(HaveOccurred())
 			expectedImage, err := components.GetReference(

@@ -363,7 +363,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		var podProxies []*httpproxy.Config
 		for _, pod := range pods.Items {
 			for _, container := range pod.Spec.Containers {
-				if container.Name == render.GuardianDeploymentName {
+				if container.Name == render.GuardianContainerName {
 					var podProxyConfig *httpproxy.Config
 					var httpsProxy, noProxy string
 					for _, env := range container.Env {

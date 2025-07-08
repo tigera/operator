@@ -712,9 +712,12 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				MountPath: "/var/run/waf-http-filter",
 			}
 			hasSocketVolumeMount := false
-			for _, volumeMount := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts {
+			for i, volumeMount := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts {
 				if volumeMount.Name == socketVolumeMount.Name {
 					hasSocketVolumeMount = true
+					if volumeMount.MountPath != socketVolumeMount.MountPath {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = socketVolumeMount
+					}
 				}
 			}
 			if !hasSocketVolumeMount {
@@ -739,12 +742,19 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			}
 			hasLogsVolume := false
 			hasSocketVolume := false
-			for _, volume := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes {
+			for i, volume := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes {
 				if volume.Name == logsVolume.Name {
 					hasLogsVolume = true
+					// Handle update
+					if volume.VolumeSource.HostPath.Path != logsVolume.VolumeSource.HostPath.Path || volume.VolumeSource.HostPath.Type != logsVolume.VolumeSource.HostPath.Type {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = logsVolume
+					}
 				}
 				if volume.Name == socketVolume.Name {
 					hasSocketVolume = true
+					if volume.VolumeSource.EmptyDir != socketVolume.VolumeSource.EmptyDir {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = socketVolume
+					}
 				}
 			}
 			if !hasLogsVolume {

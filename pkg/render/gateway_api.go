@@ -690,6 +690,25 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						MountPath: "/var/log/calico",
 					},
 				},
+				Env: []corev1.EnvVar{
+					// logger gateway name and namespace are set from the k8s downward api pod metadata.
+					{
+						Name: "LOGGER_GATEWAY_NAME",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.name",
+							},
+						},
+					},
+					{
+						Name: "LOGGER_GATEWAY_NAMESPACE",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.namespace",
+							},
+						},
+					},
+				},
 				SecurityContext: securitycontext.NewRootContext(true),
 			}
 			hasWAFHTTPFilter := false

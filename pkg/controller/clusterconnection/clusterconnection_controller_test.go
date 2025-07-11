@@ -761,7 +761,7 @@ func createPodWithProxy(ctx context.Context, c client.Client, config *test.Proxy
 		},
 		Spec: v1.PodSpec{
 			Containers: []v1.Container{{
-				Name: render.GuardianDeploymentName,
+				Name: render.GuardianContainerName,
 				Env:  []v1.EnvVar{},
 			}},
 		},

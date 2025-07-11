@@ -185,12 +185,6 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				Resources: []string{"elasticsearches"},
 				Verbs:     []string{"watch", "get", "list"},
 			},
-			// Grant update permissions to allow updating the version information in ManagedCluster resources.
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"update"},
-			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"rbac.authorization.k8s.io"},
 				Resources: []string{"clusterroles", "clusterrolebindings"},
@@ -205,13 +199,11 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	if !cfg.Tenant.MultiTenant() {
 		enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
 		if cfg.ManagementCluster != nil {
-			// The clusterinfo controller updates the managed cluster's version information
-			// in the ManagedCluster resource in an MCM setup.
-			enabledControllers = append(enabledControllers, "managedcluster", "clusterinfo")
+			enabledControllers = append(enabledControllers, "managedcluster")
 		}
 	} else if !cfg.Tenant.ManagedClusterIsCalico() {
 		// Calico OSS Managed clusters do not need the license controller.
-		enabledControllers = append(enabledControllers, "managedclusterlicensing", "clusterinfo")
+		enabledControllers = append(enabledControllers, "managedclusterlicensing")
 	}
 
 	return &kubeControllersComponent{
@@ -480,12 +472,6 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
-			// Grant permissions to access ClusterInformation resources in managed clusters.
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"clusterinformations"},
-				Verbs:     []string{"get", "list", "watch"},
 			},
 		)
 	}

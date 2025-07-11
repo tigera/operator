@@ -389,7 +389,7 @@ func (c *GuardianComponent) deployment() *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        GuardianDeploymentName,
-					Namespace:   ManagerNamespace,
+					Namespace:   GuardianNamespace,
 					Annotations: c.annotations(),
 				},
 				Spec: corev1.PodSpec{

@@ -539,7 +539,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name:  "ENABLED_CONTROLLERS",
-			Value: "authorization,elasticsearchconfiguration,managedcluster,clusterinfo",
+			Value: "authorization,elasticsearchconfiguration,managedcluster",
 		}))
 
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(1))
@@ -575,22 +575,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				Namespace: common.CalicoNamespace,
 			},
 		}))
-	})
-
-	It("should render clusterInformation policy for es-calico-kube-controllers using TigeraSecureEnterprise and ClusterType is Managed", func() {
-		instance.Variant = operatorv1.TigeraSecureEnterprise
-		cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
-
-		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
-		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(ContainElement(
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"clusterinformations"},
-				Verbs:     []string{"get", "list", "watch"},
-			}))
 	})
 
 	It("should include a ControlPlaneNodeSelector when specified", func() {
@@ -1263,7 +1247,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(envs).To(ContainElements(
 				corev1.EnvVar{
 					Name:  "ENABLED_CONTROLLERS",
-					Value: "managedclusterlicensing,clusterinfo",
+					Value: "managedclusterlicensing",
 				},
 				corev1.EnvVar{
 					Name:  "TENANT_NAMESPACE",
@@ -1310,11 +1294,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 						"system:authenticated",
 						fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, common.CalicoNamespace),
 					},
-				},
-				{
-					APIGroups: []string{"projectcalico.org"},
-					Resources: []string{"managedclusters"},
-					Verbs:     []string{"update"},
 				},
 			}
 			Expect(cr.Rules).To(ContainElements(expectedRules))

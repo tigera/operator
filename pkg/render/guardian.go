@@ -1013,6 +1013,12 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			},
 			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
 		},
+		// Rules needed to fetch the compliance reports
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"globalreporttypes", "globalreports"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}
 
 	// Rules needed by policy recommendation in openshift.

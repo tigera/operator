@@ -173,12 +173,6 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	var complianceObjs []client.Object
 	if c.cfg.Tenant.MultiTenant() {
-		complianceObjs = append(complianceObjs,
-			// We always need a sa and crb, whether a deployment of compliance-server is present or not.
-			// These two are used for rbac checks for managed clusters.
-			c.complianceServerServiceAccount(),
-			c.complianceServerClusterRoleBinding(),
-		)
 		complianceObjs = append(complianceObjs, c.multiTenantManagedClustersAccess()...)
 		// We need to bind compliance components that run inside the managed cluster
 		// to have the correct RBAC for linseed API
@@ -230,11 +224,6 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceGlobalReportNetworkAccess(),
 			c.complianceGlobalReportPolicyAudit(),
 			c.complianceGlobalReportCISBenchmark(),
-
-			// We always need a sa and crb, whether a deployment of compliance-server is present or not.
-			// These two are used for rbac checks for managed clusters.
-			c.complianceServerServiceAccount(),
-			c.complianceServerClusterRoleBinding(),
 		)
 	}
 
@@ -250,6 +239,11 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceServerClusterRole(),
 			c.complianceServerService(),
 			c.complianceServerDeployment(),
+
+			// We need compliance server ServiceAccount and ClusterRoleBinding only for standalone and management clusters.
+			// In managed clusters, the Guardian ServiceAccount handles this RBAC.
+			c.complianceServerServiceAccount(),
+			c.complianceServerClusterRoleBinding(),
 		)
 	} else {
 		// Compliance server is only for Standalone or Management clusters
@@ -257,7 +251,11 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 
 		// This ClusterRole was previously needed for the compliance server to fetch compliance reports
 		// from the managed cluster. Guardian now handles this, so we can delete it.
-		objsToDelete = append(objsToDelete, &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount}})
+		objsToDelete = append(objsToDelete,
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount, Namespace: "tigera-compliance"}},
+		)
 
 		complianceObjs = append(complianceObjs,
 			c.externalLinseedRoleBinding(),

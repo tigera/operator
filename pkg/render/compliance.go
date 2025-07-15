@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -253,8 +254,12 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	} else {
 		// Compliance server is only for Standalone or Management clusters
 		objsToDelete = append(objsToDelete, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerName, Namespace: c.cfg.Namespace}})
+
+		// This ClusterRole was previously needed for the compliance server to fetch compliance reports
+		// from the managed cluster. Guardian now handles this, so we can delete it.
+		objsToDelete = append(objsToDelete, &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount}})
+
 		complianceObjs = append(complianceObjs,
-			c.complianceServerManagedClusterRole(),
 			c.externalLinseedRoleBinding(),
 		)
 	}
@@ -585,6 +590,10 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagementClusterConnection != nil, false),
+		},
 	}
 	if c.cfg.Tenant != nil {
 		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
@@ -795,25 +804,6 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 	}
 
 	return clusterRole
-}
-
-func (c *complianceComponent) complianceServerManagedClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"globalreporttypes", "globalreports"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
-				APIGroups: []string{"authorization.k8s.io"},
-				Resources: []string{"subjectaccessreviews"},
-				Verbs:     []string{"create"},
-			},
-		},
-	}
 }
 
 func (c *complianceComponent) complianceServerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
@@ -1047,6 +1037,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagementClusterConnection != nil, false),
+		},
 	}
 	if c.cfg.Tenant != nil {
 		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
@@ -1213,6 +1207,10 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagementClusterConnection != nil, false),
+		},
 	}
 
 	if c.cfg.Tenant != nil {

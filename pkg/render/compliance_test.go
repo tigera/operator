@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -380,12 +380,12 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
-				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
-				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 				{"allow-tigera.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
+				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -526,12 +526,12 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
-				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
-				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 				{"allow-tigera.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
+				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 			}
 
 			Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -634,9 +634,6 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
-				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
-				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
-				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"tigera-linseed", ns, rbac, "v1", "RoleBinding"},
 			}
 
@@ -650,20 +647,6 @@ var _ = Describe("compliance rendering tests", func() {
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "network-access", "", "projectcalico.org", "v3", "GlobalReportType"), "network-access")
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"), "policy-audit")
 			rtest.ExpectGlobalReportType(rtest.GetResource(resources, "cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"), "cis-benchmark")
-
-			clusterRole := rtest.GetResource(resources, "tigera-compliance-server", "", rbac, "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(clusterRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
-				{
-					APIGroups: []string{"projectcalico.org"},
-					Resources: []string{"globalreporttypes", "globalreports"},
-					Verbs:     []string{"get", "list", "watch"},
-				},
-				{
-					APIGroups: []string{"authorization.k8s.io"},
-					Resources: []string{"subjectaccessreviews"},
-					Verbs:     []string{"create"},
-				},
-			}))
 		})
 	})
 
@@ -803,12 +786,12 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
-				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
-				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 				{"allow-tigera.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
+				{"tigera-compliance-server", ns, "", "v1", "ServiceAccount"},
+				{"tigera-compliance-server", "", rbac, "v1", "ClusterRoleBinding"},
 			}
 
 			for i, expectedRes := range expectedResources {

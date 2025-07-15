@@ -35,6 +35,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -543,6 +544,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
+				ReloadStrategy: ptr.ToPtr(monitoringv1.ProcessSignalReloadStrategyType),
 				PodMetadata: &monitoringv1.EmbeddedObjectMetadata{
 					Labels: map[string]string{
 						"k8s-app": TigeraPrometheusObjectName,

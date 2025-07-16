@@ -793,6 +793,25 @@ var _ = Describe("Gateway API rendering tests", func() {
 			Name:      "waf-http-filter",
 			MountPath: "/var/run/waf-http-filter",
 		}))
+
+		// logger gateway name and namespace are set from the k8s downward api pod metadata.
+		Expect(envoyDeployment.Container.Env).To(ContainElement(corev1.EnvVar{
+			Name: "LOGGER_GATEWAY_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		}))
+		Expect(envoyDeployment.Container.Env).To(ContainElement(corev1.EnvVar{
+			Name: "LOGGER_GATEWAY_NAMESPACE",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.namespace",
+				},
+			},
+		}))
+
 	})
 
 	It("should deploy waf-http-filter for Enterprise when using a custom proxy", func() {

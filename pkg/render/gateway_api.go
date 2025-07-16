@@ -690,6 +690,25 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						MountPath: "/var/log/calico",
 					},
 				},
+				Env: []corev1.EnvVar{
+					// logger gateway name and namespace are set from the k8s downward api pod metadata.
+					{
+						Name: "LOGGER_GATEWAY_NAME",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.name",
+							},
+						},
+					},
+					{
+						Name: "LOGGER_GATEWAY_NAMESPACE",
+						ValueFrom: &corev1.EnvVarSource{
+							FieldRef: &corev1.ObjectFieldSelector{
+								FieldPath: "metadata.namespace",
+							},
+						},
+					},
+				},
 				SecurityContext: securitycontext.NewRootContext(true),
 			}
 			hasWAFHTTPFilter := false
@@ -722,6 +741,46 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			}
 			if !hasSocketVolumeMount {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, socketVolumeMount)
+			}
+
+			// Add or update Container environment variables
+			gatewayNameEnvVar := corev1.EnvVar{
+				Name: "LOGGER_GATEWAY_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.name",
+					},
+				},
+			}
+			gatewayNamespaceEnvVar := corev1.EnvVar{
+				Name: "LOGGER_GATEWAY_NAMESPACE",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "metadata.namespace",
+					},
+				},
+			}
+			hasGatewayNameEnv := false
+			hasGatewayNamespaceEnv := false
+			for i, envVar := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env {
+				if envVar.Name == gatewayNameEnvVar.Name {
+					hasGatewayNameEnv = true
+					if envVar.ValueFrom.FieldRef.FieldPath != gatewayNameEnvVar.ValueFrom.FieldRef.FieldPath {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env[i] = gatewayNameEnvVar
+					}
+				}
+				if envVar.Name == gatewayNamespaceEnvVar.Name {
+					hasGatewayNamespaceEnv = true
+					if envVar.ValueFrom.FieldRef.FieldPath != gatewayNamespaceEnvVar.ValueFrom.FieldRef.FieldPath {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env[i] = gatewayNamespaceEnvVar
+					}
+				}
+			}
+			if !hasGatewayNameEnv {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env, gatewayNameEnvVar)
+			}
+			if !hasGatewayNamespaceEnv {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env, gatewayNamespaceEnvVar)
 			}
 
 			// Add or update Pod volumes

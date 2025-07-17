@@ -75,12 +75,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	err = c.WatchObject(&operatorv1.GatewayAPI{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		log.V(5).Info("Failed to create GatewayAPI watch", "err", err)
-		return fmt.Errorf("gatewayapi-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("gatewayapi-controller failed to watch primary resource: %w", err)
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
 		log.V(5).Info("Failed to create network watch", "err", err)
-		return fmt.Errorf("gatewayapi-controller failed to watch Tigera network resource: %v", err)
+		return fmt.Errorf("gatewayapi-controller failed to watch Tigera network resource: %w", err)
+	}
+
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("gatewayapi-controller failed to create periodic reconcile watch: %w", err)
 	}
 
 	watchedEnvoyProxies := make(map[operatorv1.NamespacedName]struct{})
@@ -94,7 +100,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 				},
 			}, &handler.EnqueueRequestForObject{}); err != nil {
 				log.V(5).Info("Failed to create EnvoyProxy watch", "err", err)
-				return fmt.Errorf("gatewayapi-controller failed to watch EnvoyProxy resource: %v", err)
+				return fmt.Errorf("gatewayapi-controller failed to watch EnvoyProxy resource: %w", err)
 			}
 			watchedEnvoyProxies[namespacedName] = struct{}{}
 		}
@@ -112,7 +118,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 				},
 			}, &handler.EnqueueRequestForObject{}); err != nil {
 				log.V(5).Info("Failed to create EnvoyGateway watch", "err", err)
-				return fmt.Errorf("gatewayapi-controller failed to watch EnvoyGateway resource: %v", err)
+				return fmt.Errorf("gatewayapi-controller failed to watch EnvoyGateway resource: %w", err)
 			}
 			watchedEnvoyGateways[namespacedName] = struct{}{}
 		}

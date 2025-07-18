@@ -84,6 +84,26 @@ const (
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 )
 
+var (
+	// logger gateway name and namespace are set from the k8s downward api pod metadata.
+	gatewayNameEnvVar = corev1.EnvVar{
+		Name: "LOGGER_GATEWAY_NAME",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.name",
+			},
+		},
+	}
+	gatewayNamespaceEnvVar = corev1.EnvVar{
+		Name: "LOGGER_GATEWAY_NAMESPACE",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.namespace",
+			},
+		},
+	}
+)
+
 func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 	var lock sync.Mutex
 	var resources = &gatewayAPIResources{}
@@ -691,23 +711,8 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 					},
 				},
 				Env: []corev1.EnvVar{
-					// logger gateway name and namespace are set from the k8s downward api pod metadata.
-					{
-						Name: "LOGGER_GATEWAY_NAME",
-						ValueFrom: &corev1.EnvVarSource{
-							FieldRef: &corev1.ObjectFieldSelector{
-								FieldPath: "metadata.name",
-							},
-						},
-					},
-					{
-						Name: "LOGGER_GATEWAY_NAMESPACE",
-						ValueFrom: &corev1.EnvVarSource{
-							FieldRef: &corev1.ObjectFieldSelector{
-								FieldPath: "metadata.namespace",
-							},
-						},
-					},
+					gatewayNameEnvVar,
+					gatewayNamespaceEnvVar,
 				},
 				SecurityContext: securitycontext.NewRootContext(true),
 			}
@@ -743,23 +748,6 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, socketVolumeMount)
 			}
 
-			// Add or update Container environment variables
-			gatewayNameEnvVar := corev1.EnvVar{
-				Name: "LOGGER_GATEWAY_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.name",
-					},
-				},
-			}
-			gatewayNamespaceEnvVar := corev1.EnvVar{
-				Name: "LOGGER_GATEWAY_NAMESPACE",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.namespace",
-					},
-				},
-			}
 			hasGatewayNameEnv := false
 			hasGatewayNamespaceEnv := false
 			for i, envVar := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env {

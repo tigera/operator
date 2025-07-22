@@ -161,7 +161,6 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			errMsgs = append(errMsgs, err.Error())
 		}
 		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
-
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -260,11 +259,11 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalEnterpriseObjects = append(globalEnterpriseObjects,
 			c.tigeraUserClusterRole(),
 			c.tigeraNetworkAdminClusterRole(),
-			c.managedClusterWatchClusterRole(),
 		)
 	}
 
 	if c.cfg.ManagementCluster != nil {
+		globalEnterpriseObjects = append(globalEnterpriseObjects, c.managedClusterWatchClusterRole())
 		if c.cfg.MultiTenant {
 			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
 			// per-tenant guardian certificates when creating ManagedClusters.
@@ -281,6 +280,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		objsToDelete = append(objsToDelete, c.multiTenantSecretsRBAC()...)
 		objsToDelete = append(objsToDelete, c.secretsRBAC()...)
 		objsToDelete = append(objsToDelete, c.multiTenantManagedClusterAccessClusterRoles()...)
+		objsToDelete = append(objsToDelete, c.managedClusterWatchClusterRole())
 	}
 
 	// Namespaced enterprise-only objects.
@@ -2012,7 +2012,6 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 // calicoPolicyPassthruClusterRole creates a clusterrole that is used to control the RBAC
 // mechanism for Calico tiered policy.
 func (c *apiServerComponent) calicoPolicyPassthruClusterRole() *rbacv1.ClusterRole {
-
 	resources := []string{"networkpolicies", "globalnetworkpolicies"}
 
 	// Append additional resources for enterprise Variant.
@@ -2325,7 +2324,7 @@ func (c *apiServerComponent) deprecatedResources() []client.Object {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"},
 		},
 
-		//authClusterRoleBinding
+		// authClusterRoleBinding
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"},
@@ -2344,7 +2343,7 @@ func (c *apiServerComponent) deprecatedResources() []client.Object {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"},
 		},
 
-		//webhookReaderClusterRoleBinding
+		// webhookReaderClusterRoleBinding
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"},

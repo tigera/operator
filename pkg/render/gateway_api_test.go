@@ -786,30 +786,14 @@ var _ = Describe("Gateway API rendering tests", func() {
 				MountPath: "/var/log/calico",
 			},
 		}))
+		// logger gateway name and namespace are set from the k8s downward api pod metadata.
+		Expect(envoyDeployment.InitContainers[0].Env).To(ContainElements(GatewayNameEnvVar, GatewayNamespaceEnvVar))
 
 		Expect(envoyDeployment.Container).ToNot(BeNil())
 		Expect(envoyDeployment.Container.VolumeMounts).To(HaveLen(1))
 		Expect(envoyDeployment.Container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
 			Name:      "waf-http-filter",
 			MountPath: "/var/run/waf-http-filter",
-		}))
-
-		// logger gateway name and namespace are set from the k8s downward api pod metadata.
-		Expect(envoyDeployment.Container.Env).To(ContainElement(corev1.EnvVar{
-			Name: "LOGGER_GATEWAY_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
-				},
-			},
-		}))
-		Expect(envoyDeployment.Container.Env).To(ContainElement(corev1.EnvVar{
-			Name: "LOGGER_GATEWAY_NAMESPACE",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.namespace",
-				},
-			},
 		}))
 
 	})

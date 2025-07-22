@@ -86,7 +86,7 @@ const (
 
 var (
 	// logger gateway name and namespace are set from the k8s downward api pod metadata.
-	gatewayNameEnvVar = corev1.EnvVar{
+	GatewayNameEnvVar = corev1.EnvVar{
 		Name: "LOGGER_GATEWAY_NAME",
 		ValueFrom: &corev1.EnvVarSource{
 			FieldRef: &corev1.ObjectFieldSelector{
@@ -94,7 +94,7 @@ var (
 			},
 		},
 	}
-	gatewayNamespaceEnvVar = corev1.EnvVar{
+	GatewayNamespaceEnvVar = corev1.EnvVar{
 		Name: "LOGGER_GATEWAY_NAMESPACE",
 		ValueFrom: &corev1.EnvVarSource{
 			FieldRef: &corev1.ObjectFieldSelector{
@@ -711,8 +711,8 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 					},
 				},
 				Env: []corev1.EnvVar{
-					gatewayNameEnvVar,
-					gatewayNamespaceEnvVar,
+					GatewayNameEnvVar,
+					GatewayNamespaceEnvVar,
 				},
 				SecurityContext: securitycontext.NewRootContext(true),
 			}
@@ -746,29 +746,6 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			}
 			if !hasSocketVolumeMount {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, socketVolumeMount)
-			}
-
-			hasGatewayNameEnv := false
-			hasGatewayNamespaceEnv := false
-			for i, envVar := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env {
-				if envVar.Name == gatewayNameEnvVar.Name {
-					hasGatewayNameEnv = true
-					if envVar.ValueFrom.FieldRef.FieldPath != gatewayNameEnvVar.ValueFrom.FieldRef.FieldPath {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env[i] = gatewayNameEnvVar
-					}
-				}
-				if envVar.Name == gatewayNamespaceEnvVar.Name {
-					hasGatewayNamespaceEnv = true
-					if envVar.ValueFrom.FieldRef.FieldPath != gatewayNamespaceEnvVar.ValueFrom.FieldRef.FieldPath {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env[i] = gatewayNamespaceEnvVar
-					}
-				}
-			}
-			if !hasGatewayNameEnv {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env, gatewayNameEnvVar)
-			}
-			if !hasGatewayNamespaceEnv {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Env, gatewayNamespaceEnvVar)
 			}
 
 			// Add or update Pod volumes

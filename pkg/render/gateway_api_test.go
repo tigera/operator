@@ -786,6 +786,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 				MountPath: "/var/log/calico",
 			},
 		}))
+		// logger gateway name and namespace are set from the k8s downward api pod metadata.
+		Expect(envoyDeployment.InitContainers[0].Env).To(ContainElements(GatewayNameEnvVar, GatewayNamespaceEnvVar))
 
 		Expect(envoyDeployment.Container).ToNot(BeNil())
 		Expect(envoyDeployment.Container.VolumeMounts).To(HaveLen(1))

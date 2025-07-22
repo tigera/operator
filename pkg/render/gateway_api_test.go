@@ -795,7 +795,6 @@ var _ = Describe("Gateway API rendering tests", func() {
 			Name:      "waf-http-filter",
 			MountPath: "/var/run/waf-http-filter",
 		}))
-
 	})
 
 	It("should deploy waf-http-filter for Enterprise when using a custom proxy", func() {

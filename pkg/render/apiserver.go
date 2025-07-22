@@ -161,7 +161,6 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			errMsgs = append(errMsgs, err.Error())
 		}
 		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
-
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -2012,7 +2011,6 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 // calicoPolicyPassthruClusterRole creates a clusterrole that is used to control the RBAC
 // mechanism for Calico tiered policy.
 func (c *apiServerComponent) calicoPolicyPassthruClusterRole() *rbacv1.ClusterRole {
-
 	resources := []string{"networkpolicies", "globalnetworkpolicies"}
 
 	// Append additional resources for enterprise Variant.
@@ -2258,6 +2256,11 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 
 	l7AdmissionControllerTargetPort := getContainerPort(c.cfg, L7AdmissionControllerContainerName).ContainerPort
 
+	dataplane := "iptables"
+	if c.cfg.Installation.IsNftables() {
+		dataplane = "nftables"
+	}
+
 	l7AdmssCtrl := corev1.Container{
 		Name:            string(L7AdmissionControllerContainerName),
 		Image:           c.l7AdmissionControllerImage,
@@ -2282,6 +2285,10 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 			{
 				Name:  "L7ADMCTRL_LISTENADDR",
 				Value: fmt.Sprintf(":%d", l7AdmissionControllerTargetPort),
+			},
+			{
+				Name:  "DATAPLANE",
+				Value: dataplane,
 			},
 		},
 		VolumeMounts: volumeMounts,
@@ -2325,7 +2332,7 @@ func (c *apiServerComponent) deprecatedResources() []client.Object {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"},
 		},
 
-		//authClusterRoleBinding
+		// authClusterRoleBinding
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"},
@@ -2344,7 +2351,7 @@ func (c *apiServerComponent) deprecatedResources() []client.Object {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"},
 		},
 
-		//webhookReaderClusterRoleBinding
+		// webhookReaderClusterRoleBinding
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"},

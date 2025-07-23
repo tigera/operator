@@ -1972,14 +1972,8 @@ func serviceEndpointSlice(endpointSlice *discoveryv1.EndpointSlice) []k8sapi.Ser
 					continue
 				}
 
-				host := ip
-				// Wrap IPv6 in brackets
-				if net.ParseIP(ip).To4() == nil {
-					host = fmt.Sprintf("[%s]", ip)
-				}
-
 				endpoints = append(endpoints, k8sapi.ServiceEndpoint{
-					Host: host,
+					Host: ip,
 					Port: fmt.Sprintf("%d", *port.Port),
 				})
 			}

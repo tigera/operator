@@ -93,6 +93,12 @@ type InstallationSpec struct {
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
+	// BPFBootstrapMode defines how the initial BPF networking configuration is set up.
+	// Default: Manual
+	// +optional
+	// +kubebuilder:validation:Enum=Auto;Manual
+	BPFBootstrapMode *BootstrapMode `json:"bpfBootstrapMode,omitempty"`
+
 	// Deprecated. Please use Installation.Spec.TyphaDeployment instead.
 	// TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
 	// +optional
@@ -211,6 +217,15 @@ type InstallationSpec struct {
 	// +optional
 	Proxy *Proxy `json:"proxy,omitempty"`
 }
+
+// BootstrapMode defines how the initial networking configuration is executed.
+// One of: Auto, Manual
+type BootstrapMode string
+
+const (
+	BPFBootstrapAuto   BootstrapMode = "Auto"
+	BPFBootstrapManual BootstrapMode = "Manual"
+)
 
 // +kubebuilder:validation:Enum=TLS_AES_256_GCM_SHA384;TLS_CHACHA20_POLY1305_SHA256;TLS_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;TLS_RSA_WITH_AES_256_GCM_SHA384;TLS_RSA_WITH_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA;TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA;TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
 type TLSCipher string
@@ -944,6 +959,11 @@ func (installation *InstallationSpec) BPFEnabled() bool {
 	return installation.CalicoNetwork != nil &&
 		installation.CalicoNetwork.LinuxDataplane != nil &&
 		*installation.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF
+}
+
+func (installation *InstallationSpec) BPFAutoBootstrapEnabled() bool {
+	return installation.BPFBootstrapMode != nil &&
+		*installation.BPFBootstrapMode == BPFBootstrapAuto
 }
 
 // +kubebuilder:object:root=true

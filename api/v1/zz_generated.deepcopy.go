@@ -5444,6 +5444,11 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 		*out = new(CalicoNetworkSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.BPFBootstrapMode != nil {
+		in, out := &in.BPFBootstrapMode, &out.BPFBootstrapMode
+		*out = new(BootstrapMode)
+		**out = **in
+	}
 	if in.TyphaAffinity != nil {
 		in, out := &in.TyphaAffinity, &out.TyphaAffinity
 		*out = new(TyphaAffinity)

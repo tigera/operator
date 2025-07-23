@@ -171,7 +171,7 @@ func bpfAutoBootstrapRequirements(c client.Client, ctx context.Context, install 
 	endpointSlice := &discoveryv1.EndpointSlice{}
 	err = c.Get(ctx, types.NamespacedName{Namespace: "default", Name: "kubernetes"}, endpointSlice)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list EndpointSlices for kube-proxy: %w", err)
+		return nil, fmt.Errorf("failed to get kubernetes endpoint slice: %w", err)
 	}
 	bpfBootstrapReq.k8sServiceEndpoints = endpointSlice
 

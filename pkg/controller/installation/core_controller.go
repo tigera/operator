@@ -2072,6 +2072,9 @@ func (r *ReconcileInstallation) disableKubeProxy(ctx context.Context, fc *crdv1.
 		// This step ensures that kube-proxy is disabled not only during BPF installation (fresh install or migration),
 		// but also if an external operation - such as a manual upgrade or migration - overrides this setting.
 		patchFrom := client.MergeFrom(kubeProxy.DeepCopy())
+		if kubeProxy.Spec.Template.Spec.NodeSelector == nil {
+			kubeProxy.Spec.Template.Spec.NodeSelector = make(map[string]string)
+		}
 		kubeProxy.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] = strconv.FormatBool(true)
 		if err := r.client.Patch(ctx, kubeProxy, patchFrom); err != nil {
 			return fmt.Errorf("Error patching kube-proxy DaemonSet: %w", err)

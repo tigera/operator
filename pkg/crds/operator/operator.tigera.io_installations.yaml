@@ -58,6 +58,14 @@ spec:
                         - Manual
                       type: string
                   type: object
+                bpfBootstrapMode:
+                  description: |-
+                    BPFBootstrapMode defines how the initial BPF networking configuration is set up.
+                    Default: Manual
+                  enum:
+                    - Auto
+                    - Manual
+                  type: string
                 calicoKubeControllersDeployment:
                   description: |-
                     CalicoKubeControllersDeployment configures the calico-kube-controllers Deployment. If used in
@@ -8805,6 +8813,14 @@ spec:
                             - Manual
                           type: string
                       type: object
+                    bpfBootstrapMode:
+                      description: |-
+                        BPFBootstrapMode defines how the initial BPF networking configuration is set up.
+                        Default: Manual
+                      enum:
+                        - Auto
+                        - Manual
+                      type: string
                     calicoKubeControllersDeployment:
                       description: |-
                         CalicoKubeControllersDeployment configures the calico-kube-controllers Deployment. If used in

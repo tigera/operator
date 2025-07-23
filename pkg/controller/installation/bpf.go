@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,17 +15,23 @@
 package installation
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 
+	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // bpfValidateAnnotations validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
@@ -122,4 +128,52 @@ func bpfEnabledOnFelixConfig(fc *crdv1.FelixConfiguration) bool {
 func disableBPFHostConntrackBypass(fc *crdv1.FelixConfiguration) {
 	hostConntrackBypassDisabled := false
 	fc.Spec.BPFHostConntrackBypass = &hostConntrackBypassDisabled
+}
+
+type BPFAutoBootstrap struct {
+	kubeProxyDs         *appsv1.DaemonSet
+	k8sService          *corev1.Service
+	k8sServiceEndpoints *discoveryv1.EndpointSlice
+}
+
+// bpfAutoBootstrapRequirements checks whether the BPF auto-bootstrap requirements are met.
+// If so, it retrieves the kube-proxy DaemonSet, the Kubernetes service, and its EndpointSlices, returning them in a BPFAutoBootstrap struct.
+// If any of these resources are not found, it returns an error.
+func bpfAutoBootstrapRequirements(c client.Client, ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration) (*BPFAutoBootstrap, error) {
+	// 1. Dataplane is not BPF, or the user didn't set BPFBootstrapMode, or set it to manual, so we don't need to do anything.
+	if !install.Spec.BPFEnabled() || !install.Spec.BPFAutoBootstrapEnabled() {
+		return nil, nil
+	}
+
+	// 2. CNI plugin is Calico.
+	if install.Spec.CNI.Type != operator.PluginCalico {
+		return nil, fmt.Errorf("the CNI plugin is not Calico in Installation CR")
+	}
+
+	bpfBootstrapReq := &BPFAutoBootstrap{}
+	// 3. Try to retrieve the kube-proxy DaemonSet.
+	ds := &appsv1.DaemonSet{}
+	err := c.Get(ctx, types.NamespacedName{Namespace: "kube-system", Name: "kube-proxy"}, ds)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kube-proxy: %w", err)
+	}
+	bpfBootstrapReq.kubeProxyDs = ds
+
+	// 4. Try to retrieve kubernetes service.
+	service := &corev1.Service{}
+	err = c.Get(ctx, types.NamespacedName{Namespace: "default", Name: "kubernetes"}, service)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kubernetes service: %w", err)
+	}
+	bpfBootstrapReq.k8sService = service
+
+	// 5. Try to retrieve kubernetes service endpointslice.
+	endpointSlice := &discoveryv1.EndpointSlice{}
+	err = c.Get(ctx, types.NamespacedName{Namespace: "default", Name: "kubernetes"}, endpointSlice)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get kubernetes endpoint slice: %w", err)
+	}
+	bpfBootstrapReq.k8sServiceEndpoints = endpointSlice
+
+	return bpfBootstrapReq, nil
 }

@@ -133,7 +133,7 @@ func disableBPFHostConntrackBypass(fc *crdv1.FelixConfiguration) {
 type BPFAutoBootstrap struct {
 	kubeProxyDs         *appsv1.DaemonSet
 	k8sService          *corev1.Service
-	k8sServiceEndpoints *discoveryv1.EndpointSlice
+	k8sServiceEndpoints *discoveryv1.EndpointSliceList
 }
 
 // bpfAutoBootstrapRequirements checks whether the BPF auto-bootstrap requirements are met.
@@ -167,11 +167,11 @@ func bpfAutoBootstrapRequirements(c client.Client, ctx context.Context, install 
 	}
 	bpfBootstrapReq.k8sService = service
 
-	// 5. Try to retrieve kubernetes service endpointslice.
-	endpointSlice := &discoveryv1.EndpointSlice{}
-	err = c.Get(ctx, types.NamespacedName{Namespace: "default", Name: "kubernetes"}, endpointSlice)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get kubernetes endpoint slice: %w", err)
+	// 5. Try to retrieve kubernetes service endpoint slices. If the cluster is dual-stack, there should be at least one EndpointSlice for each address type.
+	endpointSlice := &discoveryv1.EndpointSliceList{}
+	err = c.List(ctx, endpointSlice, client.InNamespace("default"), client.MatchingLabels{"kubernetes.io/service-name": "kubernetes"})
+	if err != nil || len(endpointSlice.Items) == 0 {
+		return nil, fmt.Errorf("failed to get kubernetes endpoint slices: %w", err)
 	}
 	bpfBootstrapReq.k8sServiceEndpoints = endpointSlice
 

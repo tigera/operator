@@ -1960,22 +1960,24 @@ func serviceIPsAndPorts(svc *corev1.Service) []k8sapi.ServiceEndpoint {
 }
 
 // serviceEndpointSlice extracts the service endpoints from the EndpointSlice and returns them as a slice of k8sapi.ServiceEndpoint.
-func serviceEndpointSlice(endpointSlice *discoveryv1.EndpointSlice) []k8sapi.ServiceEndpoint {
-	if endpointSlice == nil {
+func serviceEndpointSlice(endpointSliceList *discoveryv1.EndpointSliceList) []k8sapi.ServiceEndpoint {
+	if endpointSliceList == nil {
 		return nil
 	}
 	var endpoints []k8sapi.ServiceEndpoint
-	for _, endpoint := range endpointSlice.Endpoints {
-		for _, ip := range endpoint.Addresses {
-			for _, port := range endpointSlice.Ports {
-				if port.Port == nil {
-					continue
-				}
+	for _, endpointSlice := range endpointSliceList.Items {
+		for _, endpoint := range endpointSlice.Endpoints {
+			for _, ip := range endpoint.Addresses {
+				for _, port := range endpointSlice.Ports {
+					if port.Port == nil {
+						continue
+					}
 
-				endpoints = append(endpoints, k8sapi.ServiceEndpoint{
-					Host: ip,
-					Port: fmt.Sprintf("%d", *port.Port),
-				})
+					endpoints = append(endpoints, k8sapi.ServiceEndpoint{
+						Host: ip,
+						Port: fmt.Sprintf("%d", *port.Port),
+					})
+				}
 			}
 		}
 	}

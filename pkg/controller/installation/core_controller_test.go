@@ -966,6 +966,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					&corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
 						Spec: corev1.ServiceSpec{
+							IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
 							ClusterIPs: []string{"1.2.3.4"},
 							Ports: []corev1.ServicePort{
 								{Name: "https", Port: 443, TargetPort: intstr.FromInt(443)},
@@ -977,9 +978,10 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(c.Create(
 					ctx,
 					&discoveryv1.EndpointSlice{
-						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
+						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+						AddressType: discoveryv1.AddressTypeIPv4,
 						Endpoints: []discoveryv1.Endpoint{
-							{Addresses: []string{"5.6.7.8"}},
+							{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
 						},
 						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
 					})).NotTo(HaveOccurred())
@@ -996,7 +998,26 @@ var _ = Describe("Testing core-controller installation", func() {
 				cr.Spec.BPFBootstrapMode = &auto
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			})
-
+			table.DescribeTable("should fail if requirements are not met",
+				func(funcs []func(), expectedErrorSubstring string) {
+					for _, f := range funcs {
+						f()
+					}
+					By("r.Reconcile()")
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).Should(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
+				},
+				table.Entry("kube-proxy not running",
+					[]func(){createK8sService, createK8sEndpointSlice}, "failed to get kube-proxy",
+				),
+				table.Entry("kubernetes service not found",
+					[]func(){createKubeProxyDaemonSet, createK8sEndpointSlice}, "failed to get kubernetes service",
+				),
+				table.Entry("kubernetes endpoint slices not found",
+					[]func(){createKubeProxyDaemonSet, createK8sService}, "failed to get kubernetes endpoint slices",
+				),
+			)
 			It("should push env vars to mount-bpffs and disable kube-proxy", func() {
 				createKubeProxyDaemonSet()
 				createK8sService()
@@ -1030,7 +1051,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(initContainer.Name).To(Equal("mount-bpffs"))
 				Expect(initContainer.Env).To(ContainElements(
 					corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443"},
-					corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443"},
+					corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443"},
 				))
 
 				By("Checking kube-proxy is nodeSelector")
@@ -1044,27 +1065,57 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(kubeProxy.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(render.DisableKubeProxyKey, "true"))
 			})
+			It("should support dual-stack clusters - IPv4 and IPv6", func() {
+				createKubeProxyDaemonSet()
+				Expect(c.Create(
+					ctx,
+					&corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
+						Spec: corev1.ServiceSpec{
+							IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol},
+							ClusterIPs: []string{"1.2.3.4", "fd00::1"},
+							Ports: []corev1.ServicePort{
+								{Name: "https", Port: 443, TargetPort: intstr.FromInt(443)},
+							},
+						},
+					})).NotTo(HaveOccurred())
+				Expect(c.Create(
+					ctx,
+					&discoveryv1.EndpointSlice{
+						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-ep1", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+						AddressType: discoveryv1.AddressTypeIPv4,
+						Endpoints: []discoveryv1.Endpoint{
+							{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
+						},
+						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+					})).NotTo(HaveOccurred())
+				Expect(c.Create(
+					ctx,
+					&discoveryv1.EndpointSlice{
+						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-ep2", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+						AddressType: discoveryv1.AddressTypeIPv6,
+						Endpoints: []discoveryv1.Endpoint{
+							{Addresses: []string{"fd00::1", "fd00::2", "fd00::3"}},
+						},
+						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+					})).NotTo(HaveOccurred())
 
-			table.DescribeTable("should fail if requirements are not met",
-				func(funcs []func(), expectedErrorSubstring string) {
-					for _, f := range funcs {
-						f()
-					}
-					By("r.Reconcile()")
-					_, err := r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).Should(HaveOccurred())
-					Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
-				},
-				table.Entry("kube-proxy not running",
-					[]func(){createK8sService, createK8sEndpointSlice}, "failed to get kube-proxy",
-				),
-				table.Entry("kubernetes service not found",
-					[]func(){createKubeProxyDaemonSet, createK8sEndpointSlice}, "failed to get kubernetes service",
-				),
-				table.Entry("kubernetes endpoint slice not found",
-					[]func(){createKubeProxyDaemonSet, createK8sService}, "failed to get kubernetes endpoint slice",
-				),
-			)
+				By("r.Reconcile()")
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				By("Checking mount-bpffs init container has correct env vars")
+				calicoNode := &appsv1.DaemonSet{}
+				err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
+				Expect(err).ShouldNot(HaveOccurred())
+				initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "mount-bpffs")
+				Expect(initContainer).NotTo(BeNil())
+				Expect(initContainer.Name).To(Equal("mount-bpffs"))
+				Expect(initContainer.Env).To(ContainElements(
+					corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443,[fd00::1]:443"},
+					corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443,[fd00::1]:6443,[fd00::2]:6443,[fd00::3]:6443"},
+				))
+			})
 		})
 
 		It("should Reconcile with default config", func() {

@@ -96,15 +96,15 @@ type TyphaNodeTLS struct {
 // NodeConfiguration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/node on a cluster.
 type NodeConfiguration struct {
-	GoldmaneRunning   bool
-	K8sServiceEp      k8sapi.ServiceEndpoint
-	K8sServiceAddrs   []k8sapi.ServiceEndpoint
-	K8sEndpointSlices []k8sapi.ServiceEndpoint
-	Installation      *operatorv1.InstallationSpec
-	IPPools           []operatorv1.IPPool
-	TLS               *TyphaNodeTLS
-	ClusterDomain     string
-	Nameservers       []string
+	GoldmaneRunning  bool
+	K8sServiceEp     k8sapi.ServiceEndpoint
+	K8sServiceAddrs  []k8sapi.ServiceEndpoint
+	K8sEndpointSlice []k8sapi.ServiceEndpoint
+	Installation     *operatorv1.InstallationSpec
+	IPPools          []operatorv1.IPPool
+	TLS              *TyphaNodeTLS
+	ClusterDomain    string
+	Nameservers      []string
 
 	// Optional fields.
 	LogCollector            *operatorv1.LogCollector
@@ -1235,7 +1235,7 @@ func (c *nodeComponent) bpffsEnvvars() []corev1.EnvVar {
 	if env != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: env})
 	}
-	env = JoinServiceEndpoints(c.cfg.K8sEndpointSlices)
+	env = JoinServiceEndpoints(c.cfg.K8sEndpointSlice)
 	if env != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: env})
 	}

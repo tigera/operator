@@ -1432,28 +1432,25 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
 	}
 
-	bpfBootstrapReq, err := r.bpfAutoBootstrapRequirements(ctx, instance, felixConfiguration)
-
+	// Check if BPF auto-bootstrap is enabled and its requirements.
+	bpfBootstrapReq, err := bpfAutoBootstrapRequirements(r.client, ctx, instance, felixConfiguration)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceValidationError, "Unable to retrieve BPF auto-bootstrap requirements", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	if bpfBootstrapReq != nil && bpfBootstrapReq.k8sAPI != nil && bpfBootstrapReq.endpoints != nil && bpfBootstrapReq.kubeProxy != nil {
-		// Extract k8s service and endpoints to push them to mount-bpffs init container
-		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.k8sAPI)
-		nodeCfg.K8sEndpointSlices = serviceEndpoints(bpfBootstrapReq.endpoints)
+	// If BPF auto-bootstrap requirements are met, configure the node and disable kube-proxy.
+	if bpfBootstrapReq != nil {
+		// Extract k8s service and endpoints to push them to mount-bpffs init container.
+		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.k8sService)
+		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfBootstrapReq.k8sServiceEndpoints)
 
-		// Try to disable kube-proxy
-		err = r.disableKubeProxy(ctx, felixConfiguration, bpfBootstrapReq.kubeProxy)
+		// Try to disable kube-proxy.
+		err = r.disableKubeProxy(ctx, felixConfiguration, bpfBootstrapReq.kubeProxyDs)
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceValidationError, "Unable to disable kube-proxy", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-	} else if instance.Spec.BPFAutoBootstrapEnabled() {
-		err = fmt.Errorf("BPF auto-bootstrap requirements are not met, missing k8sAPI, endpoints, or kubeProxy")
-		r.status.SetDegraded(operator.ResourceValidationError, "Unable to retrieve BPF auto-bootstrap requirements", err, reqLogger)
-		return reconcile.Result{}, err
 	}
 
 	components = append(components, render.Node(&nodeCfg))
@@ -1944,53 +1941,12 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Co
 	return updated, nil
 }
 
-type BPFAutoBootstrapRequirements struct {
-	kubeProxy *appsv1.DaemonSet
-	k8sAPI    *corev1.Service
-	endpoints *discoveryv1.EndpointSlice
-}
-
-func (r *ReconcileInstallation) bpfAutoBootstrapRequirements(ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration) (*BPFAutoBootstrapRequirements, error) {
-	// Dataplane is not BPF, or the user didn't set BPFBootstrapMode, or set it to manual, so we don't need to do anything.
-	if !install.Spec.BPFEnabled() || !install.Spec.BPFAutoBootstrapEnabled() {
-		return nil, nil
-	}
-
-	if install.Spec.CNI.Type != operator.PluginCalico {
-		return nil, fmt.Errorf("the CNI plugin is not Calico in Installation CR")
-	}
-
-	bpfBootstrapReq := &BPFAutoBootstrapRequirements{}
-	// Try to retrieve the kube-proxy DaemonSet to see if it exists.
-	ds := &appsv1.DaemonSet{}
-	err := r.client.Get(ctx, types.NamespacedName{Namespace: "kube-system", Name: "kube-proxy"}, ds)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get kube-proxy: %w", err)
-	}
-	bpfBootstrapReq.kubeProxy = ds
-
-	// Try to retrieve kubernetes service.
-	k8sapi := &corev1.Service{}
-	err = r.client.Get(ctx, types.NamespacedName{Namespace: "default", Name: "kubernetes"}, k8sapi)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get kubernetes service: %w", err)
-	}
-	bpfBootstrapReq.k8sAPI = k8sapi
-
-	// Try to retrieve kubernetes service endpointslices.
-	endpointSlice := &discoveryv1.EndpointSlice{}
-	err = r.client.Get(ctx, types.NamespacedName{Namespace: "default", Name: "kubernetes"}, endpointSlice)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list EndpointSlices for kube-proxy: %w", err)
-	}
-	bpfBootstrapReq.endpoints = endpointSlice
-
-	return bpfBootstrapReq, nil
-}
-
+// serviceIPsAndPorts extracts the service IPs and ports from the Service and returns them as a slice of k8sapi.ServiceEndpoint.
 func serviceIPsAndPorts(svc *corev1.Service) []k8sapi.ServiceEndpoint {
+	if svc == nil {
+		return nil
+	}
 	var endpoints []k8sapi.ServiceEndpoint
-
 	for _, ip := range svc.Spec.ClusterIPs {
 		for _, port := range svc.Spec.Ports {
 			endpoints = append(endpoints, k8sapi.ServiceEndpoint{
@@ -2003,7 +1959,11 @@ func serviceIPsAndPorts(svc *corev1.Service) []k8sapi.ServiceEndpoint {
 	return endpoints
 }
 
-func serviceEndpoints(endpointSlice *discoveryv1.EndpointSlice) []k8sapi.ServiceEndpoint {
+// serviceEndpointSlice extracts the service endpoints from the EndpointSlice and returns them as a slice of k8sapi.ServiceEndpoint.
+func serviceEndpointSlice(endpointSlice *discoveryv1.EndpointSlice) []k8sapi.ServiceEndpoint {
+	if endpointSlice == nil {
+		return nil
+	}
 	var endpoints []k8sapi.ServiceEndpoint
 	for _, endpoint := range endpointSlice.Endpoints {
 		for _, ip := range endpoint.Addresses {
@@ -2028,11 +1988,23 @@ func serviceEndpoints(endpointSlice *discoveryv1.EndpointSlice) []k8sapi.Service
 	return endpoints
 }
 
+// disableKubeProxy disables kube-proxy by patching the DaemonSet with a nodeSelector that prevents it from running on any node.
 func (r *ReconcileInstallation) disableKubeProxy(ctx context.Context, fc *crdv1.FelixConfiguration, kubeProxy *appsv1.DaemonSet) error {
 	if fc == nil || kubeProxy == nil {
-		return fmt.Errorf("Invalid parameters when disabling kube-proxy: fc=%v, kubeProxy=%v", fc, kubeProxy)
+		return fmt.Errorf("Invalid parameters to disable kube-proxy: fc=%v, kubeProxy=%v", fc, kubeProxy)
 	}
 
+	// If kube-proxy is already disabled, we can skip further processing.
+	if kubeProxy.Spec.Template.Spec.NodeSelector != nil &&
+		kubeProxy.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] == strconv.FormatBool(true) {
+		return nil
+	}
+
+	// Check if kube-proxy is in the process of being disabled.
+	// The field `fc.Spec.BPFKubeProxyIptablesCleanupEnabled` must be nil for the automated process to proceed - i.e., the user must not have explicitly set it.
+	// However, during the process of disabling kube-proxy, the Operator sets this field to false.
+	// As a result, it's not possible to distinguish whether the field was set by the user or by the Operator.
+	// This annotation is used to make that distinction.
 	disablingKubeProxy := false
 	if fc.Annotations[render.DisableKubeProxyKey] != "" {
 		v, err := strconv.ParseBool(fc.Annotations[render.DisableKubeProxyKey])
@@ -2041,18 +2013,13 @@ func (r *ReconcileInstallation) disableKubeProxy(ctx context.Context, fc *crdv1.
 			return err
 		}
 	}
-
-	// If kube-proxy is already disabled.
-	if !disablingKubeProxy &&
-		kubeProxy.Spec.Template.Spec.NodeSelector != nil &&
-		kubeProxy.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] == strconv.FormatBool(true) {
-		return nil
-	}
-
 	if !disablingKubeProxy && fc.Spec.BPFKubeProxyIptablesCleanupEnabled != nil {
 		return fmt.Errorf("BPFKubeProxyIptablesCleanupEnabled shouldn't be set in FelixConfiguration")
 	}
 
+	// If this is the first iteration of disabling kube-proxy, we need to configure Felix to avoid cleaning up iptables rules
+	// to prevent conflicts between kube-proxy and Felix. We also set an annotation in the same resource (FelixConfiguration)
+	// to ensure that both the annotation and the BPFKubeProxyIptablesCleanupEnabled field are updated atomically and stay in sync.
 	if !disablingKubeProxy {
 		_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 			// Set the annotation to disable kube-proxy
@@ -2084,11 +2051,14 @@ func (r *ReconcileInstallation) disableKubeProxy(ctx context.Context, fc *crdv1.
 		return fmt.Errorf("Error getting calico-node DaemonSet: %w", err)
 	}
 	if isRolloutCompleteWithBPFVolumes(ds) {
+		// When the rollout is complete:
+		// 1. Patch the FelixConfiguration to revert the changes made during the disabling process.
+		// 2. Patch the kube-proxy DaemonSet to remove its pods from the nodes.
 		_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
-			// Set BPFKubeProxyIptablesCleanupEnabled back to nil
+			// Set BPFKubeProxyIptablesCleanupEnabled back to nil.
 			fc.Spec.BPFKubeProxyIptablesCleanupEnabled = nil
 
-			// Remove the annotation to disable kube-proxy
+			// Remove the annotation to disable kube-proxy.
 			annotations := fc.Annotations
 			delete(annotations, render.DisableKubeProxyKey)
 			fc.SetAnnotations(annotations)
@@ -2098,7 +2068,9 @@ func (r *ReconcileInstallation) disableKubeProxy(ctx context.Context, fc *crdv1.
 			return fmt.Errorf("Error patching felix configuration: %w", err)
 		}
 
-		// Patch kube-proxy DaemonSet with disabling nodeSelector
+		// Patch the kube-proxy DaemonSet with a disabling nodeSelector.
+		// This step ensures that kube-proxy is disabled not only during BPF installation (fresh install or migration),
+		// but also if an external operation - such as a manual upgrade or migration - overrides this setting.
 		patchFrom := client.MergeFrom(kubeProxy.DeepCopy())
 		kubeProxy.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] = strconv.FormatBool(true)
 		if err := r.client.Patch(ctx, kubeProxy, patchFrom); err != nil {

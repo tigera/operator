@@ -29,12 +29,14 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	kfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,6 +55,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -783,6 +786,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(discoveryv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -945,6 +949,172 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(fc.Spec.NFTablesMode).NotTo(BeNil())
 				Expect(*fc.Spec.NFTablesMode).To(Equal(crdv1.NFTablesModeDisabled))
+			})
+		})
+
+		Context("with LinuxDataplane=BPF and BPFBootstrapMode=Auto", func() {
+			createKubeProxyDaemonSet := func() {
+				Expect(c.Create(
+					ctx,
+					&appsv1.DaemonSet{
+						ObjectMeta: metav1.ObjectMeta{Name: "kube-proxy", Namespace: "kube-system"},
+					})).NotTo(HaveOccurred())
+			}
+			createK8sService := func() {
+				Expect(c.Create(
+					ctx,
+					&corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
+						Spec: corev1.ServiceSpec{
+							IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
+							ClusterIPs: []string{"1.2.3.4"},
+							Ports: []corev1.ServicePort{
+								{Name: "https", Port: 443, TargetPort: intstr.FromInt(443)},
+							},
+						},
+					})).NotTo(HaveOccurred())
+			}
+			createK8sEndpointSlice := func() {
+				Expect(c.Create(
+					ctx,
+					&discoveryv1.EndpointSlice{
+						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+						AddressType: discoveryv1.AddressTypeIPv4,
+						Endpoints: []discoveryv1.Endpoint{
+							{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
+						},
+						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+					})).NotTo(HaveOccurred())
+			}
+			BeforeEach(func() {
+				By("Setting the dataplane to BPF and opt in")
+				mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+				bpf := operator.LinuxDataplaneBPF
+				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+					LinuxDataplane: &bpf,
+				}
+				auto := operator.BPFBootstrapAuto
+				cr.Spec.BPFBootstrapMode = &auto
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			})
+			table.DescribeTable("should fail if requirements are not met",
+				func(funcs []func(), expectedErrorSubstring string) {
+					for _, f := range funcs {
+						f()
+					}
+					By("r.Reconcile()")
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).Should(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
+				},
+				table.Entry("kube-proxy not running",
+					[]func(){createK8sService, createK8sEndpointSlice}, "failed to get kube-proxy",
+				),
+				table.Entry("kubernetes service not found",
+					[]func(){createKubeProxyDaemonSet, createK8sEndpointSlice}, "failed to get kubernetes service",
+				),
+				table.Entry("kubernetes endpoint slices not found",
+					[]func(){createKubeProxyDaemonSet, createK8sService}, "failed to get kubernetes endpoint slices",
+				),
+			)
+			It("should push env vars to mount-bpffs and disable kube-proxy", func() {
+				createKubeProxyDaemonSet()
+				createK8sService()
+				createK8sEndpointSlice()
+
+				By("r.Reconcile()")
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				By("Checking that the Installation has the right config")
+				install := &operator.Installation{}
+				err = c.Get(ctx, types.NamespacedName{Name: "default"}, install)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(install.Spec.BPFBootstrapMode).ToNot(BeNil())
+				Expect(*install.Spec.BPFBootstrapMode).To(Equal(operator.BPFBootstrapAuto))
+				Expect(install.Spec.BPFAutoBootstrapEnabled()).To(BeTrue())
+
+				By("Checking that the FelixConfiguration has BPF Enabled")
+				fc := &crdv1.FelixConfiguration{}
+				err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(fc.Spec.BPFEnabled).ToNot(BeNil())
+				Expect(*fc.Spec.BPFEnabled).To(BeTrue())
+
+				By("Checking mount-bpffs init container has correct env vars")
+				calicoNode := &appsv1.DaemonSet{}
+				err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
+				Expect(err).ShouldNot(HaveOccurred())
+				initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "mount-bpffs")
+				Expect(initContainer).NotTo(BeNil())
+				Expect(initContainer.Name).To(Equal("mount-bpffs"))
+				Expect(initContainer.Env).To(ContainElements(
+					corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443"},
+					corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443"},
+				))
+
+				By("Checking kube-proxy is nodeSelector")
+				// Reconcile() needs to run again because kube-proxy is only disabled after the rollout is complete,
+				// meaning after all calico-node pods have been created.
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				kubeProxy := &appsv1.DaemonSet{}
+				err = c.Get(ctx, types.NamespacedName{Name: "kube-proxy", Namespace: "kube-system"}, kubeProxy)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(kubeProxy.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(render.DisableKubeProxyKey, "true"))
+			})
+			It("should support dual-stack clusters - IPv4 and IPv6", func() {
+				createKubeProxyDaemonSet()
+				Expect(c.Create(
+					ctx,
+					&corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
+						Spec: corev1.ServiceSpec{
+							IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol},
+							ClusterIPs: []string{"1.2.3.4", "fd00::1"},
+							Ports: []corev1.ServicePort{
+								{Name: "https", Port: 443, TargetPort: intstr.FromInt(443)},
+							},
+						},
+					})).NotTo(HaveOccurred())
+				Expect(c.Create(
+					ctx,
+					&discoveryv1.EndpointSlice{
+						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-ep1", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+						AddressType: discoveryv1.AddressTypeIPv4,
+						Endpoints: []discoveryv1.Endpoint{
+							{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
+						},
+						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+					})).NotTo(HaveOccurred())
+				Expect(c.Create(
+					ctx,
+					&discoveryv1.EndpointSlice{
+						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-ep2", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+						AddressType: discoveryv1.AddressTypeIPv6,
+						Endpoints: []discoveryv1.Endpoint{
+							{Addresses: []string{"fd00::1", "fd00::2", "fd00::3"}},
+						},
+						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+					})).NotTo(HaveOccurred())
+
+				By("r.Reconcile()")
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				By("Checking mount-bpffs init container has correct env vars")
+				calicoNode := &appsv1.DaemonSet{}
+				err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
+				Expect(err).ShouldNot(HaveOccurred())
+				initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "mount-bpffs")
+				Expect(initContainer).NotTo(BeNil())
+				Expect(initContainer.Name).To(Equal("mount-bpffs"))
+				Expect(initContainer.Env).To(ContainElements(
+					corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443,[fd00::1]:443"},
+					corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443,[fd00::1]:6443,[fd00::2]:6443,[fd00::3]:6443"},
+				))
 			})
 		})
 

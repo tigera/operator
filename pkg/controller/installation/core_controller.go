@@ -1947,7 +1947,12 @@ func serviceIPsAndPorts(svc *corev1.Service) []k8sapi.ServiceEndpoint {
 		return nil
 	}
 	var endpoints []k8sapi.ServiceEndpoint
-	for _, ip := range svc.Spec.ClusterIPs {
+	ips := svc.Spec.ClusterIPs
+	if len(ips) == 0 && svc.Spec.ClusterIP != "" {
+		ips = []string{svc.Spec.ClusterIP}
+	}
+
+	for _, ip := range ips {
 		for _, port := range svc.Spec.Ports {
 			endpoints = append(endpoints, k8sapi.ServiceEndpoint{
 				Host: ip,

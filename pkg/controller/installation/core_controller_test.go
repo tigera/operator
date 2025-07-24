@@ -953,38 +953,75 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		Context("with LinuxDataplane=BPF and BPFBootstrapMode=Auto", func() {
-			createKubeProxyDaemonSet := func() {
-				Expect(c.Create(
-					ctx,
+			createResource := func(obj client.Object) {
+				Expect(c.Create(ctx, obj)).NotTo(HaveOccurred())
+			}
+			kubeProxyDaemonSet := func() {
+				createResource(
 					&appsv1.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "kube-proxy", Namespace: "kube-system"},
-					})).NotTo(HaveOccurred())
+					})
 			}
-			createK8sService := func() {
-				Expect(c.Create(
-					ctx,
+			svcIpV4 := func() {
+				createResource(
 					&corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
 						Spec: corev1.ServiceSpec{
 							IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
-							ClusterIPs: []string{"1.2.3.4"},
+							ClusterIP:  "1.2.3.4",
 							Ports: []corev1.ServicePort{
 								{Name: "https", Port: 443, TargetPort: intstr.FromInt(443)},
 							},
 						},
-					})).NotTo(HaveOccurred())
+					})
 			}
-			createK8sEndpointSlice := func() {
-				Expect(c.Create(
-					ctx,
+			svcIpV6 := func() {
+				createResource(
+					&corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
+						Spec: corev1.ServiceSpec{
+							IPFamilies: []corev1.IPFamily{corev1.IPv6Protocol},
+							ClusterIPs: []string{"fd00::1"},
+							Ports: []corev1.ServicePort{
+								{Name: "https", Port: 443, TargetPort: intstr.FromInt(443)},
+							},
+						},
+					})
+			}
+			svcDualStack := func() {
+				createResource(
+					&corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
+						Spec: corev1.ServiceSpec{
+							IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol},
+							ClusterIPs: []string{"1.2.3.4", "fd00::1"},
+							Ports: []corev1.ServicePort{
+								{Name: "https", Port: 443, TargetPort: intstr.FromInt(443)},
+							},
+						},
+					})
+			}
+			epIpV4 := func() {
+				createResource(
 					&discoveryv1.EndpointSlice{
-						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-epv4", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
 						AddressType: discoveryv1.AddressTypeIPv4,
 						Endpoints: []discoveryv1.Endpoint{
 							{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
 						},
 						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
-					})).NotTo(HaveOccurred())
+					})
+			}
+			epIpV6 := func() {
+				createResource(
+					&discoveryv1.EndpointSlice{
+						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-epv6", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+						AddressType: discoveryv1.AddressTypeIPv6,
+						Endpoints: []discoveryv1.Endpoint{
+							{Addresses: []string{"fd00::1"}},
+						},
+						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+					})
 			}
 			BeforeEach(func() {
 				By("Setting the dataplane to BPF and opt in")
@@ -1009,19 +1046,48 @@ var _ = Describe("Testing core-controller installation", func() {
 					Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
 				},
 				table.Entry("kube-proxy not running",
-					[]func(){createK8sService, createK8sEndpointSlice}, "failed to get kube-proxy",
+					[]func(){svcIpV4, epIpV4}, "failed to get kube-proxy",
 				),
 				table.Entry("kubernetes service not found",
-					[]func(){createKubeProxyDaemonSet, createK8sEndpointSlice}, "failed to get kubernetes service",
+					[]func(){kubeProxyDaemonSet, epIpV4}, "failed to get kubernetes service",
 				),
 				table.Entry("kubernetes endpoint slices not found",
-					[]func(){createKubeProxyDaemonSet, createK8sService}, "failed to get kubernetes endpoint slices",
+					[]func(){kubeProxyDaemonSet, svcIpV4}, "failed to get kubernetes endpoint slices",
+				),
+			)
+			table.DescribeTable("test service and endpoint slice IPs consistency",
+				func(funcs []func(), shouldFail bool) {
+					kubeProxyDaemonSet()
+					for _, f := range funcs {
+						f()
+					}
+					By("r.Reconcile()")
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err != nil).Should(Equal(shouldFail))
+				},
+				table.Entry("service IPv4 and EP IPv4",
+					[]func(){svcIpV4, epIpV4}, false,
+				),
+				table.Entry("service IPv6 and EP IPv6",
+					[]func(){svcIpV6, epIpV6}, false,
+				),
+				table.Entry("service dual-stack and EP dual-stack",
+					[]func(){svcDualStack, epIpV4, epIpV6}, false,
+				),
+				table.Entry("service IPv4 and EP dual-stack",
+					[]func(){svcIpV4, epIpV4, epIpV6}, true,
+				),
+				table.Entry("service IPv6 and EP IPv4",
+					[]func(){svcIpV6, epIpV4}, true,
+				),
+				table.Entry("service dual-stack and EP IPv6",
+					[]func(){svcDualStack, epIpV6}, true,
 				),
 			)
 			It("should push env vars to mount-bpffs and disable kube-proxy", func() {
-				createKubeProxyDaemonSet()
-				createK8sService()
-				createK8sEndpointSlice()
+				kubeProxyDaemonSet()
+				svcIpV4()
+				epIpV4()
 
 				By("r.Reconcile()")
 				_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1066,7 +1132,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(kubeProxy.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(render.DisableKubeProxyKey, "true"))
 			})
 			It("should support dual-stack clusters - IPv4 and IPv6", func() {
-				createKubeProxyDaemonSet()
+				kubeProxyDaemonSet()
 				Expect(c.Create(
 					ctx,
 					&corev1.Service{

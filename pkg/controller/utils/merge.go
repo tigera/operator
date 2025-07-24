@@ -79,6 +79,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.CalicoNetwork = mergeCalicoNetwork(inst.CalicoNetwork, override.CalicoNetwork)
 	}
 
+	switch compareFields(inst.BPFBootstrapMode, override.BPFBootstrapMode) {
+	case BOnlySet, Different:
+		inst.BPFBootstrapMode = override.BPFBootstrapMode
+	}
+
 	switch compareFields(inst.ControlPlaneNodeSelector, override.ControlPlaneNodeSelector) {
 	case BOnlySet, Different:
 		inst.ControlPlaneNodeSelector = make(map[string]string, len(override.ControlPlaneNodeSelector))

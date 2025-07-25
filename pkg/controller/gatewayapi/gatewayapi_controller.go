@@ -192,12 +192,22 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// so that the CRDs are left in place even if the GatewayAPI CR is removed again.  This is
 	// in case the customer uses a second (or more) implementation of the Gateway API in
 	// addition to the one that we are providing here.
-	crdComponent := render.NewPassthrough(render.GatewayAPICRDs(log)...)
+	//
+	// OpenShift 4.19+ pre-installs some of the Gateway CRDs, but not all of them, and has a
+	// webhook that prevents us from installing the ones that OpenShift is missing.  To work
+	// with this we distinguish between "essential" and "optional" CRDs.  The "essential" set
+	// must be a subset of those that OpenShift installs and/or allows to be installed, and must
+	// also suffice for all of the Gateway-related feature that we consider important as part of
+	// Calico; and this controller will report an error and degraded status if any of those do
+	// not already exist and cannot be installed.  The "optional" set is everything else that we
+	// would ideally install, to provide more options to our users; but this controller will
+	// only warn if any of those cannot be installed (and do not already exist).
+	essentialCRDs, optionalCRDs := render.GatewayAPICRDs()
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
 	}
-	err = handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil)
+	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(essentialCRDs...), nil)
 	if gatewayAPI.Spec.CRDManagement == nil && (err == nil || errors.IsAlreadyExists(err)) {
 		// The GatewayAPI CR does not yet have a specified value for its CRDManagement
 		// field, and we can now infer a reasonable value.
@@ -233,8 +243,12 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 	if err != nil && !errors.IsAlreadyExists(err) {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI CRDs", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering essential GatewayAPI CRDs", err, log)
 		return reconcile.Result{}, err
+	}
+	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(optionalCRDs...), nil)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		reqLogger.Info("Could not render all optional GatewayAPI CRDs", "err", err)
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)

@@ -21,7 +21,6 @@ import (
 	"sync"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
-	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -314,17 +313,23 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 
 var GatewayAPIResources = GatewayAPIResourcesGetter()
 
-func GatewayAPICRDs(log logr.Logger) []client.Object {
+func GatewayAPICRDs() ([]client.Object, []client.Object) {
 	resources := GatewayAPIResources()
-	gatewayAPICRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
+	essentialCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
+	optionalCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
 	for _, crd := range resources.k8sCRDs {
-		gatewayAPICRDs = append(gatewayAPICRDs, crd.DeepCopyObject().(client.Object))
+		switch strings.TrimSuffix(crd.Name, ".gateway.networking.k8s.io") {
+		case "gatewayclasses", "gateways", "httproutes", "referencegrants":
+			essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
+		default:
+			optionalCRDs = append(optionalCRDs, crd.DeepCopyObject().(client.Object))
+		}
 	}
 	for _, crd := range resources.envoyCRDs {
-		gatewayAPICRDs = append(gatewayAPICRDs, crd.DeepCopyObject().(client.Object))
+		essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
 	}
 
-	return gatewayAPICRDs
+	return essentialCRDs, optionalCRDs
 }
 
 type GatewayAPIImplementationConfig struct {

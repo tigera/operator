@@ -1214,7 +1214,7 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 		command = append(command, "-skip-cgroup")
 	}
 	return corev1.Container{
-		Name:            "mount-bpffs",
+		Name:            "ebpf-bootstrap",
 		Image:           c.nodeImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Command:         command,

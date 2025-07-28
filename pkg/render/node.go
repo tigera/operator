@@ -918,7 +918,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 
 	// Mount the bpf fs for enterprise as we use BPF for some EE features.
 	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		initContainers = append(initContainers, c.bpffsInitContainer())
+		initContainers = append(initContainers, c.bpfBootstrapInitContainer())
 	}
 
 	if c.runAsNonPrivileged() {
@@ -1013,6 +1013,12 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	}
 
 	if overrides := c.cfg.Installation.CalicoNodeDaemonSet; overrides != nil {
+		// If the overrides specify the legacy mount-bpffs init container, then we rename it to the new value: ebpf-bootstrap.
+		for _, ic := range rcomp.GetInitContainers(overrides) {
+			if ic.Name == "mount-bpffs" {
+				ic.Name = "ebpf-bootstrap"
+			}
+		}
 		rcomp.ApplyDaemonSetOverrides(&ds, overrides)
 	}
 	return &ds
@@ -1181,11 +1187,11 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 	}
 }
 
-// bpffsInitContainer creates an init container that attempts to mount the BPF filesystem.  doing this from an
+// bpfBootstrapInitContainer creates an init container that attempts to mount the BPF filesystem.  doing this from an
 // init container reduces the privileges needed by the main container.  It's important that the BPF filesystem is
 // mounted on the host itself, otherwise, a restart of the node container would tear down the mount and destroy
 // the BPF dataplane's BPF maps.
-func (c *nodeComponent) bpffsInitContainer() corev1.Container {
+func (c *nodeComponent) bpfBootstrapInitContainer() corev1.Container {
 	bidirectional := corev1.MountPropagationBidirectional
 	mounts := []corev1.VolumeMount{
 		{

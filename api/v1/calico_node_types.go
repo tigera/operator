@@ -38,8 +38,8 @@ type CalicoNodeDaemonSetContainer struct {
 // CalicoNodeDaemonSetInitContainer is a calico-node DaemonSet init container.
 type CalicoNodeDaemonSetInitContainer struct {
 	// Name is an enum which identifies the calico-node DaemonSet init container by name.
-	// Supported values are: install-cni, hostpath-init, flexvol-driver, ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner
-	// +kubebuilder:validation:Enum=install-cni;hostpath-init;flexvol-driver;ebpf-bootstrap;node-certs-key-cert-provisioner;calico-node-prometheus-server-tls-key-cert-provisioner
+	// Supported values are: install-cni, hostpath-init, flexvol-driver, mount-bpffs (legacy value, replaced by ebpf-bootstrap), ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner
+	// +kubebuilder:validation:Enum=install-cni;hostpath-init;flexvol-driver;mount-bpffs;ebpf-bootstrap;node-certs-key-cert-provisioner;calico-node-prometheus-server-tls-key-cert-provisioner
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

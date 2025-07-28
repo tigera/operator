@@ -20,6 +20,8 @@ import (
 	"path"
 	"strings"
 
+	"errors"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/validation"
@@ -30,8 +32,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
-
+	rcc "github.com/tigera/operator/pkg/render/common/components"
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -346,16 +349,18 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	// Verify the CalicoNodeDaemonSet overrides, if specified, is valid.
 	if ds := instance.Spec.CalicoNodeDaemonSet; ds != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
+		err2 := validateExclusiveInitContainers(rcc.GetInitContainers(ds))
 		if err != nil {
-			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet is not valid: %w", err)
+			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet is not valid: %w", errors.Join(err, err2))
 		}
 	}
 
 	// Verify the CalicoNodeWindowsDaemonSet overrides, if specified, is valid.
 	if ds := instance.Spec.CalicoNodeWindowsDaemonSet; ds != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeWindowsDaemonSetContainer, node.ValidateCalicoNodeWindowsDaemonSetInitContainer)
+		err2 := validateExclusiveInitContainers(rcc.GetInitContainers(ds))
 		if err != nil {
-			return fmt.Errorf("Installation spec.CalicoNodeWindowsDaemonSet is not valid: %w", err)
+			return fmt.Errorf("Installation spec.CalicoNodeWindowsDaemonSet is not valid: %w", errors.Join(err, err2))
 		}
 	}
 
@@ -420,6 +425,23 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		return fmt.Errorf("Installation spec.Azure should be set only for AKS provider")
 	}
 
+	return nil
+}
+
+// validateExclusiveInitContainers checks that the init containers do not contain both mount-bpffs and ebpf-bootstrap.
+func validateExclusiveInitContainers(initContainers []v1.Container) error {
+	hasMountBpffs, hasEbpfBootstrap := false, false
+	for _, c := range initContainers {
+		switch c.Name {
+		case "mount-bpffs":
+			hasMountBpffs = true
+		case "ebpf-bootstrap":
+			hasEbpfBootstrap = true
+		}
+		if hasMountBpffs && hasEbpfBootstrap {
+			return fmt.Errorf("Init container names mount-bpffs and ebpf-bootstrap are mutually exclusive, please remove one of them")
+		}
+	}
 	return nil
 }
 

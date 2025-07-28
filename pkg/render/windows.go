@@ -884,9 +884,9 @@ func (c *windowsComponent) windowsDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1
 
 	if overrides := c.cfg.Installation.CalicoNodeWindowsDaemonSet; overrides != nil {
 		// If the overrides specify the legacy mount-bpffs init container, then we rename it to the new value: ebpf-bootstrap.
-		for _, ic := range rcomp.GetInitContainers(overrides) {
-			if ic.Name == "mount-bpffs" {
-				ic.Name = "ebpf-bootstrap"
+		for index := range rcomp.GetInitContainers(overrides) {
+			if overrides.Spec.Template.Spec.InitContainers[index].Name == "mount-bpffs" {
+				overrides.Spec.Template.Spec.InitContainers[index].Name = "ebpf-bootstrap"
 			}
 		}
 		rcomp.ApplyDaemonSetOverrides(&ds, overrides)

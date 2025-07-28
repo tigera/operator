@@ -934,35 +934,6 @@ var _ = Describe("Installation validation tests", func() {
 			}
 			err = validateCustomResource(instance)
 			Expect(err).To(HaveOccurred())
-
-			instance.Spec.CalicoNodeDaemonSet = &operator.CalicoNodeDaemonSet{
-				Spec: &operator.CalicoNodeDaemonSetSpec{
-					Template: &operator.CalicoNodeDaemonSetPodTemplateSpec{
-						Spec: &operator.CalicoNodeDaemonSetPodSpec{
-							InitContainers: []operator.CalicoNodeDaemonSetInitContainer{
-								{
-									Name: "mount-bpffs",
-									Resources: &v1.ResourceRequirements{
-										Requests: v1.ResourceList{
-											v1.ResourceCPU: resource.MustParse("100m"),
-										},
-									},
-								},
-								{
-									Name: "ebpf-bootstrap",
-									Resources: &v1.ResourceRequirements{
-										Requests: v1.ResourceList{
-											v1.ResourceMemory: resource.MustParse("100Mi"),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			}
-			err = validateCustomResource(instance)
-			Expect(err).To(HaveOccurred())
 		})
 	})
 

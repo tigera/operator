@@ -358,9 +358,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	// Verify the CalicoNodeWindowsDaemonSet overrides, if specified, is valid.
 	if ds := instance.Spec.CalicoNodeWindowsDaemonSet; ds != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeWindowsDaemonSetContainer, node.ValidateCalicoNodeWindowsDaemonSetInitContainer)
-		err2 := validateExclusiveInitContainers(rcc.GetInitContainers(ds))
-		if err != nil || err2 != nil {
-			return fmt.Errorf("Installation spec.CalicoNodeWindowsDaemonSet is not valid: %w", errors.Join(err, err2))
+		if err != nil {
+			return fmt.Errorf("Installation spec.CalicoNodeWindowsDaemonSet is not valid: %w", err)
 		}
 	}
 

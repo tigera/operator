@@ -2667,11 +2667,12 @@ spec:
                                       name:
                                         description: |-
                                           Name is an enum which identifies the calico-node DaemonSet init container by name.
-                                          Supported values are: install-cni, hostpath-init, flexvol-driver, ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner
+                                          Supported values are: install-cni, hostpath-init, flexvol-driver, mount-bpffs (legacy value, replaced by ebpf-bootstrap), ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner
                                         enum:
                                           - install-cni
                                           - hostpath-init
                                           - flexvol-driver
+                                          - mount-bpffs
                                           - ebpf-bootstrap
                                           - node-certs-key-cert-provisioner
                                           - calico-node-prometheus-server-tls-key-cert-provisioner
@@ -3955,11 +3956,12 @@ spec:
                                       name:
                                         description: |-
                                           Name is an enum which identifies the calico-node-windows DaemonSet init container by name.
-                                          Supported values are: install-cni;hostpath-init, flexvol-driver, ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-windows-prometheus-server-tls-key-cert-provisioner
+                                          Supported values are: install-cni;hostpath-init, flexvol-driver, mount-bpffs (legacy value, replaced by ebpf-bootstrap), ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-windows-prometheus-server-tls-key-cert-provisioner
                                         enum:
                                           - install-cni
                                           - hostpath-init
                                           - flexvol-driver
+                                          - mount-bpffs
                                           - ebpf-bootstrap
                                           - node-certs-key-cert-provisioner
                                           - calico-node-windows-prometheus-server-tls-key-cert-provisioner
@@ -11464,11 +11466,12 @@ spec:
                                           name:
                                             description: |-
                                               Name is an enum which identifies the calico-node DaemonSet init container by name.
-                                              Supported values are: install-cni, hostpath-init, flexvol-driver, ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner
+                                              Supported values are: install-cni, hostpath-init, flexvol-driver, mount-bpffs (legacy value, replaced by ebpf-bootstrap), ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner
                                             enum:
                                               - install-cni
                                               - hostpath-init
                                               - flexvol-driver
+                                              - mount-bpffs
                                               - ebpf-bootstrap
                                               - node-certs-key-cert-provisioner
                                               - calico-node-prometheus-server-tls-key-cert-provisioner
@@ -12775,11 +12778,12 @@ spec:
                                           name:
                                             description: |-
                                               Name is an enum which identifies the calico-node-windows DaemonSet init container by name.
-                                              Supported values are: install-cni;hostpath-init, flexvol-driver, ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-windows-prometheus-server-tls-key-cert-provisioner
+                                              Supported values are: install-cni;hostpath-init, flexvol-driver, mount-bpffs (legacy value, replaced by ebpf-bootstrap), ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-windows-prometheus-server-tls-key-cert-provisioner
                                             enum:
                                               - install-cni
                                               - hostpath-init
                                               - flexvol-driver
+                                              - mount-bpffs
                                               - ebpf-bootstrap
                                               - node-certs-key-cert-provisioner
                                               - calico-node-windows-prometheus-server-tls-key-cert-provisioner

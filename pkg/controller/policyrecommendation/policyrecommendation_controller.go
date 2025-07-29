@@ -400,8 +400,15 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		if !r.multiTenant {
 			// Zero-tenant and single tenant setups install resources inside tigera-policy-recommendation namespace. Thus,
 			// we need to create a tigera-ca-bundle inside this namespace in order to allow communication with Linseed
-			trustedBundleRW = certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
+			trustedBundleRW, err = certificateManager.CreateNamedTrustedBundleFromSecrets(ResourceName, r.client,
+				helper.TruthNamespace(), false)
+
+			// Multi-tenant setups need to use the config map that was created by pkg/controller/secrets/tenant_controller.go
+			// in the tenant namespace. This parameter will be set only for non multitenant.
+			trustedBundleRW.AddCertificates(managerInternalTLSSecret)
+			trustedBundleRW.AddCertificates(linseedCertificate)
 			trustedBundleRO = trustedBundleRW.(certificatemanagement.TrustedBundleRO)
+
 		} else {
 			// Multi-tenant setups need to load the bundle the created by pkg/controller/secrets/tenant_controller.go
 			trustedBundleRO, err = certificateManager.LoadTrustedBundle(ctx, r.client, helper.InstallNamespace())

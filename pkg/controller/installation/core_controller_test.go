@@ -1084,7 +1084,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					[]func(){svcDualStack, epIpV6}, true,
 				),
 			)
-			It("should push env vars to mount-bpffs and disable kube-proxy", func() {
+			It("should push env vars to ebpf-bootstrap and disable kube-proxy", func() {
 				kubeProxyDaemonSet()
 				svcIpV4()
 				epIpV4()
@@ -1108,13 +1108,13 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(fc.Spec.BPFEnabled).ToNot(BeNil())
 				Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 
-				By("Checking mount-bpffs init container has correct env vars")
+				By("Checking ebpf-bootstrap init container has correct env vars")
 				calicoNode := &appsv1.DaemonSet{}
 				err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
 				Expect(err).ShouldNot(HaveOccurred())
-				initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "mount-bpffs")
+				initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 				Expect(initContainer).NotTo(BeNil())
-				Expect(initContainer.Name).To(Equal("mount-bpffs"))
+				Expect(initContainer.Name).To(Equal("ebpf-bootstrap"))
 				Expect(initContainer.Env).To(ContainElements(
 					corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443"},
 					corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443"},
@@ -1170,13 +1170,13 @@ var _ = Describe("Testing core-controller installation", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				By("Checking mount-bpffs init container has correct env vars")
+				By("Checking ebpf-bootstrap init container has correct env vars")
 				calicoNode := &appsv1.DaemonSet{}
 				err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
 				Expect(err).ShouldNot(HaveOccurred())
-				initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "mount-bpffs")
+				initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 				Expect(initContainer).NotTo(BeNil())
-				Expect(initContainer.Name).To(Equal("mount-bpffs"))
+				Expect(initContainer.Name).To(Equal("ebpf-bootstrap"))
 				Expect(initContainer.Env).To(ContainElements(
 					corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443,[fd00::1]:443"},
 					corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443,[fd00::1]:6443,[fd00::2]:6443,[fd00::3]:6443"},

@@ -1441,7 +1441,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// If BPF auto-bootstrap requirements are met, configure the node and disable kube-proxy.
 	if bpfBootstrapReq != nil {
-		// Extract k8s service and endpoints to push them to mount-bpffs init container.
+		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
 		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.k8sService)
 		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfBootstrapReq.k8sServiceEndpoints)
 

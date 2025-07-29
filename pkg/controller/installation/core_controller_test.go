@@ -320,7 +320,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentTigeraCSRInitContainer.Image,
 					components.ComponentTigeraCSRInitContainer.Version)))
-			bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
+			bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 			Expect(bpfInit).ToNot(BeNil())
 			Expect(bpfInit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
@@ -429,7 +429,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					components.ComponentTigeraCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
 
-			bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
+			bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 			Expect(bpfInit).ToNot(BeNil())
 			Expect(bpfInit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",

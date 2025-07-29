@@ -26,6 +26,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
 	github.com/tigera/api v0.0.0-20230406222214-ca74195900cb
+	github.com/tigera/operator/api v0.0.0-20250718195010-e4328952af47
 	github.com/urfave/cli/v3 v3.0.0-beta1
 	go.uber.org/zap v1.27.0
 	golang.org/x/crypto v0.39.0
@@ -100,7 +101,6 @@ require (
 	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
-	github.com/tigera/operator/api v0.0.0-00010101000000-000000000000
 	github.com/vmihailenco/msgpack v4.0.4+incompatible // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.elastic.co/apm/module/apmzap/v2 v2.6.2 // indirect

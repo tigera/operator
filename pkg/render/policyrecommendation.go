@@ -242,9 +242,9 @@ func (pr *policyRecommendationComponent) multiTenantManagedClustersAccess() []cl
 	var objects []client.Object
 
 	// In a single tenant setup we want to create a cluster role that binds using service account
-	// tigera-policy-recommendation from tigera-policy-recommendation namespace. In a multi-tenant setup
+	// tigera-policy-recommendation from calico-system namespace. In a multi-tenant setup
 	// PolicyRecommendation Controller from the tenant's namespace impersonates service tigera-policy-recommendation
-	// from tigera-policy-recommendation namespace
+	// from calico-system namespace
 	objects = append(objects, &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationMultiTenantManagedClustersAccessRoleBindingName, Namespace: pr.cfg.Namespace},
@@ -255,7 +255,7 @@ func (pr *policyRecommendationComponent) multiTenantManagedClustersAccess() []cl
 		},
 		Subjects: []rbacv1.Subject{
 			// requests for policy recommendation to managed clusters are done using service account tigera-policy-recommendation
-			// from tigera-policy-recommendation namespace regardless of tenancy mode (single tenant or multi-tenant)
+			// from calico-system namespace regardless of tenancy mode (single tenant or multi-tenant)
 			{
 				Kind:      "ServiceAccount",
 				Name:      PolicyRecommendationName,

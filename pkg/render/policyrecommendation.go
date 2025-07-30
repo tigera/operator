@@ -18,16 +18,14 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	"k8s.io/apiserver/pkg/authentication/serviceaccount"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
@@ -47,7 +45,7 @@ const (
 	ElasticsearchPolicyRecommendationUserSecret = "tigera-ee-policy-recommendation-elasticsearch-access"
 
 	PolicyRecommendationName       = "tigera-policy-recommendation"
-	PolicyRecommendationNamespace  = PolicyRecommendationName
+	PolicyRecommendationNamespace  = "calico-system"
 	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
 
 	PolicyRecommendationTLSSecretName                                   = "policy-recommendation-tls"
@@ -122,26 +120,16 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	// Management and managed clusters need API access to the resources defined in the policy
 	// recommendation cluster role
 	objs = []client.Object{
+		pr.allowTigeraPolicyForPolicyRecommendation(),
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
 		pr.managedClustersWatchRoleBinding(),
-		networkpolicy.AllowTigeraDefaultDeny(pr.cfg.Namespace),
+		pr.deployment(),
 	}
 	if pr.cfg.Tenant.MultiTenant() {
 		objs = append(objs, pr.multiTenantManagedClustersAccess()...)
 	}
-
-	if pr.cfg.ManagedCluster {
-		// No further resources are needed for managed clusters
-		return objs, nil
-	}
-
-	// The deployment is created on management/standalone clusters only
-	objs = append(objs,
-		pr.allowTigeraPolicyForPolicyRecommendation(),
-		pr.deployment(),
-	)
 
 	return objs, nil
 }
@@ -239,7 +227,7 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 }
 
 func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
-	return rcomponents.ClusterRoleBinding(PolicyRecommendationName, PolicyRecommendationName, PolicyRecommendationNamespace, pr.cfg.BindingNamespaces)
+	return rcomponents.ClusterRoleBinding(PolicyRecommendationName, PolicyRecommendationName, PolicyRecommendationName, pr.cfg.BindingNamespaces)
 }
 
 func (pr *policyRecommendationComponent) managedClustersWatchRoleBinding() client.Object {
@@ -254,9 +242,9 @@ func (pr *policyRecommendationComponent) multiTenantManagedClustersAccess() []cl
 	var objects []client.Object
 
 	// In a single tenant setup we want to create a cluster role that binds using service account
-	// tigera-policy-recommendation from tigera-policy-recommendation namespace. In a multi-tenant setup
+	// tigera-policy-recommendation from calico-system namespace. In a multi-tenant setup
 	// PolicyRecommendation Controller from the tenant's namespace impersonates service tigera-policy-recommendation
-	// from tigera-policy-recommendation namespace
+	// from calico-system namespace
 	objects = append(objects, &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationMultiTenantManagedClustersAccessRoleBindingName, Namespace: pr.cfg.Namespace},
@@ -267,7 +255,7 @@ func (pr *policyRecommendationComponent) multiTenantManagedClustersAccess() []cl
 		},
 		Subjects: []rbacv1.Subject{
 			// requests for policy recommendation to managed clusters are done using service account tigera-policy-recommendation
-			// from tigera-policy-recommendation namespace regardless of tenancy mode (single tenant or multi-tenant)
+			// from calico-system namespace regardless of tenancy mode (single tenant or multi-tenant)
 			{
 				Kind:      "ServiceAccount",
 				Name:      PolicyRecommendationName,

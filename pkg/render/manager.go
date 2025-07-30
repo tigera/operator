@@ -204,7 +204,8 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.voltronImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
+	//c.voltronImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
+	c.voltronImage, err = "gcr.io/tigera-dev/vara/tigera/voltron:pr_mig", nil
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -592,7 +593,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	return corev1.Container{
 		Name:            VoltronName,
 		Image:           c.voltronImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		ImagePullPolicy: corev1.PullAlways,
 		Env:             env,
 		VolumeMounts:    mounts,
 		LivenessProbe:   c.managerProxyProbe(),

@@ -26,6 +26,8 @@ spec:
               type: object
             spec:
               properties:
+                calicoEnterpriseVersion:
+                  type: string
                 calicoVersion:
                   type: string
                 clusterGUID:

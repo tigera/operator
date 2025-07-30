@@ -78,7 +78,6 @@ var _ = Describe("Tiers rendering tests", func() {
 				render.ManagerNamespace,
 				eck.OperatorNamespace,
 				render.PacketCaptureNamespace,
-				render.PolicyRecommendationNamespace,
 				common.TigeraPrometheusNamespace,
 				"tigera-skraper",
 			},

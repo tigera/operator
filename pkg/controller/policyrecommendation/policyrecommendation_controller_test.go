@@ -702,7 +702,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			mockStatus.On("OnCRNotFound", mock.Anything).Return()
 		})
 
-		It("should return true when new deployment is ready, old one is gone, and TigeraStatus is healthy", func() {
+		It("should return true when new deployment is ready,PolicyRecommendation CR and TigeraStatus is healthy", func() {
 			err := c.Create(ctx, &appsv1.Deployment{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation", Namespace: "calico-system"},
 				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},

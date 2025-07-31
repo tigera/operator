@@ -449,15 +449,15 @@ func (pr *policyRecommendationComponent) deprecatedObjects(isManagedCluster bool
 		deprecatedObjs = append(deprecatedObjs, []client.Object{
 			&corev1.Namespace{
 				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"},
 			},
 			&rbacv1.ClusterRole{
 				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"},
 			},
 			&rbacv1.ClusterRoleBinding{
 				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"},
 			},
 		}...)
 	} else if pr.cfg.CanCleanupOlderResources {

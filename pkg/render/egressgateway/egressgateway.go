@@ -100,7 +100,6 @@ func (c *component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
-
 	var objectsToCreate []client.Object
 	objectsToCreate = append(objectsToCreate, c.egwOperatorSecretsRoleBinding())
 	objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(c.egwPullSecrets()...)...)
@@ -301,11 +300,16 @@ func (c *component) egwEnvVars() []corev1.EnvVar {
 func (c *component) egwInitEnvVars() []corev1.EnvVar {
 	egressPodIp := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIP"}}
 	egressPodIps := &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.podIPs"}}
+	dataplane := "iptables"
+	if c.config.Installation.IsNftables() {
+		dataplane = "nftables"
+	}
 	envVar := []corev1.EnvVar{
 		{Name: "EGRESS_VXLAN_VNI", Value: fmt.Sprintf("%d", c.config.VXLANVNI)},
 		{Name: "EGRESS_VXLAN_PORT", Value: fmt.Sprintf("%d", c.config.VXLANPort)},
 		{Name: "EGRESS_POD_IP", ValueFrom: egressPodIp},
 		{Name: "EGRESS_POD_IPS", ValueFrom: egressPodIps},
+		{Name: "DATAPLANE", Value: dataplane},
 	}
 	if c.config.IptablesBackend != "" {
 		envVar = append(envVar, corev1.EnvVar{Name: "IPTABLES_BACKEND", Value: c.config.IptablesBackend})

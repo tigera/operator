@@ -665,4 +665,176 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			Expect(prs.Spec.NamespaceSpec.Selector).To(Equal("!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-') && !(projectcalico.org/name starts with 'openshift-')"))
 		})
 	})
+
+	Context("check if older namespace can be cleaned up", func() {
+		ctx := context.Background()
+		BeforeEach(func() {
+			// The schema contains all objects that should be known to the fake client when the test runs.
+			scheme = runtime.NewScheme()
+			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+
+			// Create a client that will have a crud interface of k8s objects.
+			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+
+			// Create an object we can use throughout the test to do the compliance reconcile loops.
+			mockStatus = &status.MockStatus{}
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("RemoveDeployments", mock.Anything).Return()
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceUpdateError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+			mockStatus.On("SetMetaData", mock.Anything).Return()
+			mockStatus.On("OnCRNotFound", mock.Anything).Return()
+		})
+
+		It("should return true when new deployment is ready, old one is gone, and TigeraStatus is healthy", func() {
+			err := c.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation", Namespace: "calico-system"},
+				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Apply the policyrecommendation CR to the fake cluster.
+			Expect(c.Create(ctx,
+				&operatorv1.PolicyRecommendation{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+					Status: operatorv1.PolicyRecommendationStatus{
+						State: operatorv1.TigeraStatusReady,
+					},
+				})).NotTo(HaveOccurred())
+
+			err = c.Create(ctx, &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-recommendation"},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionTrue}},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			// Create a new ReconcilePolicyRecommendation instance with a fake client and scheme.
+			r := &ReconcilePolicyRecommendation{
+				client:                   c,
+				scheme:                   scheme,
+				provider:                 operatorv1.ProviderNone,
+				status:                   mockStatus,
+				licenseAPIReady:          &utils.ReadyFlag{},
+				tierWatchReady:           &utils.ReadyFlag{},
+				policyRecScopeWatchReady: &utils.ReadyFlag{},
+			}
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			Expect(canCleanedUp).To(BeTrue())
+		})
+
+		It("should return false when new deployment is not ready", func() {
+			err := c.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation", Namespace: "calico-system"},
+				Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			r := &ReconcilePolicyRecommendation{
+				client:                   c,
+				scheme:                   scheme,
+				provider:                 operatorv1.ProviderNone,
+				status:                   mockStatus,
+				licenseAPIReady:          &utils.ReadyFlag{},
+				tierWatchReady:           &utils.ReadyFlag{},
+				policyRecScopeWatchReady: &utils.ReadyFlag{},
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			Expect(canCleanedUp).To(BeFalse())
+		})
+
+		It("should return false when TigeraStatus is not healthy", func() {
+			err := c.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation", Namespace: "calico-system"},
+				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Apply the policyrecommendation CR to the fake cluster.
+			Expect(c.Create(ctx,
+				&operatorv1.PolicyRecommendation{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+					Status: operatorv1.PolicyRecommendationStatus{
+						State: operatorv1.TigeraStatusReady,
+					},
+				})).NotTo(HaveOccurred())
+
+			err = c.Create(ctx, &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-recommendation"},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionFalse}},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			r := &ReconcilePolicyRecommendation{
+				client:                   c,
+				scheme:                   scheme,
+				provider:                 operatorv1.ProviderNone,
+				status:                   mockStatus,
+				licenseAPIReady:          &utils.ReadyFlag{},
+				tierWatchReady:           &utils.ReadyFlag{},
+				policyRecScopeWatchReady: &utils.ReadyFlag{},
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			Expect(canCleanedUp).To(BeFalse())
+		})
+
+		It("should return false when policyrecommendation CR is not ready", func() {
+			err := c.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation", Namespace: "calico-system"},
+				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Apply the policyrecommendation CR to the fake cluster.
+			Expect(c.Create(ctx,
+				&operatorv1.PolicyRecommendation{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				})).NotTo(HaveOccurred())
+
+			err = c.Create(ctx, &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{Name: "policy-recommendation"},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionTrue}},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			r := &ReconcilePolicyRecommendation{
+				client:                   c,
+				scheme:                   scheme,
+				provider:                 operatorv1.ProviderNone,
+				status:                   mockStatus,
+				licenseAPIReady:          &utils.ReadyFlag{},
+				tierWatchReady:           &utils.ReadyFlag{},
+				policyRecScopeWatchReady: &utils.ReadyFlag{},
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			canCleanedUp := r.canCleanupLegacyNamespace(ctx, logf.Log.WithName("test"))
+			Expect(canCleanedUp).To(BeFalse())
+		})
+	})
+
 })

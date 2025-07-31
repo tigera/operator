@@ -3,7 +3,7 @@
   "kind": "NetworkPolicy",
   "metadata": {
     "name": "allow-tigera.tigera-policy-recommendation",
-    "namespace": "tigera-policy-recommendation"
+    "namespace": "calico-system"
   },
   "spec": {
     "order": 1,

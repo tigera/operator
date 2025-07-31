@@ -285,7 +285,7 @@ func (h *NetworkPolicyHelper) APIServerSourceEntityRule(v operatorv1.ProductVari
 }
 
 func (h *NetworkPolicyHelper) PolicyRecommendationSourceEntityRule() v3.EntityRule {
-	return CreateSourceEntityRule(h.namespace("tigera-policy-recommendation"), "tigera-policy-recommendation")
+	return CreateSourceEntityRule(h.namespace("calico-system"), "tigera-policy-recommendation")
 }
 
 func (h *NetworkPolicyHelper) ComplianceServerEntityRule() v3.EntityRule {

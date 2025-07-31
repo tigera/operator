@@ -665,4 +665,5 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			Expect(prs.Spec.NamespaceSpec.Selector).To(Equal("!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-') && !(projectcalico.org/name starts with 'openshift-')"))
 		})
 	})
+
 })

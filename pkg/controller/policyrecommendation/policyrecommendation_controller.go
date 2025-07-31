@@ -403,6 +403,10 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 			// we need to create a tigera-ca-bundle (named policy-recommendation-ca-bundle) inside this namespace in order to allow communication with Linseed
 			trustedBundleRW, err = certificateManager.CreateNamedTrustedBundleFromSecrets(ResourceName, r.client,
 				helper.TruthNamespace(), false)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, logc)
+				return reconcile.Result{}, err
+			}
 
 			// Multi-tenant setups need to use the config map that was created by pkg/controller/secrets/tenant_controller.go
 			// in the tenant namespace. This parameter will be set only for non multitenant.

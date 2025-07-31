@@ -45,7 +45,7 @@ const (
 	ElasticsearchPolicyRecommendationUserSecret = "tigera-ee-policy-recommendation-elasticsearch-access"
 
 	PolicyRecommendationName       = "tigera-policy-recommendation"
-	PolicyRecommendationNamespace  = "calico-system"
+	PolicyRecommendationNamespace  = common.CalicoNamespace
 	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
 
 	PolicyRecommendationTLSSecretName                                   = "policy-recommendation-tls"
@@ -76,7 +76,8 @@ type PolicyRecommendationConfiguration struct {
 	Tenant          *operatorv1.Tenant
 	ExternalElastic bool
 
-	PolicyRecommendation *operatorv1.PolicyRecommendation
+	PolicyRecommendation     *operatorv1.PolicyRecommendation
+	CanCleanupOlderResources bool
 }
 
 type policyRecommendationComponent struct {
@@ -114,7 +115,7 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	// Guardian has RBAC permissions to handle policy recommendation requests in managed clusters,
 	// so clean up the resources left behind in older clusters during upgrade.
 	if pr.cfg.ManagedCluster {
-		return objs, pr.deprecatedObjects()
+		return objs, pr.deprecatedObjects(pr.cfg.ManagedCluster)
 	}
 
 	// Management and managed clusters need API access to the resources defined in the policy
@@ -131,7 +132,7 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 		objs = append(objs, pr.multiTenantManagedClustersAccess()...)
 	}
 
-	return objs, nil
+	return objs, pr.deprecatedObjects(pr.cfg.ManagedCluster)
 }
 
 func (pr *policyRecommendationComponent) Ready() bool {
@@ -441,19 +442,33 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 	}
 }
 
-func (pr *policyRecommendationComponent) deprecatedObjects() []client.Object {
-	return []client.Object{
-		&corev1.Namespace{
-			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationNamespace},
-		},
-		&rbacv1.ClusterRole{
-			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
-		},
-		&rbacv1.ClusterRoleBinding{
-			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationName},
-		},
+func (pr *policyRecommendationComponent) deprecatedObjects(isManagedCluster bool) []client.Object {
+
+	var deprecatedObjs []client.Object
+	if isManagedCluster {
+		deprecatedObjs = append(deprecatedObjs, []client.Object{
+			&corev1.Namespace{
+				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"},
+			},
+			&rbacv1.ClusterRole{
+				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"},
+			},
+			&rbacv1.ClusterRoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"},
+			},
+		}...)
+	} else if pr.cfg.CanCleanupOlderResources {
+		//Clean up the legacy namespace
+		deprecatedObjs = append(deprecatedObjs,
+			&corev1.Namespace{
+				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"},
+			})
 	}
+
+	return deprecatedObjs
+
 }

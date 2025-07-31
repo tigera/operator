@@ -22,7 +22,7 @@ import (
 )
 
 type Component struct {
-	// Image is the full image path and name for this component (e.g., tigera/cnx-node, calico/cni)
+	// Image is the full image path and name for this component (e.g., tigera/node, calico/cni)
 	Image   string
 	Version string
 

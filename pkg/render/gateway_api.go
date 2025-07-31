@@ -84,6 +84,26 @@ const (
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 )
 
+var (
+	// logger gateway name and namespace are set from the k8s downward api pod metadata.
+	GatewayNameEnvVar = corev1.EnvVar{
+		Name: "LOGGER_GATEWAY_NAME",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.name",
+			},
+		},
+	}
+	GatewayNamespaceEnvVar = corev1.EnvVar{
+		Name: "LOGGER_GATEWAY_NAMESPACE",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.namespace",
+			},
+		},
+	}
+)
+
 func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 	var lock sync.Mutex
 	var resources = &gatewayAPIResources{}
@@ -689,6 +709,10 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						Name:      "var-log-calico",
 						MountPath: "/var/log/calico",
 					},
+				},
+				Env: []corev1.EnvVar{
+					GatewayNameEnvVar,
+					GatewayNamespaceEnvVar,
 				},
 				SecurityContext: securitycontext.NewRootContext(true),
 			}

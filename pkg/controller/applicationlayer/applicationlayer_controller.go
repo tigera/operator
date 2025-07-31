@@ -118,7 +118,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	}
 
 	// Watch mutatingwebhookconfiguration responsible for sidecar injetion
-	err = c.WatchObject(&admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}},
+	err = utils.AddClusterWatch(c, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}},
 		&handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("applicationlayer-controller failed to watch sidecar MutatingWebhookConfiguration resource: %w", err)

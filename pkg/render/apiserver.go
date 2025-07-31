@@ -259,11 +259,11 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalEnterpriseObjects = append(globalEnterpriseObjects,
 			c.tigeraUserClusterRole(),
 			c.tigeraNetworkAdminClusterRole(),
-			c.managedClusterWatchClusterRole(),
 		)
 	}
 
 	if c.cfg.ManagementCluster != nil {
+		globalEnterpriseObjects = append(globalEnterpriseObjects, c.managedClusterWatchClusterRole())
 		if c.cfg.MultiTenant {
 			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
 			// per-tenant guardian certificates when creating ManagedClusters.
@@ -280,6 +280,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		objsToDelete = append(objsToDelete, c.multiTenantSecretsRBAC()...)
 		objsToDelete = append(objsToDelete, c.secretsRBAC()...)
 		objsToDelete = append(objsToDelete, c.multiTenantManagedClusterAccessClusterRoles()...)
+		objsToDelete = append(objsToDelete, c.managedClusterWatchClusterRole())
 	}
 
 	// Namespaced enterprise-only objects.

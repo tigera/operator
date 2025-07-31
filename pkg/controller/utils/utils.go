@@ -265,6 +265,15 @@ func AddNamespacedWatch(c ctrlruntime.Controller, obj client.Object, h handler.E
 	return c.WatchObject(obj, h, pred)
 }
 
+// AddClusterWatch creates a watch on the given Cluster scoped object. If a name is provided, then it will
+// use predicates to only return matching objects. If it is not, then all events of the provided kind
+// will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
+// If a namespace is set on the obj passed in, the namespace will be set to the empty string.
+func AddClusterWatch(c ctrlruntime.Controller, obj client.Object, h handler.EventHandler) error {
+	obj.SetNamespace("")
+	return AddNamespacedWatch(c, obj, h)
+}
+
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
 	instance, msg, err := GetAPIServer(context.Background(), client)
 	if err != nil {

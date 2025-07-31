@@ -2257,6 +2257,11 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 
 	l7AdmissionControllerTargetPort := getContainerPort(c.cfg, L7AdmissionControllerContainerName).ContainerPort
 
+	dataplane := "iptables"
+	if c.cfg.Installation.IsNftables() {
+		dataplane = "nftables"
+	}
+
 	l7AdmssCtrl := corev1.Container{
 		Name:            string(L7AdmissionControllerContainerName),
 		Image:           c.l7AdmissionControllerImage,
@@ -2281,6 +2286,10 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 			{
 				Name:  "L7ADMCTRL_LISTENADDR",
 				Value: fmt.Sprintf(":%d", l7AdmissionControllerTargetPort),
+			},
+			{
+				Name:  "DATAPLANE",
+				Value: dataplane,
 			},
 		},
 		VolumeMounts: volumeMounts,

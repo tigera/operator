@@ -45,7 +45,7 @@ const (
 	ElasticsearchPolicyRecommendationUserSecret = "tigera-ee-policy-recommendation-elasticsearch-access"
 
 	PolicyRecommendationName       = "tigera-policy-recommendation"
-	PolicyRecommendationNamespace  = "calico-system"
+	PolicyRecommendationNamespace  = common.CalicoNamespace
 	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
 
 	PolicyRecommendationTLSSecretName                                   = "policy-recommendation-tls"

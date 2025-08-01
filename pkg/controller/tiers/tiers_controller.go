@@ -191,7 +191,6 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		render.ManagerNamespace,
 		eck.OperatorNamespace,
 		render.PacketCaptureNamespace,
-		render.PolicyRecommendationNamespace,
 		common.TigeraPrometheusNamespace,
 		"tigera-skraper",
 	}

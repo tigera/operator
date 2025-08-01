@@ -1180,7 +1180,6 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		"tigera-manager",
 		"tigera-operator",
 		"tigera-packetcapture",
-		"tigera-policy-recommendation",
 		"tigera-prometheus",
 		"calico-system",
 		"tigera-firewall-controller",

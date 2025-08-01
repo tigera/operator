@@ -97,7 +97,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PolicyRecommendationManagedClustersWatchRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: render.PolicyRecommendationNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.tigera-policy-recommendation", Namespace: render.PolicyRecommendationNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation", Namespace: render.PolicyRecommendationNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 		}
@@ -434,7 +433,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 	})
 
 	Context("allow-tigera rendering", func() {
-		policyName := types.NamespacedName{Name: "allow-tigera.tigera-policy-recommendation", Namespace: "tigera-policy-recommendation"}
+		policyName := types.NamespacedName{Name: "allow-tigera.tigera-policy-recommendation", Namespace: "calico-system"}
 
 		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 			return testutils.SelectPolicyByClusterTypeAndProvider(
@@ -487,7 +486,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PolicyRecommendationManagedClustersWatchRoleBindingName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation-managed-cluster-access", Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.tigera-policy-recommendation", Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation", Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
@@ -520,7 +518,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PolicyRecommendationManagedClustersWatchRoleBindingName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation-managed-cluster-access", Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.tigera-policy-recommendation", Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation", Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
@@ -671,9 +668,9 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		It("should not render any resources in a managed cluster", func() {
 			cfg.ManagedCluster = true
 			expectedDeleteResources := []client.Object{
-				&corev1.Namespace{TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.PolicyRecommendationNamespace}},
-				&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.PolicyRecommendationName}},
-				&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.PolicyRecommendationName}},
+				&corev1.Namespace{TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"}},
+				&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"}},
+				&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"}},
 			}
 
 			component := render.PolicyRecommendation(cfg)

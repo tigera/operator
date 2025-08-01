@@ -613,6 +613,6 @@ func (r *ReconcilePolicyRecommendation) canCleanupLegacyNamespace(ctx context.Co
 		return false
 	}
 
-	logger.V(2).Info("Safe to clean up old namespace for PolicyRecommendation.")
+	logger.V(2).Info("Safe to clean up old namespace: \"tigera-policy-recommendation\", for PolicyRecommendation.")
 	return true
 }

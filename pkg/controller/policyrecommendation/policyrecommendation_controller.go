@@ -404,7 +404,9 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 			trustedBundleRW, err = certificateManager.CreateNamedTrustedBundleFromSecrets(ResourceName, r.client,
 				helper.TruthNamespace(), false)
 			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, logc)
+				// CreateNamedTrustedBundleFromSecrets panics if it encounters an error during creation,
+				// so the only error returned here would be from trying to retrieve the certificate.
+				r.status.SetDegraded(operatorv1.CertificateReadError, "Unable to fetch the trusted bundle", err, logc)
 				return reconcile.Result{}, err
 			}
 

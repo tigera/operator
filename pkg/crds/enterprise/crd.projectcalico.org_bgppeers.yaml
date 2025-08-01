@@ -91,6 +91,11 @@ spec:
                   type: string
                 restartMode:
                   type: string
+                reversePeering:
+                  enum:
+                    - Auto
+                    - Manual
+                  type: string
                 sourceAddress:
                   type: string
                 ttlSecurity:

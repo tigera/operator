@@ -27,6 +27,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"

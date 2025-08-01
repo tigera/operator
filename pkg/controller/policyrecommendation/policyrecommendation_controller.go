@@ -572,14 +572,14 @@ func (r *ReconcilePolicyRecommendation) canCleanupLegacyNamespace(ctx context.Co
 	newDeploy := &appsv1.Deployment{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: newNamespace}, newDeploy); err != nil {
 		if errors.IsNotFound(err) {
-			logger.V(3).Info("New Policy Recommendation deployment not found", "ns", newNamespace)
+			logger.V(4).Info("New Policy Recommendation deployment not found", "ns", newNamespace)
 		} else {
 			logger.Error(err, "Failed to get new Policy Recommendation deployment", "ns", newNamespace)
 		}
 		return false
 	}
 	if newDeploy.Status.AvailableReplicas == 0 {
-		logger.V(3).Info("New PolicyRecommendation deployment has 0 replicas", "ns", newNamespace)
+		logger.V(4).Info("New PolicyRecommendation deployment has 0 replicas", "ns", newNamespace)
 		return false
 	}
 
@@ -587,14 +587,14 @@ func (r *ReconcilePolicyRecommendation) canCleanupLegacyNamespace(ctx context.Co
 	policyRec, err := GetPolicyRecommendation(ctx, r.client, false, "")
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logger.V(3).Error(err, "PolicyRecommendation resource does not exist")
+			logger.V(4).Info("PolicyRecommendation resource does not exist")
 			return false
 		}
-		logger.V(3).Error(err, "Unable to retrieve PolicyRecommendation resource", "msg")
+		logger.V(4).Info("Unable to retrieve PolicyRecommendation resource", "msg")
 		return false
 	}
 	if policyRec.Status.State != operatorv1.TigeraStatusReady {
-		logger.V(3).Info("PolicyRecommendation resource not ready")
+		logger.V(4).Info("PolicyRecommendation resource not ready")
 		return false
 	}
 
@@ -602,17 +602,17 @@ func (r *ReconcilePolicyRecommendation) canCleanupLegacyNamespace(ctx context.Co
 	ts := &operatorv1.TigeraStatus{}
 	if err := r.client.Get(ctx, types.NamespacedName{Name: ResourceName}, ts); err != nil {
 		if errors.IsNotFound(err) {
-			logger.V(3).Info("TigeraStatus not found")
+			logger.V(4).Info("TigeraStatus not found")
 		} else {
 			logger.Error(err, "Failed to get TigeraStatus resource.")
 		}
 		return false
 	}
 	if !ts.Available() {
-		logger.V(3).Info("TigeraStatus for policy-recommendation is not in Available status.")
+		logger.V(4).Info("TigeraStatus for policy-recommendation is not in Available status.")
 		return false
 	}
 
-	logger.V(2).Info("Safe to clean up old namespace: \"tigera-policy-recommendation\", for PolicyRecommendation.")
+	logger.V(5).Info("Safe to clean up old namespace: \"tigera-policy-recommendation\", for PolicyRecommendation.")
 	return true
 }

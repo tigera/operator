@@ -565,7 +565,7 @@ func (r *ReconcilePolicyRecommendation) canCleanupLegacyNamespace(ctx context.Co
 		// so skip cleanup for this resource.
 		return false
 	}
-	newNamespace := "calico-system"
+	newNamespace := common.CalicoNamespace
 	deploymentName := "tigera-policy-recommendation"
 
 	// Fetch the new policy-recommendation deployment in calico-system

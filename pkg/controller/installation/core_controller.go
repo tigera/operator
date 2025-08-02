@@ -76,7 +76,6 @@ import (
 	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -1432,25 +1431,25 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
 	}
 
-	// Check if BPF auto-bootstrap is enabled and its requirements.
+	// Check if BPF auto-bootstrap is enabled and its requirements are met.
 	bpfBootstrapReq, err := bpfAutoBootstrapRequirements(r.client, ctx, instance, felixConfiguration)
 	if err != nil {
-		r.status.SetDegraded(operator.ResourceValidationError, "Unable to retrieve BPF auto-bootstrap requirements", err, reqLogger)
+		r.status.SetDegraded(operator.ResourceValidationError, "BPF auto-bootstrap is enabled but the requirements are not met", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	// If BPF auto-bootstrap requirements are met, configure the node and disable kube-proxy.
+	// If BPF auto-bootstrap requirements are met, disable kube-proxy and configure the node.
 	if bpfBootstrapReq != nil {
+		// Try to disable kube-proxy.
+		err = r.disableKubeProxy(ctx, bpfBootstrapReq.kubeProxyDs)
+		if err != nil {
+			r.status.SetDegraded(operator.ResourcePatchError, "unable to disable kube-proxy", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
 		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
 		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.k8sService)
 		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfBootstrapReq.k8sServiceEndpoints)
-
-		// Try to disable kube-proxy.
-		err = r.disableKubeProxy(ctx, felixConfiguration, bpfBootstrapReq.kubeProxyDs)
-		if err != nil {
-			r.status.SetDegraded(operator.ResourceValidationError, "Unable to disable kube-proxy", err, reqLogger)
-			return reconcile.Result{}, err
-		}
 	}
 
 	components = append(components, render.Node(&nodeCfg))
@@ -1604,12 +1603,26 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	r.status.ReadyToMonitor()
 
 	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+	patchedFelixConfig, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
 	})
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceUpdateError, "Error updating resource", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// If patched FelixConfiguration is not BPF (which means felix will not clean up iptables rules); and
+	// Previous configuration was to automatically install BPF; and
+	// The current one is not to automatically install BPF, then we try to enable kube-proxy (if it exists).
+	if (patchedFelixConfig.Spec.BPFEnabled == nil || !*patchedFelixConfig.Spec.BPFEnabled) &&
+		instance.Status.Computed != nil && instance.Status.Computed.BPFInstallModeAuto() &&
+		!instance.Spec.BPFInstallModeAuto() {
+
+		err := r.enableKubeProxy(ctx)
+		if err != nil {
+			r.status.SetDegraded(operator.ResourcePatchError, "unable to remove kube-proxy nodeSelector", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.
@@ -1930,7 +1943,7 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Co
 		if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
 			err := setBPFEnabledOnFelixConfiguration(fc, bpfEnabledOnInstall)
 			if err != nil {
-				reqLogger.Error(err, "Unable to enable eBPF data plane")
+				reqLogger.Error(err, "Unable to disable eBPF data plane")
 				return false, err
 			} else {
 				updated = true
@@ -1990,9 +2003,9 @@ func serviceEndpointSlice(endpointSliceList *discoveryv1.EndpointSliceList) []k8
 }
 
 // disableKubeProxy disables kube-proxy by patching the DaemonSet with a nodeSelector that prevents it from running on any node.
-func (r *ReconcileInstallation) disableKubeProxy(ctx context.Context, fc *crdv1.FelixConfiguration, kubeProxy *appsv1.DaemonSet) error {
-	if fc == nil || kubeProxy == nil {
-		return fmt.Errorf("Invalid parameters to disable kube-proxy: fc=%v, kubeProxy=%v", fc, kubeProxy)
+func (r *ReconcileInstallation) disableKubeProxy(ctx context.Context, kubeProxy *appsv1.DaemonSet) error {
+	if kubeProxy == nil {
+		return fmt.Errorf("Invalid parameters to disable kube-proxy: kubeProxy=%v", kubeProxy)
 	}
 
 	// If kube-proxy is already disabled, we can skip further processing.
@@ -2001,85 +2014,43 @@ func (r *ReconcileInstallation) disableKubeProxy(ctx context.Context, fc *crdv1.
 		return nil
 	}
 
-	// Check if kube-proxy is in the process of being disabled.
-	// The field `fc.Spec.BPFKubeProxyIptablesCleanupEnabled` must be nil for the automated process to proceed - i.e., the user must not have explicitly set it.
-	// However, during the process of disabling kube-proxy, the Operator sets this field to false.
-	// As a result, it's not possible to distinguish whether the field was set by the user or by the Operator.
-	// This annotation is used to make that distinction.
-	disablingKubeProxy := false
-	if fc.Annotations[render.DisableKubeProxyKey] != "" {
-		v, err := strconv.ParseBool(fc.Annotations[render.DisableKubeProxyKey])
-		disablingKubeProxy = v
-		if err != nil {
-			return err
-		}
+	// Patch the kube-proxy DaemonSet with a disabling nodeSelector.
+	// This step ensures that kube-proxy is disabled not only during BPF installation (fresh install or migration),
+	// but also if an external operation - such as a manual upgrade or migration - overrides this setting.
+	patchFrom := client.MergeFrom(kubeProxy.DeepCopy())
+	if kubeProxy.Spec.Template.Spec.NodeSelector == nil {
+		kubeProxy.Spec.Template.Spec.NodeSelector = make(map[string]string)
 	}
-	if !disablingKubeProxy && fc.Spec.BPFKubeProxyIptablesCleanupEnabled != nil {
-		return fmt.Errorf("BPFKubeProxyIptablesCleanupEnabled shouldn't be set in FelixConfiguration")
+	kubeProxy.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] = strconv.FormatBool(true)
+	if err := r.client.Patch(ctx, kubeProxy, patchFrom); err != nil {
+		return fmt.Errorf("Error patching kube-proxy DaemonSet: %w", err)
 	}
 
-	// If this is the first iteration of disabling kube-proxy, we need to configure Felix to avoid cleaning up iptables rules
-	// to prevent conflicts between kube-proxy and Felix. We also set an annotation in the same resource (FelixConfiguration)
-	// to ensure that both the annotation and the BPFKubeProxyIptablesCleanupEnabled field are updated atomically and stay in sync.
-	if !disablingKubeProxy {
-		_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
-			// Set the annotation to disable kube-proxy
-			var annotations map[string]string
-			if fc.Annotations == nil {
-				annotations = make(map[string]string)
-			} else {
-				annotations = fc.Annotations
-			}
-			annotations[render.DisableKubeProxyKey] = strconv.FormatBool(true)
-			fc.SetAnnotations(annotations)
+	return nil
+}
 
-			// Set BPFKubeProxyIptablesCleanupEnabled to false
-			fc.Spec.BPFKubeProxyIptablesCleanupEnabled = ptr.BoolToPtr(false)
-			return true, nil
-		})
-		if err != nil {
-			return fmt.Errorf("Error patching felix configuration: %w", err)
-		}
-	}
-
-	ds := &appsv1.DaemonSet{}
-	err := r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, ds)
+// enableKubeProxy enables kube-proxy by removing the nodeSelector that prevents it from running on any node.
+func (r *ReconcileInstallation) enableKubeProxy(ctx context.Context) error {
+	kubeProxy := &appsv1.DaemonSet{}
+	// Get the kube-proxy DaemonSet.
+	err := r.client.Get(ctx, types.NamespacedName{Namespace: "kube-system", Name: "kube-proxy"}, kubeProxy)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
-			// calico-node DaemonSet not found, assuming it is not installed yet.
 			return nil
 		}
-		return fmt.Errorf("Error getting calico-node DaemonSet: %w", err)
+		return fmt.Errorf("Error getting kube-proxy DaemonSet: %w", err)
 	}
-	if isRolloutCompleteWithBPFVolumes(ds) {
-		// When the rollout is complete:
-		// 1. Patch the FelixConfiguration to revert the changes made during the disabling process.
-		// 2. Patch the kube-proxy DaemonSet to remove its pods from the nodes.
-		_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
-			// Set BPFKubeProxyIptablesCleanupEnabled back to nil.
-			fc.Spec.BPFKubeProxyIptablesCleanupEnabled = nil
 
-			// Remove the annotation to disable kube-proxy.
-			annotations := fc.Annotations
-			delete(annotations, render.DisableKubeProxyKey)
-			fc.SetAnnotations(annotations)
-			return true, nil
-		})
-		if err != nil {
-			return fmt.Errorf("Error patching felix configuration: %w", err)
-		}
+	// If the key does not exist, we can skip further processing.
+	if kubeProxy.Spec.Template.Spec.NodeSelector == nil ||
+		kubeProxy.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] == "" {
+		return nil
+	}
 
-		// Patch the kube-proxy DaemonSet with a disabling nodeSelector.
-		// This step ensures that kube-proxy is disabled not only during BPF installation (fresh install or migration),
-		// but also if an external operation - such as a manual upgrade or migration - overrides this setting.
-		patchFrom := client.MergeFrom(kubeProxy.DeepCopy())
-		if kubeProxy.Spec.Template.Spec.NodeSelector == nil {
-			kubeProxy.Spec.Template.Spec.NodeSelector = make(map[string]string)
-		}
-		kubeProxy.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] = strconv.FormatBool(true)
-		if err := r.client.Patch(ctx, kubeProxy, patchFrom); err != nil {
-			return fmt.Errorf("Error patching kube-proxy DaemonSet: %w", err)
-		}
+	patchFrom := client.MergeFrom(kubeProxy.DeepCopy())
+	delete(kubeProxy.Spec.Template.Spec.NodeSelector, render.DisableKubeProxyKey)
+	if err := r.client.Patch(ctx, kubeProxy, patchFrom); err != nil {
+		return fmt.Errorf("Error patching kube-proxy DaemonSet: %w", err)
 	}
 
 	return nil

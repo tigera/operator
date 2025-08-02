@@ -93,12 +93,6 @@ type InstallationSpec struct {
 	// +optional
 	CalicoNetwork *CalicoNetworkSpec `json:"calicoNetwork,omitempty"`
 
-	// BPFBootstrapMode defines how the initial BPF networking configuration is set up.
-	// Default: Manual
-	// +optional
-	// +kubebuilder:validation:Enum=Auto;Manual
-	BPFBootstrapMode *BootstrapMode `json:"bpfBootstrapMode,omitempty"`
-
 	// Deprecated. Please use Installation.Spec.TyphaDeployment instead.
 	// TyphaAffinity allows configuration of node affinity characteristics for Typha pods.
 	// +optional
@@ -554,6 +548,13 @@ type CalicoNetworkSpec struct {
 	// +optional
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
 
+	// BPFInstallMode defines how the initial steps to configure BPF dataplane is set up.
+	// If set to Auto, the Operator will automatically include the API Server addresses in the NAT Maps and disable kube-proxy.
+	// Default: Manual
+	// +optional
+	// +kubebuilder:validation:Enum=Auto;Manual
+	BPFInstallMode *BootstrapMode `json:"bpfInstallMode,omitempty"`
+
 	// BGP configures whether or not to enable Calico's BGP capabilities.
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
@@ -961,9 +962,11 @@ func (installation *InstallationSpec) BPFEnabled() bool {
 		*installation.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF
 }
 
-func (installation *InstallationSpec) BPFAutoBootstrapEnabled() bool {
-	return installation.BPFBootstrapMode != nil &&
-		*installation.BPFBootstrapMode == BPFBootstrapAuto
+func (installation *InstallationSpec) BPFInstallModeAuto() bool {
+	return installation != nil &&
+		installation.CalicoNetwork != nil &&
+		installation.CalicoNetwork.BPFInstallMode != nil &&
+		*installation.CalicoNetwork.BPFInstallMode == BPFBootstrapAuto
 }
 
 // +kubebuilder:object:root=true

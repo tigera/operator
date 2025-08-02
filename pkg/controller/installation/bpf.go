@@ -139,11 +139,16 @@ type BPFAutoBootstrap struct {
 
 // bpfAutoBootstrapRequirements checks whether the BPF auto-bootstrap requirements are met.
 // If so, it retrieves the kube-proxy DaemonSet, the Kubernetes service, and its EndpointSlices, returning them in a BPFAutoBootstrap struct.
-// If any of these resources are not found, it returns an error.
+// If it's not possible to retrieve any of these resources, it returns an error.
 func bpfAutoBootstrapRequirements(c client.Client, ctx context.Context, install *operator.Installation, fc *crdv1.FelixConfiguration) (*BPFAutoBootstrap, error) {
-	// 1. Dataplane is not BPF, or the user didn't set BPFBootstrapMode, or set it to manual, so we don't need to do anything.
-	if !install.Spec.BPFEnabled() || !install.Spec.BPFAutoBootstrapEnabled() {
+	// If the user didn't set BPFBootstrapMode, or set it to manual, so we don't need to do anything.
+	if !install.Spec.BPFInstallModeAuto() {
 		return nil, nil
+	}
+
+	// 1. Dataplane should be BPF.
+	if !install.Spec.BPFEnabled() {
+		return nil, fmt.Errorf("the linuxDataplane is not BPF in Installation CR")
 	}
 
 	// 2. CNI plugin is Calico.

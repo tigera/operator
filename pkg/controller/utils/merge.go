@@ -79,11 +79,6 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.CalicoNetwork = mergeCalicoNetwork(inst.CalicoNetwork, override.CalicoNetwork)
 	}
 
-	switch compareFields(inst.BPFBootstrapMode, override.BPFBootstrapMode) {
-	case BOnlySet, Different:
-		inst.BPFBootstrapMode = override.BPFBootstrapMode
-	}
-
 	switch compareFields(inst.ControlPlaneNodeSelector, override.ControlPlaneNodeSelector) {
 	case BOnlySet, Different:
 		inst.ControlPlaneNodeSelector = make(map[string]string, len(override.ControlPlaneNodeSelector))
@@ -311,6 +306,11 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 	switch compareFields(out.WindowsDataplane, override.WindowsDataplane) {
 	case BOnlySet, Different:
 		out.WindowsDataplane = override.WindowsDataplane
+	}
+
+	switch compareFields(out.BPFInstallMode, override.BPFInstallMode) {
+	case BOnlySet, Different:
+		out.BPFInstallMode = override.BPFInstallMode
 	}
 
 	switch compareFields(out.NodeAddressAutodetectionV4, override.NodeAddressAutodetectionV4) {

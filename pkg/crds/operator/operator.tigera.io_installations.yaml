@@ -1274,6 +1274,15 @@ spec:
                         - Enabled
                         - Disabled
                       type: string
+                    bpfInstallMode:
+                      description: |-
+                        BPFInstallMode defines how the initial steps to configure BPF dataplane is set up.
+                        If set to Auto, the Operator will automatically include the API Server addresses in the NAT Maps and disable kube-proxy.
+                        Default: Manual
+                      enum:
+                        - Auto
+                        - Manual
+                      type: string
                     containerIPForwarding:
                       description: |-
                         ContainerIPForwarding configures whether ip forwarding will be enabled for containers in the CNI configuration.
@@ -10043,6 +10052,15 @@ spec:
                           enum:
                             - Enabled
                             - Disabled
+                          type: string
+                        bpfInstallMode:
+                          description: |-
+                            BPFInstallMode defines how the initial steps to configure BPF dataplane is set up.
+                            If set to Auto, the Operator will automatically include the API Server addresses in the NAT Maps and disable kube-proxy.
+                            Default: Manual
+                          enum:
+                            - Auto
+                            - Manual
                           type: string
                         containerIPForwarding:
                           description: |-

@@ -381,6 +381,10 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(l.cfg.Tenant)})
 			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
 
+			if l.cfg.Tenant.Spec.ManagedClusterVariant != nil {
+				envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_PRODUCT_VARIANT", Value: string(*l.cfg.Tenant.Spec.ManagedClusterVariant)})
+			}
+
 			// We also use shared indices for multi-tenant clusters.
 			envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
 			for _, index := range l.cfg.Tenant.Spec.Indices {

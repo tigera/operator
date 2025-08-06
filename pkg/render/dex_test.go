@@ -21,6 +21,8 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
+	"gopkg.in/yaml.v2"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -257,7 +259,19 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(d.Spec.Template.Spec.Volumes).To(BeEquivalentTo(expectedVolumes))
 			cm, ok := rtest.GetResource(resources, "tigera-dex", "tigera-dex", "", "v1", "ConfigMap").(*corev1.ConfigMap)
 			Expect(ok).To(BeTrue())
-			Expect(cm.Data["config.yaml"]).To(ContainSubstring("idTokens: 15m"))
+			var config ConfigYAML
+			// Decode the JSON string into an object into a ConfigYAML object, which allows easier introspection.
+			err := yaml.Unmarshal([]byte(cm.Data["config.yaml"]), &config)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(config.Expiry.IDTokens).To(Equal("15m"))
+			Expect(config.StaticClients).To(HaveLen(1))
+			Expect(config.StaticClients[0].RedirectURIs).To(ConsistOf(
+				"https://localhost:9443/login/oidc/callback",
+				"https://localhost:9443/login/oidc/silent-callback",
+				"https://127.0.0.1:9443/login/oidc/callback",
+				"https://127.0.0.1:9443/login/oidc/silent-callback",
+				"https://example.com/login/oidc/callback",
+				"https://example.com/login/oidc/silent-callback"))
 		})
 
 		It("should render config Map with the HSTS headers", func() {
@@ -272,10 +286,15 @@ var _ = Describe("dex rendering tests", func() {
 
 			cm, ok := rtest.GetResource(resources, "tigera-dex", "tigera-dex", "", "v1", "ConfigMap").(*corev1.ConfigMap)
 			Expect(ok).To(BeTrue())
-			Expect(cm.Data["config.yaml"]).To(ContainSubstring("X-Content-Type-Options: nosniff"))
-			Expect(cm.Data["config.yaml"]).To(ContainSubstring("X-XSS-Protection: 1; mode=block"))
-			Expect(cm.Data["config.yaml"]).To(ContainSubstring("X-Frame-Options: DENY"))
-			Expect(cm.Data["config.yaml"]).To(ContainSubstring("Strict-Transport-Security: max-age=31536000; includeSubDomains"))
+			var config ConfigYAML
+			// Decode the JSON string into an object into a ConfigYAML object, which allows easier introspection.
+			err := yaml.Unmarshal([]byte(cm.Data["config.yaml"]), &config)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(config.Web.Headers.ContentSecurityPolicy).To(Equal(""))
+			Expect(config.Web.Headers.XXSSProtection).To(Equal("1; mode=block"))
+			Expect(config.Web.Headers.XFrameOptions).To(Equal("DENY"))
+			Expect(config.Web.Headers.StrictTransportSecurity).To(Equal("max-age=31536000; includeSubDomains"))
+			Expect(config.Web.Headers.XContentTypeOptions).To(Equal("nosniff"))
 		})
 
 		DescribeTable("should render the cluster name properly in the validator", func(clusterDomain string) {
@@ -532,3 +551,30 @@ var _ = Describe("dex rendering tests", func() {
 		})
 	})
 })
+
+// ConfigYAML is a slimmed down version of https://github.com/dexidp/dex/blob/v2.41.1/cmd/dex/config.go
+type ConfigYAML struct {
+	Web           Web             `yaml:"web"`
+	StaticClients []StaticClients `yaml:"staticClients"`
+	Expiry        Expiry          `yaml:"expiry"`
+}
+
+type Web struct {
+	Headers Headers `json:"headers"`
+}
+
+type StaticClients struct {
+	RedirectURIs []string `yaml:"redirectURIs"`
+}
+
+type Expiry struct {
+	IDTokens string `yaml:"idTokens"`
+}
+
+type Headers struct {
+	ContentSecurityPolicy   string `yaml:"Content-Security-Policy"`
+	XFrameOptions           string `yaml:"X-Frame-Options"`
+	XContentTypeOptions     string `yaml:"X-Content-Type-Options"`
+	XXSSProtection          string `yaml:"X-XSS-Protection"`
+	StrictTransportSecurity string `yaml:"Strict-Transport-Security"`
+}

@@ -62,6 +62,9 @@ const (
 	// This is for development and testing purposes only. Do not use this annotation
 	// for production, as this will cause problems with upgrade.
 	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
+
+	KubeProxyDaemonSetName = "kube-proxy"
+	KubeProxyNamespace     = "kube-system"
 )
 
 var (
@@ -844,6 +847,17 @@ func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch
 		return nil, err
 	}
 	return &es, nil
+}
+
+// AddKubeProxyWatch creates a watch on the kube-proxy DaemonSet.
+func AddKubeProxyWatch(c ctrlruntime.Controller) error {
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: KubeProxyNamespace,
+			Name:      KubeProxyDaemonSetName,
+		},
+	}
+	return c.WatchObject(&appsv1.DaemonSet{}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
 }
 
 func IsNodeLocalDNSAvailable(ctx context.Context, cli client.Client) (bool, error) {

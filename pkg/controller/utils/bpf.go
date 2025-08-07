@@ -56,9 +56,14 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kube-proxy: %w", err)
 	}
+
+	// 4. Validate that the kube-proxy DaemonSet is not managed by an external tool.
+	if err = validateDaemonSetManaged(ds); err != nil {
+		return nil, fmt.Errorf("failed to validate kube-proxy DaemonSet: %w", err)
+	}
 	bpfAutoInstallReq.KubeProxyDs = ds
 
-	// 4. Try to retrieve kubernetes service.
+	// 5. Try to retrieve kubernetes service.
 	service := &corev1.Service{}
 	err = c.Get(ctx, types.NamespacedName{Namespace: "default", Name: "kubernetes"}, service)
 	if err != nil {
@@ -66,7 +71,7 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 	}
 	bpfAutoInstallReq.K8sService = service
 
-	// 5. Try to retrieve kubernetes service endpoint slices. If the cluster is dual-stack, there should be at least one EndpointSlice for each address type.
+	// 6. Try to retrieve kubernetes service endpoint slices. If the cluster is dual-stack, there should be at least one EndpointSlice for each address type.
 	endpointSlice := &discoveryv1.EndpointSliceList{}
 	err = c.List(ctx, endpointSlice, client.InNamespace("default"), client.MatchingLabels{"kubernetes.io/service-name": "kubernetes"})
 	if err != nil || len(endpointSlice.Items) == 0 {
@@ -74,11 +79,35 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 	}
 	bpfAutoInstallReq.K8sServiceEndpoints = endpointSlice
 
+	// 7. Validate that the service and EndpointSlice IPs are consistent.
 	if err = validateIpFamilyConsistency(service, endpointSlice); err != nil {
 		return nil, err
 	}
 
 	return bpfAutoInstallReq, nil
+}
+
+// validateDaemonSetManaged checks whether the DaemonSet is managed by an external tool,
+// based on common labels or annotations typically added by automation.
+func validateDaemonSetManaged(ds *appsv1.DaemonSet) error {
+	if len(ds.Labels) == 0 && len(ds.Annotations) == 0 {
+		return nil
+	}
+
+	// Kubernetes well-known labels
+	if _, ok := ds.Labels["app.kubernetes.io/managed-by"]; ok {
+		return fmt.Errorf("DaemonSet is likely managed by: %s", ds.Labels["app.kubernetes.io/managed-by"])
+	}
+	if _, ok := ds.Labels["addonmanager.kubernetes.io/mode"]; ok {
+		return fmt.Errorf("DaemonSet is likely managed by another source due to the label 'addonmanager.kubernetes.io/mode: %s'", ds.Labels["addonmanager.kubernetes.io/mode"])
+	}
+
+	// Check for GitOps tools
+	if _, ok := ds.Annotations["argocd.argoproj.io/tracking-id"]; ok {
+		return fmt.Errorf("DaemonSet is likely managed by another source due to the label 'argocd.argoproj.io/tracking-id: %s'", ds.Annotations["argocd.argoproj.io/tracking-id"])
+	}
+
+	return nil
 }
 
 // validateIpFamilyConsistency checks whether the service and EndpointSliceList have consistent IP address families.

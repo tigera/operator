@@ -959,7 +959,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			kubeProxyDaemonSet := func() {
 				createResource(
 					&appsv1.DaemonSet{
-						ObjectMeta: metav1.ObjectMeta{Name: "kube-proxy", Namespace: "kube-system"},
+						ObjectMeta: metav1.ObjectMeta{Name: utils.KubeProxyDaemonSetName, Namespace: utils.KubeProxyNamespace},
 					})
 			}
 			svcIpV4 := func() {
@@ -1128,7 +1128,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 
 				kubeProxy := &appsv1.DaemonSet{}
-				err = c.Get(ctx, types.NamespacedName{Name: "kube-proxy", Namespace: "kube-system"}, kubeProxy)
+				err = c.Get(ctx, types.NamespacedName{Name: utils.KubeProxyDaemonSetName, Namespace: utils.KubeProxyNamespace}, kubeProxy)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(kubeProxy.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(render.DisableKubeProxyKey, "true"))
 			})

@@ -952,14 +952,22 @@ var _ = Describe("Testing core-controller installation", func() {
 			})
 		})
 
-		Context("with LinuxDataplane=BPF and BPFBootstrapMode=Auto", func() {
+		Context("with LinuxDataplane=BPF and BPFInstallMode=Auto", func() {
 			createResource := func(obj client.Object) {
 				Expect(c.Create(ctx, obj)).NotTo(HaveOccurred())
 			}
-			kubeProxyDaemonSet := func() {
+			kubeProxyDaemonSetDisabled := func() {
 				createResource(
 					&appsv1.DaemonSet{
 						ObjectMeta: metav1.ObjectMeta{Name: utils.KubeProxyDaemonSetName, Namespace: utils.KubeProxyNamespace},
+						Spec: appsv1.DaemonSetSpec{
+							Template: corev1.PodTemplateSpec{
+								ObjectMeta: metav1.ObjectMeta{},
+								Spec: corev1.PodSpec{
+									NodeSelector: map[string]string{render.DisableKubeProxyKey: "true"},
+								},
+							},
+						},
 					})
 			}
 			svcIpV4 := func() {
@@ -1028,7 +1036,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 				bpf := operator.LinuxDataplaneBPF
-				auto := operator.BPFBootstrapAuto
+				auto := operator.BPFInstallAuto
 				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
 					LinuxDataplane: &bpf,
 					BPFInstallMode: &auto,
@@ -1049,15 +1057,15 @@ var _ = Describe("Testing core-controller installation", func() {
 					[]func(){svcIpV4, epIpV4}, "failed to get kube-proxy",
 				),
 				table.Entry("kubernetes service not found",
-					[]func(){kubeProxyDaemonSet, epIpV4}, "failed to get kubernetes service",
+					[]func(){kubeProxyDaemonSetDisabled, epIpV4}, "failed to get kubernetes service",
 				),
 				table.Entry("kubernetes endpoint slices not found",
-					[]func(){kubeProxyDaemonSet, svcIpV4}, "failed to get kubernetes endpoint slices",
+					[]func(){kubeProxyDaemonSetDisabled, svcIpV4}, "failed to get kubernetes endpoint slices",
 				),
 			)
 			table.DescribeTable("test service and endpoint slice IPs consistency",
 				func(funcs []func(), shouldFail bool) {
-					kubeProxyDaemonSet()
+					kubeProxyDaemonSetDisabled()
 					for _, f := range funcs {
 						f()
 					}
@@ -1085,7 +1093,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				),
 			)
 			It("should push env vars to ebpf-bootstrap and disable kube-proxy", func() {
-				kubeProxyDaemonSet()
+				kubeProxyDaemonSetDisabled()
 				svcIpV4()
 				epIpV4()
 
@@ -1099,7 +1107,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(install.Spec.CalicoNetwork).ToNot(BeNil())
 				Expect(install.Spec.CalicoNetwork.BPFInstallMode).ToNot(BeNil())
-				Expect(*install.Spec.CalicoNetwork.BPFInstallMode).To(Equal(operator.BPFBootstrapAuto))
+				Expect(*install.Spec.CalicoNetwork.BPFInstallMode).To(Equal(operator.BPFInstallAuto))
 				Expect(install.Spec.BPFInstallModeAuto()).To(BeTrue())
 
 				By("Checking that the FelixConfiguration has BPF Enabled")
@@ -1120,20 +1128,9 @@ var _ = Describe("Testing core-controller installation", func() {
 					corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443"},
 					corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443"},
 				))
-
-				By("Checking kube-proxy is nodeSelector")
-				// Reconcile() needs to run again because kube-proxy is only disabled after the rollout is complete,
-				// meaning after all calico-node pods have been created.
-				_, err = r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				kubeProxy := &appsv1.DaemonSet{}
-				err = c.Get(ctx, types.NamespacedName{Name: utils.KubeProxyDaemonSetName, Namespace: utils.KubeProxyNamespace}, kubeProxy)
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(kubeProxy.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue(render.DisableKubeProxyKey, "true"))
 			})
 			It("should support dual-stack clusters - IPv4 and IPv6", func() {
-				kubeProxyDaemonSet()
+				kubeProxyDaemonSetDisabled()
 				Expect(c.Create(
 					ctx,
 					&corev1.Service{

@@ -29,7 +29,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 )
 
-type BPFAutoBootstrap struct {
+type BPFAutoInstall struct {
 	KubeProxyDs         *appsv1.DaemonSet
 	K8sService          *corev1.Service
 	K8sServiceEndpoints *discoveryv1.EndpointSliceList
@@ -38,7 +38,7 @@ type BPFAutoBootstrap struct {
 // BPFAutoInstallRequirements checks whether the BPF auto-bootstrap requirements are met.
 // If so, it retrieves the kube-proxy DaemonSet, the Kubernetes service, and its EndpointSlices, returning them in a BPFAutoBootstrap struct.
 // If it's not possible to retrieve any of these resources, it returns an error.
-func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *operator.InstallationSpec) (*BPFAutoBootstrap, error) {
+func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *operator.InstallationSpec) (*BPFAutoInstall, error) {
 	// 1. If BPFInstallMode is not set to Auto, skip further processing.
 	if !install.BPFInstallModeAuto() {
 		return nil, nil
@@ -49,14 +49,14 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 		return nil, fmt.Errorf("the CNI plugin is not Calico in Installation CR")
 	}
 
-	bpfBootstrapReq := &BPFAutoBootstrap{}
+	bpfAutoInstallReq := &BPFAutoInstall{}
 	// 3. Try to retrieve the kube-proxy DaemonSet.
 	ds := &appsv1.DaemonSet{}
 	err := c.Get(ctx, types.NamespacedName{Namespace: KubeProxyNamespace, Name: KubeProxyDaemonSetName}, ds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kube-proxy: %w", err)
 	}
-	bpfBootstrapReq.KubeProxyDs = ds
+	bpfAutoInstallReq.KubeProxyDs = ds
 
 	// 4. Try to retrieve kubernetes service.
 	service := &corev1.Service{}
@@ -64,7 +64,7 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubernetes service: %w", err)
 	}
-	bpfBootstrapReq.K8sService = service
+	bpfAutoInstallReq.K8sService = service
 
 	// 5. Try to retrieve kubernetes service endpoint slices. If the cluster is dual-stack, there should be at least one EndpointSlice for each address type.
 	endpointSlice := &discoveryv1.EndpointSliceList{}
@@ -72,13 +72,13 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 	if err != nil || len(endpointSlice.Items) == 0 {
 		return nil, fmt.Errorf("failed to get kubernetes endpoint slices: %w", err)
 	}
-	bpfBootstrapReq.K8sServiceEndpoints = endpointSlice
+	bpfAutoInstallReq.K8sServiceEndpoints = endpointSlice
 
 	if err = validateIpFamilyConsistency(service, endpointSlice); err != nil {
 		return nil, err
 	}
 
-	return bpfBootstrapReq, nil
+	return bpfAutoInstallReq, nil
 }
 
 // validateIpFamilyConsistency checks whether the service and EndpointSliceList have consistent IP address families.

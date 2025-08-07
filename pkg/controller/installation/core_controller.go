@@ -1987,33 +1987,6 @@ func serviceEndpointSlice(endpointSliceList *discoveryv1.EndpointSliceList) []k8
 	return endpoints
 }
 
-// disableKubeProxy disables kube-proxy by patching the DaemonSet with a nodeSelector that prevents it from running on any node.
-func (r *ReconcileInstallation) disableKubeProxy(ctx context.Context, kubeProxy *appsv1.DaemonSet) error {
-	if kubeProxy == nil {
-		return fmt.Errorf("Invalid parameters to disable kube-proxy: kubeProxy=%v", kubeProxy)
-	}
-
-	// If kube-proxy is already disabled, we can skip further processing.
-	if kubeProxy.Spec.Template.Spec.NodeSelector != nil &&
-		kubeProxy.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] == strconv.FormatBool(true) {
-		return nil
-	}
-
-	// Patch the kube-proxy DaemonSet with a disabling nodeSelector.
-	// This step ensures that kube-proxy is disabled not only during BPF installation (fresh install or migration),
-	// but also if an external operation - such as a manual upgrade or migration - overrides this setting.
-	patchFrom := client.MergeFrom(kubeProxy.DeepCopy())
-	if kubeProxy.Spec.Template.Spec.NodeSelector == nil {
-		kubeProxy.Spec.Template.Spec.NodeSelector = make(map[string]string)
-	}
-	kubeProxy.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] = strconv.FormatBool(true)
-	if err := r.client.Patch(ctx, kubeProxy, patchFrom); err != nil {
-		return fmt.Errorf("Error patching kube-proxy DaemonSet: %w", err)
-	}
-
-	return nil
-}
-
 var osExitOverride = os.Exit
 
 // checkActive verifies the operator that calls this function is designated as the active operator.

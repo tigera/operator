@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,6 +63,11 @@ func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
 // the current scheduled pods also equals the number available.  When all these
 // checks are reconciled then FelixConfig can be patched as bpfEnabled: true.
 func isRolloutCompleteWithBPFVolumes(ds *appsv1.DaemonSet) bool {
+	if ds.Status.ObservedGeneration != ds.Generation {
+		// To avoid race condition: the k8s DaemonSet controller hasn't observed the
+		// latest Spec update yet, so the Status might still be outdated.
+		return false
+	}
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == render.BPFVolumeName {
 			//return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable

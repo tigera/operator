@@ -111,7 +111,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		voltron := deployment.Spec.Template.Spec.Containers[1]
 		manager := deployment.Spec.Template.Spec.Containers[2]
 
-		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/cnx-manager:" + components.ComponentManager.Version))
+		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/manager:" + components.ComponentManager.Version))
 		Expect(uiAPIs.Image).Should(Equal(components.TigeraRegistry + "tigera/ui-apis:" + components.ComponentUIAPIs.Version))
 		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
 
@@ -1276,7 +1276,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			}
 		})
 
-		It("should not install cnx-manager container in manager pod in single-tenant mode", func() {
+		It("should not install manager container in manager pod in single-tenant mode", func() {
 			tenant := &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test-tenant",
@@ -1299,11 +1299,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
 			for _, c := range d.Spec.Template.Spec.Containers {
 				Expect(c.Name).NotTo(Equal("tigera-manager"))
-				Expect(c.Image).NotTo(ContainSubstring("cnx-manager"))
+				Expect(c.Image).NotTo(ContainSubstring("manager"))
 			}
 		})
 
-		It("should not install cnx-manager container in manager pod in multi-tenant mode", func() {
+		It("should not install manager container in manager pod in multi-tenant mode", func() {
 			tenant := &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-tenant",
@@ -1328,7 +1328,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(2))
 			for _, c := range d.Spec.Template.Spec.Containers {
 				Expect(c.Name).NotTo(Equal("tigera-manager"))
-				Expect(c.Image).NotTo(ContainSubstring("cnx-manager"))
+				Expect(c.Image).NotTo(ContainSubstring("manager"))
 			}
 		})
 	})

@@ -335,7 +335,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Images: []operator.Image{
 						{Image: "tigera/kube-controllers", Digest: "sha256:tigerakubecontrollerhash"},
 						{Image: "tigera/typha", Digest: "sha256:tigeratyphahash"},
-						{Image: "tigera/cnx-node", Digest: "sha256:tigeracnxnodehash"},
+						{Image: "tigera/node", Digest: "sha256:tigeranodehash"},
 						{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
 						{Image: "tigera/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
 						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
@@ -402,7 +402,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(node.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentTigeraNode.Image,
-					"sha256:tigeracnxnodehash")))
+					"sha256:tigeranodehash")))
 			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
 			fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 			Expect(fv).ToNot(BeNil())
@@ -434,7 +434,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(bpfInit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentTigeraNode.Image,
-					"sha256:tigeracnxnodehash")))
+					"sha256:tigeranodehash")))
 			inst := operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",

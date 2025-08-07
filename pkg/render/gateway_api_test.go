@@ -35,11 +35,38 @@ import (
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 )
 
+type matchObject struct {
+	name string
+}
+
+func (m *matchObject) Match(actual any) (success bool, err error) {
+	return actual.(client.Object).GetName() == m.name, nil
+}
+func (m *matchObject) FailureMessage(actual any) (message string) {
+	return "" // not used within ContainElement
+}
+
+func (m *matchObject) NegatedFailureMessage(actual any) (message string) {
+	return "" // not used within ContainElement
+}
+
 var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should read Gateway API resources from YAML", func() {
 		resources := GatewayAPIResources()
 		Expect(resources.namespace.Name).To(Equal("tigera-gateway"))
+	})
+
+	It("should report UDPRoute as required when platform is not OpenShift", func() {
+		essentialCRDs, optionalCRDs := GatewayAPICRDs(operatorv1.ProviderAKS)
+		Expect(essentialCRDs).To(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
+		Expect(optionalCRDs).NotTo(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
+	})
+
+	It("should report UDPRoute as optional when platform is OpenShift", func() {
+		essentialCRDs, optionalCRDs := GatewayAPICRDs(operatorv1.ProviderOpenShift)
+		Expect(essentialCRDs).NotTo(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
+		Expect(optionalCRDs).To(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 	})
 
 	It("should apply overrides from GatewayAPI CR", func() {
@@ -920,5 +947,4 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(envoyDeployment.Pod.Volumes[2].EmptyDir).ToNot(BeNil())
 
 	})
-
 })

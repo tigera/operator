@@ -68,6 +68,7 @@ func isRolloutCompleteWithBPFVolumes(ds *appsv1.DaemonSet) bool {
 		// latest Spec update yet, so the Status might still be outdated.
 		return false
 	}
+
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == render.BPFVolumeName {
 			//return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable

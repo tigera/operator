@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -33,6 +34,8 @@ type ManagementClusterConnectionSpec struct {
 
 	// GuardianDeployment configures the guardian Deployment.
 	GuardianDeployment *GuardianDeployment `json:"guardianDeployment,omitempty"`
+
+	Impersonation []rbacv1.PolicyRule `json:"impersonation,omitempty"`
 }
 
 type ManagementClusterTLS struct {

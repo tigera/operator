@@ -20,6 +20,7 @@ import (
 	"strconv"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -123,16 +124,29 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
+	if !installationCR.BPFInstallModeAuto() {
+		// If BPFInstallMode is not Auto, we should clean up kubeproxy from tigerastatus and not reconcile kube-proxy.
+		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
+	}
+
+	r.status.AddDaemonsets([]types.NamespacedName{
+		{
+			Name:      utils.KubeProxyDaemonSetName,
+			Namespace: utils.KubeProxyNamespace,
+		},
+	})
+	// Mark resource found so we can report problems via tigerastatus
+	r.status.OnCRFound()
+
 	bpfAutoInstallReq, err := utils.BPFAutoInstallRequirements(r.cli, ctx, installationCR)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "bpfInstallMode is Auto but the requirements are not met", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	// BPF installation is not in Auto mode, skipping kube-proxy reconciliation.
-	if bpfAutoInstallReq == nil {
-		return reconcile.Result{}, nil
-	}
+	// SetMetaData in the TigeraStatus such as observedGenerations.
+	defer r.status.SetMetaData(&bpfAutoInstallReq.KubeProxyDs.ObjectMeta)
 
 	felixCR, err := utils.GetFelixConfiguration(ctx, r.cli)
 	if err != nil {
@@ -182,7 +196,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 	}
 
+	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
-
 	return reconcile.Result{}, nil
 }

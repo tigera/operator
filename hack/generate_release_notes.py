@@ -60,11 +60,11 @@ def issues_in_milestone() -> list:
             f"milestone {m.title} is not closed, please close it before generating release notes"
         )
     print(f"  found milestone {m.title}")
-    milestone_issues = repo.get_issues(
+    milestone_issues = list(repo.get_issues(
         milestone=m, state="closed", labels=["release-note-required"]
-    )
+    ))
     # If there are no issues in the milestone, raise an error.
-    if milestone_issues.totalCount == 0:
+    if not milestone_issues:
         raise ReleaseNoteError(f"no issues found for milestone {m.title}")
     open_issues = [
         issue for issue in milestone_issues if issue.as_pull_request().state == "open"

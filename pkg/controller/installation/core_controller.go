@@ -1439,14 +1439,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// If BPF auto-install requirements are met, disable kube-proxy and configure the node.
 	if bpfAutoInstallReq != nil && instance.Spec.BPFEnabled() {
-		// Wait until kube-proxy DaemonSet is disabled by kubeproxy-controller.
-		kubeProxyDS := bpfAutoInstallReq.KubeProxyDs
-		if kubeProxyDS.Spec.Template.Spec.NodeSelector == nil ||
-			kubeProxyDS.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] != strconv.FormatBool(true) {
-			reqLogger.Info("Waiting for the kube-proxy DaemonSet to be disabled by kubeproxy-controller")
-			return reconcile.Result{Requeue: true}, nil
-		}
-
 		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
 		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfAutoInstallReq.K8sService)
 		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfAutoInstallReq.K8sServiceEndpoints)

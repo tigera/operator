@@ -38,7 +38,7 @@ import (
 
 const (
 	controllerName = "kubeproxy-controller"
-	ResourceName   = "calico"
+	ResourceName   = "kubeproxy"
 )
 
 var log = logf.Log.WithName(controllerName)
@@ -46,7 +46,7 @@ var log = logf.Log.WithName(controllerName)
 // Add creates a new Reconciler Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	statusManager := status.New(mgr.GetClient(), "kubeproxy", opts.KubernetesVersion)
+	statusManager := status.New(mgr.GetClient(), ResourceName, opts.KubernetesVersion)
 	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts)
 
 	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: reconciler})
@@ -64,6 +64,11 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	if err = utils.AddKubeProxyWatch(c); err != nil {
 		return fmt.Errorf("%s failed to watch for Kube Proxy resource: %w", controllerName, err)
+	}
+
+	// Watch for changes to TigeraStatus.
+	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
+		return fmt.Errorf("kubeproxy-controller failed to watch TigeraStatus: %w", err)
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
@@ -120,7 +125,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	bpfAutoInstallReq, err := utils.BPFAutoInstallRequirements(r.cli, ctx, installationCR)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "BPF auto-install is enabled but the requirements are not met", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "bpfInstallMode is Auto but the requirements are not met", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -129,9 +134,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
-	// If BPF enabled in Installation CR and BPF auto-install mode, we should try to disable kube-proxy.
-	if installationCR.BPFEnabled() {
+	felixCR, err := utils.GetFelixConfiguration(ctx, r.cli)
+	if err != nil {
+		return reconcile.Result{}, err
+	} else if felixCR == nil {
+		return reconcile.Result{}, nil
+	}
 
+	// If BPF enabled in FelixConfiguration (meaning the calico-node rollout is completed) and BPFInstallMode is Auto,
+	// we should try to disable kube-proxy.
+	if felixCR.Spec.BPFEnabled != nil && *felixCR.Spec.BPFEnabled {
 		// 1. Check if kube-proxy is already disabled.
 		kubeProxyDS := bpfAutoInstallReq.KubeProxyDs
 		if kubeProxyDS.Spec.Template.Spec.NodeSelector != nil &&
@@ -153,8 +165,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 		}
 	} else {
-		// If the dataplane is not BPF, we'll try to re-enable kube-proxy.
-
+		// If the dataplane is not BPF, we'll try to re-enable kube-proxy:
 		// 1. Check if kube-proxy DaemonSet is disabled.
 		kubeProxyDS := bpfAutoInstallReq.KubeProxyDs
 		if kubeProxyDS.Spec.Template.Spec.NodeSelector == nil ||
@@ -162,17 +173,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			return reconcile.Result{}, nil
 		}
 
-		// 2. Check if FelixConfiguration is still in BPF enabled.
-		felixCR, err := utils.GetFelixConfiguration(ctx, r.cli)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		if felixCR.Spec.BPFEnabled != nil && *felixCR.Spec.BPFEnabled {
-			// BPF is enabled in FelixConfiguration, we can't re-enable kube-proxy yet.
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		// 3. Re-enable kube-proxy by removing the disabling nodeSelector.
+		// 2. Re-enable kube-proxy by removing the disabling nodeSelector.
 		patchFrom := client.MergeFrom(kubeProxyDS.DeepCopy())
 		delete(kubeProxyDS.Spec.Template.Spec.NodeSelector, render.DisableKubeProxyKey)
 		if err := r.cli.Patch(ctx, kubeProxyDS, patchFrom); err != nil {

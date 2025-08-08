@@ -44,26 +44,21 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 		return nil, nil
 	}
 
-	// 2. CNI plugin is Calico.
-	if install.CNI.Type != operator.PluginCalico {
-		return nil, fmt.Errorf("the CNI plugin is not Calico in Installation CR")
-	}
-
 	bpfAutoInstallReq := &BPFAutoInstall{}
-	// 3. Try to retrieve the kube-proxy DaemonSet.
+	// 2. Try to retrieve the kube-proxy DaemonSet.
 	ds := &appsv1.DaemonSet{}
 	err := c.Get(ctx, types.NamespacedName{Namespace: KubeProxyNamespace, Name: KubeProxyDaemonSetName}, ds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kube-proxy: %w", err)
 	}
 
-	// 4. Validate that the kube-proxy DaemonSet is not managed by an external tool.
+	// 3. Validate that the kube-proxy DaemonSet is not managed by an external tool.
 	if err = validateDaemonSetManaged(ds); err != nil {
 		return nil, fmt.Errorf("failed to validate kube-proxy DaemonSet: %w", err)
 	}
 	bpfAutoInstallReq.KubeProxyDs = ds
 
-	// 5. Try to retrieve kubernetes service.
+	// 4. Try to retrieve kubernetes service.
 	service := &corev1.Service{}
 	err = c.Get(ctx, types.NamespacedName{Namespace: "default", Name: "kubernetes"}, service)
 	if err != nil {
@@ -71,7 +66,7 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 	}
 	bpfAutoInstallReq.K8sService = service
 
-	// 6. Try to retrieve kubernetes service endpoint slices. If the cluster is dual-stack, there should be at least one EndpointSlice for each address type.
+	// 5. Try to retrieve kubernetes service endpoint slices. If the cluster is dual-stack, there should be at least one EndpointSlice for each address type.
 	endpointSlice := &discoveryv1.EndpointSliceList{}
 	err = c.List(ctx, endpointSlice, client.InNamespace("default"), client.MatchingLabels{"kubernetes.io/service-name": "kubernetes"})
 	if err != nil || len(endpointSlice.Items) == 0 {
@@ -79,7 +74,7 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 	}
 	bpfAutoInstallReq.K8sServiceEndpoints = endpointSlice
 
-	// 7. Validate that the service and EndpointSlice IPs are consistent.
+	// 6. Validate that the service and EndpointSlice IPs are consistent.
 	if err = validateIpFamilyConsistency(service, endpointSlice); err != nil {
 		return nil, err
 	}

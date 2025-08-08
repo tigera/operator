@@ -308,6 +308,11 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 		out.WindowsDataplane = override.WindowsDataplane
 	}
 
+	switch compareFields(out.BPFInstallMode, override.BPFInstallMode) {
+	case BOnlySet, Different:
+		out.BPFInstallMode = override.BPFInstallMode
+	}
+
 	switch compareFields(out.NodeAddressAutodetectionV4, override.NodeAddressAutodetectionV4) {
 	case BOnlySet, Different:
 		out.NodeAddressAutodetectionV4 = override.NodeAddressAutodetectionV4

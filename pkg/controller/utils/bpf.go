@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 )
 
 type BPFAutoInstall struct {
@@ -37,9 +38,14 @@ type BPFAutoInstall struct {
 // If so, it retrieves the kube-proxy DaemonSet, the Kubernetes service, and its EndpointSlices, returning them in a BPFAutoBootstrap struct.
 // If it's not possible to retrieve any of these resources, it returns an error.
 func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *operator.InstallationSpec) (*BPFAutoInstall, error) {
-	// 1. If BPFInstallMode is not set to Auto, skip further processing.
+	// If BPFInstallMode is not set to Auto, skip further processing.
 	if !install.BPFInstallModeAuto() {
 		return nil, nil
+	}
+
+	// 1. kubernetes service endpoint shouldn't be defined by another source.
+	if k8sapi.Endpoint.Host != "" || k8sapi.Endpoint.Port != "" {
+		return nil, fmt.Errorf("kubernetes service endpoint is being defined by another source, likely via the kubernetes-service-endpoints ConfigMap.")
 	}
 
 	bpfAutoInstallReq := &BPFAutoInstall{}

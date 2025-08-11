@@ -51,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -956,6 +957,10 @@ var _ = Describe("Testing core-controller installation", func() {
 			createResource := func(obj client.Object) {
 				Expect(c.Create(ctx, obj)).NotTo(HaveOccurred())
 			}
+			setK8sServiceEp := func() {
+				k8sapi.Endpoint.Host = "10.96.0.1"
+				k8sapi.Endpoint.Port = "443"
+			}
 			kubeProxyDaemonSetDisabled := func() {
 				createResource(
 					&appsv1.DaemonSet{
@@ -997,7 +1002,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			BeforeEach(func() {
 				By("Setting the dataplane to BPF and opt in")
 				mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
-
+				k8sapi.Endpoint.Host = ""
+				k8sapi.Endpoint.Port = ""
 				bpf := operator.LinuxDataplaneBPF
 				auto := operator.BPFInstallAuto
 				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
@@ -1016,6 +1022,10 @@ var _ = Describe("Testing core-controller installation", func() {
 					Expect(err).Should(HaveOccurred())
 					Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
 				},
+				table.Entry("kubernetes service endpoint is already defined",
+					[]func(){setK8sServiceEp, kubeProxyDaemonSetDisabled, svcIpV4, epIpV4},
+					"kubernetes service endpoint is being defined by another source",
+				),
 				table.Entry("kube-proxy not running",
 					[]func(){svcIpV4, epIpV4}, "failed to get kube-proxy",
 				),

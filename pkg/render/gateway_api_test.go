@@ -824,6 +824,58 @@ var _ = Describe("Gateway API rendering tests", func() {
 		}))
 	})
 
+	It("should deploy l7-log-collector for Enterprise", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(envoyDeployment).ToNot(BeNil())
+
+		Expect(envoyDeployment.Pod).ToNot(BeNil())
+		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(2))
+		Expect(envoyDeployment.Pod.Volumes[0].Name).To(Equal("var-log-calico"))
+		Expect(envoyDeployment.Pod.Volumes[0].HostPath.Path).To(Equal("/var/log/calico"))
+		Expect(envoyDeployment.Pod.Volumes[1].Name).To(Equal("access-logs"))
+		Expect(envoyDeployment.Pod.Volumes[1].EmptyDir).ToNot(BeNil())
+
+		Expect(envoyDeployment.InitContainers[0].Name).To(Equal("access-logs"))
+		Expect(*envoyDeployment.InitContainers[0].RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
+		Expect(envoyDeployment.InitContainers[0].VolumeMounts).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers[0].VolumeMounts).To(ContainElements([]corev1.VolumeMount{
+			{
+				Name:      "access-logs",
+				MountPath: "/access_logs",
+			},
+			{
+				Name:      "felix-sync",
+				MountPath: "/var/run/felix",
+			},
+		}))
+		// logger gateway name and namespace are set from the k8s downward api pod metadata.
+		Expect(envoyDeployment.InitContainers[0].Env).To(ContainElements(GatewayNameEnvVar, GatewayNamespaceEnvVar))
+
+		Expect(envoyDeployment.Container).ToNot(BeNil())
+		Expect(envoyDeployment.Container.VolumeMounts).To(HaveLen(1))
+		Expect(envoyDeployment.Container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+			Name:      "access-logs",
+			MountPath: "/access_logs",
+		}))
+	})
+
 	It("should deploy waf-http-filter for Enterprise when using a custom proxy", func() {
 		installation := &operatorv1.InstallationSpec{
 			Variant: operatorv1.TigeraSecureEnterprise,
@@ -944,6 +996,130 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(envoyDeployment.Pod.Volumes[1].Name).To(Equal("var-log-calico"))
 		Expect(envoyDeployment.Pod.Volumes[1].HostPath.Path).To(Equal("/var/log/calico"))
 		Expect(envoyDeployment.Pod.Volumes[2].Name).To(Equal("waf-http-filter"))
+		Expect(envoyDeployment.Pod.Volumes[2].EmptyDir).ToNot(BeNil())
+
+	})
+
+	It("should deploy l7-log-collector for Enterprise when using a custom proxy", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "custom-class",
+					EnvoyProxyRef: &operatorv1.NamespacedName{
+						Namespace: "default",
+						Name:      "my-proxy",
+					},
+				}},
+			},
+		}
+		envoyProxy := &envoyapi.EnvoyProxy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "EnvoyProxy",
+				APIVersion: "gateway.envoyproxy.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-proxy",
+				Namespace: "default",
+			},
+			Spec: envoyapi.EnvoyProxySpec{
+				Provider: &envoyapi.EnvoyProxyProvider{
+					Type: envoyapi.ProviderTypeKubernetes,
+					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
+						EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
+							InitContainers: []corev1.Container{
+								{
+									Name:          "some-other-sidecar",
+									RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "some-other-volume",
+											MountPath: "/test",
+										},
+									},
+								},
+							},
+							Container: &envoyapi.KubernetesContainerSpec{
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      "some-other-volume",
+										MountPath: "/test",
+									},
+								},
+							},
+							Pod: &envoyapi.KubernetesPodSpec{
+								Volumes: []corev1.Volume{
+									{
+										Name: "some-other-volume",
+										VolumeSource: corev1.VolumeSource{
+											EmptyDir: &corev1.EmptyDirVolumeSource{},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+			CustomEnvoyProxies: map[string]*envoyapi.EnvoyProxy{
+				"custom-class": envoyProxy,
+			},
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Get the four expected GatewayClasses.
+		gc, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "custom-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Get their four EnvoyProxies.
+		Expect(gc.Spec.ParametersRef).NotTo(BeNil())
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, gc.Spec.ParametersRef.Name, string(*gc.Spec.ParametersRef.Namespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(envoyDeployment).ToNot(BeNil())
+
+		Expect(envoyDeployment.InitContainers).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers[0].Name).To(Equal("some-other-sidecar"))
+		Expect(envoyDeployment.InitContainers[1].Name).To(Equal("access_logs"))
+		Expect(*envoyDeployment.InitContainers[1].RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
+		Expect(envoyDeployment.InitContainers[1].VolumeMounts).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers[1].VolumeMounts).To(ContainElements([]corev1.VolumeMount{
+			{
+				Name:      "access-logs",
+				MountPath: "/access_logs",
+			},
+			{
+				Name:      "felix-sync",
+				MountPath: "/var/run/felix",
+			},
+		}))
+
+		Expect(envoyDeployment.Container).ToNot(BeNil())
+		Expect(envoyDeployment.Container.VolumeMounts).To(ContainElements(
+			corev1.VolumeMount{
+				Name:      "some-other-volume",
+				MountPath: "/test",
+			}, corev1.VolumeMount{
+				Name:      "access-logs",
+				MountPath: "/access_logs",
+			},
+		))
+
+		Expect(envoyDeployment.Pod).ToNot(BeNil())
+		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(3))
+		Expect(envoyDeployment.Pod.Volumes[0].Name).To(Equal("some-other-volume"))
+		Expect(envoyDeployment.Pod.Volumes[0].EmptyDir).ToNot(BeNil())
+		Expect(envoyDeployment.Pod.Volumes[1].Name).To(Equal("var-log-calico"))
+		Expect(envoyDeployment.Pod.Volumes[1].HostPath.Path).To(Equal("/var/log/calico"))
+		Expect(envoyDeployment.Pod.Volumes[2].Name).To(Equal("access-logs"))
 		Expect(envoyDeployment.Pod.Volumes[2].EmptyDir).ToNot(BeNil())
 
 	})

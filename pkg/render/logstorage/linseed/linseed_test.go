@@ -595,6 +595,23 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_WAF_LOGS_BASE_INDEX_NAME", Value: "calico_waflogs_standard"}))
 		})
 
+		Describe("product variant", func() {
+			It("should set LINSEED_PRODUCT_VARIANT to oss", func() {
+				cfg.ManagementCluster = true
+				cfg.Tenant.Spec.ManagedClusterVariant = &operatorv1.Calico
+				resources, _ := Linseed(cfg).Objects()
+				d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+				Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_PRODUCT_VARIANT", Value: string(operatorv1.Calico)}))
+			})
+			It("should set LINSEED_PRODUCT_VARIANT to enterprise", func() {
+				cfg.ManagementCluster = true
+				cfg.Tenant.Spec.ManagedClusterVariant = &operatorv1.TigeraSecureEnterprise
+				resources, _ := Linseed(cfg).Objects()
+				d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+				Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_PRODUCT_VARIANT", Value: string(operatorv1.TigeraSecureEnterprise)}))
+			})
+		})
+
 		It("should override replicas with the value from TenantSpec's controlPlaneReplicas when available", func() {
 			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.Int32ToPtr(3)
 			component := Linseed(cfg)

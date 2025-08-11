@@ -182,6 +182,12 @@ func AddToManager(mgr ctrl.Manager, options options.AddOptions) error {
 	}).SetupWithManager(mgr, options); err != nil {
 		return fmt.Errorf("failed to create controller %s: %v", "Goldmane", err)
 	}
+	if err := (&KubeProxyReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr, options); err != nil {
+		return fmt.Errorf("failed to create controller %s: %v", "KubeProxy", err)
+	}
 	// +kubebuilder:scaffold:builder
 	return nil
 }

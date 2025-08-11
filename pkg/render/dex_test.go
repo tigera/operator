@@ -398,7 +398,7 @@ var _ = Describe("dex rendering tests", func() {
 			deploy, ok := rtest.GetResource(resources, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
 			Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
-			Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-dex", "tigera-dex")))
+			Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-dex", []string{"tigera-dex"})))
 		})
 
 		It("should render configuration with resource requests and limits", func() {

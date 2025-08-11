@@ -37,15 +37,21 @@ type BPFAutoInstall struct {
 // If so, it retrieves the kube-proxy DaemonSet, the Kubernetes service, and its EndpointSlices, returning them in a BPFAutoBootstrap struct.
 // If it's not possible to retrieve any of these resources, it returns an error.
 func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *operator.InstallationSpec) (*BPFAutoInstall, error) {
-	// 1. If BPFInstallMode is not set to Auto, skip further processing.
+	// If BPFInstallMode is not set to Auto, skip further processing.
 	if !install.BPFInstallModeAuto() {
 		return nil, nil
+	}
+
+	// 1. kubernetes service endpoint shouldn't be defined by kubernetes-service-endpoints ConfigMap.
+	_, err := GetK8sServiceEndPoint(c)
+	if err == nil {
+		return nil, fmt.Errorf("kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap.")
 	}
 
 	bpfAutoInstallReq := &BPFAutoInstall{}
 	// 2. Try to retrieve the kube-proxy DaemonSet.
 	ds := &appsv1.DaemonSet{}
-	err := c.Get(ctx, types.NamespacedName{Namespace: KubeProxyNamespace, Name: KubeProxyDaemonSetName}, ds)
+	err = c.Get(ctx, types.NamespacedName{Namespace: KubeProxyNamespace, Name: KubeProxyDaemonSetName}, ds)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kube-proxy: %w", err)
 	}

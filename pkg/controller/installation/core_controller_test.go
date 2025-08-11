@@ -956,6 +956,16 @@ var _ = Describe("Testing core-controller installation", func() {
 			createResource := func(obj client.Object) {
 				Expect(c.Create(ctx, obj)).NotTo(HaveOccurred())
 			}
+			setK8sServiceEp := func() {
+				createResource(
+					&corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{Name: render.K8sSvcEndpointConfigMapName, Namespace: common.OperatorNamespace()},
+						Data: map[string]string{
+							"KUBERNETES_SERVICE_HOST": "10.96.0.1",
+							"KUBERNETES_SERVICE_PORT": "443",
+						},
+					})
+			}
 			kubeProxyDaemonSetDisabled := func() {
 				createResource(
 					&appsv1.DaemonSet{
@@ -1016,6 +1026,10 @@ var _ = Describe("Testing core-controller installation", func() {
 					Expect(err).Should(HaveOccurred())
 					Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
 				},
+				table.Entry("kubernetes service endpoint is already defined",
+					[]func(){setK8sServiceEp, kubeProxyDaemonSetDisabled, svcIpV4, epIpV4},
+					"kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap",
+				),
 				table.Entry("kube-proxy not running",
 					[]func(){svcIpV4, epIpV4}, "failed to get kube-proxy",
 				),

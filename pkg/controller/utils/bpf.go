@@ -16,9 +16,7 @@ package utils
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"net"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -74,11 +72,6 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 	}
 	bpfAutoInstallReq.K8sServiceEndpoints = endpointSlice
 
-	// 6. Validate that the service and EndpointSlice IPs are consistent.
-	if err = validateIpFamilyConsistency(service, endpointSlice); err != nil {
-		return nil, err
-	}
-
 	return bpfAutoInstallReq, nil
 }
 
@@ -103,62 +96,4 @@ func validateDaemonSetManaged(ds *appsv1.DaemonSet) error {
 	}
 
 	return nil
-}
-
-// validateIpFamilyConsistency checks whether the service and EndpointSliceList have consistent IP address families.
-func validateIpFamilyConsistency(service *corev1.Service, endpointSliceList *discoveryv1.EndpointSliceList) error {
-
-	// Validating EndpointSlice IPs.
-	epHasIPv4, epHasIPv6 := false, false
-nestedLoop:
-	for _, slice := range endpointSliceList.Items {
-		for _, endpoint := range slice.Endpoints {
-			for _, addr := range endpoint.Addresses {
-				ip := net.ParseIP(addr)
-				if ip == nil {
-					return fmt.Errorf("Endpoint has an invalid IP: %s", addr)
-				}
-
-				if ip.To4() != nil {
-					epHasIPv4 = true
-				} else {
-					epHasIPv6 = true
-				}
-
-				if epHasIPv4 && epHasIPv6 {
-					break nestedLoop
-				}
-			}
-		}
-	}
-
-	// Validating Service IPs.
-	svcHasIPv4, svcHasIPv6 := false, false
-	ips := service.Spec.ClusterIPs
-	if len(ips) == 0 && service.Spec.ClusterIP != "" {
-		ips = []string{service.Spec.ClusterIP}
-	}
-
-	for _, ipStr := range ips {
-		ip := net.ParseIP(ipStr)
-		if ip == nil {
-			return fmt.Errorf("service has an invalid IP: %s", ipStr)
-		}
-
-		if ip.To4() != nil {
-			svcHasIPv4 = true
-		} else {
-			svcHasIPv6 = true
-		}
-	}
-
-	var errV4, errV6 error
-	if svcHasIPv4 != epHasIPv4 {
-		errV4 = fmt.Errorf("service and EndpointSlice have inconsistent IPv4 configuration")
-	}
-	if svcHasIPv6 != epHasIPv6 {
-		errV6 = fmt.Errorf("service and EndpointSlice have inconsistent IPv6 configuration")
-	}
-
-	return errors.Join(errV4, errV6)
 }

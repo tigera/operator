@@ -178,6 +178,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			return reconcile.Result{}, err
 
 		}
+		reqLogger.Info("kube-proxy DaemonSet patched to disable kube-proxy, since bpfInstallMode is set to Auto and BPFEnabled is true.")
 	} else {
 		// If the dataplane is not BPF, we'll try to re-enable kube-proxy:
 		// 1. Check if kube-proxy DaemonSet is disabled.
@@ -194,6 +195,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			r.status.SetDegraded(operatorv1.ResourcePatchError, "unable to remove kube-proxy nodeSelector", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+		reqLogger.Info("kube-proxy DaemonSet patched to deploy kube-proxy, since bpfInstallMode is set to Auto and BPFEnabled is false.")
 	}
 
 	r.status.ReadyToMonitor()

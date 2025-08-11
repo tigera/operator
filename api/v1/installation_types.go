@@ -212,13 +212,13 @@ type InstallationSpec struct {
 	Proxy *Proxy `json:"proxy,omitempty"`
 }
 
-// BootstrapMode defines how the initial networking configuration is executed.
+// InstallMode defines how the initial networking configuration is executed.
 // One of: Auto, Manual
-type BootstrapMode string
+type InstallMode string
 
 const (
-	BPFInstallAuto   BootstrapMode = "Auto"
-	BPFInstallManual BootstrapMode = "Manual"
+	BPFInstallAuto   InstallMode = "Auto"
+	BPFInstallManual InstallMode = "Manual"
 )
 
 // +kubebuilder:validation:Enum=TLS_AES_256_GCM_SHA384;TLS_CHACHA20_POLY1305_SHA256;TLS_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;TLS_RSA_WITH_AES_256_GCM_SHA384;TLS_RSA_WITH_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA;TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA;TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
@@ -553,7 +553,7 @@ type CalicoNetworkSpec struct {
 	// Default: Manual
 	// +optional
 	// +kubebuilder:validation:Enum=Auto;Manual
-	BPFInstallMode *BootstrapMode `json:"bpfInstallMode,omitempty"`
+	BPFInstallMode *InstallMode `json:"bpfInstallMode,omitempty"`
 
 	// BGP configures whether or not to enable Calico's BGP capabilities.
 	// +optional

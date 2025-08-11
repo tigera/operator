@@ -1430,14 +1430,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
 	}
-	// Check if BPF auto-install is enabled and its requirements are met.
+	// Check if BPFInstallMode is Auto and its requirements are met.
 	bpfAutoInstallReq, err := utils.BPFAutoInstallRequirements(r.client, ctx, &instance.Spec)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceValidationError, "bpfInstallMode is Auto but the requirements are not met", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	// If BPF auto-install requirements are met, disable kube-proxy and configure the node.
+	// If BPFInstallMode is Auto and its requirements are met configure the node with API Server info.
 	if bpfAutoInstallReq != nil && instance.Spec.BPFEnabled() {
 		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
 		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfAutoInstallReq.K8sService)

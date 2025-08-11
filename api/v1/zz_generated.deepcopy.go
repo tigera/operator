@@ -1189,7 +1189,7 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 	}
 	if in.BPFInstallMode != nil {
 		in, out := &in.BPFInstallMode, &out.BPFInstallMode
-		*out = new(BootstrapMode)
+		*out = new(InstallMode)
 		**out = **in
 	}
 	if in.BGP != nil {

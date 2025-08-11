@@ -16,6 +16,7 @@ package render
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -75,12 +76,13 @@ type gatewayAPIResources struct {
 }
 
 const (
-	GatewayAPIName                      = "gateway-api"
-	GatewayControllerLabel              = GatewayAPIName + "-controller"
-	EnvoyGatewayConfigName              = "envoy-gateway-config"
-	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
-	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
-	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
+	GatewayAPIName                                         = "gateway-api"
+	GatewayControllerLabel                                 = GatewayAPIName + "-controller"
+	EnvoyGatewayConfigName                                 = "envoy-gateway-config"
+	EnvoyGatewayConfigKey                                  = "envoy-gateway.yaml"
+	EnvoyGatewayDeploymentContainerName                    = "envoy-gateway"
+	EnvoyGatewayJobContainerName                           = "envoy-gateway-certgen"
+	L7LogCollectorMergeType             envoyapi.MergeType = "StrategicMerge"
 )
 
 var (
@@ -377,6 +379,7 @@ type gatewayAPIImplementationComponent struct {
 	envoyProxyImage     string
 	envoyRatelimitImage string
 	wafHTTPFilterImage  string
+	L7LogCollectorImage string
 }
 
 func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) Component {
@@ -405,6 +408,10 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 			return err
 		}
 		pr.wafHTTPFilterImage, err = components.GetReference(components.ComponentWAFHTTPFilter, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		pr.L7LogCollectorImage, err = components.GetReference(components.ComponentL7LogCollector, reg, path, prefix, is)
 		if err != nil {
 			return err
 		}
@@ -695,7 +702,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 	}
 	applyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
 
-	// Setup WAF HTTP Filter on Enterprise.
+	// Setup WAF HTTP Filter and l7 Log collector on Enterprise.
 	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		// The WAF HTTP filter is not supported when the envoy proxy is deployed as a DaemonSet
 		// as there is no support for init containers in a DaemonSet.
@@ -729,6 +736,42 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				},
 				SecurityContext: securitycontext.NewRootContext(true),
 			}
+			// need to make changes to the envoy container to mount the socket
+			l7LogCollector := corev1.Container{
+				Name:  "l7-log-collector",
+				Image: pr.L7LogCollectorImage,
+				Env: []corev1.EnvVar{
+					{
+						Name:  "FELIX_DIAL_TARGET",
+						Value: "/var/run/felix/nodeagent/socket",
+					},
+					{
+						Name:  "LISTEN_ADDRESS",
+						Value: ":8080",
+					},
+					{
+						Name:  "LISTEN_NETWORK",
+						Value: "tcp",
+					},
+					{
+						Name:  "ENVOY_ACCESS_LOG_PATH",
+						Value: "/access_logs/access.log",
+					},
+				},
+				RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "access-logs",
+						MountPath: "/access_logs",
+					},
+					{
+						Name:      "felix-sync",
+						MountPath: "/var/run/felix",
+					},
+				},
+				SecurityContext: securitycontext.NewRootContext(true),
+			}
+
 			hasWAFHTTPFilter := false
 			for i, initContainer := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers {
 				if initContainer.Name == wafHTTPFilter.Name {
@@ -743,22 +786,87 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, wafHTTPFilter)
 			}
 
-			// Add or update Container volume mount
-			socketVolumeMount := corev1.VolumeMount{
-				Name:      "waf-http-filter",
-				MountPath: "/var/run/waf-http-filter",
+			hasL7LogCollector := false
+			if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Type != nil {
+				if *envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Type != L7LogCollectorMergeType {
+					log.Info("EnvoyDeployment patch type is not Merge. Unable to add L7 Log Collector container")
+				}
+			} else {
+				var deploymentSpec *appsv1.DeploymentSpec
+				if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Type == nil {
+					deploymentSpec = &appsv1.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{},
+							},
+						},
+					}
+				} else {
+					err := json.Unmarshal(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Value.Raw, deploymentSpec)
+					if err != nil {
+						log.Error(err, "Failed to unmarshal EnvoyDeployment patch value")
+						return envoyProxy
+					}
+				}
+
+				for i, container := range deploymentSpec.Template.Spec.Containers {
+					if container.Name == l7LogCollector.Name {
+						hasL7LogCollector = true
+						// Handle update
+						if container.Image != l7LogCollector.Image {
+							deploymentSpec.Template.Spec.Containers[i] = l7LogCollector
+						}
+					}
+				}
+				if !hasL7LogCollector {
+					deploymentSpec.Template.Spec.Containers = append(deploymentSpec.Template.Spec.Containers, l7LogCollector)
+				}
+				jsonData, err := json.Marshal(deploymentSpec)
+				if err != nil {
+					log.Error(err, "Failed to marshal EnvoyDeployment patch value")
+					return envoyProxy
+				}
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Value = apiextenv1.JSON{Raw: jsonData}
 			}
-			hasSocketVolumeMount := false
+
+			wafSocketFilterName := "waf-http-filter"
+			accessLogsName := "access-logs"
+			// Add or update Container volume mount
+			socketVolumeMount := []corev1.VolumeMount{
+				{
+					Name:      wafSocketFilterName,
+					MountPath: "/var/run/waf-http-filter",
+				},
+				{
+					Name:      accessLogsName,
+					MountPath: "/access_logs",
+				},
+			}
+			hasWAFFilterSocketVolumeMount := false
+			hasAccessLogsVolumeMount := false
+
 			for i, volumeMount := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts {
-				if volumeMount.Name == socketVolumeMount.Name {
-					hasSocketVolumeMount = true
-					if volumeMount.MountPath != socketVolumeMount.MountPath {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = socketVolumeMount
+				for _, socketVolumeMount := range socketVolumeMount {
+					if volumeMount.Name == wafSocketFilterName {
+						hasWAFFilterSocketVolumeMount = true
+						if volumeMount.MountPath != socketVolumeMount.MountPath {
+							envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = socketVolumeMount
+						}
+					} else if volumeMount.Name == accessLogsName {
+						hasAccessLogsVolumeMount = true
+						if volumeMount.MountPath != socketVolumeMount.MountPath {
+							envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = socketVolumeMount
+						}
+
 					}
 				}
 			}
-			if !hasSocketVolumeMount {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, socketVolumeMount)
+			if !hasWAFFilterSocketVolumeMount {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, socketVolumeMount[0])
+			}
+
+			if !hasAccessLogsVolumeMount {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, socketVolumeMount[1])
 			}
 
 			// Add or update Pod volumes
@@ -771,14 +879,21 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				},
 				Name: "var-log-calico",
 			}
-			socketVolume := corev1.Volume{
+			WAFHttpFilterSocketVolume := corev1.Volume{
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
-				Name: "waf-http-filter",
+				Name: wafSocketFilterName,
+			}
+			AccessLogsVolume := corev1.Volume{
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+				Name: accessLogsName,
 			}
 			hasLogsVolume := false
 			hasSocketVolume := false
+			hasAccessLogsVolume := false
 			for i, volume := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes {
 				if volume.Name == logsVolume.Name {
 					hasLogsVolume = true
@@ -787,10 +902,16 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = logsVolume
 					}
 				}
-				if volume.Name == socketVolume.Name {
+				if volume.Name == WAFHttpFilterSocketVolume.Name {
 					hasSocketVolume = true
-					if volume.VolumeSource.EmptyDir != socketVolume.VolumeSource.EmptyDir {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = socketVolume
+					if volume.VolumeSource.EmptyDir != WAFHttpFilterSocketVolume.VolumeSource.EmptyDir {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = WAFHttpFilterSocketVolume
+					}
+				}
+				if volume.Name == AccessLogsVolume.Name {
+					hasAccessLogsVolume = true
+					if volume.VolumeSource.EmptyDir != AccessLogsVolume.VolumeSource.EmptyDir {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = AccessLogsVolume
 					}
 				}
 			}
@@ -798,7 +919,10 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, logsVolume)
 			}
 			if !hasSocketVolume {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, socketVolume)
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, WAFHttpFilterSocketVolume)
+			}
+			if !hasAccessLogsVolume {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, AccessLogsVolume)
 			}
 		}
 	}

@@ -868,7 +868,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		deploy, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 		Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
-		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-manager", render.ManagerNamespace)))
+		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-manager", []string{render.ManagerNamespace})))
 	})
 
 	It("should override container's resource request with the value from Manager CR", func() {

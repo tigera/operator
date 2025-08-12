@@ -132,7 +132,6 @@ type APIServerConfiguration struct {
 	MultiTenant                 bool
 	KeyValidatorConfig          authentication.KeyValidatorConfig
 	KubernetesVersion           *common.VersionInfo
-	CanCleanupOlderResources    bool
 
 	// When certificate management is enabled, we need a separate init container to create a cert, running
 	// with the same permissions as query server.
@@ -1054,7 +1053,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
-		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(APIServerName, APIServerNamespace)
+		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(APIServerName, []string{APIServerNamespace, "tigera-system", "calico-apiserver"})
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -2222,24 +2221,19 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 		})
 	}
 
-	// Delete the older namespace for OSS and EE.
-	// This supports upgrades from older OSS versions to newer EE versions, and vice versa.
-	// CanCleanupOlderResources ensure the newdeployment is up and running in calico-system in both variant.
-	if c.cfg.CanCleanupOlderResources {
-		renamedRscList = append(renamedRscList, &corev1.Namespace{
-			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "calico-apiserver",
-			},
-		})
+	renamedRscList = append(renamedRscList, &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "calico-apiserver",
+		},
+	})
 
-		renamedRscList = append(renamedRscList, &corev1.Namespace{
-			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "tigera-system",
-			},
-		})
-	}
+	renamedRscList = append(renamedRscList, &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-system",
+		},
+	})
 
 	return renamedRscList
 }
@@ -2398,7 +2392,7 @@ func (c *apiServerComponent) deprecatedResources() []client.Object {
 		// Clean up legacy secrets in the tigera-operator namespace
 		&corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-api-cert", Namespace: "tigera-operator"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-api-cert", Namespace: common.OperatorNamespace()},
 		},
 	}
 }

@@ -100,7 +100,7 @@ require (
 	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
-	github.com/tigera/operator/api v0.0.0-00010101000000-000000000000
+	github.com/tigera/operator/api v0.0.0-20250806010545-16784f6fb34b
 	github.com/vmihailenco/msgpack v4.0.4+incompatible // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.elastic.co/apm/module/apmzap/v2 v2.6.2 // indirect

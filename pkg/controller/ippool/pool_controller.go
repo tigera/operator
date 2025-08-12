@@ -319,7 +319,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 					return reconcile.Result{}, err
 				}
 				toCreateOrUpdate = append(toCreateOrUpdate, v3res)
-
 			} else {
 				// The v3 API is not available, and there are existing pools in the cluster. We cannot create new pools until the v3 API is available.
 				// The user may need to manually delete or update pools in order to allow the v3 API to launch successfully.

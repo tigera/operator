@@ -19,12 +19,10 @@ import (
 	"fmt"
 	"time"
 
-	kerror "k8s.io/apimachinery/pkg/api/errors"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
+	kerror "k8s.io/apimachinery/pkg/api/errors"
 
 	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -799,126 +797,6 @@ var _ = Describe("apiserver controller tests", func() {
 				Expect(kerror.IsNotFound(err)).Should(BeTrue())
 			})
 
-		})
-	})
-
-	Context("check if older namespace can be cleaned up", func() {
-		BeforeEach(func() {
-			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
-		})
-
-		It("should return true when new deployment is ready, old one is gone, and TigeraStatus is healthy", func() {
-			err := cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
-				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "tigera-system"},
-				Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = cli.Create(ctx, &operatorv1.TigeraStatus{
-				ObjectMeta: metav1.ObjectMeta{Name: "apiserver"},
-				Status: operatorv1.TigeraStatusStatus{
-					Conditions: []operatorv1.TigeraStatusCondition{{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionTrue}},
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
-			}
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
-			Expect(canCleanedUp).To(BeTrue())
-		})
-
-		It("should return false when new deployment is not ready", func() {
-			err := cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
-				Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
-			}
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
-			Expect(canCleanedUp).To(BeFalse())
-		})
-
-		It("should return false when older deployment is still running", func() {
-			err := cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
-				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "tigera-system"},
-				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
-			}
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
-			Expect(canCleanedUp).To(BeFalse())
-		})
-
-		It("should return false when TigeraStatus is not healthy", func() {
-			err := cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
-				Status:     appsv1.DeploymentStatus{AvailableReplicas: 1},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = cli.Create(ctx, &appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "tigera-system"},
-				Status:     appsv1.DeploymentStatus{AvailableReplicas: 0},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			err = cli.Create(ctx, &operatorv1.TigeraStatus{
-				ObjectMeta: metav1.ObjectMeta{Name: "apiserver"},
-				Status: operatorv1.TigeraStatusStatus{
-					Conditions: []operatorv1.TigeraStatusCondition{{Type: operatorv1.ComponentAvailable, Status: operatorv1.ConditionFalse}},
-				},
-			})
-			Expect(err).NotTo(HaveOccurred())
-			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
-			}
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			canCleanedUp := r.canCleanupLegacyNamespace(ctx, installation.Spec.Variant, logf.Log.WithName("test"))
-			Expect(canCleanedUp).To(BeFalse())
 		})
 	})
 

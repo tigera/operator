@@ -1187,6 +1187,11 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 		*out = new(WindowsDataplaneOption)
 		**out = **in
 	}
+	if in.BPFInstallMode != nil {
+		in, out := &in.BPFInstallMode, &out.BPFInstallMode
+		*out = new(InstallMode)
+		**out = **in
+	}
 	if in.BGP != nil {
 		in, out := &in.BGP, &out.BGP
 		*out = new(BGPOption)

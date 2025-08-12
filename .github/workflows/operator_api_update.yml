@@ -1,0 +1,40 @@
+name: Auto Update operator api module
+on:
+  push:
+    branches:
+      - master
+      - release-v1.3*
+    paths:
+      - api/*
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create new branch
+        run: |
+          BRANCH=auto-pr-$(date +%s)
+          git checkout -b $BRANCH
+
+          go get -u github.com/tigera/operator/api
+          go mod tidy
+
+          git add go.mod go.sum
+          git commit -m "Auto PR: update api module version in operator"
+          git push origin $BRANCH
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          title: "Auto PR: update api module version in operator"
+          body: "This PR was automatically opened due to an update in api module in operator"

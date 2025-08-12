@@ -224,6 +224,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 	apiAvailable := apiserver != nil && apiserver.Status.State == operatorv1.TigeraStatusReady
 
+	// CASEY: HACK - we don't need an apiserver!
+	apiAvailable = true
+
 	// Create a lookup map of pools owned by this controller for easy access.
 	// This controller will only modify IP pools if:
 	// - The pool was created by or last updated by this controller (as indicated by the managed-by label).

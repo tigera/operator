@@ -102,7 +102,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 							fmt.Sprintf("--tls-private-key-file=%s", c.cfg.KeyPair.VolumeMountKeyFilePath()),
 						},
 						Ports: []corev1.ContainerPort{{
-							ContainerPort: 443,
+							ContainerPort: 6443,
 							Protocol:      corev1.ProtocolTCP,
 						}},
 						VolumeMounts: []corev1.VolumeMount{c.cfg.KeyPair.VolumeMount(c.SupportedOSType())},
@@ -123,7 +123,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				{
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(443),
+					TargetPort: intstr.FromInt(6443),
 				},
 			},
 			Type: corev1.ServiceTypeClusterIP,

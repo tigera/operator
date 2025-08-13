@@ -24,6 +24,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 )
 
 const (
@@ -285,7 +286,7 @@ func (h *NetworkPolicyHelper) APIServerSourceEntityRule(v operatorv1.ProductVari
 }
 
 func (h *NetworkPolicyHelper) PolicyRecommendationSourceEntityRule() v3.EntityRule {
-	return CreateSourceEntityRule(h.namespace("tigera-policy-recommendation"), "tigera-policy-recommendation")
+	return CreateSourceEntityRule(h.namespace(common.CalicoNamespace), "tigera-policy-recommendation")
 }
 
 func (h *NetworkPolicyHelper) ComplianceServerEntityRule() v3.EntityRule {

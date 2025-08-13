@@ -171,7 +171,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				ClientConfig: admissionregistrationv1.WebhookClientConfig{
 					Service: &admissionregistrationv1.ServiceReference{
 						Namespace: "calico-system",
-						Name:      "validation",
+						Name:      "tier-rbac-validator",
 					},
 					CABundle: c.cfg.KeyPair.GetCertificatePEM(),
 				},

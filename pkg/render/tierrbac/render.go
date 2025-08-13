@@ -95,7 +95,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers: []corev1.Container{{
 						Name:  "tier-rbac-validator",
-						Image: "calico/webhook:latest",
+						Image: "calico/webhook:test-build", // Placeholder image, replace with actual image.
 						Args: []string{
 							"webhook",
 							fmt.Sprintf("--tls-cert-file=%s", c.cfg.KeyPair.VolumeMountCertificateFilePath()),

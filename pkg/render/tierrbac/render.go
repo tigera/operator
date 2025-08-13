@@ -107,6 +107,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 						}},
 						VolumeMounts: []corev1.VolumeMount{c.cfg.KeyPair.VolumeMount(c.SupportedOSType())},
 					}},
+					Volumes: []corev1.Volume{c.cfg.KeyPair.Volume()},
 				},
 			},
 		},

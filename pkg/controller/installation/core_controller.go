@@ -81,6 +81,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/tierrbac"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -1288,6 +1289,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	}
 
+	webhookTLS, err := certificateManager.GetOrCreateKeyPair(r.client, "webhook-secret", common.OperatorNamespace(), dns.GetServiceDNSNames("tier-rbac-webhook", "calico-system", r.clusterDomain))
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceCreateError, "Error creating webhook TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	components = append(components,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       common.CalicoNamespace,
@@ -1298,6 +1305,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
 				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
+				rcertificatemanagement.NewKeyPairOption(webhookTLS, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}))
@@ -1455,6 +1463,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BindingNamespaces:           []string{common.CalicoNamespace},
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
+
+	// Add in a validating webhook configuration for tier-based RBAC.
+	hookCfg := tierrbac.Configuration{
+		PullSecrets: pullSecrets,
+		KeyPair:     webhookTLS,
+	}
+	components = append(components, tierrbac.RBAC(&hookCfg))
 
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller

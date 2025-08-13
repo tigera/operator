@@ -170,7 +170,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 						Rule: admissionregistrationv1.Rule{
 							APIGroups:   []string{"projectcalico.org"},
 							APIVersions: []string{"v3"},
-							Resources:   []string{"*"},
+							Resources:   []string{"networkpolicies", "globalnetworkpolicies", "stagednetworkpolicies", "stagedglobalnetworkpolicies"},
 							Scope:       ptr.ToPtr(admissionregistrationv1.ScopeType("*")),
 						},
 					},

@@ -1289,7 +1289,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	}
 
-	webhookTLS, err := certificateManager.GetOrCreateKeyPair(r.client, "webhook-secret", common.OperatorNamespace(), dns.GetServiceDNSNames("tier-rbac-webhook", "calico-system", r.clusterDomain))
+	webhookTLS, err := certificateManager.GetOrCreateKeyPair(r.client, "webhook-secret", common.OperatorNamespace(), dns.GetServiceDNSNames("tier-rbac-validator", "calico-system", r.clusterDomain))
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceCreateError, "Error creating webhook TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err

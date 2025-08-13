@@ -92,6 +92,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					},
 				},
 				Spec: corev1.PodSpec{
+					HostNetwork:        true,
 					ServiceAccountName: "tier-rbac-validator",
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers: []corev1.Container{{

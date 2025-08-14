@@ -75,13 +75,12 @@ type gatewayAPIResources struct {
 }
 
 const (
-	GatewayAPIName                                         = "gateway-api"
-	GatewayControllerLabel                                 = GatewayAPIName + "-controller"
-	EnvoyGatewayConfigName                                 = "envoy-gateway-config"
-	EnvoyGatewayConfigKey                                  = "envoy-gateway.yaml"
-	EnvoyGatewayDeploymentContainerName                    = "envoy-gateway"
-	EnvoyGatewayJobContainerName                           = "envoy-gateway-certgen"
-	L7LogCollectorMergeType             envoyapi.MergeType = "StrategicMerge"
+	GatewayAPIName                      = "gateway-api"
+	GatewayControllerLabel              = GatewayAPIName + "-controller"
+	EnvoyGatewayConfigName              = "envoy-gateway-config"
+	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
+	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
+	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 )
 
 var (

@@ -149,6 +149,12 @@ var (
 		Registry: "",
 	}
 
+	ComponentL7LogCollector = Component{
+		Version:  "master",
+		Image:    "tigera/l7-collector",
+		Registry: "",
+	}
+
 	ComponentSecurityEventWebhooksProcessor = Component{
 		Version:  "master",
 		Image:    "tigera/webhooks-processor",
@@ -352,6 +358,7 @@ var (
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
 		ComponentWAFHTTPFilter,
+		ComponentL7LogCollector,
 		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,

@@ -16,7 +16,6 @@ package render
 
 import (
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -773,6 +772,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			}
 
 			hasWAFHTTPFilter := false
+			hasL7LogCollector := false
 			for i, initContainer := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers {
 				if initContainer.Name == wafHTTPFilter.Name {
 					hasWAFHTTPFilter = true
@@ -781,92 +781,60 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i] = wafHTTPFilter
 					}
 				}
+				if initContainer.Name == l7LogCollector.Name {
+					hasL7LogCollector = true
+					// Handle update
+					if initContainer.Image != l7LogCollector.Image {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i] = l7LogCollector
+					}
+				}
 			}
 			if !hasWAFHTTPFilter {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, wafHTTPFilter)
 			}
 
-			hasL7LogCollector := false
-			if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Type != nil {
-				if *envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Type != L7LogCollectorMergeType {
-					log.Info("EnvoyDeployment patch type is not Merge. Unable to add L7 Log Collector container")
-				}
-			} else {
-				var deploymentSpec *appsv1.DeploymentSpec
-				if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Type == nil {
-					deploymentSpec = &appsv1.DeploymentSpec{
-						Template: corev1.PodTemplateSpec{
-							Spec: corev1.PodSpec{
-								Containers: []corev1.Container{},
-							},
-						},
-					}
-				} else {
-					err := json.Unmarshal(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Value.Raw, deploymentSpec)
-					if err != nil {
-						log.Error(err, "Failed to unmarshal EnvoyDeployment patch value")
-						return envoyProxy
-					}
-				}
-
-				for i, container := range deploymentSpec.Template.Spec.Containers {
-					if container.Name == l7LogCollector.Name {
-						hasL7LogCollector = true
-						// Handle update
-						if container.Image != l7LogCollector.Image {
-							deploymentSpec.Template.Spec.Containers[i] = l7LogCollector
-						}
-					}
-				}
-				if !hasL7LogCollector {
-					deploymentSpec.Template.Spec.Containers = append(deploymentSpec.Template.Spec.Containers, l7LogCollector)
-				}
-				jsonData, err := json.Marshal(deploymentSpec)
-				if err != nil {
-					log.Error(err, "Failed to marshal EnvoyDeployment patch value")
-					return envoyProxy
-				}
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Value = apiextenv1.JSON{Raw: jsonData}
+			if !hasL7LogCollector {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, l7LogCollector)
 			}
 
 			wafSocketFilterName := "waf-http-filter"
 			accessLogsName := "access-logs"
 			// Add or update Container volume mount
-			socketVolumeMount := []corev1.VolumeMount{
-				{
-					Name:      wafSocketFilterName,
-					MountPath: "/var/run/waf-http-filter",
-				},
-				{
-					Name:      accessLogsName,
-					MountPath: "/access_logs",
-				},
+			wafSocketVolumeMount := corev1.VolumeMount{
+
+				Name:      wafSocketFilterName,
+				MountPath: "/var/run/waf-http-filter",
 			}
+
+			l7SocketVolumeMount := corev1.VolumeMount{
+				Name:      accessLogsName,
+				MountPath: "/access_logs",
+			}
+
 			hasWAFFilterSocketVolumeMount := false
 			hasAccessLogsVolumeMount := false
 
 			for i, volumeMount := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts {
-				for _, socketVolumeMount := range socketVolumeMount {
-					if volumeMount.Name == wafSocketFilterName {
-						hasWAFFilterSocketVolumeMount = true
-						if volumeMount.MountPath != socketVolumeMount.MountPath {
-							envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = socketVolumeMount
-						}
-					} else if volumeMount.Name == accessLogsName {
-						hasAccessLogsVolumeMount = true
-						if volumeMount.MountPath != socketVolumeMount.MountPath {
-							envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = socketVolumeMount
-						}
 
+				if volumeMount.Name == wafSocketVolumeMount.Name {
+					hasWAFFilterSocketVolumeMount = true
+					if volumeMount.MountPath != wafSocketVolumeMount.MountPath {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = wafSocketVolumeMount
 					}
+				} else if volumeMount.Name == l7SocketVolumeMount.Name {
+					hasAccessLogsVolumeMount = true
+					if volumeMount.MountPath != l7SocketVolumeMount.MountPath {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = l7SocketVolumeMount
+					}
+
 				}
 			}
 			if !hasWAFFilterSocketVolumeMount {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, socketVolumeMount[0])
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, wafSocketVolumeMount)
 			}
 
 			if !hasAccessLogsVolumeMount {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, socketVolumeMount[1])
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, l7SocketVolumeMount)
 			}
 
 			// Add or update Pod volumes

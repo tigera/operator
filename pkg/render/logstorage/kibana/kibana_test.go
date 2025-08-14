@@ -422,7 +422,7 @@ var _ = Describe("Kibana rendering tests", func() {
 				kibana, ok := rtest.GetResource(resources, "tigera-secure", "tigera-kibana", "kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
 				Expect(ok).To(BeTrue())
 				Expect(kibana.Spec.PodTemplate.Spec.Affinity).NotTo(BeNil())
-				Expect(kibana.Spec.PodTemplate.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-secure", "tigera-kibana")))
+				Expect(kibana.Spec.PodTemplate.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("tigera-secure", []string{"tigera-kibana"})))
 			})
 
 			It("should render the kibana pod template with resource requests and limits when set", func() {

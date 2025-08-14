@@ -269,7 +269,7 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 	}
 
 	if e.cfg.Installation.ControlPlaneReplicas != nil && *e.cfg.Installation.ControlPlaneReplicas > 1 {
-		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, e.cfg.Namespace)
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, []string{e.cfg.Namespace})
 	}
 
 	d := appsv1.Deployment{

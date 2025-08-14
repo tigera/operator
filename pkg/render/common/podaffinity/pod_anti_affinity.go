@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ const (
 	K8sAppLabelName string = "k8s-app"
 )
 
-func NewPodAntiAffinity(name, namespace string) *corev1.Affinity {
+func NewPodAntiAffinity(name string, namespaces []string) *corev1.Affinity {
 	return &corev1.Affinity{
 		PodAntiAffinity: &corev1.PodAntiAffinity{
 			PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
@@ -35,7 +35,7 @@ func NewPodAntiAffinity(name, namespace string) *corev1.Affinity {
 								K8sAppLabelName: name,
 							},
 						},
-						Namespaces:  []string{namespace},
+						Namespaces:  namespaces,
 						TopologyKey: "kubernetes.io/hostname",
 					},
 				},
@@ -47,7 +47,7 @@ func NewPodAntiAffinity(name, namespace string) *corev1.Affinity {
 								K8sAppLabelName: name,
 							},
 						},
-						Namespaces:  []string{namespace},
+						Namespaces:  namespaces,
 						TopologyKey: "topology.kubernetes.io/zone",
 					},
 				},

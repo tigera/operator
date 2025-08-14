@@ -20,7 +20,6 @@ import (
 
 	"github.com/go-logr/logr"
 
-	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -462,7 +461,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		TrustedBundle:                  trustedBundleRO,
 		PolicyRecommendationCertSecret: policyRecommendationKeyPair,
 		PolicyRecommendation:           policyRecommendation,
-		CanCleanupOlderResources:       r.canCleanupLegacyNamespace(ctx, log),
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -553,68 +551,4 @@ func (r *ReconcilePolicyRecommendation) createDefaultPolicyRecommendationScope(c
 	}
 
 	return nil
-}
-
-// canCleanupLegacyNamespace determines whether the legacy "tigera-policy-recommendation" namespace
-// (which previously hosted the policy-recommendation) can be safely cleaned up.
-// It returns true only if:
-// - The new tigera-policy-recommendation deployment in "calico-system" exists and is available.
-// - Both the policyrecommendation custom resource and the TigeraStatus for 'policy-recommendation' are in the Ready state
-func (r *ReconcilePolicyRecommendation) canCleanupLegacyNamespace(ctx context.Context, logger logr.Logger) bool {
-
-	if r.multiTenant {
-		// Policy recommendation deployment resides in the tenant namespace,
-		// so skip cleanup for this resource.
-		return false
-	}
-	newNamespace := common.CalicoNamespace
-	deploymentName := "tigera-policy-recommendation"
-
-	// Fetch the new policy-recommendation deployment in calico-system
-	newDeploy := &appsv1.Deployment{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: newNamespace}, newDeploy); err != nil {
-		if errors.IsNotFound(err) {
-			logger.V(4).Info("New Policy Recommendation deployment not found", "ns", newNamespace)
-		} else {
-			logger.Error(err, "Failed to get new Policy Recommendation deployment", "ns", newNamespace)
-		}
-		return false
-	}
-	if newDeploy.Status.AvailableReplicas == 0 {
-		logger.V(4).Info("New PolicyRecommendation deployment has 0 replicas", "ns", newNamespace)
-		return false
-	}
-
-	// Ensure the new policy recommendation is functionally ready
-	policyRec, err := GetPolicyRecommendation(ctx, r.client, false, "")
-	if err != nil {
-		if errors.IsNotFound(err) {
-			logger.V(4).Info("PolicyRecommendation resource does not exist")
-			return false
-		}
-		logger.V(4).Info("Unable to retrieve PolicyRecommendation resource", "msg")
-		return false
-	}
-	if policyRec.Status.State != operatorv1.TigeraStatusReady {
-		logger.V(4).Info("PolicyRecommendation resource not ready")
-		return false
-	}
-
-	// Ensure TigeraStatus indicates readiness
-	ts := &operatorv1.TigeraStatus{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: ResourceName}, ts); err != nil {
-		if errors.IsNotFound(err) {
-			logger.V(4).Info("TigeraStatus not found")
-		} else {
-			logger.Error(err, "Failed to get TigeraStatus resource.")
-		}
-		return false
-	}
-	if !ts.Available() {
-		logger.V(4).Info("TigeraStatus for policy-recommendation is not in Available status.")
-		return false
-	}
-
-	logger.V(5).Info("Safe to clean up old namespace: \"tigera-policy-recommendation\", for PolicyRecommendation.")
-	return true
 }

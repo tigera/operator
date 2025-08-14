@@ -77,8 +77,7 @@ type PolicyRecommendationConfiguration struct {
 	Tenant          *operatorv1.Tenant
 	ExternalElastic bool
 
-	PolicyRecommendation     *operatorv1.PolicyRecommendation
-	CanCleanupOlderResources bool
+	PolicyRecommendation *operatorv1.PolicyRecommendation
 }
 
 type policyRecommendationComponent struct {
@@ -461,8 +460,8 @@ func (pr *policyRecommendationComponent) deprecatedObjects(isManagedCluster bool
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"},
 			},
 		}...)
-	} else if pr.cfg.CanCleanupOlderResources {
-		//Clean up the legacy namespace
+	} else {
+		// Clean up the legacy namespace
 		deprecatedObjs = append(deprecatedObjs,
 			&corev1.Namespace{
 				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},

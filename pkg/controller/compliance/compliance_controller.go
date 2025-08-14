@@ -419,7 +419,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	// Determine the namespaces to which we must bind the cluster role.
 	// For multi-tenant, the cluster role will be bind to the service account in the tenant namespace
-	// For single-tenant or zero-tenant, the cluster role will be bind to the service account in the tigera-policy-recommendation
+	// For single-tenant or zero-tenant, the cluster role will be bind to the service account in the tigera-compliance
 	// namespace
 	bindNamespaces, err := helper.TenantNamespaces(r.client)
 	if err != nil {

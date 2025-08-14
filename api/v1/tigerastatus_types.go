@@ -121,6 +121,7 @@ const (
 	ResourceNotReady          TigeraStatusReason = "ResourceNotReady"
 	PodFailure                TigeraStatusReason = "PodFailure"
 	CertificateError          TigeraStatusReason = "CertificateError"
+	CertificateReadError      TigeraStatusReason = "CertificateReadError"
 	InvalidConfigurationError TigeraStatusReason = "InvalidConfigurationError"
 	ResourceCreateError       TigeraStatusReason = "ResourceCreateError"
 	ResourceMigrationError    TigeraStatusReason = "ResourceMigrationError"

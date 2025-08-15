@@ -794,7 +794,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(envoyDeployment).ToNot(BeNil())
 
 		Expect(envoyDeployment.Pod).ToNot(BeNil())
-		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(2))
+		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(3))
 		Expect(envoyDeployment.Pod.Volumes[0].Name).To(Equal("var-log-calico"))
 		Expect(envoyDeployment.Pod.Volumes[0].HostPath.Path).To(Equal("/var/log/calico"))
 		Expect(envoyDeployment.Pod.Volumes[1].Name).To(Equal("waf-http-filter"))
@@ -974,7 +974,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		))
 
 		Expect(envoyDeployment.Pod).ToNot(BeNil())
-		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(3))
+		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(4))
 		Expect(envoyDeployment.Pod.Volumes[0].Name).To(Equal("some-other-volume"))
 		Expect(envoyDeployment.Pod.Volumes[0].EmptyDir).ToNot(BeNil())
 		Expect(envoyDeployment.Pod.Volumes[1].Name).To(Equal("var-log-calico"))

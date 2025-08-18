@@ -620,13 +620,19 @@ var _ = Describe("Manager controller tests", func() {
 						},
 					}
 					Expect(test.GetResource(c, &d)).To(BeNil())
-					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
 					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
 							components.ComponentManager.Image,
 							components.ComponentManager.Version)))
+					dashboard := test.GetContainer(d.Spec.Template.Spec.Containers, render.DashboardAPIName)
+					Expect(dashboard).ToNot(BeNil())
+					Expect(dashboard.Image).To(Equal(
+						fmt.Sprintf("some.registry.org/%s:%s",
+							components.ComponentUIAPIs.Image,
+							components.ComponentUIAPIs.Version)))
 					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
@@ -664,14 +670,20 @@ var _ = Describe("Manager controller tests", func() {
 						},
 					}
 					Expect(test.GetResource(c, &d)).To(BeNil())
-					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
-					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
+					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
+					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, render.ManagerName)
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
 							components.ComponentManager.Image,
 							"sha256:managerhash")))
-					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
+					dashboard := test.GetContainer(d.Spec.Template.Spec.Containers, render.DashboardAPIName)
+					Expect(dashboard).ToNot(BeNil())
+					Expect(dashboard.Image).To(Equal(
+						fmt.Sprintf("some.registry.org/%s@%s",
+							components.ComponentUIAPIs.Image,
+							"sha256:uiapihash")))
+					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
@@ -1128,8 +1140,8 @@ var _ = Describe("Manager controller tests", func() {
 						},
 					}
 					Expect(test.GetResource(c, &d)).To(BeNil())
-					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
-					voltron := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-voltron")
+					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
+					voltron := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(voltron).NotTo(BeNil())
 					Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST", Value: "true"}))
 				})

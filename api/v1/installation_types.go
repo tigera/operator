@@ -499,14 +499,33 @@ const (
 // LinuxDataplaneOption controls which dataplane is to be used on Linux nodes.
 //
 // One of: Iptables, BPF, VPP, Nftables
-// +kubebuilder:validation:Enum=Iptables;BPF;VPP;Nftables;
+// +kubebuilder:validation:Enum=Iptables;BPF;BPFWithIptables;BPFWithNftables;VPP;Nftables;
 type LinuxDataplaneOption string
 
 const (
-	LinuxDataplaneIptables LinuxDataplaneOption = "Iptables"
-	LinuxDataplaneBPF      LinuxDataplaneOption = "BPF"
-	LinuxDataplaneVPP      LinuxDataplaneOption = "VPP"
+	// LinuxDataplaneBPF indicates that Calico should use the BPF dataplane. This option
+	// selects the "best available" use of iptables of nftables (currently iptables) where necessary.
+	// If you would like to explicitly select the use of nftables or iptables,
+	// please see the "BPFWithNftables" or "BPFWithIptables" options.
+	LinuxDataplaneBPF LinuxDataplaneOption = "BPF"
+
+	// LinuxDataplaneBPFNftables indicates that Calico should use the BPF dataplane, using
+	// nftables for programming rules where necessary.
+	LinuxDaplaneBPFNftables LinuxDataplaneOption = "BPFWithNftables"
+
+	// LinuxDataplaneBPFWithIptables indicates that Calico should use the BPF dataplane, using
+	// iptables for programming rules where necessary.
+	LinuxDataplaneBPFIptables LinuxDataplaneOption = "BPFWithIptables"
+
+	// LinuxDataplaneNftables indicates that Calico should use the nftables dataplane.
 	LinuxDataplaneNftables LinuxDataplaneOption = "Nftables"
+
+	// LinuxDataplaneIptables indicates that Calico should use the iptables dataplane. Note that
+	// iptables is largegly deprecated in favor of BPF and/or nftables.
+	LinuxDataplaneIptables LinuxDataplaneOption = "Iptables"
+
+	// LinuxDataplaneVPP indicates that Calico should use the VPP dataplane.
+	LinuxDataplaneVPP LinuxDataplaneOption = "VPP"
 )
 
 // +kubebuilder:validation:Enum=HNS;Disabled
@@ -943,13 +962,16 @@ type Installation struct {
 func (s *InstallationSpec) BPFEnabled() bool {
 	return s.CalicoNetwork != nil &&
 		s.CalicoNetwork.LinuxDataplane != nil &&
-		*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF
+		(*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF ||
+			*s.CalicoNetwork.LinuxDataplane == LinuxDaplaneBPFNftables ||
+			*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPFIptables)
 }
 
 func (s *InstallationSpec) IsNftables() bool {
 	return s.CalicoNetwork != nil &&
 		s.CalicoNetwork.LinuxDataplane != nil &&
-		*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneNftables
+		(*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneNftables ||
+			*s.CalicoNetwork.LinuxDataplane == LinuxDaplaneBPFNftables)
 }
 
 // +kubebuilder:object:root=true

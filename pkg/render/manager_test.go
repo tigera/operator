@@ -106,13 +106,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
 
-		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(3))
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(4))
 		uiAPIs := deployment.Spec.Template.Spec.Containers[0]
 		voltron := deployment.Spec.Template.Spec.Containers[1]
-		manager := deployment.Spec.Template.Spec.Containers[2]
+		dashboard := deployment.Spec.Template.Spec.Containers[2]
+		manager := deployment.Spec.Template.Spec.Containers[3]
 
 		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/manager:" + components.ComponentManager.Version))
 		Expect(uiAPIs.Image).Should(Equal(components.TigeraRegistry + "tigera/ui-apis:" + components.ComponentUIAPIs.Version))
+		Expect(dashboard.Image).Should(Equal(components.TigeraRegistry + "tigera/ui-apis:" + components.ComponentUIAPIs.Version))
 		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
 
 		// manager container
@@ -165,6 +167,32 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
+
+		dashboardExpectedEnv := []corev1.EnvVar{
+			{Name: "LISTEN_ADDR", Value: fmt.Sprintf("127.0.0.1:%s", render.DashboardAPIPort)},
+			{Name: "LOG_LEVEL", Value: "Info"},
+			{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc.%s", render.ElasticsearchNamespace, clusterDomain)},
+			{Name: "LINSEED_CLIENT_KEY", Value: fmt.Sprintf("/%s/tls.key", render.ManagerInternalTLSSecretName)},
+			{Name: "LINSEED_CLIENT_CERT", Value: fmt.Sprintf("/%s/tls.crt", render.ManagerInternalTLSSecretName)},
+			{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:%s", render.ManagerNamespace, "9443")},
+			{Name: "HEALTH_PORT", Value: render.DashboardAPIHealthPort},
+		}
+		Expect(dashboard.Env).To(Equal(dashboardExpectedEnv))
+
+		Expect(dashboard.VolumeMounts).To(HaveLen(2))
+		Expect(dashboard.VolumeMounts[0].Name).To(Equal("tigera-ca-bundle"))
+		Expect(dashboard.VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
+		Expect(dashboard.VolumeMounts[1].Name).To(Equal(render.ManagerInternalTLSSecretName))
+		Expect(dashboard.VolumeMounts[1].MountPath).To(Equal(fmt.Sprintf("/%s", render.ManagerInternalTLSSecretName)))
+
+		Expect(dashboard.ReadinessProbe).NotTo(BeNil())
+		Expect(dashboard.ReadinessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/dashboard-api", "-ready"}))
+		Expect(dashboard.LivenessProbe).NotTo(BeNil())
+		Expect(dashboard.LivenessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/dashboard-api", "-ready"}))
+
+		Expect(dashboard.SecurityContext).NotTo(BeNil())
+		Expect(*dashboard.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
+		Expect(*dashboard.SecurityContext.RunAsNonRoot).To(BeTrue())
 
 		// voltron container
 		Expect(voltron.Env).To(ContainElements([]corev1.EnvVar{
@@ -326,6 +354,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"felixconfigurations",
 				},
@@ -382,12 +415,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{
 					"flows",
 					"flowlogs",
+					"flowlogs-multi-cluster",
 					"bgplogs",
 					"auditlogs",
 					"dnsflows",
 					"dnslogs",
+					"dnslogs-multi-cluster",
 					"l7flows",
 					"l7logs",
+					"l7logs-multi-cluster",
 					"events",
 					"processes",
 				},
@@ -446,7 +482,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Value:     "https://127.0.0.1/dex",
 			ValueFrom: nil,
 		}
-		Expect(d.Spec.Template.Spec.Containers[2].Env).To(ContainElement(oidcEnvVar))
+		Expect(d.Spec.Template.Spec.Containers[3].Env).To(ContainElement(oidcEnvVar))
 	})
 
 	Describe("public ca bundle", func() {
@@ -539,7 +575,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		By("configuring the manager deployment")
 		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		manager := deployment.Spec.Template.Spec.Containers[2]
+		manager := deployment.Spec.Template.Spec.Containers[3]
 		Expect(manager.Name).To(Equal("tigera-manager"))
 		rtest.ExpectEnv(manager.Env, "ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
@@ -626,6 +662,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"felixconfigurations",
 				},
@@ -687,12 +728,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{
 					"flows",
 					"flowlogs",
+					"flowlogs-multi-cluster",
 					"bgplogs",
 					"auditlogs",
 					"dnsflows",
 					"dnslogs",
+					"dnslogs-multi-cluster",
 					"l7flows",
 					"l7logs",
+					"l7logs-multi-cluster",
 					"events",
 					"processes",
 				},
@@ -904,7 +948,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		d, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 
-		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
 
 		container := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-voltron")
 		Expect(container).NotTo(BeNil())
@@ -1331,6 +1375,26 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Expect(c.Image).NotTo(ContainSubstring("manager"))
 			}
 		})
+
+		It("should not render dashboard sidecar", func() {
+			tenant := &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: tenantANamespace},
+				Spec:       operatorv1.TenantSpec{ID: "tenant-a"},
+			}
+			resources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              compliance,
+				complianceFeatureActive: true,
+				ns:                      tenantANamespace,
+				tenant:                  tenant,
+			})
+
+			deployment := rtest.GetResource(resources, "tigera-manager", tenantANamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(2))
+			Expect(rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.DashboardAPIName)).To(BeNil())
+		})
 	})
 
 	Context("single-tenant rendering", func() {
@@ -1405,6 +1469,26 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			for _, env := range uiAPIsEnv {
 				Expect(env.Name).NotTo(Equal("TENANT_NAMESPACE"))
 			}
+		})
+
+		It("should not render dashboard sidecar", func() {
+			tenant := &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{Name: "tenantA"},
+				Spec:       operatorv1.TenantSpec{ID: "tenant-a"},
+			}
+			resources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              compliance,
+				complianceFeatureActive: true,
+				tenant:                  tenant,
+				ns:                      render.ManagerNamespace,
+			})
+
+			deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(2))
+			Expect(rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.DashboardAPIName)).To(BeNil())
 		})
 	})
 })

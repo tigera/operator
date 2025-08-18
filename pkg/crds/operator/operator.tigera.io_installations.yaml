@@ -1379,6 +1379,8 @@ spec:
                       enum:
                         - Iptables
                         - BPF
+                        - BPFWithIptables
+                        - BPFWithNftables
                         - VPP
                         - Nftables
                       type: string
@@ -10149,6 +10151,8 @@ spec:
                           enum:
                             - Iptables
                             - BPF
+                            - BPFWithIptables
+                            - BPFWithNftables
                             - VPP
                             - Nftables
                           type: string

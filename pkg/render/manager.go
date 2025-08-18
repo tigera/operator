@@ -32,6 +32,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -89,10 +90,14 @@ const (
 
 // ManagementClusterConnection configuration constants
 const (
-	VoltronName              = "tigera-voltron"
-	VoltronTunnelSecretName  = "tigera-management-cluster-connection"
-	defaultVoltronPort       = "9443"
-	defaultTunnelVoltronPort = "9449"
+	VoltronName                        = "tigera-voltron"
+	VoltronTunnelSecretName            = "tigera-management-cluster-connection"
+	defaultVoltronPort                 = "9443"
+	defaultTunnelVoltronPort           = "9449"
+	DashboardAPIPort                   = "8444"
+	DashboardAPIHealthPort             = "8080"
+	DashboardAPIName                   = "tigera-dashboard-api"
+	DashboardAPITLSTerminatedRouteName = "tigera-dashboard-api-route"
 )
 
 // Manager returns a component for rendering namespaced manager resources.
@@ -256,6 +261,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	)
 	objs = append(objs, c.getTLSObjects()...)
 	objs = append(objs, c.managerService())
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise && c.cfg.Tenant == nil {
+		objs = append(objs, c.dashboardTLSTerminatedRoute())
+	}
 
 	if c.cfg.VoltronRouteConfig != nil {
 		objs = append(objs, c.cfg.VoltronRouteConfig.RoutesConfigMap(c.cfg.Namespace))
@@ -299,6 +307,9 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	}
 
 	managerPodContainers := []corev1.Container{c.managerUIAPIsContainer(), c.voltronContainer()}
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise && c.cfg.Tenant == nil {
+		managerPodContainers = append(managerPodContainers, c.dashboardContainer())
+	}
 	if c.cfg.Tenant == nil {
 		managerPodContainers = append(managerPodContainers, c.managerContainer())
 	}
@@ -600,6 +611,63 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	}
 }
 
+// dashboardContainer returns the dashboard sidecar container that only gets created in Enterprise (where tenancy is
+// not enabled).
+func (c *managerComponent) dashboardContainer() corev1.Container {
+	var keyPath, certPath string
+	if c.cfg.InternalTLSKeyPair != nil {
+		keyPath, certPath = c.cfg.InternalTLSKeyPair.VolumeMountKeyFilePath(), c.cfg.InternalTLSKeyPair.VolumeMountCertificateFilePath()
+	}
+
+	env := []corev1.EnvVar{
+		{Name: "LISTEN_ADDR", Value: fmt.Sprintf("127.0.0.1:%s", DashboardAPIPort)},
+		{Name: "LOG_LEVEL", Value: "Info"},
+		{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc.%s", ElasticsearchNamespace, c.cfg.ClusterDomain)},
+		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
+		{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:%s", c.cfg.Namespace, defaultVoltronPort)},
+		{Name: "HEALTH_PORT", Value: DashboardAPIHealthPort},
+	}
+
+	mounts := append(
+		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
+		c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()),
+	)
+
+	return corev1.Container{
+		Name:            DashboardAPIName,
+		Image:           c.uiAPIsImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{"/usr/bin/dashboard-api"},
+		Env:             env,
+		VolumeMounts:    mounts,
+		SecurityContext: securitycontext.NewNonRootContext(),
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/usr/bin/dashboard-api", "-ready"},
+				},
+			},
+			FailureThreshold:    3,
+			PeriodSeconds:       30,
+			SuccessThreshold:    1,
+			TimeoutSeconds:      5,
+			InitialDelaySeconds: 5,
+		},
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/usr/bin/dashboard-api", "-ready"},
+				},
+			},
+			FailureThreshold: 3,
+			PeriodSeconds:    30,
+			SuccessThreshold: 1,
+			TimeoutSeconds:   5,
+		},
+	}
+}
+
 // managerUIAPIsContainer returns the ES proxy container
 func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 	var keyPath, certPath string
@@ -852,6 +920,11 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"felixconfigurations",
 				},
@@ -913,12 +986,15 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				Resources: []string{
 					"flows",
 					"flowlogs",
+					"flowlogs-multi-cluster",
 					"bgplogs",
 					"auditlogs",
 					"dnsflows",
 					"dnslogs",
+					"dnslogs-multi-cluster",
 					"l7flows",
 					"l7logs",
+					"l7logs-multi-cluster",
 					"events",
 					"processes",
 				},
@@ -976,6 +1052,22 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 	}
 
 	return objs
+}
+
+func (c *managerComponent) dashboardTLSTerminatedRoute() client.Object {
+	return &operatorv1.TLSTerminatedRoute{
+		TypeMeta:   metav1.TypeMeta{Kind: "TLSTerminatedRoute", APIVersion: "operator.tigera.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: DashboardAPITLSTerminatedRouteName, Namespace: c.cfg.Namespace},
+		Spec: operatorv1.TLSTerminatedRouteSpec{
+			Target: operatorv1.TargetTypeUI,
+			PathMatch: &operatorv1.PathMatch{
+				Path:        "/dashboard/",
+				PathRegexp:  ptr.ToPtr("^/dashboard/?"),
+				PathReplace: ptr.ToPtr("/api/"),
+			},
+			Destination: fmt.Sprintf("127.0.0.1:%s", DashboardAPIPort),
+		},
+	}
 }
 
 // Allow users to access Calico Enterprise Manager.

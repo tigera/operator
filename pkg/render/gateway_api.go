@@ -409,7 +409,7 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 		if err != nil {
 			return err
 		}
-		pr.L7LogCollectorImage, err = components.GetReference(components.ComponentL7LogCollector, reg, path, prefix, is)
+		pr.L7LogCollectorImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, is)
 		if err != nil {
 			return err
 		}

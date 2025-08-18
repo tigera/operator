@@ -55,6 +55,9 @@ spec:
                   Note: that this field is deprecated. Users should use the NextHopMode field to control
                   the next hop attribute for a BGP peer.
                 type: boolean
+              localASNumber:
+                format: int32
+                type: integer
               localWorkloadSelector:
                 description: |-
                   Selector for the local workload that the node should peer with. When this is set, the peerSelector and peerIP fields must be empty,

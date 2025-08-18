@@ -1723,18 +1723,16 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 	// Set the FelixConfiguration nftables dataplane mode based on the operator configuration. We do this unconditonally because
 	// we don't need to handle upgrades from versions that were previously FelixConfiguration only - nftables mode has always
 	// been controlled by the operator.
-	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
-		if *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables {
-			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
-			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeEnabled
-			nftablesMode := crdv1.NFTablesModeEnabled
-			fc.Spec.NFTablesMode = &nftablesMode
-		} else {
-			// The operator is configured to use another dataplane. Disable nftables.
-			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeDisabled
-			nftablesMode := crdv1.NFTablesModeDisabled
-			fc.Spec.NFTablesMode = &nftablesMode
-		}
+	if install.Spec.IsNftables() {
+		// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
+		updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeEnabled
+		nftablesMode := crdv1.NFTablesModeEnabled
+		fc.Spec.NFTablesMode = &nftablesMode
+	} else {
+		// The operator is configured to use another dataplane. Disable nftables.
+		updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeDisabled
+		nftablesMode := crdv1.NFTablesModeDisabled
+		fc.Spec.NFTablesMode = &nftablesMode
 	}
 	if updated {
 		reqLogger.Info("Patching nftables mode", "nftablesMode", *fc.Spec.NFTablesMode)

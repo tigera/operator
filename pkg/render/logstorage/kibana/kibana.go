@@ -361,7 +361,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	}
 
 	if k.cfg.Installation.ControlPlaneReplicas != nil && *k.cfg.Installation.ControlPlaneReplicas > 1 {
-		kibana.Spec.PodTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(CRName, Namespace)
+		kibana.Spec.PodTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(CRName, []string{Namespace})
 	}
 
 	if k.cfg.LogStorage != nil {

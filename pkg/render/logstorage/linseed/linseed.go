@@ -469,7 +469,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	}
 
 	if replicas != nil && *replicas > 1 {
-		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, l.namespace)
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, []string{l.namespace})
 	}
 
 	d := appsv1.Deployment{

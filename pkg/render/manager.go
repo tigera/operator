@@ -327,7 +327,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	}
 
 	if c.cfg.Replicas != nil && *c.cfg.Replicas > 1 {
-		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", c.cfg.Namespace)
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", []string{c.cfg.Namespace})
 	}
 
 	d := &appsv1.Deployment{
@@ -1180,7 +1180,6 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		"tigera-manager",
 		"tigera-operator",
 		"tigera-packetcapture",
-		"tigera-policy-recommendation",
 		"tigera-prometheus",
 		"calico-system",
 		"tigera-firewall-controller",

@@ -294,7 +294,7 @@ func (c *dexComponent) deployment() client.Object {
 	}
 
 	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
-		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(DexObjectName, DexNamespace)
+		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(DexObjectName, []string{DexNamespace})
 	}
 
 	if c.cfg.Authentication != nil {

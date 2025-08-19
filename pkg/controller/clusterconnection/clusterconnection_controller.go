@@ -20,9 +20,6 @@ import (
 
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render/goldmane"
-	"github.com/tigera/operator/pkg/render/whisker"
 	"golang.org/x/net/http/httpproxy"
 	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,9 +47,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -257,6 +257,8 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for clusterInfoWatchReady watch to be established", err, reqLogger)
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
+
+	fillDefaults(managementClusterConnection)
 
 	if err := utils.ApplyDefaults(ctx, r.cli, managementClusterConnection); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
@@ -492,6 +494,16 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// We should create the Guardian deployment.
 	return result, nil
+}
+
+func fillDefaults(mcc *operatorv1.ManagementClusterConnection) {
+	if mcc.Spec.Impersonation == nil {
+		mcc.Spec.Impersonation = &operatorv1.Impersonation{
+			Users:           "*",
+			Groups:          "*",
+			ServiceAccounts: "*",
+		}
+	}
 }
 
 func (r *ReconcileConnection) maintainFinalizer(ctx context.Context, managementClusterConnection client.Object) error {

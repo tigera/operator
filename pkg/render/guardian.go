@@ -21,8 +21,9 @@ import (
 	"net"
 	"net/url"
 
-	operatorurl "github.com/tigera/operator/pkg/url"
 	"golang.org/x/net/http/httpproxy"
+
+	operatorurl "github.com/tigera/operator/pkg/url"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -240,11 +241,23 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 	var policyRules []rbacv1.PolicyRule
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		policyRules = append(policyRules, rbacv1.PolicyRule{
-			APIGroups: []string{""},
-			Resources: []string{"users", "groups", "serviceaccounts"},
-			Verbs:     []string{"impersonate"},
-		})
+		policyRules = append(policyRules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{c.cfg.ManagementClusterConnection.Spec.Impersonation.Users},
+				Resources: []string{"users"},
+				Verbs:     []string{"impersonate"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{c.cfg.ManagementClusterConnection.Spec.Impersonation.Groups},
+				Resources: []string{"groups"},
+				Verbs:     []string{"impersonate"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{c.cfg.ManagementClusterConnection.Spec.Impersonation.ServiceAccounts},
+				Resources: []string{"serviceaccounts"},
+				Verbs:     []string{"impersonate"},
+			},
+		)
 
 		policyRules = append(policyRules, rulesForManagementClusterRequests(c.cfg.OpenShift)...)
 

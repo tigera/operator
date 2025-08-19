@@ -32,6 +32,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -1429,6 +1430,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
 	}
+	// Check if BPFInstallMode is Auto and its requirements are met.
+	bpfAutoInstallReq, err := utils.BPFAutoInstallRequirements(r.client, ctx, &instance.Spec)
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceValidationError, "bpfInstallMode is Auto but the requirements are not met", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// If BPFInstallMode is Auto and its requirements are met configure the node with API Server info.
+	if bpfAutoInstallReq != nil && instance.Spec.BPFEnabled() {
+		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
+		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfAutoInstallReq.K8sService)
+		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfAutoInstallReq.K8sServiceEndpoints)
+	}
 	components = append(components, render.Node(&nodeCfg))
 
 	csiCfg := render.CSIConfiguration{
@@ -1906,7 +1920,7 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Co
 		if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
 			err := setBPFEnabledOnFelixConfiguration(fc, bpfEnabledOnInstall)
 			if err != nil {
-				reqLogger.Error(err, "Unable to enable eBPF data plane")
+				reqLogger.Error(err, "Unable to disable eBPF data plane")
 				return false, err
 			} else {
 				updated = true
@@ -1915,6 +1929,54 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Co
 	}
 
 	return updated, nil
+}
+
+// serviceIPsAndPorts extracts the service IPs and ports from the Service and returns them as a slice of k8sapi.ServiceEndpoint.
+func serviceIPsAndPorts(svc *corev1.Service) []k8sapi.ServiceEndpoint {
+	if svc == nil {
+		return nil
+	}
+	var endpoints []k8sapi.ServiceEndpoint
+	ips := svc.Spec.ClusterIPs
+	if len(ips) == 0 && svc.Spec.ClusterIP != "" {
+		ips = []string{svc.Spec.ClusterIP}
+	}
+
+	for _, ip := range ips {
+		for _, port := range svc.Spec.Ports {
+			endpoints = append(endpoints, k8sapi.ServiceEndpoint{
+				Host: ip,
+				Port: fmt.Sprintf("%d", port.Port),
+			})
+		}
+	}
+
+	return endpoints
+}
+
+// serviceEndpointSlice extracts the service endpoints from the EndpointSlice and returns them as a slice of k8sapi.ServiceEndpoint.
+func serviceEndpointSlice(endpointSliceList *discoveryv1.EndpointSliceList) []k8sapi.ServiceEndpoint {
+	if endpointSliceList == nil {
+		return nil
+	}
+	var endpoints []k8sapi.ServiceEndpoint
+	for _, endpointSlice := range endpointSliceList.Items {
+		for _, endpoint := range endpointSlice.Endpoints {
+			for _, ip := range endpoint.Addresses {
+				for _, port := range endpointSlice.Ports {
+					if port.Port == nil {
+						continue
+					}
+
+					endpoints = append(endpoints, k8sapi.ServiceEndpoint{
+						Host: ip,
+						Port: fmt.Sprintf("%d", *port.Port),
+					})
+				}
+			}
+		}
+	}
+	return endpoints
 }
 
 var osExitOverride = os.Exit

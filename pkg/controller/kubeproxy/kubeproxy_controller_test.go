@@ -43,7 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-var _ = Describe("Gateway API controller tests", func() {
+var _ = Describe("kube-proxy controller tests", func() {
 	var c client.Client
 	var ctx context.Context
 	var r *Reconciler

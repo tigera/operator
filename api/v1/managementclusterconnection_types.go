@@ -33,6 +33,14 @@ type ManagementClusterConnectionSpec struct {
 
 	// GuardianDeployment configures the guardian Deployment.
 	GuardianDeployment *GuardianDeployment `json:"guardianDeployment,omitempty"`
+
+	ImpersonateAccess ImpersonateAccess `json:"impersonation,omitempty"`
+}
+
+type Impersonation struct {
+	Users           []string `json:"users,omitempty"`
+	Groups          []string `json:"users,omitempty"`
+	ServiceAccounts []string `json:"users,omitempty"`
 }
 
 type ManagementClusterTLS struct {

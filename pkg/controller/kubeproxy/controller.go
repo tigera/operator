@@ -20,7 +20,6 @@ import (
 	"strconv"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -130,12 +129,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
-	r.status.AddDaemonsets([]types.NamespacedName{
-		{
-			Name:      utils.KubeProxyDaemonSetName,
-			Namespace: utils.KubeProxyNamespace,
-		},
-	})
 	// Mark resource found so we can report problems via tigerastatus
 	r.status.OnCRFound()
 
@@ -181,10 +174,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		reqLogger.Info("kube-proxy DaemonSet patched to disable kube-proxy, since bpfInstallMode is set to Auto and BPFEnabled is true.")
 	} else {
 		// If the dataplane is not BPF, we'll try to re-enable kube-proxy:
-		// 1. Check if kube-proxy DaemonSet is disabled.
+		// 1. Check if kube-proxy DaemonSet is disabled by verifying whether render.DisableKubeProxyKey exists in the NodeSelector.
 		kubeProxyDS := bpfAutoInstallReq.KubeProxyDs
-		if kubeProxyDS.Spec.Template.Spec.NodeSelector == nil ||
-			kubeProxyDS.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] != strconv.FormatBool(true) {
+		if _, ok := kubeProxyDS.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey]; !ok {
 			return reconcile.Result{}, nil
 		}
 

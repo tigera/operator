@@ -956,7 +956,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			createResource := func(obj client.Object) {
 				Expect(c.Create(ctx, obj)).NotTo(HaveOccurred())
 			}
-			setK8sServiceEp := func() {
+			k8sServiceEpConfigMap := func() {
 				createResource(
 					&corev1.ConfigMap{
 						ObjectMeta: metav1.ObjectMeta{Name: render.K8sSvcEndpointConfigMapName, Namespace: common.OperatorNamespace()},
@@ -1027,7 +1027,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
 				},
 				table.Entry("kubernetes service endpoint is already defined",
-					[]func(){setK8sServiceEp, kubeProxyDaemonSetDisabled, svcIpV4, epIpV4},
+					[]func(){k8sServiceEpConfigMap, kubeProxyDaemonSetDisabled, svcIpV4, epIpV4},
 					"kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap",
 				),
 				table.Entry("kube-proxy not running",
@@ -1040,7 +1040,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					[]func(){kubeProxyDaemonSetDisabled, svcIpV4}, "failed to get kubernetes endpoint slices",
 				),
 			)
-			It("should push env vars to ebpf-bootstrap and disable kube-proxy", func() {
+			It("should push env vars to ebpf-bootstrap", func() {
 				kubeProxyDaemonSetDisabled()
 				svcIpV4()
 				epIpV4()

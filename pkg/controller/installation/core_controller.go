@@ -1415,9 +1415,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Users can override this with explicit configuration in the Installation resource, but using the operator as
 	// a baseline is a reasonable default.
 	operatorDeployment := &appsv1.Deployment{}
+	defaultDNSPolicy := corev1.DNSClusterFirstWithHostNet
+	var defaultDNSConfig *corev1.PodDNSConfig
 	if err := r.client.Get(ctx, common.OperatorKey(), operatorDeployment); err != nil {
-		r.status.SetDegraded(operator.ResourceReadError, "Unable to retrieve tigera-operator Deployment", err, reqLogger)
-		return reconcile.Result{}, err
+		if !apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operator.ResourceReadError, "Unable to read operator Deployment", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		reqLogger.Info("Operator Deployment not found, using default DNS configuration")
+	} else {
+		defaultDNSPolicy = operatorDeployment.Spec.Template.Spec.DNSPolicy
+		defaultDNSConfig = operatorDeployment.Spec.Template.Spec.DNSConfig
 	}
 
 	// Build a configuration for rendering calico/node.
@@ -1430,8 +1438,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BirdTemplates:                 birdTemplates,
 		TLS:                           typhaNodeTLS,
 		ClusterDomain:                 r.clusterDomain,
-		DefaultDNSPolicy:              operatorDeployment.Spec.Template.Spec.DNSPolicy,
-		DefaultDNSConfig:              operatorDeployment.Spec.Template.Spec.DNSConfig,
+		DefaultDNSPolicy:              defaultDNSPolicy,
+		DefaultDNSConfig:              defaultDNSConfig,
 		NodeReporterMetricsPort:       nodeReporterMetricsPort,
 		BGPLayouts:                    bgpLayout,
 		NodeAppArmorProfile:           nodeAppArmorProfile,

@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -38,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -855,7 +855,7 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 				Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
-				//Expect 2 Ports when FelixPrometheusMetricsEnabled is false
+				// Expect 2 Ports when FelixPrometheusMetricsEnabled is false
 				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
 				Expect(len(ms.Spec.Ports)).To(Equal(2))
 
@@ -867,11 +867,9 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(bpfVolMount))
 
 				verifyProbesAndLifecycle(ds, false, true)
-
 			})
 
 			It("should render felix service metric with FelixPrometheusMetricPort when FelixPrometheusMetricsEnabled is true", func() {
-
 				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
 				cfg.NodeReporterMetricsPort = 9081
 				cfg.FelixPrometheusMetricsEnabled = true
@@ -901,7 +899,7 @@ var _ = Describe("Node rendering tests", func() {
 					},
 				}
 
-				//Expect 3 Ports when FelixPrometheusMetricsEnabled is true
+				// Expect 3 Ports when FelixPrometheusMetricsEnabled is true
 				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
 				Expect(ms.Spec.Ports).To(Equal(expectedServicePorts))
 			})
@@ -3430,7 +3428,7 @@ var _ = Describe("Node rendering tests", func() {
 				fipsEnabled := operatorv1.FIPSModeEnabled
 				cfg.Installation.FIPSMode = &fipsEnabled
 				cfg.Installation.Variant = operatorv1.Calico
-				cfg.Installation.NodeMetricsPort = ptr.Int32ToPtr(123)
+				cfg.Installation.NodeMetricsPort = ptr.To(int32(123))
 
 				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
@@ -3511,6 +3509,15 @@ var _ = Describe("Node rendering tests", func() {
 									Annotations: map[string]string{"template-level": "annot2"},
 								},
 								Spec: &operatorv1.CalicoNodeDaemonSetPodSpec{
+									DNSPolicy: corev1.DNSNone,
+									DNSConfig: &corev1.PodDNSConfig{
+										Nameservers: []string{"5.5.5.5"},
+										Searches:    []string{"ns1.svc.cluster.local"},
+										Options: []corev1.PodDNSConfigOption{{
+											Name:  "ndots",
+											Value: ptr.To("2"),
+										}},
+									},
 									Containers: []operatorv1.CalicoNodeDaemonSetContainer{
 										{
 											Name:      "calico-node",
@@ -3564,6 +3571,17 @@ var _ = Describe("Node rendering tests", func() {
 
 					Expect(ds.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 					Expect(ds.Spec.Template.Spec.Tolerations[0]).To(Equal(toleration))
+
+					// Verify DNS policy and config.
+					Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSNone))
+					Expect(ds.Spec.Template.Spec.DNSConfig).ToNot(BeNil())
+					Expect(ds.Spec.Template.Spec.DNSConfig.Nameservers).To(HaveLen(1))
+					Expect(ds.Spec.Template.Spec.DNSConfig.Nameservers[0]).To(Equal("5.5.5.5"))
+					Expect(ds.Spec.Template.Spec.DNSConfig.Searches).To(HaveLen(1))
+					Expect(ds.Spec.Template.Spec.DNSConfig.Searches[0]).To(Equal("ns1.svc.cluster.local"))
+					Expect(ds.Spec.Template.Spec.DNSConfig.Options).To(HaveLen(1))
+					Expect(ds.Spec.Template.Spec.DNSConfig.Options[0].Name).To(Equal("ndots"))
+					Expect(*ds.Spec.Template.Spec.DNSConfig.Options[0].Value).To(Equal("2"))
 				})
 
 				It("should override ComponentResources", func() {

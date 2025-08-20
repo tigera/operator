@@ -186,7 +186,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		namespaceMigration:   nm,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
-		nameservers:          opts.Nameservers,
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
@@ -370,7 +369,6 @@ type ReconcileInstallation struct {
 	enterpriseCRDsExist           bool
 	migrationChecked              bool
 	clusterDomain                 string
-	nameservers                   []string
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
@@ -1407,6 +1405,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		goldmaneRunning = goldmaneCR != nil
 	}
 
+	// Calico node DNS configuration and policy should be inherited from the tigera/operator Deployment by default since:
+	//
+	// - they are both host networked and run prior to CNI being installed (and thus beofre kube-dns is available)
+	// - they both need access to in-cluster serivces via kube-dns, as well as external services such as the API server.
+	//
+	// So, they will require the same DNS configuration.
+	//
+	// Users can override this with explicit configuration in the Installation resource, but using the operator as
+	// a baseline is a reasonable default.
+	operatorDeployment := &appsv1.Deployment{}
+	if err := r.client.Get(ctx, common.OperatorKey(), operatorDeployment); err != nil {
+		r.status.SetDegraded(operator.ResourceReadError, "Unable to retrieve tigera-operator Deployment", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
 		GoldmaneRunning:               goldmaneRunning,
@@ -1417,7 +1430,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BirdTemplates:                 birdTemplates,
 		TLS:                           typhaNodeTLS,
 		ClusterDomain:                 r.clusterDomain,
-		Nameservers:                   r.nameservers,
+		DefaultDNSPolicy:              operatorDeployment.Spec.Template.Spec.DNSPolicy,
+		DefaultDNSConfig:              operatorDeployment.Spec.Template.Spec.DNSConfig,
 		NodeReporterMetricsPort:       nodeReporterMetricsPort,
 		BGPLayouts:                    bgpLayout,
 		NodeAppArmorProfile:           nodeAppArmorProfile,

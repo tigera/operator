@@ -18,6 +18,7 @@ import (
 	"os"
 
 	"github.com/cloudflare/cfssl/log"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 var namespace = ""
@@ -48,4 +49,20 @@ func init() {
 //	The default "tigera-operator" is returned.
 func OperatorNamespace() string {
 	return namespace
+}
+
+// OperatorName returns the name of the operator deployment.
+func OperatorName() string {
+	name := "tigera-operator"
+	if v, ok := os.LookupEnv("OPERATOR_NAME"); ok && v != "" {
+		name = v
+	}
+	return name
+}
+
+func OperatorKey() types.NamespacedName {
+	return types.NamespacedName{
+		Name:      OperatorName(),
+		Namespace: OperatorNamespace(),
+	}
 }

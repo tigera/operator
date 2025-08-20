@@ -26,20 +26,21 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+
 	"github.com/stretchr/testify/mock"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
@@ -51,6 +52,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
 )
@@ -747,6 +749,56 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			Expect(c.Delete(ctx, ts)).NotTo(HaveOccurred())
 		})
 	})
+
+	//val := []string{"some-value"}
+	star := []string{"*"}
+	//empty := []string{""}
+	FDescribeTable("should render impersonation permissions correctly", func(impersonation *operatorv1.Impersonation, expectedUser, expectedGroup, expectedSA []string) {
+		By("ensuring a tigerastatus exists")
+		ts := &operatorv1.TigeraStatus{
+			ObjectMeta: metav1.ObjectMeta{Name: "management-cluster-connection"},
+			Spec:       operatorv1.TigeraStatusSpec{},
+			Status:     operatorv1.TigeraStatusStatus{},
+		}
+		Expect(c.Create(ctx, ts)).NotTo(HaveOccurred())
+
+		By("updating the CR with the impersonation settings, reconciling and fetching the results")
+		err := c.Get(ctx, client.ObjectKey{Name: cfg.Name, Namespace: cfg.Namespace}, cfg)
+		Expect(err).ShouldNot(HaveOccurred())
+		cfg.Spec.Impersonation = impersonation
+		Expect(c.Update(ctx, cfg)).NotTo(HaveOccurred())
+		_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+			Name:      "management-cluster-connection",
+			Namespace: "",
+		}})
+		Expect(err).ShouldNot(HaveOccurred())
+		role := &rbacv1.ClusterRole{}
+		err = c.Get(ctx, client.ObjectKey{Name: render.GuardianClusterRoleName, Namespace: render.GuardianNamespace}, role)
+
+		By("verifying the resulting RBAC")
+		var user, group, sa []string
+		for _, rule := range role.Rules {
+			if len(rule.Verbs) == 1 && rule.Verbs[0] == "impersonate" {
+				if len(rule.ResourceNames) == 1 {
+					if rule.ResourceNames[0] == "users" {
+						user = rule.Resources
+					}
+				}
+			}
+
+		}
+		Expect(user).To(Equal(expectedUser))
+		Expect(group).To(Equal(expectedGroup))
+		Expect(sa).To(Equal(expectedSA))
+	},
+		Entry("no impersonation configured", nil, star, star, star),
+		//Entry("all set", &operatorv1.Impersonation{Users: val, Groups: val, ServiceAccounts: val}, val, val, val),
+		//Entry("user set", &operatorv1.Impersonation{Users: val}, val, empty, empty),
+		//Entry("groups set", &operatorv1.Impersonation{Groups: val}, empty, val, empty),
+		//Entry("service accounts set", &operatorv1.Impersonation{ServiceAccounts: val}, empty, empty, val),
+		//Entry("empty impersonation", &operatorv1.Impersonation{}, empty, empty, empty)
+	)
+
 })
 
 func createPodWithProxy(ctx context.Context, c client.Client, config *test.ProxyConfig, lowercase bool, replicaNum int) {

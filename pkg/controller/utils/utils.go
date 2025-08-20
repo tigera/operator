@@ -501,10 +501,13 @@ type Defaultable[E any, O ClientObjType[E]] interface {
 }
 
 // ApplyDefaults sets any defaults that haven't been set on the given object and writes it to the k8s server.
-func ApplyDefaults[E any, O ClientObjType[E], D Defaultable[E, O]](ctx context.Context, c client.Client, obj D) error {
+// funcs can be passed in for filling defaults that cannot be derived from D alone.
+func ApplyDefaults[E any, O ClientObjType[E], D Defaultable[E, O]](ctx context.Context, c client.Client, obj D, funcs ...func()) error {
 	preDefaultPatchFrom := client.MergeFrom(obj.DeepCopy())
 	obj.FillDefaults()
-
+	for _, fn := range funcs {
+		fn()
+	}
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 	return c.Patch(ctx, obj, preDefaultPatchFrom)

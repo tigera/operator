@@ -784,7 +784,11 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 					hasL7LogCollector = true
 					// Handle update
 					if initContainer.Image != l7LogCollector.Image {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i] = l7LogCollector
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].Image = l7LogCollector.Image
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].Env = l7LogCollector.Env
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].VolumeMounts = l7LogCollector.VolumeMounts
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].RestartPolicy = l7LogCollector.RestartPolicy
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].SecurityContext = l7LogCollector.SecurityContext
 					}
 				}
 			}

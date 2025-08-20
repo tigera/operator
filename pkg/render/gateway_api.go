@@ -81,6 +81,7 @@ const (
 	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
+	wafFilterName                       = "waf-http-filter"
 )
 
 var (
@@ -707,7 +708,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {
 			// Add or update the Init Container to the deployment
 			wafHTTPFilter := corev1.Container{
-				Name:  "waf-http-filter",
+				Name:  wafFilterName,
 				Image: pr.wafHTTPFilterImage,
 				Args: []string{
 					"-logFileDirectory",
@@ -720,7 +721,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
 				VolumeMounts: []corev1.VolumeMount{
 					{
-						Name:      "waf-http-filter",
+						Name:      wafFilterName,
 						MountPath: "/var/run/waf-http-filter",
 					},
 					{
@@ -800,12 +801,11 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, l7LogCollector)
 			}
 
-			wafSocketFilterName := "waf-http-filter"
 			accessLogsName := "access-logs"
 			// Add or update Container volume mount
 			wafSocketVolumeMount := corev1.VolumeMount{
 
-				Name:      wafSocketFilterName,
+				Name:      wafFilterName,
 				MountPath: "/var/run/waf-http-filter",
 			}
 
@@ -854,7 +854,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				VolumeSource: corev1.VolumeSource{
 					EmptyDir: &corev1.EmptyDirVolumeSource{},
 				},
-				Name: wafSocketFilterName,
+				Name: wafFilterName,
 			}
 			AccessLogsVolume := corev1.Volume{
 				VolumeSource: corev1.VolumeSource{

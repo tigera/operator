@@ -117,13 +117,13 @@ func GetContainers(overrides any) []corev1.Container {
 	return valueToContainers(value)
 }
 
-func GetDNSPolicy(overrides any) *corev1.DNSPolicy {
+func GetDNSPolicy(overrides any) corev1.DNSPolicy {
 	value := getField(overrides, "Spec", "Template", "Spec", "DNSPolicy")
-	if !value.IsValid() || value.IsNil() {
-		return nil
+	if !value.IsValid() || value.String() == "" {
+		return ""
 	}
 	dnsPolicy := corev1.DNSPolicy(value.String())
-	return &dnsPolicy
+	return dnsPolicy
 }
 
 func GetDNSConfig(overrides any) *corev1.PodDNSConfig {
@@ -357,8 +357,8 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 
 	// If `overrides` has a Spec.Template.Spec.DNSPolicy field, and it's non-empty, it sets
 	// `r.podTemplateSpec.Spec.DNSPolicy`.
-	if dnsPolicy := GetDNSPolicy(overrides); dnsPolicy != nil {
-		r.podTemplateSpec.Spec.DNSPolicy = *dnsPolicy
+	if dnsPolicy := GetDNSPolicy(overrides); dnsPolicy != "" {
+		r.podTemplateSpec.Spec.DNSPolicy = dnsPolicy
 	}
 
 	// If `overrides` has a Spec.Template.Spec.DNSConfig field, and it's non-nil, it sets

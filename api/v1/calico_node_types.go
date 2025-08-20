@@ -87,7 +87,7 @@ type CalicoNodeDaemonSetPodSpec struct {
 	Tolerations []v1.Toleration `json:"tolerations"`
 
 	// DNSPolicy is the DNS policy for the calico-node pods.
-	DNSPolicy *v1.DNSPolicy `json:"dnsPolicy,omitempty"`
+	DNSPolicy v1.DNSPolicy `json:"dnsPolicy,omitempty"`
 
 	// DNSConfig allows customization of the DNS configuration for the calico-node pods.
 	DNSConfig *v1.PodDNSConfig `json:"dnsConfig,omitempty"`

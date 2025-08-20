@@ -34,12 +34,6 @@ type AddOptions struct {
 	ManageCRDs          bool
 	ShutdownContext     context.Context
 
-	// Nameservers contains the nameservers configured for the operator. Most pods do not need explicit
-	// nameservers specified, as they will use the default nameservers configured in the cluster. However, any pods
-	// that must function prior to cluster DNS being available (e.g., the operator itself and calico/node)
-	// may need to have the nameservers explicitly set if configured to access the Kubernetes API via a domain name.
-	Nameservers []string
-
 	// Kubernetes clientset used by controllers to create watchers and informers.
 	K8sClientset *kubernetes.Clientset
 

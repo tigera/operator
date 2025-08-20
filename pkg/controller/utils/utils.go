@@ -493,23 +493,6 @@ func GetIfExists[E any, ClientObj ClientObjType[E]](ctx context.Context, key cli
 	return obj, nil
 }
 
-type Defaultable[E any, O ClientObjType[E]] interface {
-	ClientObjType[E]
-	client.Object
-	FillDefaults()
-	DeepCopy() O
-}
-
-// ApplyDefaults sets any defaults that haven't been set on the given object and writes it to the k8s server.
-func ApplyDefaults[E any, O ClientObjType[E], D Defaultable[E, O]](ctx context.Context, c client.Client, obj D) error {
-	preDefaultPatchFrom := client.MergeFrom(obj.DeepCopy())
-	obj.FillDefaults()
-
-	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
-	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	return c.Patch(ctx, obj, preDefaultPatchFrom)
-}
-
 // GetNonClusterHost finds the NonClusterHost CR in your cluster.
 func GetNonClusterHost(ctx context.Context, cli client.Client) (*operatorv1.NonClusterHost, error) {
 	nonclusterhost := &operatorv1.NonClusterHost{}

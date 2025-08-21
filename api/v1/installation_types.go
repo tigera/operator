@@ -212,6 +212,22 @@ type InstallationSpec struct {
 	Proxy *Proxy `json:"proxy,omitempty"`
 }
 
+// BPFNetworkBootstrapType defines how the initial networking configuration is executed.
+type BPFNetworkBootstrapType string
+
+const (
+	BPFNetworkAutoEnabled  BPFNetworkBootstrapType = "Enabled"
+	BPFNetworkAutoDisabled BPFNetworkBootstrapType = "Disabled"
+)
+
+// KubeProxyManagementType specifies whether kube-proxy management is enabled.
+type KubeProxyManagementType string
+
+const (
+	KubeProxyManagementEnabled  KubeProxyManagementType = "Enabled"
+	KubeProxyManagementDisabled KubeProxyManagementType = "Disabled"
+)
+
 // +kubebuilder:validation:Enum=TLS_AES_256_GCM_SHA384;TLS_CHACHA20_POLY1305_SHA256;TLS_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;TLS_RSA_WITH_AES_256_GCM_SHA384;TLS_RSA_WITH_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA;TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA;TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
 type TLSCipher string
 
@@ -538,6 +554,21 @@ type CalicoNetworkSpec struct {
 	// Default: Disabled
 	// +optional
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
+
+	// BPFNetworkBootstrap defines how the initial setup for configuring the BPF dataplane is performed.
+	// When enabled, the Kubernetes service and associated endpoints will be used to bootstrap access to the kubernetes API server.
+	// Default: Disabled
+	// +optional
+	// +kubebuilder:validation:Enum=Disabled;Enabled
+	BPFNetworkBootstrap *BPFNetworkBootstrapType `json:"bpfNetworkBootstrap,omitempty"`
+
+	// KubeProxyManagement controls whether the operator manages the kube-proxy DaemonSet.
+	// When enabled, the operator will manage the DaemonSet by patching it:
+	// it disables kube-proxy if the dataplane is BPF, or enables it otherwise.
+	// Default: Disabled
+	// +optional
+	// +kubebuilder:validation:Enum=Disabled;Enabled
+	KubeProxyManagement *KubeProxyManagementType `json:"kubeProxyManagement,omitempty"`
 
 	// BGP configures whether or not to enable Calico's BGP capabilities.
 	// +optional
@@ -950,6 +981,20 @@ func (s *InstallationSpec) IsNftables() bool {
 	return s.CalicoNetwork != nil &&
 		s.CalicoNetwork.LinuxDataplane != nil &&
 		*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneNftables
+}
+
+func (installation *InstallationSpec) BPFNetworkBootstrapEnabled() bool {
+	return installation != nil &&
+		installation.CalicoNetwork != nil &&
+		installation.CalicoNetwork.BPFNetworkBootstrap != nil &&
+		*installation.CalicoNetwork.BPFNetworkBootstrap == BPFNetworkAutoEnabled
+}
+
+func (installation *InstallationSpec) KubeProxyManagementEnabled() bool {
+	return installation != nil &&
+		installation.CalicoNetwork != nil &&
+		installation.CalicoNetwork.KubeProxyManagement != nil &&
+		*installation.CalicoNetwork.KubeProxyManagement == KubeProxyManagementEnabled
 }
 
 // +kubebuilder:object:root=true

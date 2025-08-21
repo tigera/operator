@@ -3509,7 +3509,7 @@ var _ = Describe("Node rendering tests", func() {
 									Annotations: map[string]string{"template-level": "annot2"},
 								},
 								Spec: &operatorv1.CalicoNodeDaemonSetPodSpec{
-									DNSPolicy: corev1.DNSNone,
+									DNSPolicy: ptr.To(corev1.DNSNone),
 									DNSConfig: &corev1.PodDNSConfig{
 										Nameservers: []string{"5.5.5.5"},
 										Searches:    []string{"ns1.svc.cluster.local"},

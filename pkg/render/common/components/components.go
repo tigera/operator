@@ -117,6 +117,24 @@ func GetContainers(overrides any) []corev1.Container {
 	return valueToContainers(value)
 }
 
+func GetDNSPolicy(overrides any) (corev1.DNSPolicy, bool) {
+	value := getField(overrides, "Spec", "Template", "Spec", "DNSPolicy")
+
+	// If the value is not valid or is an empty string, return an empty DNSPolicy.
+	if !value.IsValid() || value.IsNil() {
+		return "", false
+	}
+	return *value.Interface().(*corev1.DNSPolicy), true
+}
+
+func GetDNSConfig(overrides any) *corev1.PodDNSConfig {
+	value := getField(overrides, "Spec", "Template", "Spec", "DNSConfig")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(*corev1.PodDNSConfig)
+}
+
 func valueToContainers(value reflect.Value) []corev1.Container {
 	cs := make([]corev1.Container, 0, value.Len())
 	for _, v := range value.Seq2() {
@@ -208,8 +226,7 @@ func getField(overrides any, fieldNames ...string) (value reflect.Value) {
 		}
 	}
 
-	// Record that we're handling `fieldNames`.  See `overrideFieldsHandledInLastApplyCall` for
-	// why.
+	// Record that we're handling `fieldNames`.  See `overrideFieldsHandledInLastApplyCall` for why.
 	recordHandledField(fieldNames)
 
 	typ := reflect.TypeOf(overrides)
@@ -336,6 +353,18 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 	// sets `r.podTemplateSpec.Spec.PriorityClassName`.
 	if priorityClassName := GetPriorityClassName(overrides); priorityClassName != "" {
 		r.podTemplateSpec.Spec.PriorityClassName = priorityClassName
+	}
+
+	// If `overrides` has a Spec.Template.Spec.DNSPolicy field, and it's non-empty, it sets
+	// `r.podTemplateSpec.Spec.DNSPolicy`.
+	if dnsPolicy, ok := GetDNSPolicy(overrides); ok {
+		r.podTemplateSpec.Spec.DNSPolicy = dnsPolicy
+	}
+
+	// If `overrides` has a Spec.Template.Spec.DNSConfig field, and it's non-nil, it sets
+	// `r.podTemplateSpec.Spec.DNSConfig`.
+	if dnsConfig := GetDNSConfig(overrides); dnsConfig != nil {
+		r.podTemplateSpec.Spec.DNSConfig = dnsConfig
 	}
 
 	return r

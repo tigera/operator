@@ -21,6 +21,7 @@ resources:
 - bases/operator.tigera.io_packetcaptureapis.yaml
 - bases/operator.tigera.io_policyrecommendations.yaml
 - bases/operator.tigera.io_tenants.yaml
+- bases/operator.tigera.io_tigeraistios.yaml
 - bases/operator.tigera.io_tigerastatuses.yaml
 - bases/operator.tigera.io_tlspassthroughroutes.yaml
 - bases/operator.tigera.io_tlsterminatedroutes.yaml

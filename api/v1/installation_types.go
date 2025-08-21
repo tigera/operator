@@ -555,8 +555,17 @@ type CalicoNetworkSpec struct {
 	// +optional
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
 
-	// BPFNetworkBootstrap defines how the initial setup for configuring the BPF dataplane is performed.
-	// When enabled, the Kubernetes service and associated endpoints will be used to bootstrap access to the kubernetes API server.
+	// BPFNetworkBootstrap manages the initial networking setup required to configure the BPF dataplane.
+	//
+	// When enabled, the operator tries to bootstraps access to the Kubernetes API Server
+	// by using the Kubernetes service and its associated endpoints.
+	//
+	// This field should be enabled only if linuxDataplane is set to "BPF".
+	// If another dataplane is selected, this field must be omitted or explicitly set to Disabled.
+	//
+	// When disabled and linuxDataplane is BPF, you must manually provide the Kubernetes API Server
+	// information via the "kubernetes-service-endpoint" ConfigMap. It is invalid to use both the ConfigMap
+	// and have this field set to true at the same time.
 	// Default: Disabled
 	// +optional
 	// +kubebuilder:validation:Enum=Disabled;Enabled

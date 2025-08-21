@@ -990,124 +990,149 @@ var _ = Describe("Testing core-controller installation", func() {
 						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
 					})
 			}
-			BeforeEach(func() {
-				By("Setting the dataplane to BPF and Enabling network bootstrap")
-				mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+			When("the LinuxDataplane is not BPF", func() {
+				It("should fail if BPFNetworkBootstrap is enabled", func() {
+					By("Setting the dataplane to Iptables and enabling network bootstrap")
+					mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
-				bpf := operator.LinuxDataplaneBPF
-				enabled := operator.BPFNetworkAutoEnabled
-				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
-					LinuxDataplane:      &bpf,
-					BPFNetworkBootstrap: &enabled,
-				}
-				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-			})
-			table.DescribeTable("should fail if requirements are not met",
-				func(funcs []func(), expectedErrorSubstring string) {
-					for _, f := range funcs {
-						f()
+					ipt := operator.LinuxDataplaneIptables
+					enabled := operator.BPFNetworkAutoEnabled
+					cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+						LinuxDataplane:      &ipt,
+						BPFNetworkBootstrap: &enabled,
 					}
+					Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+					By("Creating the other required resources")
+					createK8sService()
+					createEndpointSlice()
+
 					By("r.Reconcile()")
 					_, err := r.Reconcile(ctx, reconcile.Request{})
 					Expect(err).Should(HaveOccurred())
-					Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
-				},
-				table.Entry("kubernetes service endpoint is already defined",
-					[]func(){createK8sSvcEpConfigMap, createK8sService, createEndpointSlice},
-					"kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap",
-				),
-				table.Entry("kubernetes service not found",
-					[]func(){createEndpointSlice}, "failed to get kubernetes service",
-				),
-				table.Entry("kubernetes endpoint slices not found",
-					[]func(){createK8sService}, "failed to get kubernetes endpoint slices",
-				),
-			)
-			It("should push env vars to ebpf-bootstrap", func() {
-				createK8sService()
-				createEndpointSlice()
-
-				By("r.Reconcile()")
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				By("Checking that the Installation has the right config")
-				install := &operator.Installation{}
-				err = c.Get(ctx, types.NamespacedName{Name: "default"}, install)
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(install.Spec.CalicoNetwork).ToNot(BeNil())
-				Expect(install.Spec.CalicoNetwork.BPFNetworkBootstrap).ToNot(BeNil())
-				Expect(*install.Spec.CalicoNetwork.BPFNetworkBootstrap).To(Equal(operator.BPFNetworkAutoEnabled))
-				Expect(install.Spec.BPFNetworkBootstrapEnabled()).To(BeTrue())
-
-				By("Checking that the FelixConfiguration has BPF Enabled")
-				fc := &crdv1.FelixConfiguration{}
-				err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(fc.Spec.BPFEnabled).ToNot(BeNil())
-				Expect(*fc.Spec.BPFEnabled).To(BeTrue())
-
-				By("Checking ebpf-bootstrap init container has correct env vars")
-				calicoNode := &appsv1.DaemonSet{}
-				err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
-				Expect(err).ShouldNot(HaveOccurred())
-				initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
-				Expect(initContainer).NotTo(BeNil())
-				Expect(initContainer.Name).To(Equal("ebpf-bootstrap"))
-				Expect(initContainer.Env).To(ContainElements(
-					corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443"},
-					corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443"},
-				))
+					Expect(err.Error()).To(ContainSubstring("bpfNetworkBootstrap is enabled but linuxDataplane is not set to BPF"))
+				})
 			})
-			It("should support dual-stack clusters - IPv4 and IPv6", func() {
-				Expect(c.Create(
-					ctx,
-					&corev1.Service{
-						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
-						Spec: corev1.ServiceSpec{
-							IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol},
-							ClusterIPs: []string{"1.2.3.4", "fd00::1"},
-							Ports: []corev1.ServicePort{
-								{Name: "https", Port: 443, TargetPort: intstr.FromInt(443)},
+			When("the LinuxDataplane is BPF", func() {
+				BeforeEach(func() {
+					By("Setting the dataplane to BPF and Enabling network bootstrap")
+					mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+					bpf := operator.LinuxDataplaneBPF
+					enabled := operator.BPFNetworkAutoEnabled
+					cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+						LinuxDataplane:      &bpf,
+						BPFNetworkBootstrap: &enabled,
+					}
+					Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+				})
+				table.DescribeTable("should fail if requirements are not met",
+					func(funcs []func(), expectedErrorSubstring string) {
+						for _, f := range funcs {
+							f()
+						}
+						By("r.Reconcile()")
+						_, err := r.Reconcile(ctx, reconcile.Request{})
+						Expect(err).Should(HaveOccurred())
+						Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
+					},
+					table.Entry("kubernetes service endpoint is already defined",
+						[]func(){createK8sSvcEpConfigMap, createK8sService, createEndpointSlice},
+						"kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap",
+					),
+					table.Entry("kubernetes service not found",
+						[]func(){createEndpointSlice}, "failed to get kubernetes service",
+					),
+					table.Entry("kubernetes endpoint slices not found",
+						[]func(){createK8sService}, "failed to get kubernetes endpoint slices",
+					),
+				)
+				It("should push env vars to ebpf-bootstrap", func() {
+					createK8sService()
+					createEndpointSlice()
+
+					By("r.Reconcile()")
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+
+					By("Checking that the Installation has the right config")
+					install := &operator.Installation{}
+					err = c.Get(ctx, types.NamespacedName{Name: "default"}, install)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(install.Spec.CalicoNetwork).ToNot(BeNil())
+					Expect(install.Spec.CalicoNetwork.BPFNetworkBootstrap).ToNot(BeNil())
+					Expect(*install.Spec.CalicoNetwork.BPFNetworkBootstrap).To(Equal(operator.BPFNetworkAutoEnabled))
+					Expect(install.Spec.BPFNetworkBootstrapEnabled()).To(BeTrue())
+
+					By("Checking that the FelixConfiguration has BPF Enabled")
+					fc := &crdv1.FelixConfiguration{}
+					err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(fc.Spec.BPFEnabled).ToNot(BeNil())
+					Expect(*fc.Spec.BPFEnabled).To(BeTrue())
+
+					By("Checking ebpf-bootstrap init container has correct env vars")
+					calicoNode := &appsv1.DaemonSet{}
+					err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
+					Expect(err).ShouldNot(HaveOccurred())
+					initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
+					Expect(initContainer).NotTo(BeNil())
+					Expect(initContainer.Name).To(Equal("ebpf-bootstrap"))
+					Expect(initContainer.Env).To(ContainElements(
+						corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443"},
+						corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443"},
+					))
+				})
+				It("should support dual-stack clusters - IPv4 and IPv6", func() {
+					Expect(c.Create(
+						ctx,
+						&corev1.Service{
+							ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
+							Spec: corev1.ServiceSpec{
+								IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol},
+								ClusterIPs: []string{"1.2.3.4", "fd00::1"},
+								Ports: []corev1.ServicePort{
+									{Name: "https", Port: 443, TargetPort: intstr.FromInt(443)},
+								},
 							},
-						},
-					})).NotTo(HaveOccurred())
-				Expect(c.Create(
-					ctx,
-					&discoveryv1.EndpointSlice{
-						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-ep1", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
-						AddressType: discoveryv1.AddressTypeIPv4,
-						Endpoints: []discoveryv1.Endpoint{
-							{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
-						},
-						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
-					})).NotTo(HaveOccurred())
-				Expect(c.Create(
-					ctx,
-					&discoveryv1.EndpointSlice{
-						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-ep2", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
-						AddressType: discoveryv1.AddressTypeIPv6,
-						Endpoints: []discoveryv1.Endpoint{
-							{Addresses: []string{"fd00::1", "fd00::2", "fd00::3"}},
-						},
-						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
-					})).NotTo(HaveOccurred())
+						})).NotTo(HaveOccurred())
+					Expect(c.Create(
+						ctx,
+						&discoveryv1.EndpointSlice{
+							ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-ep1", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+							AddressType: discoveryv1.AddressTypeIPv4,
+							Endpoints: []discoveryv1.Endpoint{
+								{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
+							},
+							Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+						})).NotTo(HaveOccurred())
+					Expect(c.Create(
+						ctx,
+						&discoveryv1.EndpointSlice{
+							ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-ep2", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+							AddressType: discoveryv1.AddressTypeIPv6,
+							Endpoints: []discoveryv1.Endpoint{
+								{Addresses: []string{"fd00::1", "fd00::2", "fd00::3"}},
+							},
+							Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+						})).NotTo(HaveOccurred())
 
-				By("r.Reconcile()")
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
+					By("r.Reconcile()")
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
 
-				By("Checking ebpf-bootstrap init container has correct env vars")
-				calicoNode := &appsv1.DaemonSet{}
-				err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
-				Expect(err).ShouldNot(HaveOccurred())
-				initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
-				Expect(initContainer).NotTo(BeNil())
-				Expect(initContainer.Name).To(Equal("ebpf-bootstrap"))
-				Expect(initContainer.Env).To(ContainElements(
-					corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443,[fd00::1]:443"},
-					corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443,[fd00::1]:6443,[fd00::2]:6443,[fd00::3]:6443"},
-				))
+					By("Checking ebpf-bootstrap init container has correct env vars")
+					calicoNode := &appsv1.DaemonSet{}
+					err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
+					Expect(err).ShouldNot(HaveOccurred())
+					initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
+					Expect(initContainer).NotTo(BeNil())
+					Expect(initContainer.Name).To(Equal("ebpf-bootstrap"))
+					Expect(initContainer.Env).To(ContainElements(
+						corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443,[fd00::1]:443"},
+						corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443,[fd00::1]:6443,[fd00::2]:6443,[fd00::3]:6443"},
+					))
+				})
 			})
 		})
 

@@ -40,14 +40,19 @@ func BPFBootstrapRequirements(c client.Client, ctx context.Context, install *ope
 		return nil, nil
 	}
 
-	// 1. kubernetes service endpoint shouldn't be defined by kubernetes-service-endpoints ConfigMap.
+	// 1. If BPFNetworkBootstrap is enabled, linuxDataplane must be BPF.
+	if !install.BPFEnabled() {
+		return nil, fmt.Errorf("bpfNetworkBootstrap is enabled but linuxDataplane is not set to BPF")
+	}
+
+	// 2. kubernetes service endpoint shouldn't be defined by kubernetes-service-endpoints ConfigMap.
 	_, err := GetK8sServiceEndPoint(c)
 	if err == nil {
 		return nil, fmt.Errorf("kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap.")
 	}
 
 	bpfBootstrapReq := &BPFBootstrap{}
-	// 2. Try to retrieve kubernetes service.
+	// 3. Try to retrieve kubernetes service.
 	service := &corev1.Service{}
 	err = c.Get(ctx, types.NamespacedName{Namespace: "default", Name: "kubernetes"}, service)
 	if err != nil {
@@ -55,7 +60,7 @@ func BPFBootstrapRequirements(c client.Client, ctx context.Context, install *ope
 	}
 	bpfBootstrapReq.K8sService = service
 
-	// 3. Try to retrieve kubernetes service endpoint slices. If the cluster is dual-stack, there should be at least one EndpointSlice for each address type.
+	// 4. Try to retrieve kubernetes service endpoint slices. If the cluster is dual-stack, there should be at least one EndpointSlice for each address type.
 	endpointSlice := &discoveryv1.EndpointSliceList{}
 	err = c.List(ctx, endpointSlice, client.InNamespace("default"), client.MatchingLabels{"kubernetes.io/service-name": "kubernetes"})
 	if err != nil || len(endpointSlice.Items) == 0 {

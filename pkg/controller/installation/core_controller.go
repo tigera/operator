@@ -79,6 +79,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -1402,6 +1403,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		goldmaneRunning = goldmaneCR != nil
 	}
 
+	// Get the Goldmane Service in order to find its cluster IP.
+	goldmaneIP := ""
+	if goldmaneRunning {
+		goldmaneService := &corev1.Service{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: goldmane.GoldmaneServiceName, Namespace: common.CalicoNamespace}, goldmaneService); err != nil {
+			if !apierrors.IsNotFound(err) {
+				r.status.SetDegraded(operator.ResourceReadError, "Unable to read Goldmane Service", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		} else {
+			goldmaneIP = goldmaneService.Spec.ClusterIP
+		}
+	}
+
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
 		GoldmaneRunning:               goldmaneRunning,
@@ -1413,6 +1428,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TLS:                           typhaNodeTLS,
 		ClusterDomain:                 r.clusterDomain,
 		Nameservers:                   r.nameservers,
+		GoldmaneIP:                    goldmaneIP,
 		NodeReporterMetricsPort:       nodeReporterMetricsPort,
 		BGPLayouts:                    bgpLayout,
 		NodeAppArmorProfile:           nodeAppArmorProfile,

@@ -31,6 +31,7 @@ import (
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	v1 "k8s.io/api/core/v1"
+	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -202,6 +203,8 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	multipleOwners := checkIfMultipleOwnersLabel(om.GetObjectMeta())
 	// Add owner ref for controller owned resources,
 	switch obj.(type) {
+	case render.ErrorObject:
+		return obj.(render.ErrorObject)
 	case *v3.UISettings:
 		// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
 	default:
@@ -284,6 +287,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			delete(labels, common.MultipleOwnersLabel)
 			om.GetObjectMeta().SetLabels(labels)
 		}
+
 		err = c.create(ctx, obj)
 		if err != nil {
 			logCtx.WithValues("key", key).Error(err, "Failed to create object.")
@@ -743,6 +747,14 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 			return nil
 		}
 		return dt
+	case *apiextv1.CustomResourceDefinition:
+		// Only update if the spec has changed
+		ccrd := current.(*apiextv1.CustomResourceDefinition)
+		dcrd := desired.(*apiextv1.CustomResourceDefinition)
+		if reflect.DeepEqual(ccrd.Spec, dcrd.Spec) {
+			return nil
+		}
+		return dcrd
 	default:
 		// Default to just using the desired state, with an updated RV.
 		return desired

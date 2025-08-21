@@ -162,17 +162,21 @@ type InstallationSpec struct {
 
 	// CalicoNodeDaemonSet configures the calico-node DaemonSet. If used in
 	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
+	// +optional
 	CalicoNodeDaemonSet *CalicoNodeDaemonSet `json:"calicoNodeDaemonSet,omitempty"`
 
 	// CSINodeDriverDaemonSet configures the csi-node-driver DaemonSet.
+	// +optional
 	CSINodeDriverDaemonSet *CSINodeDriverDaemonSet `json:"csiNodeDriverDaemonSet,omitempty"`
 
 	// CalicoKubeControllersDeployment configures the calico-kube-controllers Deployment. If used in
 	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
+	// +optional
 	CalicoKubeControllersDeployment *CalicoKubeControllersDeployment `json:"calicoKubeControllersDeployment,omitempty"`
 
 	// TyphaDeployment configures the typha Deployment. If used in conjunction with the deprecated
 	// ComponentResources or TyphaAffinity, then these overrides take precedence.
+	// +optional
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
 
 	// Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.

@@ -36,7 +36,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
@@ -100,7 +99,10 @@ type NodeConfiguration struct {
 	IPPools         []operatorv1.IPPool
 	TLS             *TyphaNodeTLS
 	ClusterDomain   string
-	Nameservers     []string
+
+	// Defaults for DNS.
+	DefaultDNSPolicy corev1.DNSPolicy
+	DefaultDNSConfig *corev1.PodDNSConfig
 
 	// Optional fields.
 	LogCollector            *operatorv1.LogCollector
@@ -138,6 +140,10 @@ type NodeConfiguration struct {
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(cfg *NodeConfiguration) Component {
+	// Configure default values for any fields that might not be set.
+	if cfg.DefaultDNSPolicy == "" {
+		cfg.DefaultDNSPolicy = corev1.DNSClusterFirstWithHostNet
+	}
 	return &nodeComponent{cfg: cfg}
 }
 
@@ -981,22 +987,15 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 					ServiceAccountName:            CalicoNodeObjectName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
-					DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
 					InitContainers:                initContainers,
 					Containers:                    []corev1.Container{nodeContainer},
 					Volumes:                       c.nodeVolumes(),
+					DNSPolicy:                     c.cfg.DefaultDNSPolicy,
+					DNSConfig:                     c.cfg.DefaultDNSConfig,
 				},
 			},
 			UpdateStrategy: c.cfg.Installation.NodeUpdateStrategy,
 		},
-	}
-
-	if len(c.cfg.Nameservers) > 0 && dns.IsDomainName(c.cfg.K8sServiceEp.Host) {
-		// If the configured k8s service endpoint is a domain name rather than an IP address, calico/node
-		// will need explicit nameservers to resolve it.
-		ds.Spec.Template.Spec.DNSConfig = &corev1.PodDNSConfig{
-			Nameservers: c.cfg.Nameservers,
-		}
 	}
 
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {

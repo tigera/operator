@@ -147,9 +147,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	// SetMetaData in the TigeraStatus such as observedGenerations.
-	defer r.status.SetMetaData(&kubeProxyDS.ObjectMeta)
-
 	felixCR, err := utils.GetFelixConfiguration(ctx, r.cli)
 	if err != nil {
 		return reconcile.Result{}, err

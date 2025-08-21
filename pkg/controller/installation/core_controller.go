@@ -347,6 +347,9 @@ func secondaryResources() []client.Object {
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: common.CalicoNamespace}},
+
+		// We care about the Goldmane Service for providing host aliases to calico/node.
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: goldmane.GoldmaneServiceName, Namespace: common.CalicoNamespace}},
 	}
 }
 

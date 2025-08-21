@@ -85,6 +85,15 @@ type CalicoNodeDaemonSetPodSpec struct {
 	// WARNING: Please note that this field will override the default calico-node DaemonSet tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations"`
+
+	// DNSPolicy is the DNS policy for the calico-node pods.
+	// +kubebuilder:validation:Enum="";Default;ClusterFirst;ClusterFirstWithHostNet;None
+	// +optional
+	DNSPolicy *v1.DNSPolicy `json:"dnsPolicy,omitempty"`
+
+	// DNSConfig allows customization of the DNS configuration for the calico-node pods.
+	// +optional
+	DNSConfig *v1.PodDNSConfig `json:"dnsConfig,omitempty"`
 }
 
 // CalicoNodeDaemonSetPodTemplateSpec is the calico-node DaemonSet's PodTemplateSpec

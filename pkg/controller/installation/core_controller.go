@@ -1432,13 +1432,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	// Check if BPFNetworkBootstrap is Enabled and its requirements are met.
 	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(r.client, ctx, &instance.Spec)
-	if instance.Spec.BPFNetworkBootstrapEnabled() && err != nil {
+	if err != nil {
 		r.status.SetDegraded(operator.ResourceValidationError, "bpfNetworkBootstrap is Enabled but the requirements are not met", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// If BPFNetworkBootstrap is Enabled and its requirements are met configure the node with API Server info.
-	if instance.Spec.BPFNetworkBootstrapEnabled() && bpfBootstrapReq != nil && instance.Spec.BPFEnabled() {
+	if bpfBootstrapReq != nil && instance.Spec.BPFEnabled() {
 		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
 		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.K8sService)
 		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfBootstrapReq.K8sServiceEndpoints)

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strconv"
 
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -132,14 +133,22 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// Mark resource found so we can report problems via tigerastatus
 	r.status.OnCRFound()
 
-	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(r.cli, ctx, installationCR)
-	if installationCR.KubeProxyManagementEnabled() && err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "kubeProxyManagement is Enabled but the requirements are not met", err, reqLogger)
+	// Try to retrieve the kube-proxy DaemonSet.
+	kubeProxyDS := &appsv1.DaemonSet{}
+	err = r.cli.Get(ctx, utils.KubeProxyInstanceKey, kubeProxyDS)
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed to get kube-proxy: %w", err)
+	}
+
+	// Validate that the kube-proxy DaemonSet is not managed by an external tool.
+	err = validateDaemonSetManaged(kubeProxyDS)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "failed to validate kube-proxy DaemonSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// SetMetaData in the TigeraStatus such as observedGenerations.
-	defer r.status.SetMetaData(&bpfBootstrapReq.KubeProxyDs.ObjectMeta)
+	defer r.status.SetMetaData(&kubeProxyDS.ObjectMeta)
 
 	felixCR, err := utils.GetFelixConfiguration(ctx, r.cli)
 	if err != nil {
@@ -152,7 +161,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// we should try to disable kube-proxy.
 	if felixCR.Spec.BPFEnabled != nil && *felixCR.Spec.BPFEnabled {
 		// 1. Check if kube-proxy is already disabled.
-		kubeProxyDS := bpfBootstrapReq.KubeProxyDs
 		if kubeProxyDS.Spec.Template.Spec.NodeSelector != nil &&
 			kubeProxyDS.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey] == strconv.FormatBool(true) {
 			return reconcile.Result{}, nil
@@ -175,7 +183,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	} else {
 		// If the dataplane is not BPF, we'll try to re-enable kube-proxy:
 		// 1. Check if kube-proxy DaemonSet is disabled by verifying whether render.DisableKubeProxyKey exists in the NodeSelector.
-		kubeProxyDS := bpfBootstrapReq.KubeProxyDs
 		if _, ok := kubeProxyDS.Spec.Template.Spec.NodeSelector[render.DisableKubeProxyKey]; !ok {
 			return reconcile.Result{}, nil
 		}
@@ -193,4 +200,27 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 	return reconcile.Result{}, nil
+}
+
+// validateDaemonSetManaged checks whether the DaemonSet is managed by an external tool,
+// based on common labels or annotations typically added by automation.
+func validateDaemonSetManaged(ds *appsv1.DaemonSet) error {
+	if len(ds.Labels) == 0 && len(ds.Annotations) == 0 {
+		return nil
+	}
+
+	// Kubernetes well-known labels
+	if _, ok := ds.Labels["app.kubernetes.io/managed-by"]; ok {
+		return fmt.Errorf("DaemonSet is likely managed by: %s", ds.Labels["app.kubernetes.io/managed-by"])
+	}
+	if _, ok := ds.Labels["addonmanager.kubernetes.io/mode"]; ok {
+		return fmt.Errorf("DaemonSet is likely managed by another source due to the label 'addonmanager.kubernetes.io/mode: %s'", ds.Labels["addonmanager.kubernetes.io/mode"])
+	}
+
+	// Check for GitOps tools
+	if _, ok := ds.Annotations["argocd.argoproj.io/tracking-id"]; ok {
+		return fmt.Errorf("DaemonSet is likely managed by another source due to the label 'argocd.argoproj.io/tracking-id: %s'", ds.Annotations["argocd.argoproj.io/tracking-id"])
+	}
+
+	return nil
 }

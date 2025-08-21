@@ -27,7 +27,6 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -124,7 +123,7 @@ var _ = Describe("kube-proxy controller tests", func() {
 			nodeSelector[render.DisableKubeProxyKey] = "true"
 		}
 		createResource(&appsv1.DaemonSet{
-			ObjectMeta: metav1.ObjectMeta{Name: utils.KubeProxyDaemonSetName, Namespace: utils.KubeProxyNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: utils.KubeProxyInstanceKey.Name, Namespace: utils.KubeProxyInstanceKey.Namespace},
 			Spec: appsv1.DaemonSetSpec{
 				Template: corev1.PodTemplateSpec{
 					ObjectMeta: metav1.ObjectMeta{},
@@ -164,7 +163,7 @@ var _ = Describe("kube-proxy controller tests", func() {
 			createResource(K8sEndpointSlice)
 
 			By("reading the KubeProxy DaemonSet initial state")
-			err := c.Get(ctx, types.NamespacedName{Namespace: utils.KubeProxyNamespace, Name: utils.KubeProxyDaemonSetName}, kp)
+			err := c.Get(ctx, utils.KubeProxyInstanceKey, kp)
 			Expect(err).NotTo(HaveOccurred())
 			checkKubeProxyState(kp, nodeSelectorIncluded)
 
@@ -173,7 +172,7 @@ var _ = Describe("kube-proxy controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("re-reading the KubeProxy DaemonSet")
-			err = c.Get(ctx, types.NamespacedName{Namespace: utils.KubeProxyNamespace, Name: utils.KubeProxyDaemonSetName}, kp)
+			err = c.Get(ctx, utils.KubeProxyInstanceKey, kp)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("checking if NodeSelector changed")
@@ -196,5 +195,42 @@ var _ = Describe("kube-proxy controller tests", func() {
 			true, nil,
 		),
 	)
+
+	Context("kube-proxy managed by external tool", func() {
+		kubeProxyDS := func() *appsv1.DaemonSet {
+			return &appsv1.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      utils.KubeProxyInstanceKey.Name,
+					Namespace: utils.KubeProxyInstanceKey.Namespace,
+				},
+			}
+		}
+		table.DescribeTable("check whether kube-proxy is not managed",
+			func(labels map[string]string, annotations map[string]string, shouldSucceed bool) {
+				ds := kubeProxyDS()
+				ds.Labels = labels
+				ds.Annotations = annotations
+				err := validateDaemonSetManaged(ds)
+				Expect(err == nil).Should(Equal(shouldSucceed))
+			},
+			table.Entry("managed by argocd",
+				map[string]string{"app.kubernetes.io/managed-by": "argocd"}, nil, false,
+			),
+			table.Entry("addonmanager mode ReconcileOnce",
+				map[string]string{"addonmanager.kubernetes.io/mode": "ReconcileOnce"}, nil, false,
+			),
+			table.Entry("managed by argocd with tracking-id",
+				nil, map[string]string{"argocd.argoproj.io/tracking-id": "fake-git-commit-hash"}, false,
+			),
+			table.Entry("kube-proxy not managed",
+				map[string]string{"app.kubernetes.io/name": "kube-proxy"}, nil, true,
+			),
+			table.Entry("kube-proxy not managed",
+				map[string]string{"app.kubernetes.io/name": "kube-proxy"},
+				map[string]string{"kube-proxy.config.k8s.io/proxy-mode": "iptables"},
+				true,
+			),
+		)
+	})
 
 })

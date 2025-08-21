@@ -956,7 +956,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			createResource := func(obj client.Object) {
 				Expect(c.Create(ctx, obj)).NotTo(HaveOccurred())
 			}
-			k8sServiceEpConfigMap := func() {
+			createK8sSvcEpConfigMap := func() {
 				createResource(
 					&corev1.ConfigMap{
 						ObjectMeta: metav1.ObjectMeta{Name: render.K8sSvcEndpointConfigMapName, Namespace: common.OperatorNamespace()},
@@ -966,21 +966,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						},
 					})
 			}
-			kubeProxyDaemonSetDisabled := func() {
-				createResource(
-					&appsv1.DaemonSet{
-						ObjectMeta: metav1.ObjectMeta{Name: utils.KubeProxyDaemonSetName, Namespace: utils.KubeProxyNamespace},
-						Spec: appsv1.DaemonSetSpec{
-							Template: corev1.PodTemplateSpec{
-								ObjectMeta: metav1.ObjectMeta{},
-								Spec: corev1.PodSpec{
-									NodeSelector: map[string]string{render.DisableKubeProxyKey: "true"},
-								},
-							},
-						},
-					})
-			}
-			svcIpV4 := func() {
+			createK8sService := func() {
 				createResource(
 					&corev1.Service{
 						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
@@ -993,7 +979,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						},
 					})
 			}
-			epIpV4 := func() {
+			createEndpointSlice := func() {
 				createResource(
 					&discoveryv1.EndpointSlice{
 						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-epv4", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
@@ -1027,23 +1013,19 @@ var _ = Describe("Testing core-controller installation", func() {
 					Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
 				},
 				table.Entry("kubernetes service endpoint is already defined",
-					[]func(){k8sServiceEpConfigMap, kubeProxyDaemonSetDisabled, svcIpV4, epIpV4},
+					[]func(){createK8sSvcEpConfigMap, createK8sService, createEndpointSlice},
 					"kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap",
 				),
-				table.Entry("kube-proxy not running",
-					[]func(){svcIpV4, epIpV4}, "failed to get kube-proxy",
-				),
 				table.Entry("kubernetes service not found",
-					[]func(){kubeProxyDaemonSetDisabled, epIpV4}, "failed to get kubernetes service",
+					[]func(){createEndpointSlice}, "failed to get kubernetes service",
 				),
 				table.Entry("kubernetes endpoint slices not found",
-					[]func(){kubeProxyDaemonSetDisabled, svcIpV4}, "failed to get kubernetes endpoint slices",
+					[]func(){createK8sService}, "failed to get kubernetes endpoint slices",
 				),
 			)
 			It("should push env vars to ebpf-bootstrap", func() {
-				kubeProxyDaemonSetDisabled()
-				svcIpV4()
-				epIpV4()
+				createK8sService()
+				createEndpointSlice()
 
 				By("r.Reconcile()")
 				_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1078,7 +1060,6 @@ var _ = Describe("Testing core-controller installation", func() {
 				))
 			})
 			It("should support dual-stack clusters - IPv4 and IPv6", func() {
-				kubeProxyDaemonSetDisabled()
 				Expect(c.Create(
 					ctx,
 					&corev1.Service{

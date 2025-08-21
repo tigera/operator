@@ -556,7 +556,7 @@ type CalicoNetworkSpec struct {
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
 
 	// BPFNetworkBootstrap defines how the initial setup for configuring the BPF dataplane is performed.
-	// When enabled, the operator automatically includes the API server and EndpointSlice addresses in the NAT maps.
+	// When enabled, the Kubernetes service and associated endpoints will be used to bootstrap access to the kubernetes API server.
 	// Default: Disabled
 	// +optional
 	// +kubebuilder:validation:Enum=Disabled;Enabled

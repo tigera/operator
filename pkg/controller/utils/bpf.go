@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,7 +27,6 @@ import (
 )
 
 type BPFBootstrap struct {
-	KubeProxyDs         *appsv1.DaemonSet
 	K8sService          *corev1.Service
 	K8sServiceEndpoints *discoveryv1.EndpointSliceList
 }
@@ -37,8 +35,8 @@ type BPFBootstrap struct {
 // If so, it retrieves the kube-proxy DaemonSet, the Kubernetes service, and its EndpointSlices, returning them in a BPFBootstrap struct.
 // If it's not possible to retrieve any of these resources, it returns an error.
 func BPFBootstrapRequirements(c client.Client, ctx context.Context, install *operator.InstallationSpec) (*BPFBootstrap, error) {
-	// If BPFNetworkBootstrap or KubeProxyManagement are not Enabled, skip further processing.
-	if !install.BPFNetworkBootstrapEnabled() && !install.KubeProxyManagementEnabled() {
+	// If BPFNetworkBootstrap is not Enabled, skip further processing.
+	if !install.BPFNetworkBootstrapEnabled() {
 		return nil, nil
 	}
 
@@ -49,20 +47,7 @@ func BPFBootstrapRequirements(c client.Client, ctx context.Context, install *ope
 	}
 
 	bpfBootstrapReq := &BPFBootstrap{}
-	// 2. Try to retrieve the kube-proxy DaemonSet.
-	ds := &appsv1.DaemonSet{}
-	err = c.Get(ctx, types.NamespacedName{Namespace: KubeProxyNamespace, Name: KubeProxyDaemonSetName}, ds)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get kube-proxy: %w", err)
-	}
-
-	// 3. Validate that the kube-proxy DaemonSet is not managed by an external tool.
-	if err = validateDaemonSetManaged(ds); err != nil {
-		return nil, fmt.Errorf("failed to validate kube-proxy DaemonSet: %w", err)
-	}
-	bpfBootstrapReq.KubeProxyDs = ds
-
-	// 4. Try to retrieve kubernetes service.
+	// 2. Try to retrieve kubernetes service.
 	service := &corev1.Service{}
 	err = c.Get(ctx, types.NamespacedName{Namespace: "default", Name: "kubernetes"}, service)
 	if err != nil {
@@ -70,7 +55,7 @@ func BPFBootstrapRequirements(c client.Client, ctx context.Context, install *ope
 	}
 	bpfBootstrapReq.K8sService = service
 
-	// 5. Try to retrieve kubernetes service endpoint slices. If the cluster is dual-stack, there should be at least one EndpointSlice for each address type.
+	// 3. Try to retrieve kubernetes service endpoint slices. If the cluster is dual-stack, there should be at least one EndpointSlice for each address type.
 	endpointSlice := &discoveryv1.EndpointSliceList{}
 	err = c.List(ctx, endpointSlice, client.InNamespace("default"), client.MatchingLabels{"kubernetes.io/service-name": "kubernetes"})
 	if err != nil || len(endpointSlice.Items) == 0 {
@@ -79,27 +64,4 @@ func BPFBootstrapRequirements(c client.Client, ctx context.Context, install *ope
 	bpfBootstrapReq.K8sServiceEndpoints = endpointSlice
 
 	return bpfBootstrapReq, nil
-}
-
-// validateDaemonSetManaged checks whether the DaemonSet is managed by an external tool,
-// based on common labels or annotations typically added by automation.
-func validateDaemonSetManaged(ds *appsv1.DaemonSet) error {
-	if len(ds.Labels) == 0 && len(ds.Annotations) == 0 {
-		return nil
-	}
-
-	// Kubernetes well-known labels
-	if _, ok := ds.Labels["app.kubernetes.io/managed-by"]; ok {
-		return fmt.Errorf("DaemonSet is likely managed by: %s", ds.Labels["app.kubernetes.io/managed-by"])
-	}
-	if _, ok := ds.Labels["addonmanager.kubernetes.io/mode"]; ok {
-		return fmt.Errorf("DaemonSet is likely managed by another source due to the label 'addonmanager.kubernetes.io/mode: %s'", ds.Labels["addonmanager.kubernetes.io/mode"])
-	}
-
-	// Check for GitOps tools
-	if _, ok := ds.Annotations["argocd.argoproj.io/tracking-id"]; ok {
-		return fmt.Errorf("DaemonSet is likely managed by another source due to the label 'argocd.argoproj.io/tracking-id: %s'", ds.Annotations["argocd.argoproj.io/tracking-id"])
-	}
-
-	return nil
 }

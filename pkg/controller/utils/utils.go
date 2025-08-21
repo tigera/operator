@@ -62,15 +62,13 @@ const (
 	// This is for development and testing purposes only. Do not use this annotation
 	// for production, as this will cause problems with upgrade.
 	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
-
-	KubeProxyDaemonSetName = "kube-proxy"
-	KubeProxyNamespace     = "kube-system"
 )
 
 var (
 	DefaultInstanceKey     = client.ObjectKey{Name: "default"}
 	DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 	OverlayInstanceKey     = client.ObjectKey{Name: "overlay"}
+	KubeProxyInstanceKey   = client.ObjectKey{Name: "kube-proxy", Namespace: "kube-system"}
 
 	PeriodicReconcileTime = 5 * time.Minute
 
@@ -853,8 +851,8 @@ func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch
 func AddKubeProxyWatch(c ctrlruntime.Controller) error {
 	ds := &appsv1.DaemonSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Namespace: KubeProxyNamespace,
-			Name:      KubeProxyDaemonSetName,
+			Namespace: KubeProxyInstanceKey.Namespace,
+			Name:      KubeProxyInstanceKey.Name,
 		},
 	}
 	return c.WatchObject(&appsv1.DaemonSet{}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))

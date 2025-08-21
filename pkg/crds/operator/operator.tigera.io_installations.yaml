@@ -1274,6 +1274,15 @@ spec:
                         - Enabled
                         - Disabled
                       type: string
+                    bpfNetworkBootstrap:
+                      description: |-
+                        BPFNetworkBootstrap defines how the initial steps to configure BPF dataplane is set up.
+                        If Enabled, the Operator will automatically include the API Server and endpoint slices addresses in the NAT Maps.
+                        Default: Disabled
+                      enum:
+                        - Disabled
+                        - Enabled
+                      type: string
                     containerIPForwarding:
                       description: |-
                         ContainerIPForwarding configures whether ip forwarding will be enabled for containers in the CNI configuration.
@@ -1370,6 +1379,15 @@ spec:
                         type: object
                       maxItems: 25
                       type: array
+                    kubeProxyManagement:
+                      description: |-
+                        KubeProxyManagement controls whether the operator manages the kube-proxy DaemonSet.
+                        If Enabled, the Operator will patch the DaemonSet to disable kube-proxy if dataplane is BPF or to enable it in other cases.
+                        Default: Disabled
+                      enum:
+                        - Disabled
+                        - Enabled
+                      type: string
                     linuxDataplane:
                       description: |-
                         LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
@@ -10044,6 +10062,15 @@ spec:
                             - Enabled
                             - Disabled
                           type: string
+                        bpfNetworkBootstrap:
+                          description: |-
+                            BPFNetworkBootstrap defines how the initial steps to configure BPF dataplane is set up.
+                            If Enabled, the Operator will automatically include the API Server and endpoint slices addresses in the NAT Maps.
+                            Default: Disabled
+                          enum:
+                            - Disabled
+                            - Enabled
+                          type: string
                         containerIPForwarding:
                           description: |-
                             ContainerIPForwarding configures whether ip forwarding will be enabled for containers in the CNI configuration.
@@ -10140,6 +10167,15 @@ spec:
                             type: object
                           maxItems: 25
                           type: array
+                        kubeProxyManagement:
+                          description: |-
+                            KubeProxyManagement controls whether the operator manages the kube-proxy DaemonSet.
+                            If Enabled, the Operator will patch the DaemonSet to disable kube-proxy if dataplane is BPF or to enable it in other cases.
+                            Default: Disabled
+                          enum:
+                            - Disabled
+                            - Enabled
+                          type: string
                         linuxDataplane:
                           description: |-
                             LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it

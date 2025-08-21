@@ -153,11 +153,25 @@ var _ = Describe("VoltronRouteConfigBuilder", func() {
 
 	Context("TLSTerminatedRoutes", func() {
 		When("the CABundle is not set", func() {
-			It("returns an error", func() {
+			It("succeeds", func() {
+				route.Spec.Target = operatorv1.TargetTypeUI
 				builder.AddTLSTerminatedRoute(route)
 
-				_, err := builder.Build()
-				Expect(err).Should(HaveOccurred())
+				config, err := builder.Build()
+				Expect(err).ShouldNot(HaveOccurred())
+
+				Expect(config.Annotations()).Should(Equal(map[string]string{
+					"hash.operator.tigera.io/routeconf-cm-voltron-routes-uitlstermro": "45c3d2b5fada9b8440d330798da77665ecb98e38",
+				}))
+				Expect(config.VolumeMounts()).Should(Equal([]corev1.VolumeMount{routesConfigMapVolumeMount}))
+
+				Expect(config.Volumes()).Should(Equal([]corev1.Volume{routesConfigMapVolume}))
+
+				cm := config.RoutesConfigMap("tigera-manager")
+				cm.Data["uiTLSTermRoutes.json"] = compactJSONString(cm.Data["uiTLSTermRoutes.json"])
+
+				routesConfigMap.Data["uiTLSTermRoutes.json"] = `[{"destination":"","path":"/foobar","pathRegexp":"^/foobar$","pathReplace":"/"}]`
+				Expect(cm).Should(Equal(routesConfigMap))
 			})
 		})
 

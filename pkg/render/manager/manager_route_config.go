@@ -188,10 +188,6 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 	var tunnelTLSPassThroughRoutes tlsPassThroughRouteList
 
 	for _, route := range builder.tlsTerminatedRoutes {
-		if route.Spec.CABundle == nil {
-			return nil, fmt.Errorf("CABundle is required")
-		}
-
 		r := &tlsTerminatedRoute{
 			Destination: route.Spec.Destination,
 			Path:        route.Spec.PathMatch.Path,

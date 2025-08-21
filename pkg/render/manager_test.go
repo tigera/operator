@@ -326,6 +326,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"felixconfigurations",
 				},
@@ -382,12 +387,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{
 					"flows",
 					"flowlogs",
+					"flowlogs-multi-cluster",
 					"bgplogs",
 					"auditlogs",
 					"dnsflows",
 					"dnslogs",
+					"dnslogs-multi-cluster",
 					"l7flows",
 					"l7logs",
+					"l7logs-multi-cluster",
 					"events",
 					"processes",
 				},
@@ -427,6 +435,26 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 		}))
 
+	})
+
+	It("should render dashboard sidecar and route for enterprise", func() {
+		inst := &operatorv1.InstallationSpec{Variant: operatorv1.TigeraSecureEnterprise, ControlPlaneReplicas: &replicas}
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            inst,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
+
+		tlsTerminatedRoute := rtest.GetResource(resources, render.DashboardAPITLSTerminatedRouteName, render.ManagerNamespace, "operator.tigera.io", "v1", "TLSTerminatedRoute").(*operatorv1.TLSTerminatedRoute)
+		Expect(tlsTerminatedRoute).NotTo(BeNil())
+		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(4))
+		dashboard := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.DashboardAPIName)
+		Expect(dashboard).NotTo(BeNil())
+		rtest.ExpectEnv(dashboard.Env, "LISTEN_ADDR", fmt.Sprintf("127.0.0.1:%s", render.DashboardAPIPort))
 	})
 
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {
@@ -626,6 +654,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"felixconfigurations",
 				},
@@ -687,12 +720,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{
 					"flows",
 					"flowlogs",
+					"flowlogs-multi-cluster",
 					"bgplogs",
 					"auditlogs",
 					"dnsflows",
 					"dnslogs",
+					"dnslogs-multi-cluster",
 					"l7flows",
 					"l7logs",
+					"l7logs-multi-cluster",
 					"events",
 					"processes",
 				},

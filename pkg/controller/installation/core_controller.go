@@ -80,6 +80,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -1415,7 +1416,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Users can override this with explicit configuration in the Installation resource, but using the operator as
 	// a baseline is a reasonable default.
 	operatorDeployment := &appsv1.Deployment{}
-	defaultDNSPolicy := corev1.DNSClusterFirstWithHostNet
+	defaultDNSPolicy := corev1.DNSDefault
 	var defaultDNSConfig *corev1.PodDNSConfig
 	if err := r.client.Get(ctx, common.OperatorKey(), operatorDeployment); err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -1426,6 +1427,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	} else {
 		defaultDNSPolicy = operatorDeployment.Spec.Template.Spec.DNSPolicy
 		defaultDNSConfig = operatorDeployment.Spec.Template.Spec.DNSConfig
+	}
+
+	// Get the Goldmane Service in order to find its cluster IP.
+	goldmaneIP := ""
+	if goldmaneRunning {
+		goldmaneService := &corev1.Service{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: goldmane.GoldmaneServiceName, Namespace: common.CalicoNamespace}, goldmaneService); err != nil {
+			if !apierrors.IsNotFound(err) {
+				r.status.SetDegraded(operator.ResourceReadError, "Unable to read Goldmane Service", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		} else {
+			goldmaneIP = goldmaneService.Spec.ClusterIP
+		}
 	}
 
 	// Build a configuration for rendering calico/node.
@@ -1440,6 +1455,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ClusterDomain:                 r.clusterDomain,
 		DefaultDNSPolicy:              defaultDNSPolicy,
 		DefaultDNSConfig:              defaultDNSConfig,
+		GoldmaneIP:                    goldmaneIP,
 		NodeReporterMetricsPort:       nodeReporterMetricsPort,
 		BGPLayouts:                    bgpLayout,
 		NodeAppArmorProfile:           nodeAppArmorProfile,

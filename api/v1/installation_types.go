@@ -212,13 +212,20 @@ type InstallationSpec struct {
 	Proxy *Proxy `json:"proxy,omitempty"`
 }
 
-// InstallMode defines how the initial networking configuration is executed.
-// One of: Auto, Manual
-type InstallMode string
+// BPFNetworkBootstrapType defines how the initial networking configuration is executed.
+type BPFNetworkBootstrapType string
 
 const (
-	BPFInstallAuto   InstallMode = "Auto"
-	BPFInstallManual InstallMode = "Manual"
+	BPFNetworkAutoEnabled  BPFNetworkBootstrapType = "Enabled"
+	BPFNetworkAutoDisabled BPFNetworkBootstrapType = "Disabled"
+)
+
+// KubeProxyManagementType specifies whether kube-proxy management is enabled.
+type KubeProxyManagementType string
+
+const (
+	KubeProxyManagementEnabled  KubeProxyManagementType = "Enabled"
+	KubeProxyManagementDisabled KubeProxyManagementType = "Disabled"
 )
 
 // +kubebuilder:validation:Enum=TLS_AES_256_GCM_SHA384;TLS_CHACHA20_POLY1305_SHA256;TLS_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;TLS_RSA_WITH_AES_256_GCM_SHA384;TLS_RSA_WITH_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA;TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA;TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
@@ -548,12 +555,20 @@ type CalicoNetworkSpec struct {
 	// +optional
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
 
-	// BPFInstallMode defines how the initial steps to configure BPF dataplane is set up.
-	// If set to Auto, the Operator will automatically include the API Server addresses in the NAT Maps and disable kube-proxy.
-	// Default: Manual
+	// BPFNetworkBootstrap defines how the initial steps to configure BPF dataplane is set up.
+	// If Enabled, the Operator will automatically include the API Server and endpoint slices addresses in the NAT Maps.
+	// Default: Disabled
 	// +optional
-	// +kubebuilder:validation:Enum=Auto;Manual
-	BPFInstallMode *InstallMode `json:"bpfInstallMode,omitempty"`
+	// +kubebuilder:validation:Enum=Disabled;Enabled
+	BPFNetworkBootstrap *BPFNetworkBootstrapType `json:"bpfNetworkBootstrap,omitempty"`
+
+	// KubeProxyManagement controls whether the operator manages the kube-proxy DaemonSet.
+	// If Enabled, the Operator will manage the kube-proxy DaemonSet, patching it to disable kube-proxy if dataplane is BPF
+	// or to enable it in other cases.
+	// Default: Disabled
+	// +optional
+	// +kubebuilder:validation:Enum=Disabled;Enabled
+	KubeProxyManagement *KubeProxyManagementType `json:"kubeProxyManagement,omitempty"`
 
 	// BGP configures whether or not to enable Calico's BGP capabilities.
 	// +optional
@@ -968,11 +983,18 @@ func (s *InstallationSpec) IsNftables() bool {
 		*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneNftables
 }
 
-func (installation *InstallationSpec) BPFInstallModeAuto() bool {
+func (installation *InstallationSpec) BPFBootstrapEnabled() bool {
 	return installation != nil &&
 		installation.CalicoNetwork != nil &&
-		installation.CalicoNetwork.BPFInstallMode != nil &&
-		*installation.CalicoNetwork.BPFInstallMode == BPFInstallAuto
+		installation.CalicoNetwork.BPFNetworkBootstrap != nil &&
+		*installation.CalicoNetwork.BPFNetworkBootstrap == BPFNetworkAutoEnabled
+}
+
+func (installation *InstallationSpec) KubeProxyManagementEnabled() bool {
+	return installation != nil &&
+		installation.CalicoNetwork != nil &&
+		installation.CalicoNetwork.KubeProxyManagement != nil &&
+		*installation.CalicoNetwork.KubeProxyManagement == KubeProxyManagementEnabled
 }
 
 // +kubebuilder:object:root=true

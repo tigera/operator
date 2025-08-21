@@ -52,8 +52,8 @@ var _ = Describe("kube-proxy controller tests", func() {
 	var k8sService *corev1.Service
 	var K8sEndpointSlice *discoveryv1.EndpointSlice
 
-	bpfInstallModeAuto := operatorv1.BPFInstallAuto
-	bpfInstallModeManual := operatorv1.BPFInstallManual
+	kpManagementEnabled := operatorv1.KubeProxyManagementEnabled
+	kpManagementDisabled := operatorv1.KubeProxyManagementDisabled
 
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
@@ -103,7 +103,7 @@ var _ = Describe("kube-proxy controller tests", func() {
 	createResource := func(obj client.Object) {
 		Expect(c.Create(ctx, obj)).NotTo(HaveOccurred())
 	}
-	createInstallationCR := func(bpfEnabled bool, installMode *operatorv1.InstallMode) {
+	createInstallationCR := func(bpfEnabled bool, managed *operatorv1.KubeProxyManagementType) {
 		linuxDataplaneBPF := operatorv1.LinuxDataplaneBPF
 		if !bpfEnabled {
 			linuxDataplaneBPF = operatorv1.LinuxDataplaneIptables
@@ -112,8 +112,8 @@ var _ = Describe("kube-proxy controller tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: operatorv1.InstallationSpec{
 				CalicoNetwork: &operatorv1.CalicoNetworkSpec{
-					BPFInstallMode: installMode,
-					LinuxDataplane: &linuxDataplaneBPF,
+					KubeProxyManagement: managed,
+					LinuxDataplane:      &linuxDataplaneBPF,
 				},
 			},
 		})
@@ -153,11 +153,11 @@ var _ = Describe("kube-proxy controller tests", func() {
 	}
 
 	table.DescribeTable("handle kube-proxy DaemonSet correctly based on BPF auto-install requirements",
-		func(bpfEnabled bool, installMode *operatorv1.InstallMode) {
+		func(bpfEnabled bool, kpManaged *operatorv1.KubeProxyManagementType) {
 			kp := &appsv1.DaemonSet{}
 			nodeSelectorIncluded := !bpfEnabled
 			By("applying the resources")
-			createInstallationCR(bpfEnabled, installMode)
+			createInstallationCR(bpfEnabled, kpManaged)
 			createFelixConfiguration(bpfEnabled)
 			createKubeProxyDS(nodeSelectorIncluded)
 			createResource(k8sService)
@@ -177,22 +177,22 @@ var _ = Describe("kube-proxy controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("checking if NodeSelector changed")
-			// It should change only if BPFInstallMode is Auto
-			if installMode == &bpfInstallModeAuto {
+			// It should change only if KubeProxyManagement is Enabled
+			if kpManaged == &kpManagementEnabled {
 				nodeSelectorIncluded = !nodeSelectorIncluded
 			}
 			checkKubeProxyState(kp, nodeSelectorIncluded)
 		},
-		table.Entry("disable kube-proxy if BPFEnabled is false and Install Mode is Auto",
-			true, &bpfInstallModeAuto,
+		table.Entry("disable kube-proxy if BPFEnabled is false and kubeProxyManagement is Enabled",
+			true, &kpManagementEnabled,
 		),
-		table.Entry("enable kube-proxy if BPFEnabled is false and Install Mode is Auto",
-			false, &bpfInstallModeAuto,
+		table.Entry("enable kube-proxy if BPFEnabled is false and kubeProxyManagement is Enabled",
+			false, &kpManagementEnabled,
 		),
-		table.Entry("doesn't change kube-proxy if Install Mode is Manual",
-			false, &bpfInstallModeManual,
+		table.Entry("doesn't change kube-proxy if kubeProxyManagement is Disabled",
+			false, &kpManagementDisabled,
 		),
-		table.Entry("doesn't change kube-proxy if Install Mode is unset",
+		table.Entry("doesn't change kube-proxy if kubeProxyManagement is unset",
 			true, nil,
 		),
 	)

@@ -27,18 +27,18 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 )
 
-type BPFAutoInstall struct {
+type BPFBootstrap struct {
 	KubeProxyDs         *appsv1.DaemonSet
 	K8sService          *corev1.Service
 	K8sServiceEndpoints *discoveryv1.EndpointSliceList
 }
 
-// BPFAutoInstallRequirements checks whether the BPF auto-bootstrap requirements are met.
-// If so, it retrieves the kube-proxy DaemonSet, the Kubernetes service, and its EndpointSlices, returning them in a BPFAutoBootstrap struct.
+// BPFBootstrapRequirements checks whether the BPF auto-bootstrap requirements are met.
+// If so, it retrieves the kube-proxy DaemonSet, the Kubernetes service, and its EndpointSlices, returning them in a BPFBootstrap struct.
 // If it's not possible to retrieve any of these resources, it returns an error.
-func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *operator.InstallationSpec) (*BPFAutoInstall, error) {
-	// If BPFInstallMode is not set to Auto, skip further processing.
-	if !install.BPFInstallModeAuto() {
+func BPFBootstrapRequirements(c client.Client, ctx context.Context, install *operator.InstallationSpec) (*BPFBootstrap, error) {
+	// If BPFNetworkBootstrap or KubeProxyManagement areJust informative.  not Enabled, skip further processing.
+	if !install.BPFBootstrapEnabled() && !install.KubeProxyManagementEnabled() {
 		return nil, nil
 	}
 
@@ -48,7 +48,7 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 		return nil, fmt.Errorf("kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap.")
 	}
 
-	bpfAutoInstallReq := &BPFAutoInstall{}
+	bpfBootstrapReq := &BPFBootstrap{}
 	// 2. Try to retrieve the kube-proxy DaemonSet.
 	ds := &appsv1.DaemonSet{}
 	err = c.Get(ctx, types.NamespacedName{Namespace: KubeProxyNamespace, Name: KubeProxyDaemonSetName}, ds)
@@ -60,7 +60,7 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 	if err = validateDaemonSetManaged(ds); err != nil {
 		return nil, fmt.Errorf("failed to validate kube-proxy DaemonSet: %w", err)
 	}
-	bpfAutoInstallReq.KubeProxyDs = ds
+	bpfBootstrapReq.KubeProxyDs = ds
 
 	// 4. Try to retrieve kubernetes service.
 	service := &corev1.Service{}
@@ -68,7 +68,7 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubernetes service: %w", err)
 	}
-	bpfAutoInstallReq.K8sService = service
+	bpfBootstrapReq.K8sService = service
 
 	// 5. Try to retrieve kubernetes service endpoint slices. If the cluster is dual-stack, there should be at least one EndpointSlice for each address type.
 	endpointSlice := &discoveryv1.EndpointSliceList{}
@@ -76,9 +76,9 @@ func BPFAutoInstallRequirements(c client.Client, ctx context.Context, install *o
 	if err != nil || len(endpointSlice.Items) == 0 {
 		return nil, fmt.Errorf("failed to get kubernetes endpoint slices: %w", err)
 	}
-	bpfAutoInstallReq.K8sServiceEndpoints = endpointSlice
+	bpfBootstrapReq.K8sServiceEndpoints = endpointSlice
 
-	return bpfAutoInstallReq, nil
+	return bpfBootstrapReq, nil
 }
 
 // validateDaemonSetManaged checks whether the DaemonSet is managed by an external tool,

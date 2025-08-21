@@ -68,6 +68,7 @@ var (
 	DefaultInstanceKey     = client.ObjectKey{Name: "default"}
 	DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 	OverlayInstanceKey     = client.ObjectKey{Name: "overlay"}
+	KubeProxyInstanceKey   = client.ObjectKey{Name: "kube-proxy", Namespace: "kube-system"}
 
 	PeriodicReconcileTime = 5 * time.Minute
 
@@ -844,6 +845,17 @@ func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch
 		return nil, err
 	}
 	return &es, nil
+}
+
+// AddKubeProxyWatch creates a watch on the kube-proxy DaemonSet.
+func AddKubeProxyWatch(c ctrlruntime.Controller) error {
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: KubeProxyInstanceKey.Namespace,
+			Name:      KubeProxyInstanceKey.Name,
+		},
+	}
+	return c.WatchObject(&appsv1.DaemonSet{}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
 }
 
 func IsNodeLocalDNSAvailable(ctx context.Context, cli client.Client) (bool, error) {

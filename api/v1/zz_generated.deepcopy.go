@@ -1352,6 +1352,11 @@ func (in *CalicoNodeDaemonSetPodSpec) DeepCopyInto(out *CalicoNodeDaemonSetPodSp
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
+	if in.DNSPolicy != nil {
+		in, out := &in.DNSPolicy, &out.DNSPolicy
+		*out = new(corev1.DNSPolicy)
+		**out = **in
+	}
 	if in.DNSConfig != nil {
 		in, out := &in.DNSConfig, &out.DNSConfig
 		*out = new(corev1.PodDNSConfig)

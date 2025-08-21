@@ -208,6 +208,7 @@ var _ = Describe("Common components render tests", func() {
 			ApplyDaemonSetOverrides(&orig, template)
 			expectations(orig)
 		},
+
 		Entry("empty",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -216,6 +217,7 @@ var _ = Describe("Common components render tests", func() {
 			func(result appsv1.DaemonSet) {
 				Expect(result).To(Equal(defaultedDaemonSet()))
 			}),
+
 		Entry("empty labels and annotations",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -229,6 +231,7 @@ var _ = Describe("Common components render tests", func() {
 			func(result appsv1.DaemonSet) {
 				Expect(result).To(Equal(defaultedDaemonSet()))
 			}),
+
 		Entry("empty labels and annotations, empty spec",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -243,6 +246,7 @@ var _ = Describe("Common components render tests", func() {
 			func(result appsv1.DaemonSet) {
 				Expect(result).To(Equal(defaultedDaemonSet()))
 			}),
+
 		Entry("labels and annotations",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -352,6 +356,23 @@ var _ = Describe("Common components render tests", func() {
 				expected.Annotations["test-annot"] = "annot1"
 				Expect(result).To(Equal(expected))
 			}),
+		Entry("DNSPolicy that is defined",
+			defaultedDaemonSet,
+			func() *v1.CalicoNodeDaemonSet {
+				return &v1.CalicoNodeDaemonSet{
+					Spec: &v1.CalicoNodeDaemonSetSpec{
+						Template: &v1.CalicoNodeDaemonSetPodTemplateSpec{
+							Spec: &v1.CalicoNodeDaemonSetPodSpec{
+								DNSPolicy: ptr.ToPtr(corev1.DNSClusterFirstWithHostNet),
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.DaemonSet) {
+				Expect(result.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
+			}),
+
 		Entry("minReadySeconds",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -386,6 +407,7 @@ var _ = Describe("Common components render tests", func() {
 				expected.Spec.Template.Annotations["test-pod-annot"] = "annot1"
 				Expect(result).To(Equal(expected))
 			}),
+
 		Entry("pod template labels only",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -404,6 +426,7 @@ var _ = Describe("Common components render tests", func() {
 				expected.Spec.Template.Labels["test-pod-label"] = "label1"
 				Expect(result).To(Equal(expected))
 			}),
+
 		Entry("pod template annotations only",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -422,6 +445,7 @@ var _ = Describe("Common components render tests", func() {
 				expected.Spec.Template.Annotations["test-pod-annot"] = "annot1"
 				Expect(result).To(Equal(expected))
 			}),
+
 		Entry("pod labels and annotations that are already defined",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -448,6 +472,7 @@ var _ = Describe("Common components render tests", func() {
 				expected.Spec.Template.Annotations["test-pod-annot"] = "annot1"
 				Expect(result).To(Equal(expected))
 			}),
+
 		Entry("pod labels that are already defined",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -469,6 +494,7 @@ var _ = Describe("Common components render tests", func() {
 				expected.Spec.Template.Labels["test-pod-label"] = "label1"
 				Expect(result).To(Equal(expected))
 			}),
+
 		Entry("pod annotations that are already defined",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -490,6 +516,7 @@ var _ = Describe("Common components render tests", func() {
 				expected.Spec.Template.Annotations["test-pod-annot"] = "annot1"
 				Expect(result).To(Equal(expected))
 			}),
+
 		Entry("init containers",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -526,6 +553,7 @@ var _ = Describe("Common components render tests", func() {
 				Expect(result.Spec.Template.Spec.InitContainers).To(ContainElements(expected.Spec.Template.Spec.InitContainers))
 				Expect(result).To(Equal(expected))
 			}),
+
 		Entry("empty init containers",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -545,6 +573,7 @@ var _ = Describe("Common components render tests", func() {
 				Expect(result.Spec.Template.Spec.InitContainers).To(ContainElements(expected.Spec.Template.Spec.InitContainers))
 				Expect(result).To(Equal(expected))
 			}),
+
 		Entry("containers",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -575,6 +604,7 @@ var _ = Describe("Common components render tests", func() {
 				Expect(result.Spec.Template.Spec.Containers).To(ContainElements(expected.Spec.Template.Spec.Containers))
 				Expect(result).To(Equal(expected))
 			}),
+
 		Entry("empty containers",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -594,6 +624,7 @@ var _ = Describe("Common components render tests", func() {
 				Expect(result.Spec.Template.Spec.Containers).To(ContainElements(expected.Spec.Template.Spec.Containers))
 				Expect(result).To(Equal(expected))
 			}),
+
 		Entry("empty tolerations",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -613,6 +644,7 @@ var _ = Describe("Common components render tests", func() {
 				Expect(result.Spec.Template.Spec.Tolerations).To(Equal(expected.Spec.Template.Spec.Tolerations))
 				Expect(result).To(Equal(expected))
 			}),
+
 		Entry("empty nodeSelector",
 			defaultedDaemonSet,
 			func() *v1.CalicoNodeDaemonSet {
@@ -671,6 +703,7 @@ var _ = Describe("Common components render tests", func() {
 			ApplyDeploymentOverrides(&orig, template)
 			expectations(orig)
 		},
+
 		Entry("empty",
 			defaultedDeployment,
 			func() *v1.TyphaDeployment {
@@ -1182,7 +1215,6 @@ func addContainer(cs []corev1.Container) []corev1.Container {
 	containers = append(containers, cs[0])
 	containers = append(containers, newContainer)
 	return containers
-
 }
 
 // defaultedDaemonSet returns a DaemonSet with its fields populated.
@@ -1191,6 +1223,7 @@ func defaultedDaemonSet() appsv1.DaemonSet {
 	defaulter := test.NewNonZeroStructDefaulter()
 	Expect(defaulter.SetDefault(&ds)).ToNot(HaveOccurred())
 
+	ds.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirst
 	ds.Spec.Template.Spec.Containers = addContainer(ds.Spec.Template.Spec.Containers)
 	ds.Spec.Template.Spec.InitContainers = addContainer(ds.Spec.Template.Spec.InitContainers)
 	return ds

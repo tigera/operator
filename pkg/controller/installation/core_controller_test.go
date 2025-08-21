@@ -952,7 +952,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			})
 		})
 
-		Context("with LinuxDataplane=BPF and BPFInstallMode=Auto", func() {
+		Context("with LinuxDataplane=BPF and BPFNetworkBootstrap=Enabled", func() {
 			createResource := func(obj client.Object) {
 				Expect(c.Create(ctx, obj)).NotTo(HaveOccurred())
 			}
@@ -1005,14 +1005,14 @@ var _ = Describe("Testing core-controller installation", func() {
 					})
 			}
 			BeforeEach(func() {
-				By("Setting the dataplane to BPF and opt in")
+				By("Setting the dataplane to BPF and Enabling network bootstrap")
 				mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 				bpf := operator.LinuxDataplaneBPF
-				auto := operator.BPFInstallAuto
+				enabled := operator.BPFNetworkAutoEnabled
 				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
-					LinuxDataplane: &bpf,
-					BPFInstallMode: &auto,
+					LinuxDataplane:      &bpf,
+					BPFNetworkBootstrap: &enabled,
 				}
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			})
@@ -1054,9 +1054,9 @@ var _ = Describe("Testing core-controller installation", func() {
 				err = c.Get(ctx, types.NamespacedName{Name: "default"}, install)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(install.Spec.CalicoNetwork).ToNot(BeNil())
-				Expect(install.Spec.CalicoNetwork.BPFInstallMode).ToNot(BeNil())
-				Expect(*install.Spec.CalicoNetwork.BPFInstallMode).To(Equal(operator.BPFInstallAuto))
-				Expect(install.Spec.BPFInstallModeAuto()).To(BeTrue())
+				Expect(install.Spec.CalicoNetwork.BPFNetworkBootstrap).ToNot(BeNil())
+				Expect(*install.Spec.CalicoNetwork.BPFNetworkBootstrap).To(Equal(operator.BPFNetworkAutoEnabled))
+				Expect(install.Spec.BPFNetworkBootstrapEnabled()).To(BeTrue())
 
 				By("Checking that the FelixConfiguration has BPF Enabled")
 				fc := &crdv1.FelixConfiguration{}

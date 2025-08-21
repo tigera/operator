@@ -1187,6 +1187,16 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 		*out = new(WindowsDataplaneOption)
 		**out = **in
 	}
+	if in.BPFNetworkBootstrap != nil {
+		in, out := &in.BPFNetworkBootstrap, &out.BPFNetworkBootstrap
+		*out = new(BPFNetworkBootstrapType)
+		**out = **in
+	}
+	if in.KubeProxyManagement != nil {
+		in, out := &in.KubeProxyManagement, &out.KubeProxyManagement
+		*out = new(KubeProxyManagementType)
+		**out = **in
+	}
 	if in.BGP != nil {
 		in, out := &in.BGP, &out.BGP
 		*out = new(BGPOption)

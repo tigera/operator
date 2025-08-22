@@ -44,6 +44,8 @@ import (
 var (
 	//go:embed gateway_api_resources.yaml
 	gatewayAPIResourcesYAML string
+
+	AccessLogType envoyapi.ProxyAccessLogType = "Route"
 )
 
 type yamlKind struct {
@@ -894,6 +896,57 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			}
 			if !hasAccessLogsVolume {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, AccessLogsVolume)
+			}
+
+			if envoyProxy.Spec.Telemetry != nil {
+				if envoyProxy.Spec.Telemetry.AccessLog == nil {
+					envoyProxy.Spec.Telemetry.AccessLog = &envoyapi.ProxyAccessLog{
+						Settings: []envoyapi.ProxyAccessLogSetting{},
+					}
+				}
+			} else {
+				envoyProxy.Spec.Telemetry = &envoyapi.ProxyTelemetry{
+					AccessLog: &envoyapi.ProxyAccessLog{
+						Settings: []envoyapi.ProxyAccessLogSetting{},
+					},
+				}
+			}
+
+			envoyProxy.Spec.Telemetry.AccessLog.Settings = []envoyapi.ProxyAccessLogSetting{
+				{
+					Sinks: []envoyapi.ProxyAccessLogSink{
+						{
+							Type: envoyapi.ProxyAccessLogSinkTypeFile,
+							File: &envoyapi.FileEnvoyProxyAccessLog{
+								Path: "/access_logs/access.log",
+							},
+						},
+					},
+					Format: &envoyapi.ProxyAccessLogFormat{
+						JSON: map[string]string{
+							"reporter":                         "gateway",
+							"start_time":                       "%START_TIME%",
+							"duration":                         "%DURATION%",
+							"response_code":                    "%RESPONSE_CODE%",
+							"bytes_sent":                       "%BYTES_SENT%",
+							"bytes_received":                   "%BYTES_RECEIVED%",
+							"user_agent":                       "%REQ(USER-AGENT)%",
+							"request_path":                     "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%",
+							"request_method":                   "%REQ(:METHOD)%",
+							"request_id":                       "%REQ(X-REQUEST-ID)%",
+							"type":                             "{{.}}",
+							"downstream_remote_address":        "%DOWNSTREAM_REMOTE_ADDRESS%",
+							"downstream_local_address":         "%DOWNSTREAM_LOCAL_ADDRESS%",
+							"downstream_direct_remote_address": "%DOWNSTREAM_DIRECT_REMOTE_ADDRESS%",
+							"domain":                           "%REQ(HOST?:AUTHORITY)%",
+							"upstream_host":                    "%UPSTREAM_HOST%",
+							"upstream_local_address":           "%UPSTREAM_LOCAL_ADDRESS%",
+							"upstream_service_time":            "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%",
+							"route_name":                       "%ROUTE_NAME%",
+						},
+					},
+					Type: &AccessLogType,
+				},
 			}
 		}
 	}

@@ -52,6 +52,43 @@ func (m *matchObject) NegatedFailureMessage(actual any) (message string) {
 
 var _ = Describe("Gateway API rendering tests", func() {
 
+	var AccessLogSettings = []envoyapi.ProxyAccessLogSetting{
+		{
+			Sinks: []envoyapi.ProxyAccessLogSink{
+				{
+					Type: envoyapi.ProxyAccessLogSinkTypeFile,
+					File: &envoyapi.FileEnvoyProxyAccessLog{
+						Path: "/access_logs/access.log",
+					},
+				},
+			},
+			Format: &envoyapi.ProxyAccessLogFormat{
+				JSON: map[string]string{
+					"reporter":                         "gateway",
+					"start_time":                       "%START_TIME%",
+					"duration":                         "%DURATION%",
+					"response_code":                    "%RESPONSE_CODE%",
+					"bytes_sent":                       "%BYTES_SENT%",
+					"bytes_received":                   "%BYTES_RECEIVED%",
+					"user_agent":                       "%REQ(USER-AGENT)%",
+					"request_path":                     "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%",
+					"request_method":                   "%REQ(:METHOD)%",
+					"request_id":                       "%REQ(X-REQUEST-ID)%",
+					"type":                             "{{.}}",
+					"downstream_remote_address":        "%DOWNSTREAM_REMOTE_ADDRESS%",
+					"downstream_local_address":         "%DOWNSTREAM_LOCAL_ADDRESS%",
+					"downstream_direct_remote_address": "%DOWNSTREAM_DIRECT_REMOTE_ADDRESS%",
+					"domain":                           "%REQ(HOST?:AUTHORITY)%",
+					"upstream_host":                    "%UPSTREAM_HOST%",
+					"upstream_local_address":           "%UPSTREAM_LOCAL_ADDRESS%",
+					"upstream_service_time":            "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%",
+					"route_name":                       "%ROUTE_NAME%",
+				},
+			},
+			Type: &AccessLogType,
+		},
+	}
+
 	It("should read Gateway API resources from YAML", func() {
 		resources := GatewayAPIResources()
 		Expect(resources.namespace.Name).To(Equal("tigera-gateway"))
@@ -748,7 +785,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(*ep4.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP).To(Equal(lbIP))
 	})
 
-	It("should not deploy waf-http-filter for open-source", func() {
+	It("should not deploy waf-http-filter or l7-log-collector for open-source", func() {
 		installation := &operatorv1.InstallationSpec{
 			Variant: operatorv1.Calico,
 		}
@@ -794,7 +831,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(envoyDeployment).ToNot(BeNil())
 
 		Expect(envoyDeployment.Pod).ToNot(BeNil())
-		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(2))
+		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(3))
 		Expect(envoyDeployment.Pod.Volumes[0].Name).To(Equal("var-log-calico"))
 		Expect(envoyDeployment.Pod.Volumes[0].HostPath.Path).To(Equal("/var/log/calico"))
 		Expect(envoyDeployment.Pod.Volumes[1].Name).To(Equal("waf-http-filter"))
@@ -813,15 +850,36 @@ var _ = Describe("Gateway API rendering tests", func() {
 				MountPath: "/var/log/calico",
 			},
 		}))
+
+		Expect(envoyDeployment.InitContainers[1].Name).To(Equal("l7-log-collector"))
+		Expect(*envoyDeployment.InitContainers[1].RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
+		Expect(envoyDeployment.InitContainers[1].VolumeMounts).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers[1].VolumeMounts).To(ContainElements([]corev1.VolumeMount{
+			{
+				Name:      "access-logs",
+				MountPath: "/access_logs",
+			},
+			{
+				Name:      "felix-sync",
+				MountPath: "/var/run/felix",
+			},
+		}))
+
 		// logger gateway name and namespace are set from the k8s downward api pod metadata.
 		Expect(envoyDeployment.InitContainers[0].Env).To(ContainElements(GatewayNameEnvVar, GatewayNamespaceEnvVar))
 
 		Expect(envoyDeployment.Container).ToNot(BeNil())
-		Expect(envoyDeployment.Container.VolumeMounts).To(HaveLen(1))
+		Expect(envoyDeployment.Container.VolumeMounts).To(HaveLen(2))
 		Expect(envoyDeployment.Container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
 			Name:      "waf-http-filter",
 			MountPath: "/var/run/waf-http-filter",
 		}))
+		Expect(envoyDeployment.Container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+			Name:      "access-logs",
+			MountPath: "/access_logs",
+		}))
+
+		Expect(proxy.Spec.Telemetry.AccessLog.Settings).To(Equal(AccessLogSettings))
 	})
 
 	It("should deploy waf-http-filter for Enterprise when using a custom proxy", func() {
@@ -910,7 +968,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
 		Expect(envoyDeployment).ToNot(BeNil())
 
-		Expect(envoyDeployment.InitContainers).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers).To(HaveLen(3))
 		Expect(envoyDeployment.InitContainers[0].Name).To(Equal("some-other-sidecar"))
 		Expect(envoyDeployment.InitContainers[1].Name).To(Equal("waf-http-filter"))
 		Expect(*envoyDeployment.InitContainers[1].RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
@@ -926,6 +984,20 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}))
 
+		Expect(envoyDeployment.InitContainers[2].Name).To(Equal("l7-log-collector"))
+		Expect(*envoyDeployment.InitContainers[2].RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
+		Expect(envoyDeployment.InitContainers[2].VolumeMounts).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers[2].VolumeMounts).To(ContainElements([]corev1.VolumeMount{
+			{
+				Name:      "access-logs",
+				MountPath: "/access_logs",
+			},
+			{
+				Name:      "felix-sync",
+				MountPath: "/var/run/felix",
+			},
+		}))
+
 		Expect(envoyDeployment.Container).ToNot(BeNil())
 		Expect(envoyDeployment.Container.VolumeMounts).To(ContainElements(
 			corev1.VolumeMount{
@@ -934,17 +1006,23 @@ var _ = Describe("Gateway API rendering tests", func() {
 			}, corev1.VolumeMount{
 				Name:      "waf-http-filter",
 				MountPath: "/var/run/waf-http-filter",
+			}, corev1.VolumeMount{
+				Name:      "access-logs",
+				MountPath: "/access_logs",
 			},
 		))
 
 		Expect(envoyDeployment.Pod).ToNot(BeNil())
-		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(3))
+		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(4))
 		Expect(envoyDeployment.Pod.Volumes[0].Name).To(Equal("some-other-volume"))
 		Expect(envoyDeployment.Pod.Volumes[0].EmptyDir).ToNot(BeNil())
 		Expect(envoyDeployment.Pod.Volumes[1].Name).To(Equal("var-log-calico"))
 		Expect(envoyDeployment.Pod.Volumes[1].HostPath.Path).To(Equal("/var/log/calico"))
 		Expect(envoyDeployment.Pod.Volumes[2].Name).To(Equal("waf-http-filter"))
 		Expect(envoyDeployment.Pod.Volumes[2].EmptyDir).ToNot(BeNil())
+		Expect(envoyDeployment.Pod.Volumes[3].Name).To(Equal("access-logs"))
+		Expect(envoyDeployment.Pod.Volumes[3].EmptyDir).ToNot(BeNil())
 
+		Expect(proxy.Spec.Telemetry.AccessLog.Settings).To(Equal(AccessLogSettings))
 	})
 })

@@ -81,6 +81,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -347,6 +348,9 @@ func secondaryResources() []client.Object {
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: common.CalicoNamespace}},
+
+		// We care about the Goldmane Service for providing host aliases to calico/node.
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: goldmane.GoldmaneServiceName, Namespace: common.CalicoNamespace}},
 	}
 }
 
@@ -1238,13 +1242,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	components := []render.Component{}
 
-	namespaceCfg := &render.NamespaceConfiguration{
-		Installation: &instance.Spec,
-		PullSecrets:  pullSecrets,
-	}
-	// Render namespaces for Calico and Enterprise components.
-	components = append(components, render.Namespaces(namespaceCfg))
-
 	if newActiveCM != nil && !installationMarkedForDeletion {
 		log.Info("adding active configmap")
 		components = append(components, render.NewPassthrough(newActiveCM))
@@ -1387,6 +1384,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Create a component handler to create or update the rendered components.
+	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
+
+	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
+	namespaceCfg := &render.NamespaceConfiguration{
+		Installation: &instance.Spec,
+		PullSecrets:  pullSecrets,
+	}
+	if err := handler.CreateOrUpdateOrDelete(ctx, render.Namespaces(namespaceCfg), nil); err != nil {
+		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Fetch any existing default BGPConfiguration object.
 	bgpConfiguration := &crdv1.BGPConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
@@ -1416,7 +1426,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Users can override this with explicit configuration in the Installation resource, but using the operator as
 	// a baseline is a reasonable default.
 	operatorDeployment := &appsv1.Deployment{}
-	defaultDNSPolicy := corev1.DNSClusterFirstWithHostNet
+	defaultDNSPolicy := corev1.DNSDefault
 	var defaultDNSConfig *corev1.PodDNSConfig
 	if err := r.client.Get(ctx, common.OperatorKey(), operatorDeployment); err != nil {
 		if !apierrors.IsNotFound(err) {
@@ -1427,6 +1437,26 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	} else {
 		defaultDNSPolicy = operatorDeployment.Spec.Template.Spec.DNSPolicy
 		defaultDNSConfig = operatorDeployment.Spec.Template.Spec.DNSConfig
+	}
+
+	// Get the Goldmane Service in order to find its cluster IP.
+	goldmaneIP := ""
+	if goldmaneRunning {
+		goldmaneService := &corev1.Service{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: goldmane.GoldmaneServiceName, Namespace: common.CalicoNamespace}, goldmaneService); err != nil {
+			if !apierrors.IsNotFound(err) {
+				r.status.SetDegraded(operator.ResourceReadError, "Unable to read Goldmane Service", err, reqLogger)
+				return reconcile.Result{}, err
+			} else {
+				// Service not found - Goldmane is probably still starting. Wait for it to appear. This helps prevent us from rolling out calico/node twice
+				// during initial installation - once when we first Reconcile and again when we detect the Goldmane Service, which triggers
+				// us adding host aliases to the calico/node DaemonSet.
+				r.status.SetDegraded(operator.ResourceNotFound, "Goldmane enabled, waiting for Service to receive an IP", nil, reqLogger)
+				return reconcile.Result{}, nil
+			}
+		} else {
+			goldmaneIP = goldmaneService.Spec.ClusterIP
+		}
 	}
 
 	// Build a configuration for rendering calico/node.
@@ -1441,6 +1471,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ClusterDomain:                 r.clusterDomain,
 		DefaultDNSPolicy:              defaultDNSPolicy,
 		DefaultDNSConfig:              defaultDNSConfig,
+		GoldmaneIP:                    goldmaneIP,
 		NodeReporterMetricsPort:       nodeReporterMetricsPort,
 		BGPLayouts:                    bgpLayout,
 		NodeAppArmorProfile:           nodeAppArmorProfile,
@@ -1534,8 +1565,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Create a component handler to create or update the rendered components.
-	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 			r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

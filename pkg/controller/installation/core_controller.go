@@ -1236,8 +1236,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
-	components := []render.Component{}
+	// Create a component handler to create or update the rendered components.
+	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
 
+	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
+	namespaceCfg := &render.NamespaceConfiguration{
+		Installation: &instance.Spec,
+		PullSecrets:  pullSecrets,
+	}
+	if err := handler.CreateOrUpdateOrDelete(ctx, render.Namespaces(namespaceCfg), nil); err != nil {
+		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating namespaces", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Build the list of components to render, in rendering order.
+	components := []render.Component{}
 	if newActiveCM != nil && !installationMarkedForDeletion {
 		log.Info("adding active configmap")
 		components = append(components, render.NewPassthrough(newActiveCM))
@@ -1378,19 +1391,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			reqLogger.Info("Removing finalizers from objects that are wrongly marked for deletion")
 			components = append(components, render.NewPassthrough(needsCleanup...))
 		}
-	}
-
-	// Create a component handler to create or update the rendered components.
-	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
-
-	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
-	namespaceCfg := &render.NamespaceConfiguration{
-		Installation: &instance.Spec,
-		PullSecrets:  pullSecrets,
-	}
-	if err := handler.CreateOrUpdateOrDelete(ctx, render.Namespaces(namespaceCfg), nil); err != nil {
-		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-		return reconcile.Result{}, err
 	}
 
 	// Fetch any existing default BGPConfiguration object.

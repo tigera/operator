@@ -21,8 +21,9 @@ import (
 	"net"
 	"net/url"
 
-	operatorurl "github.com/tigera/operator/pkg/url"
 	"golang.org/x/net/http/httpproxy"
+
+	operatorurl "github.com/tigera/operator/pkg/url"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -240,12 +241,33 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 	var policyRules []rbacv1.PolicyRule
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		policyRules = append(policyRules, rbacv1.PolicyRule{
-			APIGroups: []string{""},
-			Resources: []string{"users", "groups", "serviceaccounts"},
-			Verbs:     []string{"impersonate"},
-		})
-
+		if c.cfg.ManagementClusterConnection.Spec.Impersonation != nil && len(c.cfg.ManagementClusterConnection.Spec.Impersonation.Users) > 0 {
+			policyRules = append(policyRules,
+				rbacv1.PolicyRule{
+					APIGroups:     []string{""},
+					Resources:     []string{"users"},
+					ResourceNames: c.cfg.ManagementClusterConnection.Spec.Impersonation.Users,
+					Verbs:         []string{"impersonate"},
+				})
+		}
+		if c.cfg.ManagementClusterConnection.Spec.Impersonation != nil && len(c.cfg.ManagementClusterConnection.Spec.Impersonation.Groups) > 0 {
+			policyRules = append(policyRules,
+				rbacv1.PolicyRule{
+					APIGroups:     []string{""},
+					Resources:     []string{"groups"},
+					ResourceNames: c.cfg.ManagementClusterConnection.Spec.Impersonation.Groups,
+					Verbs:         []string{"impersonate"},
+				})
+		}
+		if c.cfg.ManagementClusterConnection.Spec.Impersonation != nil && len(c.cfg.ManagementClusterConnection.Spec.Impersonation.ServiceAccounts) > 0 {
+			policyRules = append(policyRules,
+				rbacv1.PolicyRule{
+					APIGroups:     []string{""},
+					Resources:     []string{"serviceaccounts"},
+					ResourceNames: c.cfg.ManagementClusterConnection.Spec.Impersonation.ServiceAccounts,
+					Verbs:         []string{"impersonate"},
+				})
+		}
 		policyRules = append(policyRules, rulesForManagementClusterRequests(c.cfg.OpenShift)...)
 
 		if c.cfg.OpenShift {

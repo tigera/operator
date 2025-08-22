@@ -67,6 +67,8 @@ const (
 	CalicoNodeObjectName          = "calico-node"
 	CalicoCNIPluginObjectName     = "calico-cni-plugin"
 	BPFVolumeName                 = "bpffs"
+
+	goldmaneDomainName = "goldmane.calico-system.svc"
 )
 
 var (
@@ -967,7 +969,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	if c.cfg.GoldmaneIP != "" {
 		hostAliases = []corev1.HostAlias{
 			{
-				Hostnames: []string{"goldmane.calico-system.svc"},
+				Hostnames: []string{goldmaneDomainName},
 				IP:        c.cfg.GoldmaneIP,
 			},
 		}
@@ -1470,7 +1472,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv,
 			corev1.EnvVar{
 				Name:  "FELIX_FLOWLOGSGOLDMANESERVER",
-				Value: "goldmane.calico-system.svc:7443",
+				Value: fmt.Sprintf("%s:7443", goldmaneDomainName),
 			},
 			corev1.EnvVar{
 				Name:  "FELIX_FLOWLOGSFLUSHINTERVAL",

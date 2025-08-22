@@ -52,6 +52,43 @@ func (m *matchObject) NegatedFailureMessage(actual any) (message string) {
 
 var _ = Describe("Gateway API rendering tests", func() {
 
+	var AccessLogSettings = []envoyapi.ProxyAccessLogSetting{
+		{
+			Sinks: []envoyapi.ProxyAccessLogSink{
+				{
+					Type: envoyapi.ProxyAccessLogSinkTypeFile,
+					File: &envoyapi.FileEnvoyProxyAccessLog{
+						Path: "/access_logs/access.log",
+					},
+				},
+			},
+			Format: &envoyapi.ProxyAccessLogFormat{
+				JSON: map[string]string{
+					"reporter":                         "gateway",
+					"start_time":                       "%START_TIME%",
+					"duration":                         "%DURATION%",
+					"response_code":                    "%RESPONSE_CODE%",
+					"bytes_sent":                       "%BYTES_SENT%",
+					"bytes_received":                   "%BYTES_RECEIVED%",
+					"user_agent":                       "%REQ(USER-AGENT)%",
+					"request_path":                     "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%",
+					"request_method":                   "%REQ(:METHOD)%",
+					"request_id":                       "%REQ(X-REQUEST-ID)%",
+					"type":                             "{{.}}",
+					"downstream_remote_address":        "%DOWNSTREAM_REMOTE_ADDRESS%",
+					"downstream_local_address":         "%DOWNSTREAM_LOCAL_ADDRESS%",
+					"downstream_direct_remote_address": "%DOWNSTREAM_DIRECT_REMOTE_ADDRESS%",
+					"domain":                           "%REQ(HOST?:AUTHORITY)%",
+					"upstream_host":                    "%UPSTREAM_HOST%",
+					"upstream_local_address":           "%UPSTREAM_LOCAL_ADDRESS%",
+					"upstream_service_time":            "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%",
+					"route_name":                       "%ROUTE_NAME%",
+				},
+			},
+			Type: &AccessLogType,
+		},
+	}
+
 	It("should read Gateway API resources from YAML", func() {
 		resources := GatewayAPIResources()
 		Expect(resources.namespace.Name).To(Equal("tigera-gateway"))
@@ -841,6 +878,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 			Name:      "access-logs",
 			MountPath: "/access_logs",
 		}))
+
+		Expect(proxy.Spec.Telemetry.AccessLog.Settings).To(Equal(AccessLogSettings))
 	})
 
 	It("should deploy waf-http-filter for Enterprise when using a custom proxy", func() {
@@ -983,5 +1022,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(envoyDeployment.Pod.Volumes[2].EmptyDir).ToNot(BeNil())
 		Expect(envoyDeployment.Pod.Volumes[3].Name).To(Equal("access-logs"))
 		Expect(envoyDeployment.Pod.Volumes[3].EmptyDir).ToNot(BeNil())
+
+		Expect(proxy.Spec.Telemetry.AccessLog.Settings).To(Equal(AccessLogSettings))
 	})
 })

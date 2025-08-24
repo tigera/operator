@@ -303,24 +303,6 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
 
-				expectedCNIEnv := []corev1.EnvVar{
-					{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
-					{Name: "SLEEP", Value: "false"},
-					{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
-					{
-						Name: "CNI_NETWORK_CONFIG",
-						ValueFrom: &corev1.EnvVarSource{
-							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-								Key: "config",
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "cni-config",
-								},
-							},
-						},
-					},
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
-
 				// Verify volumes.
 				fileOrCreate := corev1.HostPathFileOrCreate
 				dirOrCreate := corev1.HostPathDirectoryOrCreate
@@ -374,12 +356,6 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
-
-				expectedCNIVolumeMounts := []corev1.VolumeMount{
-					{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
-					{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 				// Verify tolerations.
 				Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
@@ -475,9 +451,6 @@ var _ = Describe("Node rendering tests", func() {
 
 				rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "NO_DEFAULT_POOLS", "true")
 
-				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
-				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
-
 				// Node image override results in correct image.
 				calicoNodeImage := fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(calicoNodeImage))
@@ -519,24 +492,6 @@ var _ = Describe("Node rendering tests", func() {
 				// Expect the SECURITY_GROUP env variables to not be set
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
-
-				expectedCNIEnv := []corev1.EnvVar{
-					{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
-					{Name: "SLEEP", Value: "false"},
-					{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
-					{
-						Name: "CNI_NETWORK_CONFIG",
-						ValueFrom: &corev1.EnvVarSource{
-							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-								Key: "config",
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "cni-config",
-								},
-							},
-						},
-					},
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 				// Verify volumes.
 				fileOrCreate := corev1.HostPathFileOrCreate
@@ -591,12 +546,6 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
-
-				expectedCNIVolumeMounts := []corev1.VolumeMount{
-					{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
-					{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 				// Verify tolerations.
 				Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
@@ -977,12 +926,6 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
-
-				expectedCNIVolumeMounts := []corev1.VolumeMount{
-					{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
-					{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 			})
 
 			It("should render all resources when using Calico CNI on EKS", func() {
@@ -1069,9 +1012,6 @@ var _ = Describe("Node rendering tests", func() {
 
 				rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "NO_DEFAULT_POOLS", "true")
 
-				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
-				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
-
 				// Node image override results in correct image.
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
@@ -1112,24 +1052,6 @@ var _ = Describe("Node rendering tests", func() {
 				// Expect the SECURITY_GROUP env variables to not be set
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
-
-				expectedCNIEnv := []corev1.EnvVar{
-					{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
-					{Name: "SLEEP", Value: "false"},
-					{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
-					{
-						Name: "CNI_NETWORK_CONFIG",
-						ValueFrom: &corev1.EnvVarSource{
-							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-								Key: "config",
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "cni-config",
-								},
-							},
-						},
-					},
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
 
 				// Verify volumes.
 				fileOrCreate := corev1.HostPathFileOrCreate
@@ -1185,12 +1107,6 @@ var _ = Describe("Node rendering tests", func() {
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
-				expectedCNIVolumeMounts := []corev1.VolumeMount{
-					{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
-					{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
-
 				// Verify tolerations.
 				Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
@@ -1230,10 +1146,6 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The pod template should have node critical priority
 				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
-
-				// CNI install container should not be present.
-				//	cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
-				//	Expect(cniContainer).To(BeNil())
 
 				verifyInitContainers(ds, amazonVPCInstalllation)
 				// Verify env
@@ -1506,9 +1418,6 @@ var _ = Describe("Node rendering tests", func() {
 
 				rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "NO_DEFAULT_POOLS", "true")
 
-				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
-				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
-
 				// Node image override results in correct image.
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
@@ -1549,25 +1458,6 @@ var _ = Describe("Node rendering tests", func() {
 				// Expect the SECURITY_GROUP env variables to not be set
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_POD_SECURITY_GROUP")})))
-
-				expectedCNIEnv := []corev1.EnvVar{
-					{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
-					{Name: "SLEEP", Value: "false"},
-					{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
-					{
-						Name: "CNI_NETWORK_CONFIG",
-						ValueFrom: &corev1.EnvVarSource{
-							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-								Key: "config",
-								LocalObjectReference: corev1.LocalObjectReference{
-									Name: "cni-config",
-								},
-							},
-						},
-					},
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))
-
 				// Verify volumes.
 				fileOrCreate := corev1.HostPathFileOrCreate
 				dirOrCreate := corev1.HostPathDirectoryOrCreate
@@ -1621,12 +1511,6 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
-
-				expectedCNIVolumeMounts := []corev1.VolumeMount{
-					{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
-					{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
-				}
-				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 
 				// Verify tolerations.
 				Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
@@ -3068,9 +2952,6 @@ var _ = Describe("Node rendering tests", func() {
 
 				rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "NO_DEFAULT_POOLS", "true")
 
-				cniContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
-				rtest.ExpectEnv(cniContainer.Env, "CNI_NET_DIR", "/etc/cni/net.d")
-
 				// Node image override results in correct image.
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
@@ -3109,25 +2990,6 @@ var _ = Describe("Node rendering tests", func() {
 				}
 				expectedNodeEnv = configureExpectedNodeEnvIPVersions(expectedNodeEnv, defaultInstance, enableIPv4, enableIPv6)
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
-
-				/*
-					expectedCNIEnv := []corev1.EnvVar{
-						{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
-						{Name: "SLEEP", Value: "false"},
-						{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
-						{
-							Name: "CNI_NETWORK_CONFIG",
-							ValueFrom: &corev1.EnvVarSource{
-								ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
-									Key: "config",
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "cni-config",
-									},
-								},
-							},
-						},
-					}
-					Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni").Env).To(ConsistOf(expectedCNIEnv))*/
 
 				// Verify readiness and liveness probes.
 				verifyProbesAndLifecycle(ds, false, false)

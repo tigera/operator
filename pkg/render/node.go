@@ -931,10 +931,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
-	// Mount the bpf fs for enterprise as we use BPF for some EE features.
-	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		initContainers = append(initContainers, c.bpfBootstrapInitContainer())
-	}
+	// Mount the bpf fs for the node container.
+	// This is required for the BPF dataplane, but also for the other dataplanes
+	// as we need to cleanup the BPF state when switching dataplanes.
+	initContainers = append(initContainers, c.bpfBootstrapInitContainer())
 
 	if c.runAsNonPrivileged() {
 		initContainers = append(initContainers, c.hostPathInitContainer())
@@ -1070,16 +1070,14 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		)
 	}
 
-	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		volumes = append(volumes,
-			// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
-			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
-			// Volume for the bpffs itself, used by the main node container.
-			corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
-			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
-			corev1.Volume{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
-		)
-	}
+	volumes = append(volumes,
+		// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
+		corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
+		// Volume for the bpffs itself, used by the main node container.
+		corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+		// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
+		corev1.Volume{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
+	)
 
 	if c.vppDataplaneEnabled() {
 		volumes = append(volumes,
@@ -1235,8 +1233,12 @@ func (c *nodeComponent) bpfBootstrapInitContainer() corev1.Container {
 	}
 
 	command := []string{CalicoNodeObjectName, "-init"}
+	// If BPF is not enabled, then we run the init container in best-effort mode.
+	// This means that it will not fail if the BPF filesystem is not mounted, but
+	// it will still attempt to mount it if it is available. This is useful when we
+	// are running calico in test environments like KinD or K3s.
 	if !c.cfg.Installation.BPFEnabled() {
-		command = append(command, "-skip-cgroup")
+		command = append(command, "-best-effort")
 	}
 	return corev1.Container{
 		Name:            "ebpf-bootstrap",
@@ -1370,9 +1372,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		)
 	}
-	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName})
-	}
+	nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName})
 	if c.vppDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})
 	}

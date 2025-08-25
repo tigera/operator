@@ -1442,20 +1442,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Get the Goldmane Service in order to find its cluster IP.
 	goldmaneIP := ""
 	if goldmaneRunning {
-		goldmaneService := &corev1.Service{}
-		if err := r.client.Get(ctx, types.NamespacedName{Name: goldmane.GoldmaneServiceName, Namespace: common.CalicoNamespace}, goldmaneService); err != nil {
-			if !apierrors.IsNotFound(err) {
-				r.status.SetDegraded(operator.ResourceReadError, "Unable to read Goldmane Service", err, reqLogger)
-				return reconcile.Result{}, err
-			} else {
-				// Service not found - Goldmane is probably still starting. Wait for it to appear. This helps prevent us from rolling out calico/node twice
-				// during initial installation - once when we first Reconcile and again when we detect the Goldmane Service, which triggers
-				// us adding host aliases to the calico/node DaemonSet.
-				r.status.SetDegraded(operator.ResourceNotFound, "Goldmane enabled, waiting for Service to receive an IP", nil, reqLogger)
-				return reconcile.Result{}, nil
-			}
-		} else {
-			goldmaneIP = goldmaneService.Spec.ClusterIP
+		goldmaneIP, err = utils.ResolveClusterIP(ctx, r.client, goldmane.GoldmaneServiceName, common.CalicoNamespace)
+		if apierrors.IsNotFound(err) {
+			// Service not found - Goldmane is probably still starting. Wait for it to appear. This helps prevent us from rolling out calico/node twice
+			// during initial installation - once when we first Reconcile and again when we detect the Goldmane Service, which triggers
+			// us adding host aliases to the calico/node DaemonSet.
+			r.status.SetDegraded(operator.ResourceNotFound, "Goldmane enabled, waiting for Service to receive an IP", nil, reqLogger)
+			return reconcile.Result{}, nil
+		} else if err != nil {
+			// Some other error - degrade.
+			r.status.SetDegraded(operator.ResourceReadError, "Unable to read Goldmane Service", err, reqLogger)
+			return reconcile.Result{}, err
 		}
 	}
 

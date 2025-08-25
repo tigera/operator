@@ -106,13 +106,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret.SecretName).To(Equal(render.ManagerInternalTLSSecretName))
 
-		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(3))
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(4))
 		uiAPIs := deployment.Spec.Template.Spec.Containers[0]
 		voltron := deployment.Spec.Template.Spec.Containers[1]
-		manager := deployment.Spec.Template.Spec.Containers[2]
+		dashboard := deployment.Spec.Template.Spec.Containers[2]
+		manager := deployment.Spec.Template.Spec.Containers[3]
 
 		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/manager:" + components.ComponentManager.Version))
 		Expect(uiAPIs.Image).Should(Equal(components.TigeraRegistry + "tigera/ui-apis:" + components.ComponentUIAPIs.Version))
+		Expect(dashboard.Image).Should(Equal(components.TigeraRegistry + "tigera/ui-apis:" + components.ComponentUIAPIs.Version))
 		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
 
 		// manager container
@@ -326,6 +328,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"felixconfigurations",
 				},
@@ -382,12 +389,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{
 					"flows",
 					"flowlogs",
+					"flowlogs-multi-cluster",
 					"bgplogs",
 					"auditlogs",
 					"dnsflows",
 					"dnslogs",
+					"dnslogs-multi-cluster",
 					"l7flows",
 					"l7logs",
+					"l7logs-multi-cluster",
 					"events",
 					"processes",
 				},
@@ -429,6 +439,24 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	})
 
+	It("should render dashboard sidecar and route for enterprise", func() {
+		inst := &operatorv1.InstallationSpec{Variant: operatorv1.TigeraSecureEnterprise, ControlPlaneReplicas: &replicas}
+		resources := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            inst,
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+		})
+
+		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(4))
+		dashboard := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.DashboardAPIName)
+		Expect(dashboard).NotTo(BeNil())
+		rtest.ExpectEnv(dashboard.Env, "LISTEN_ADDR", fmt.Sprintf("127.0.0.1:%s", render.DashboardAPIPort))
+	})
+
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {
 		resources := renderObjects(renderConfig{
 			oidc:                    true,
@@ -446,7 +474,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Value:     "https://127.0.0.1/dex",
 			ValueFrom: nil,
 		}
-		Expect(d.Spec.Template.Spec.Containers[2].Env).To(ContainElement(oidcEnvVar))
+		Expect(d.Spec.Template.Spec.Containers[3].Env).To(ContainElement(oidcEnvVar))
 	})
 
 	Describe("public ca bundle", func() {
@@ -539,7 +567,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		By("configuring the manager deployment")
 		deployment := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		manager := deployment.Spec.Template.Spec.Containers[2]
+		manager := deployment.Spec.Template.Spec.Containers[3]
 		Expect(manager.Name).To(Equal("tigera-manager"))
 		rtest.ExpectEnv(manager.Env, "ENABLE_MULTI_CLUSTER_MANAGEMENT", "true")
 
@@ -626,6 +654,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"felixconfigurations",
 				},
@@ -687,12 +720,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{
 					"flows",
 					"flowlogs",
+					"flowlogs-multi-cluster",
 					"bgplogs",
 					"auditlogs",
 					"dnsflows",
 					"dnslogs",
+					"dnslogs-multi-cluster",
 					"l7flows",
 					"l7logs",
+					"l7logs-multi-cluster",
 					"events",
 					"processes",
 				},
@@ -904,7 +940,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		d, ok := rtest.GetResource(resources, "tigera-manager", render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
 
-		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
 
 		container := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-voltron")
 		Expect(container).NotTo(BeNil())

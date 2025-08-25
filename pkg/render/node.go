@@ -67,6 +67,8 @@ const (
 	CalicoNodeObjectName          = "calico-node"
 	CalicoCNIPluginObjectName     = "calico-cni-plugin"
 	BPFVolumeName                 = "bpffs"
+
+	goldmaneDomainName = "goldmane.calico-system.svc"
 )
 
 var (
@@ -100,6 +102,9 @@ type NodeConfiguration struct {
 	TLS             *TyphaNodeTLS
 	ClusterDomain   string
 	Nameservers     []string
+
+	// Goldmane IP, to avoid DNS resolution using kube-dns.
+	GoldmaneIP string
 
 	// Optional fields.
 	LogCollector            *operatorv1.LogCollector
@@ -960,6 +965,16 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		annotations[bgpBindModeHashAnnotation] = rmeta.AnnotationHash(c.cfg.BindMode)
 	}
 
+	var hostAliases []corev1.HostAlias
+	if c.cfg.GoldmaneIP != "" {
+		hostAliases = []corev1.HostAlias{
+			{
+				Hostnames: []string{goldmaneDomainName},
+				IP:        c.cfg.GoldmaneIP,
+			},
+		}
+	}
+
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet
 	// with its own name so as to not conflict.
 	ds := appsv1.DaemonSet{
@@ -977,10 +992,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 					Tolerations:                   rmeta.TolerateAll,
 					Affinity:                      affinity,
 					ImagePullSecrets:              c.cfg.Installation.ImagePullSecrets,
+					HostAliases:                   hostAliases,
 					ServiceAccountName:            CalicoNodeObjectName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
-					DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
+					DNSPolicy:                     corev1.DNSDefault,
 					InitContainers:                initContainers,
 					Containers:                    []corev1.Container{nodeContainer},
 					Volumes:                       c.nodeVolumes(),
@@ -1450,12 +1466,13 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "NO_DEFAULT_POOLS", Value: "true"},
 	}
 
-	// Only append goldmane variables if goldmane is running.
-	if c.cfg.GoldmaneRunning {
+	// Only append goldmane variables if goldmane is running and we have a valid IP address,
+	// as we rely on an explicitly configured host alias to resolve the goldmane service.
+	if c.cfg.GoldmaneRunning && c.cfg.GoldmaneIP != "" {
 		nodeEnv = append(nodeEnv,
 			corev1.EnvVar{
 				Name:  "FELIX_FLOWLOGSGOLDMANESERVER",
-				Value: "goldmane.calico-system.svc:7443",
+				Value: fmt.Sprintf("%s:7443", goldmaneDomainName),
 			},
 			corev1.EnvVar{
 				Name:  "FELIX_FLOWLOGSFLUSHINTERVAL",

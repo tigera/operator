@@ -210,7 +210,7 @@ spec:
                   NoDelay - Felix does not introduce any delay to the packets. DNS rules may not have been programmed by the time
                   the first packet traverses the policy rules. Client applications need to handle reconnection attempts if initial
                   connection attempts fail. This may be problematic for some applications or for very low DNS TTLs.
-                  [Default: Inline]
+                  [Default: DelayDeniedPacket]
                 type: string
               bpfDSROptoutCIDRs:
                 description: |-
@@ -1001,6 +1001,16 @@ spec:
                   traces in the flow logs. Any policy updates that impact a flow will be reflected in the
                   pending_policies field, offering a near-real-time view of policy changes across flows.
                   [Default: Continuous]
+                type: string
+              flowLogsPolicyScope:
+                description: |-
+                  FlowLogsPolicyScope controls which policies are included in flow logs.
+                  AllPolicies - Processes both transit policies for the local node and
+                  endpoint policies derived from packet source/destination IPs. Provides comprehensive
+                  visibility into all policy evaluations but increases log volume.
+                  EndpointPolicies - Processes only policies for endpoints identified as the source
+                  or destination of the packet (whether workload or host endpoints).
+                  [Default: EndpointPolicies]
                 type: string
               flowLogsPositionFilePath:
                 description: |-

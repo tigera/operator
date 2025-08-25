@@ -48,7 +48,7 @@ type KeyPairInterface interface {
 	UseCertificateManagement() bool
 	// BYO returns true if this KeyPair was provided by the user. If BYO is true, UseCertificateManagement is false.
 	BYO() bool
-	InitContainer(namespace string) corev1.Container
+	InitContainer(namespace string, securityContext *corev1.SecurityContext) corev1.Container
 	VolumeMount(osType meta.OSType) corev1.VolumeMount
 	VolumeMountKeyFilePath() string
 	VolumeMountCertificateFilePath() string

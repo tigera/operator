@@ -447,10 +447,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 		}
 	}
-
+	sc := securitycontext.NewNonRootContext()
 	var initContainers []corev1.Container
 	if c.cfg.ControllerKeyPair != nil && c.cfg.ControllerKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.ControllerKeyPair.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.ControllerKeyPair.InitContainer(c.cfg.Namespace, sc))
 	}
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
@@ -483,7 +483,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 							},
 						},
 					},
-					SecurityContext: securitycontext.NewNonRootContext(),
+					SecurityContext: sc,
 					VolumeMounts:    volumeMounts,
 				},
 			},
@@ -632,8 +632,9 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			})
 	}
 	var initContainers []corev1.Container
+	sc := securitycontext.NewRootContext(c.cfg.OpenShift)
 	if c.cfg.ReporterKeyPair != nil && c.cfg.ReporterKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.ReporterKeyPair.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.ReporterKeyPair.InitContainer(c.cfg.Namespace, sc))
 	}
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
@@ -682,7 +683,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 						},
 
 						// On OpenShift reporter needs privileged access to write compliance reports to host path volume
-						SecurityContext: securitycontext.NewRootContext(c.cfg.OpenShift),
+						SecurityContext: sc,
 						VolumeMounts:    volumeMounts,
 					},
 				},
@@ -868,9 +869,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
 	}
+	sc := securitycontext.NewNonRootContext()
 	var initContainers []corev1.Container
 	if c.cfg.ServerKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.ServerKeyPair.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.ServerKeyPair.InitContainer(c.cfg.Namespace, sc))
 	}
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
@@ -922,7 +924,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						fmt.Sprintf("-certpath=%s", c.cfg.ServerKeyPair.VolumeMountCertificateFilePath()),
 						fmt.Sprintf("-keypath=%s", c.cfg.ServerKeyPair.VolumeMountKeyFilePath()),
 					},
-					SecurityContext: securitycontext.NewNonRootContext(),
+					SecurityContext: sc,
 					VolumeMounts: append(
 						c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 						c.cfg.ServerKeyPair.VolumeMount(c.SupportedOSType()),
@@ -1078,8 +1080,9 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			})
 	}
 	var initContainers []corev1.Container
+	sc := securitycontext.NewNonRootContext()
 	if c.cfg.SnapshotterKeyPair != nil && c.cfg.SnapshotterKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.SnapshotterKeyPair.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.SnapshotterKeyPair.InitContainer(c.cfg.Namespace, sc))
 	}
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
@@ -1112,7 +1115,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 							},
 						},
 					},
-					SecurityContext: securitycontext.NewNonRootContext(),
+					SecurityContext: sc,
 					VolumeMounts:    volumeMounts,
 				},
 			},
@@ -1285,8 +1288,9 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 	}
 
 	var initContainers []corev1.Container
+	sc := securitycontext.NewRootContext(false)
 	if c.cfg.BenchmarkerKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.BenchmarkerKeyPair.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.BenchmarkerKeyPair.InitContainer(c.cfg.Namespace, sc))
 	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1305,7 +1309,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 					Image:           c.benchmarkerImage,
 					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
-					SecurityContext: securitycontext.NewRootContext(false),
+					SecurityContext: sc,
 					VolumeMounts:    volMounts,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{

@@ -194,13 +194,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	nodeCA, err := certificateManager.GetCertificate(r.cli, render.NodeTLSSecretName, common.OperatorNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, log)
+		return reconcile.Result{}, err
+	}
+
 	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(goldmane.GoldmaneDeploymentName, r.cli,
 		common.OperatorNamespace(), false,
 		whisker.WhiskerBackendKeyPairSecret, render.VoltronLinseedPublicCert)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
 	}
-	trustedBundle.AddCertificates(keyPair)
+	trustedBundle.AddCertificates(keyPair, nodeCA)
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:       goldmane.GoldmaneNamespace,

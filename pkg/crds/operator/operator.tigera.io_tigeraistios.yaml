@@ -43,8 +43,8 @@ spec:
               properties:
                 istioStatus:
                   description:
-                    IstioStatus tracks the overall status of Istio dependent
-                    resources managed by the operator
+                    IstioStatus reports the overall status of Istio resources
+                    managed by the operator
                   type: string
               type: object
           type: object

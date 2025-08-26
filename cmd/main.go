@@ -407,6 +407,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		render.LogCollectorNamespace,
 		render.CSIDaemonSetNamespace,
 		render.ManagerNamespace,
+		render.TigeraIstioNamespace,
 	}
 	for _, ns := range badNamespaces {
 		if common.OperatorNamespace() == ns {

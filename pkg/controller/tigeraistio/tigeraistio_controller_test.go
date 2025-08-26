@@ -26,6 +26,8 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
@@ -50,6 +52,7 @@ var _ = Describe("tigeraistio controller tests", func() {
 		r := &ReconcileTigeraIstio{
 			Client: c,
 			scheme: scheme,
+			status: status.New(c, "tigeraistio", &common.VersionInfo{Major: 1, Minor: 25}),
 		}
 
 		req := reconcile.Request{NamespacedName: client.ObjectKey{Name: "default"}}
@@ -82,6 +85,7 @@ var _ = Describe("tigeraistio controller tests", func() {
 		r := &ReconcileTigeraIstio{
 			Client: c,
 			scheme: scheme,
+			status: status.New(c, "tigeraistio", &common.VersionInfo{Major: 1, Minor: 25}),
 		}
 
 		req := reconcile.Request{NamespacedName: client.ObjectKey{Name: "default"}}

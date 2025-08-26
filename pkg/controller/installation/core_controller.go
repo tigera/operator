@@ -396,6 +396,45 @@ func getActivePools(ctx context.Context, client client.Client) (*crdv1.IPPoolLis
 	return &filtered, nil
 }
 
+// autoDetectDefaultBPF checks whether the Operator can default to the BPF dataplane and install it automatically without user intervention.
+func autoDetectDefaultBPF(ctx context.Context, client client.Client, instance *operator.Installation) bool {
+	// Check if it's a new installation. `instance.Status.Computed` is set at the end of a successful reconcile. Thus, if it's
+	// nil, it's likely a new installation.
+	if instance == nil || instance.Status.Computed != nil {
+		return false
+	}
+
+	// linuxDataplane, bpfNetworkingBootstrap, and kubeProxyManagement shouldn't be set, or should be set to their default values.
+	calicoNetwork := instance.Spec.CalicoNetwork
+	if calicoNetwork != nil &&
+		((calicoNetwork.LinuxDataplane != nil && *calicoNetwork.LinuxDataplane != operator.LinuxDataplaneBPF) ||
+			(calicoNetwork.BPFNetworkBootstrap != nil && *calicoNetwork.BPFNetworkBootstrap != operator.BPFNetworkBootstrapEnabled) ||
+			(calicoNetwork.KubeProxyManagement != nil && *calicoNetwork.KubeProxyManagement != operator.KubeProxyManagementEnabled)) {
+		return false
+	}
+
+	// At the time of this implementation, we're avoiding managed platforms (EKS, GKE, AKS, OpenShift) as they often come with complex networking
+	// setups, automation layers, or restrictions that could lead to unintended behavior when applying BPF configurations automatically.
+	if !instance.Spec.KubernetesProvider.IsNone() {
+		return false
+	}
+
+	// Check if the cluster has the required resources.
+	_, err := utils.CheckBPFClusterResourcesReq(ctx, client)
+	if err != nil {
+		return false
+	}
+
+	// Check if it can retrieve kube-proxy DaemonSet and validate it's not managed.
+	_, err = utils.GetManageableKubeProxy(ctx, client)
+	if err != nil {
+		return false
+	}
+
+	log.V(1).Info("Defaulting dataplane to BPF, since the cluster meets the requirements.")
+	return true
+}
+
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
 func updateInstallationWithDefaults(ctx context.Context, client client.Client, instance *operator.Installation, provider operator.Provider) error {
 	// Determine the provider in use by combining any auto-detected value with any value
@@ -420,7 +459,14 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 		return fmt.Errorf("unable to list IPPools: %s", err.Error())
 	}
 
-	err = MergeAndFillDefaults(instance, awsNode, currentPools)
+	defaultBpfDataplane := autoDetectDefaultBPF(ctx, client, instance)
+
+	params := &fillDefaultsParams{
+		currentPools:        currentPools,
+		defaultBpfDataplane: &defaultBpfDataplane,
+	}
+
+	err = MergeAndFillDefaults(instance, awsNode, params)
 	if err != nil {
 		return err
 	}
@@ -429,18 +475,23 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 
 // MergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
 // populates defaults in the Installation instance.
-func MergeAndFillDefaults(i *operator.Installation, awsNode *appsv1.DaemonSet, currentPools *crdv1.IPPoolList) error {
+func MergeAndFillDefaults(i *operator.Installation, awsNode *appsv1.DaemonSet, params *fillDefaultsParams) error {
 	if awsNode != nil {
 		if err := updateInstallationForAWSNode(i, awsNode); err != nil {
 			return fmt.Errorf("could not resolve AWS node configuration: %s", err.Error())
 		}
 	}
 
-	return fillDefaults(i, currentPools)
+	return fillDefaults(i, params)
+}
+
+type fillDefaultsParams struct {
+	currentPools        *crdv1.IPPoolList
+	defaultBpfDataplane *bool
 }
 
 // fillDefaults populates the default values onto an Installation object.
-func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolList) error {
+func fillDefaults(instance *operator.Installation, params *fillDefaultsParams) error {
 	if len(instance.Spec.Variant) == 0 {
 		// Default to installing Calico.
 		instance.Spec.Variant = operator.Calico
@@ -522,6 +573,17 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 	}
 
+	// defaultBpfDataplane == true indicates that this is a new installation, and that automatic BPF installation can be set by default.
+	if params != nil && params.defaultBpfDataplane != nil && *params.defaultBpfDataplane {
+		// Set defaults for auto-installing BPF dataplane.
+		dpBPF := operator.LinuxDataplaneBPF
+		instance.Spec.CalicoNetwork.LinuxDataplane = &dpBPF
+		bpfNetworkEnabled := operator.BPFNetworkBootstrapEnabled
+		instance.Spec.CalicoNetwork.BPFNetworkBootstrap = &bpfNetworkEnabled
+		kpEnabled := operator.KubeProxyManagementEnabled
+		instance.Spec.CalicoNetwork.KubeProxyManagement = &kpEnabled
+	}
+
 	// Default dataplane is iptables.
 	if instance.Spec.CalicoNetwork.LinuxDataplane == nil {
 		dpIptables := operator.LinuxDataplaneIptables
@@ -579,8 +641,8 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 		// BPF dataplane requires IP autodetection even if we're not using Calico IPAM.
 		needIPv4Autodetection = true
 	}
-	if currentPools != nil {
-		for _, pool := range currentPools.Items {
+	if params != nil && params.currentPools != nil {
+		for _, pool := range params.currentPools.Items {
 			ip, _, err := net.ParseCIDR(pool.Spec.CIDR)
 			if err != nil {
 				return fmt.Errorf("failed to parse CIDR %s: %s", pool.Spec.CIDR, err)
@@ -1481,7 +1543,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
 	}
 	// Check if BPFNetworkBootstrap is Enabled and its requirements are met.
-	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(r.client, ctx, &instance.Spec)
+	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(ctx, r.client, &instance.Spec)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceValidationError, "bpfNetworkBootstrap is Enabled but the requirements are not met", err, reqLogger)
 		return reconcile.Result{}, err

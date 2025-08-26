@@ -357,14 +357,14 @@ GINKGO_ARGS?= -v -trace -r
 GINKGO_FOCUS?=.*
 
 .PHONY: ut
-ut: $(ENVOY_GATEWAY_RESOURCES)
+ut: $(ENVOY_GATEWAY_RESOURCES) istio_charts
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs: $(ENVOY_GATEWAY_RESOURCES)
+run-fvs: $(ENVOY_GATEWAY_RESOURCES) istio_charts
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'

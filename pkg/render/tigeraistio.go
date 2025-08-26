@@ -50,28 +50,20 @@ func TigeraIstioComponent(cfg *TigeraIstioConfig) Component {
 func (c *tigeraIstioComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Tigera Istio Namespace
-	objs := make([]client.Object, 1+len(c.cfg.Resources.Base)+len(c.cfg.Resources.Istiod)+
+	objs := make([]client.Object, 0, 1+len(c.cfg.Resources.Base)+len(c.cfg.Resources.Istiod)+
 		len(c.cfg.Resources.CNI)+len(c.cfg.Resources.ZTunnel))
-	objs[0] = CreateNamespace(
+	objs = append(objs, CreateNamespace(
 		TigeraIstioNamespace,
 		c.cfg.Installation.KubernetesProvider,
 		PSSPrivileged,
 		c.cfg.Installation.Azure,
-	)
+	))
 
 	// Append Istio resources in order: Base, Istiod, CNI, ZTunnel
-	idx := 1
-	for _, res := range [][]client.Object{
-		c.cfg.Resources.Base,
-		c.cfg.Resources.Istiod,
-		c.cfg.Resources.CNI,
-		c.cfg.Resources.ZTunnel,
-	} {
-		for _, obj := range res {
-			objs[idx] = obj
-			idx++
-		}
-	}
+	objs = append(objs, c.cfg.Resources.Base...)
+	objs = append(objs, c.cfg.Resources.Istiod...)
+	objs = append(objs, c.cfg.Resources.CNI...)
+	objs = append(objs, c.cfg.Resources.ZTunnel...)
 
 	return objs, nil
 }

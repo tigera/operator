@@ -220,8 +220,8 @@ type InstallationSpec struct {
 type BPFNetworkBootstrapType string
 
 const (
-	BPFNetworkAutoEnabled  BPFNetworkBootstrapType = "Enabled"
-	BPFNetworkAutoDisabled BPFNetworkBootstrapType = "Disabled"
+	BPFNetworkBootstrapEnabled  BPFNetworkBootstrapType = "Enabled"
+	BPFNetworkBootstrapDisabled BPFNetworkBootstrapType = "Disabled"
 )
 
 // KubeProxyManagementType specifies whether kube-proxy management is enabled.
@@ -1000,7 +1000,7 @@ func (installation *InstallationSpec) BPFNetworkBootstrapEnabled() bool {
 	return installation != nil &&
 		installation.CalicoNetwork != nil &&
 		installation.CalicoNetwork.BPFNetworkBootstrap != nil &&
-		*installation.CalicoNetwork.BPFNetworkBootstrap == BPFNetworkAutoEnabled
+		*installation.CalicoNetwork.BPFNetworkBootstrap == BPFNetworkBootstrapEnabled
 }
 
 func (installation *InstallationSpec) KubeProxyManagementEnabled() bool {

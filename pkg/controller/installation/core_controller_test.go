@@ -522,7 +522,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					VXLANMode:    crdv1.VXLANModeAlways,
 				},
 			})
-			Expect(MergeAndFillDefaults(installation, nil, &currentPools)).To(BeNil())
+			Expect(MergeAndFillDefaults(installation, nil, &fillDefaultsParams{currentPools: &currentPools})).To(BeNil())
 			Expect(installation.Spec.CalicoNetwork.NodeAddressAutodetectionV4.SkipInterface).Should(Equal("^br-.*"))
 			Expect(installation.Spec.CalicoNetwork.NodeAddressAutodetectionV6).Should(BeNil())
 		})
@@ -996,7 +996,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 					ipt := operator.LinuxDataplaneIptables
-					enabled := operator.BPFNetworkAutoEnabled
+					enabled := operator.BPFNetworkBootstrapEnabled
 					cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
 						LinuxDataplane:      &ipt,
 						BPFNetworkBootstrap: &enabled,
@@ -1019,7 +1019,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 					bpf := operator.LinuxDataplaneBPF
-					enabled := operator.BPFNetworkAutoEnabled
+					enabled := operator.BPFNetworkBootstrapEnabled
 					cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
 						LinuxDataplane:      &bpf,
 						BPFNetworkBootstrap: &enabled,
@@ -1061,7 +1061,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(install.Spec.CalicoNetwork).ToNot(BeNil())
 					Expect(install.Spec.CalicoNetwork.BPFNetworkBootstrap).ToNot(BeNil())
-					Expect(*install.Spec.CalicoNetwork.BPFNetworkBootstrap).To(Equal(operator.BPFNetworkAutoEnabled))
+					Expect(*install.Spec.CalicoNetwork.BPFNetworkBootstrap).To(Equal(operator.BPFNetworkBootstrapEnabled))
 					Expect(install.Spec.BPFNetworkBootstrapEnabled()).To(BeTrue())
 
 					By("Checking that the FelixConfiguration has BPF Enabled")
@@ -1134,8 +1134,74 @@ var _ = Describe("Testing core-controller installation", func() {
 					))
 				})
 			})
-		})
+			When("defaulting to BPF", func() {
+				dataplaneBPF := operator.LinuxDataplaneBPF
+				dataplaneIptables := operator.LinuxDataplaneIptables
+				bpfNetworkBootstrapDisabled := operator.BPFNetworkBootstrapDisabled
+				bpfNetworkBootstrapEnabled := operator.BPFNetworkBootstrapEnabled
+				kubeProxyManagementDisabled := operator.KubeProxyManagementDisabled
+				kubeProxyManagementEnabled := operator.KubeProxyManagementEnabled
 
+				createKubeProxy := func() {
+					createResource(
+						&appsv1.DaemonSet{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      utils.KubeProxyInstanceKey.Name,
+								Namespace: utils.KubeProxyInstanceKey.Namespace,
+							},
+						})
+				}
+
+				table.DescribeTable("auto-detect cluster status to defaulting BPF",
+					func(funcs []func(), installation *operator.Installation, shouldDefaulted bool) {
+						for _, f := range funcs {
+							f()
+						}
+						defaulted := autoDetectDefaultBPF(ctx, c, installation)
+						Expect(defaulted).To(Equal(shouldDefaulted))
+					},
+					table.Entry("all requirements met with empty installation",
+						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{}, true,
+					),
+					table.Entry("all requirements met with dataplane set to BPF",
+						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Spec: operator.InstallationSpec{CalicoNetwork: &operator.CalicoNetworkSpec{LinuxDataplane: &dataplaneBPF}}}, true,
+					),
+					table.Entry("all requirements met with bpfNetworkBootstrap enabled",
+						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Spec: operator.InstallationSpec{CalicoNetwork: &operator.CalicoNetworkSpec{BPFNetworkBootstrap: &bpfNetworkBootstrapEnabled}}}, true,
+					),
+					table.Entry("all requirements met with kubeProxyManagement enabled",
+						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Spec: operator.InstallationSpec{CalicoNetwork: &operator.CalicoNetworkSpec{KubeProxyManagement: &kubeProxyManagementEnabled}}}, true,
+					),
+					table.Entry("installation already has Status.Computed - existing installation",
+						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Status: operator.InstallationStatus{Computed: &operator.InstallationSpec{}}}, false,
+					),
+					table.Entry("kubernetes provider isn't None",
+						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Spec: operator.InstallationSpec{KubernetesProvider: operator.ProviderAKS}}, false,
+					),
+					table.Entry("installation has a dataplane other than BPF already set",
+						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Spec: operator.InstallationSpec{CalicoNetwork: &operator.CalicoNetworkSpec{LinuxDataplane: &dataplaneIptables}}}, false,
+					),
+					table.Entry("installation has bpfNetworkBootstrap disabled",
+						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Spec: operator.InstallationSpec{CalicoNetwork: &operator.CalicoNetworkSpec{BPFNetworkBootstrap: &bpfNetworkBootstrapDisabled}}}, false,
+					),
+					table.Entry("installation has kubeProxyManagement disabled",
+						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Spec: operator.InstallationSpec{CalicoNetwork: &operator.CalicoNetworkSpec{KubeProxyManagement: &kubeProxyManagementDisabled}}}, false,
+					),
+					table.Entry("missing kubernetes service",
+						[]func(){createKubeProxy, createEndpointSlice}, &operator.Installation{}, false,
+					),
+					table.Entry("missing endpoint slices",
+						[]func(){createKubeProxy, createK8sService}, &operator.Installation{}, false,
+					),
+					table.Entry("existing kubernetes-service-endpoints configmap",
+						[]func(){createK8sSvcEpConfigMap, createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{}, false,
+					),
+					table.Entry("missing kube-proxy daemonset",
+						[]func(){createK8sService, createEndpointSlice}, &operator.Installation{}, false,
+					),
+				)
+			})
+		})
 		It("should Reconcile with default config", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})

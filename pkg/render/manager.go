@@ -882,7 +882,12 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 			},
 			{
 				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "pods"},
+				Resources: []string{"serviceaccounts"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"namespaces", "nodes", "events", "services", "pods"},
 				Verbs:     []string{"list"},
 			},
 			{

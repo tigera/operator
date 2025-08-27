@@ -990,10 +990,15 @@ func (s *InstallationSpec) BPFEnabled() bool {
 		*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF
 }
 
+// IsNftables is an extension method that returns true if the Installation resource
+// has Calico Network Linux Dataplane set and equal to value "Nftables" or "BPF", otherwise false.
+//
+// BPF is included here as it uses nftables to program some rules.
 func (s *InstallationSpec) IsNftables() bool {
 	return s.CalicoNetwork != nil &&
 		s.CalicoNetwork.LinuxDataplane != nil &&
-		*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneNftables
+		(*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneNftables ||
+			*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF)
 }
 
 func (installation *InstallationSpec) BPFNetworkBootstrapEnabled() bool {

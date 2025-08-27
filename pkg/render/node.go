@@ -138,6 +138,9 @@ type NodeConfiguration struct {
 	// and sets this.
 	FelixHealthPort int
 
+	// Node's CgroupV2Path override. The controller reads FelixConfiguration and sets this.
+	NodeCgroupV2Path string
+
 	// The bindMode read from the default BGPConfiguration. Used to trigger rolling updates
 	// should this value change.
 	BindMode string
@@ -1261,6 +1264,10 @@ func (c *nodeComponent) bpffsEnvvars() []corev1.EnvVar {
 	env = JoinServiceEndpoints(c.cfg.K8sEndpointSlice)
 	if env != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: env})
+	}
+
+	if c.cfg.NodeCgroupV2Path != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: "CALICO_CGROUP_PATH", Value: c.cfg.NodeCgroupV2Path})
 	}
 
 	return envVars

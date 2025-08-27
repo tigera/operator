@@ -1040,6 +1040,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
 					})
 			}
+
 			When("the LinuxDataplane is not BPF", func() {
 				It("should fail if BPFNetworkBootstrap is enabled", func() {
 					By("Setting the dataplane to Iptables and enabling network bootstrap")
@@ -1097,6 +1098,23 @@ var _ = Describe("Testing core-controller installation", func() {
 						[]func(){createK8sService}, "failed to get kubernetes endpoint slices",
 					),
 				)
+
+				It("should set NFTablesMode to Enabled on FelixConfiguration", func() {
+					createK8sService()
+					createEndpointSlice()
+
+					By("r.Reconcile()")
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+
+					By("Checking that the FelixConfiguration has NFTablesMode Enabled")
+					fc := &crdv1.FelixConfiguration{}
+					err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(fc.Spec.NFTablesMode).ToNot(BeNil())
+					Expect(*fc.Spec.NFTablesMode).To(Equal(crdv1.NFTablesModeEnabled))
+				})
+
 				It("should push env vars to ebpf-bootstrap", func() {
 					createK8sService()
 					createEndpointSlice()

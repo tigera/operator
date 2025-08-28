@@ -24,6 +24,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -237,6 +238,22 @@ func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	}
 
 	return foundRKE2Resource, nil
+}
+
+// IsKindCluster checks if the cluster is a kind cluster by evaluating the node.Spec.ProviderID value.
+func IsKindCluster(ctx context.Context, c client.Client) (bool, error) {
+	nodes := &corev1.NodeList{}
+	err := c.List(ctx, nodes)
+	if err != nil {
+		return false, fmt.Errorf("failed to get nodes: %w", err)
+	}
+
+	for _, node := range nodes.Items {
+		if strings.HasPrefix(node.Spec.ProviderID, "kind://") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // UseExternalElastic returns true if this cluster is configured to use an external elasticsearch cluster,

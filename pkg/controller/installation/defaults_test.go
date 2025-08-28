@@ -209,6 +209,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var nodeMetricsPort int32 = 9081
 		false_ := false
 		var twentySeven int32 = 27
+		var linuxPolicySetupTimeoutSeconds int32 = 123 // Custom value to test that it's not overridden
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
 		var logFileMaxCount uint32 = 5
@@ -244,8 +245,9 @@ var _ = Describe("Defaulting logic tests", func() {
 					ConfDir: &cniConfDir,
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
-					LinuxDataplane:   &dpBPF, // Actually the default but BPF would make other values invalid.
-					WindowsDataplane: &winDataplaneDisabled,
+					LinuxDataplane:                     &dpBPF, // Actually the default but BPF would make other values invalid.
+					WindowsDataplane:                  &winDataplaneDisabled,
+					LinuxPolicySetupTimeoutSeconds:    &linuxPolicySetupTimeoutSeconds,
 					IPPools: []operator.IPPool{
 						{
 							CIDR:          "1.2.3.0/24",

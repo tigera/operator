@@ -1787,7 +1787,7 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 	// we don't need to handle upgrades from versions that were previously FelixConfiguration only - nftables mode has always
 	// been controlled by the operator.
 	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
-		if *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables {
+		if install.Spec.IsNftables() {
 			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
 			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeEnabled
 			nftablesMode := crdv1.NFTablesModeEnabled

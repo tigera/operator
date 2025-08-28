@@ -563,8 +563,10 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	linseedEndpointEnv := corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc.%s", ElasticsearchNamespace, c.cfg.ClusterDomain)}
 	if c.cfg.Tenant != nil {
 		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
-		// Multi-tenant and single tenant needs this variable set
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		// Multi-tenant and single tenant with external elastic needs this variable set
+		if c.cfg.ExternalElastic {
+			env = append(env, corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+		}
 
 		// Always configure the Tenant Claim for all multi-tenancy setups (single tenant and multi tenant)
 		// This will check the tenant claim when a Bearer token is presented to Voltron

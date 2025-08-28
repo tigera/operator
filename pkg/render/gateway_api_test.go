@@ -1022,7 +1022,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(envoyDeployment.Pod.Volumes[2].EmptyDir).ToNot(BeNil())
 		Expect(envoyDeployment.Pod.Volumes[3].Name).To(Equal("access-logs"))
 		Expect(envoyDeployment.Pod.Volumes[3].EmptyDir).ToNot(BeNil())
-
+		Expect(envoyDeployment.Pod.Volumes[4].Name).To(Equal("felix-sync"))
+		Expect(envoyDeployment.Pod.Volumes[4].CSI.Driver).To(Equal("csi.tigera.io"))
 		Expect(proxy.Spec.Telemetry.AccessLog.Settings).To(Equal(AccessLogSettings))
 	})
 })

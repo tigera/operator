@@ -862,11 +862,21 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				},
 				Name: wafFilterName,
 			}
-			AccessLogsVolume := corev1.Volume{
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
+			AccessLogsVolume := []corev1.Volume{
+				{
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+					Name: accessLogsName,
 				},
-				Name: accessLogsName,
+				{
+					VolumeSource: corev1.VolumeSource{
+						CSI: &corev1.CSIVolumeSource{
+							Driver: "csi.tigera.io",
+						},
+					},
+					Name: "felix-sync",
+				},
 			}
 			hasLogsVolume := false
 			hasSocketVolume := false
@@ -885,12 +895,15 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = WAFHttpFilterSocketVolume
 					}
 				}
-				if volume.Name == AccessLogsVolume.Name {
-					hasAccessLogsVolume = true
-					if volume.VolumeSource.EmptyDir != AccessLogsVolume.VolumeSource.EmptyDir {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = AccessLogsVolume
+				for _, acVolume := range AccessLogsVolume {
+					if volume.Name == acVolume.Name {
+						hasAccessLogsVolume = true
+						if acVolume.VolumeSource != volume.VolumeSource {
+							envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = acVolume
+						}
 					}
 				}
+
 			}
 			if !hasLogsVolume {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, logsVolume)
@@ -899,7 +912,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, WAFHttpFilterSocketVolume)
 			}
 			if !hasAccessLogsVolume {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, AccessLogsVolume)
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, AccessLogsVolume...)
 			}
 
 			if envoyProxy.Spec.Telemetry != nil {
@@ -927,6 +940,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						},
 					},
 					Format: &envoyapi.ProxyAccessLogFormat{
+						Type: "JSON",
 						JSON: map[string]string{
 							"reporter":                         "gateway",
 							"start_time":                       "%START_TIME%",

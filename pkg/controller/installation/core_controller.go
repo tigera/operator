@@ -626,7 +626,7 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 	if instance.Spec.CNI.Type == operator.PluginCalico &&
 		*instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneIptables &&
 		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds == nil {
-		var delay int32 = 0
+		var delay int32 = 90
 		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &delay
 	}
 

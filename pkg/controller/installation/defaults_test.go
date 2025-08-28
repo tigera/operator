@@ -61,7 +61,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.WindowsDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneDisabled))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
-		Expect(*instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds).To(BeZero())
+		Expect(*instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds).To(Equal(int32(90)))
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
 		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
@@ -98,7 +98,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork.WindowsDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneDisabled))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
-		Expect(*instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds).To(BeZero())
+		Expect(*instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds).To(Equal(int32(90)))
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
 		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
 		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
@@ -209,6 +209,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var nodeMetricsPort int32 = 9081
 		false_ := false
 		var twentySeven int32 = 27
+		var linuxPolicySetupTimeoutSeconds int32 = 123 // Custom value to test that it's not overridden
 		var one intstr.IntOrString = intstr.FromInt(1)
 		var replicas int32 = 3
 		var logFileMaxCount uint32 = 5
@@ -244,8 +245,9 @@ var _ = Describe("Defaulting logic tests", func() {
 					ConfDir: &cniConfDir,
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
-					LinuxDataplane:   &dpBPF, // Actually the default but BPF would make other values invalid.
-					WindowsDataplane: &winDataplaneDisabled,
+					LinuxDataplane:                     &dpBPF, // Actually the default but BPF would make other values invalid.
+					WindowsDataplane:                  &winDataplaneDisabled,
+					LinuxPolicySetupTimeoutSeconds:    &linuxPolicySetupTimeoutSeconds,
 					IPPools: []operator.IPPool{
 						{
 							CIDR:          "1.2.3.0/24",

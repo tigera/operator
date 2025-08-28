@@ -1186,6 +1186,35 @@ var _ = Describe("Testing core-controller installation", func() {
 			})
 		})
 
+		It("should push 'CALICO_CGROUP_PATH' env var to ebpf-bootstrap if specified in FelixConfiguration", func() {
+			customPath := "/foo/bar/path"
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Spec: crdv1.FelixConfigurationSpec{
+					CgroupV2Path: customPath,
+				},
+			}
+			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+			By("r.Reconcile()")
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("Checking ebpf-bootstrap init container has correct env var")
+			calicoNode := &appsv1.DaemonSet{}
+			err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
+			Expect(err).ShouldNot(HaveOccurred())
+			initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Name).To(Equal("ebpf-bootstrap"))
+			Expect(initContainer.Env).To(ContainElements(
+				corev1.EnvVar{Name: "CALICO_CGROUP_PATH", Value: customPath},
+			))
+		})
+
 		It("should Reconcile with default config", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})

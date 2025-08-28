@@ -419,15 +419,18 @@ func autoDetectDefaultBPF(ctx context.Context, client client.Client, instance *o
 		return false
 	}
 
+	// At the time of this implementation, we don't support BPF on KinD clusters.
+	if isKind, err := utils.IsKindCluster(ctx, client); err != nil || isKind {
+		return false
+	}
+
 	// Check if the cluster has the required resources.
-	_, err := utils.CheckBPFClusterResourcesReq(ctx, client)
-	if err != nil {
+	if _, err := utils.CheckBPFClusterResourcesReq(ctx, client); err != nil {
 		return false
 	}
 
 	// Check if it can retrieve kube-proxy DaemonSet and validate it's not managed.
-	_, err = utils.GetManageableKubeProxy(ctx, client)
-	if err != nil {
+	if _, err := utils.GetManageableKubeProxy(ctx, client); err != nil {
 		return false
 	}
 

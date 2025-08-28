@@ -362,20 +362,21 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			secret := &corev1.Secret{}
+			dnsNames := append([]string{"localhost"}, dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)...)
 			// Verify that the operator managed cert secrets exist. These cert
 			// secrets should have the manager service DNS names plus localhost only.
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, []string{"localhost"}...)
+			test.VerifyCert(secret, dnsNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, []string{"localhost"}...)
+			test.VerifyCert(secret, dnsNames...)
 
 			// Check that the internal secret was copied over to the manager namespace
 			internalSecret := &corev1.Secret{}
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerInternalTLSSecretName, Namespace: render.ManagerNamespace}, internalSecret)).ShouldNot(HaveOccurred())
 
 			// Create a custom manager cert secret.
-			dnsNames := []string{"manager.example.com", "192.168.10.22"}
+			dnsNames = []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
 			customSecret, err := rsecret.CreateTLSSecret(
 				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, tigeratls.DefaultCertificateDuration, nil, dnsNames...)

@@ -63,6 +63,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 				},
 			},
 			Format: &envoyapi.ProxyAccessLogFormat{
+				Type: envoyapi.ProxyAccessLogFormatTypeJSON,
 				JSON: map[string]string{
 					"reporter":                         "gateway",
 					"start_time":                       "%START_TIME%",

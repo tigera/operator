@@ -881,8 +881,17 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				Verbs: []string{"list"},
 			},
 			{
+				// Get:  required by Voltron to validate non-cluster host service accounts
+				//       when handling proxied requests for the Kubernetes API server.
+				// List: required by Voltron when performing impersonation for components
+				//       such as Compliance.
 				APIGroups: []string{""},
-				Resources: []string{"serviceaccounts", "namespaces", "nodes", "events", "services", "pods"},
+				Resources: []string{"serviceaccounts"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"namespaces", "nodes", "events", "services", "pods"},
 				Verbs:     []string{"list"},
 			},
 			{

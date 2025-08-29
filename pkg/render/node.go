@@ -659,6 +659,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 		},
 		"policy_setup_timeout_seconds": linuxPolicySetupTimeoutSeconds,
 		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().VolumeSource.HostPath.Path, "endpoint-status"),
+		"calico_api_group":             "projectcalico.org/v3",
 	}
 
 	// Determine logging configuration

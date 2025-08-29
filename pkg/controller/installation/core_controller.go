@@ -419,11 +419,6 @@ func autoDetectDefaultBPF(ctx context.Context, client client.Client, instance *o
 		return false
 	}
 
-	// At the time of this implementation, we don't support BPF on KinD clusters.
-	if isKind, err := utils.IsKindCluster(ctx, client); err != nil || isKind {
-		return false
-	}
-
 	// Check if the cluster has the required resources.
 	if _, err := utils.CheckBPFClusterResourcesReq(ctx, client); err != nil {
 		return false
@@ -434,8 +429,44 @@ func autoDetectDefaultBPF(ctx context.Context, client client.Client, instance *o
 		return false
 	}
 
-	log.V(1).Info("Defaulting dataplane to BPF, since the cluster meets the requirements.")
 	return true
+}
+
+// checkAndApplyBPFDefaults updates the Installation CR to set defaults for BPF dataplane installation if the cluster meets the requirements.
+func checkAndApplyBPFDefaults(ctx context.Context, client client.Client, instance *operator.Installation) {
+	defaultBpfDataplane := autoDetectDefaultBPF(ctx, client, instance)
+
+	// defaultBpfDataplane == true indicates that this is a new installation, and that automatic BPF installation can be set by default.
+	if defaultBpfDataplane {
+		dpBPF := operator.LinuxDataplaneBPF
+		instance.Spec.CalicoNetwork.LinuxDataplane = &dpBPF
+		bpfNetworkEnabled := operator.BPFNetworkBootstrapEnabled
+		instance.Spec.CalicoNetwork.BPFNetworkBootstrap = &bpfNetworkEnabled
+		kpEnabled := operator.KubeProxyManagementEnabled
+		instance.Spec.CalicoNetwork.KubeProxyManagement = &kpEnabled
+
+		log.V(1).Info("Defaulting dataplane to BPF, since the cluster meets the requirements.")
+	}
+}
+
+func checkAndApplyAWSNode(ctx context.Context, client client.Client, instance *operator.Installation) error {
+	awsNode := &appsv1.DaemonSet{}
+	key := types.NamespacedName{Name: "aws-node", Namespace: metav1.NamespaceSystem}
+	if err := client.Get(ctx, key, awsNode); err != nil {
+		if apierrors.IsNotFound(err) {
+			awsNode = nil
+		} else {
+			return fmt.Errorf("unable to read aws-node daemonset: %s", err.Error())
+		}
+	}
+
+	if awsNode != nil {
+		if err := updateInstallationForAWSNode(instance, awsNode); err != nil {
+			return fmt.Errorf("could not resolve AWS node configuration: %s", err.Error())
+		}
+	}
+
+	return nil
 }
 
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
@@ -447,14 +478,12 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 		return err
 	}
 
-	awsNode := &appsv1.DaemonSet{}
-	key := types.NamespacedName{Name: "aws-node", Namespace: metav1.NamespaceSystem}
-	err = client.Get(ctx, key, awsNode)
-	if err != nil {
-		if !apierrors.IsNotFound(err) {
-			return fmt.Errorf("unable to read aws-node daemonset: %s", err.Error())
-		}
-		awsNode = nil
+	// Check if we can default to BPF dataplane and update installation instance if so.
+	checkAndApplyBPFDefaults(ctx, client, instance)
+
+	// Check if there is an aws-node DaemonSet in kube-system and update CNI.Type if it's not specified.
+	if err := checkAndApplyAWSNode(ctx, client, instance); err != nil {
+		return err
 	}
 
 	currentPools, err := getActivePools(ctx, client)
@@ -462,39 +491,11 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 		return fmt.Errorf("unable to list IPPools: %s", err.Error())
 	}
 
-	defaultBpfDataplane := autoDetectDefaultBPF(ctx, client, instance)
-
-	params := &fillDefaultsParams{
-		currentPools:        currentPools,
-		defaultBpfDataplane: &defaultBpfDataplane,
-	}
-
-	err = MergeAndFillDefaults(instance, awsNode, params)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// MergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
-// populates defaults in the Installation instance.
-func MergeAndFillDefaults(i *operator.Installation, awsNode *appsv1.DaemonSet, params *fillDefaultsParams) error {
-	if awsNode != nil {
-		if err := updateInstallationForAWSNode(i, awsNode); err != nil {
-			return fmt.Errorf("could not resolve AWS node configuration: %s", err.Error())
-		}
-	}
-
-	return fillDefaults(i, params)
-}
-
-type fillDefaultsParams struct {
-	currentPools        *crdv1.IPPoolList
-	defaultBpfDataplane *bool
+	return fillDefaults(instance, currentPools)
 }
 
 // fillDefaults populates the default values onto an Installation object.
-func fillDefaults(instance *operator.Installation, params *fillDefaultsParams) error {
+func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolList) error {
 	if len(instance.Spec.Variant) == 0 {
 		// Default to installing Calico.
 		instance.Spec.Variant = operator.Calico
@@ -576,17 +577,6 @@ func fillDefaults(instance *operator.Installation, params *fillDefaultsParams) e
 		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 	}
 
-	// defaultBpfDataplane == true indicates that this is a new installation, and that automatic BPF installation can be set by default.
-	if params != nil && params.defaultBpfDataplane != nil && *params.defaultBpfDataplane {
-		// Set defaults for auto-installing BPF dataplane.
-		dpBPF := operator.LinuxDataplaneBPF
-		instance.Spec.CalicoNetwork.LinuxDataplane = &dpBPF
-		bpfNetworkEnabled := operator.BPFNetworkBootstrapEnabled
-		instance.Spec.CalicoNetwork.BPFNetworkBootstrap = &bpfNetworkEnabled
-		kpEnabled := operator.KubeProxyManagementEnabled
-		instance.Spec.CalicoNetwork.KubeProxyManagement = &kpEnabled
-	}
-
 	// Default dataplane is iptables.
 	if instance.Spec.CalicoNetwork.LinuxDataplane == nil {
 		dpIptables := operator.LinuxDataplaneIptables
@@ -644,8 +634,8 @@ func fillDefaults(instance *operator.Installation, params *fillDefaultsParams) e
 		// BPF dataplane requires IP autodetection even if we're not using Calico IPAM.
 		needIPv4Autodetection = true
 	}
-	if params != nil && params.currentPools != nil {
-		for _, pool := range params.currentPools.Items {
+	if currentPools != nil {
+		for _, pool := range currentPools.Items {
 			ip, _, err := net.ParseCIDR(pool.Spec.CIDR)
 			if err != nil {
 				return fmt.Errorf("failed to parse CIDR %s: %s", pool.Spec.CIDR, err)

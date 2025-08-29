@@ -743,7 +743,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				Image: pr.L7LogCollectorImage,
 				Env: []corev1.EnvVar{
 					{
-						Name:  "READ_FILES",
+						Name:  "ENABLE_LOG_TAIL",
 						Value: "true",
 					},
 					{

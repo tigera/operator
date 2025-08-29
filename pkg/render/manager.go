@@ -89,10 +89,15 @@ const (
 
 // ManagementClusterConnection configuration constants
 const (
+	ManagerName              = "tigera-manager"
+	UIAPIsName               = "tigera-ui-apis"
 	VoltronName              = "tigera-voltron"
 	VoltronTunnelSecretName  = "tigera-management-cluster-connection"
 	defaultVoltronPort       = "9443"
 	defaultTunnelVoltronPort = "9449"
+	DashboardAPIPort         = "8444"
+	DashboardAPIHealthPort   = "8090"
+	DashboardAPIName         = "tigera-dashboard-api"
 )
 
 // Manager returns a component for rendering namespaced manager resources.
@@ -300,7 +305,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 	managerPodContainers := []corev1.Container{c.managerUIAPIsContainer(), c.voltronContainer()}
 	if c.cfg.Tenant == nil {
-		managerPodContainers = append(managerPodContainers, c.managerContainer())
+		managerPodContainers = append(managerPodContainers, c.dashboardContainer(), c.managerContainer())
 	}
 	annotations := c.tlsAnnotations
 	if c.cfg.VoltronRouteConfig != nil {
@@ -434,6 +439,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", common.TigeraPrometheusNamespace)},
 		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
 		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/calico-system/services/https:calico-api:8080/proxy"},
+		{Name: "DASHBOARD_API_URL", Value: "/dashboards"},
 		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
 		{Name: "CNX_ELASTICSEARCH_KIBANA_URL", Value: fmt.Sprintf("/%s", KibanaBasePath)},
 		{Name: "CNX_ENABLE_ERROR_TRACKING", Value: "false"},
@@ -451,7 +457,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 // managerContainer returns the manager container.
 func (c *managerComponent) managerContainer() corev1.Container {
 	return corev1.Container{
-		Name:            "tigera-manager",
+		Name:            ManagerName,
 		Image:           c.managerImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Env:             c.managerEnvVars(),
@@ -602,6 +608,63 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	}
 }
 
+// dashboardContainer returns the dashboard sidecar container that only gets created in Enterprise (where tenancy is
+// not enabled).
+func (c *managerComponent) dashboardContainer() corev1.Container {
+	var keyPath, certPath string
+	if c.cfg.InternalTLSKeyPair != nil {
+		keyPath, certPath = c.cfg.InternalTLSKeyPair.VolumeMountKeyFilePath(), c.cfg.InternalTLSKeyPair.VolumeMountCertificateFilePath()
+	}
+
+	env := []corev1.EnvVar{
+		{Name: "LISTEN_ADDR", Value: fmt.Sprintf("127.0.0.1:%s", DashboardAPIPort)},
+		{Name: "LOG_LEVEL", Value: "Info"},
+		{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc.%s", ElasticsearchNamespace, c.cfg.ClusterDomain)},
+		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
+		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
+		{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:%s", c.cfg.Namespace, defaultVoltronPort)},
+		{Name: "HEALTH_PORT", Value: DashboardAPIHealthPort},
+	}
+
+	mounts := append(
+		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
+		c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()),
+	)
+
+	return corev1.Container{
+		Name:            DashboardAPIName,
+		Image:           c.uiAPIsImage,
+		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{"/usr/bin/dashboard-api"},
+		Env:             env,
+		VolumeMounts:    mounts,
+		SecurityContext: securitycontext.NewNonRootContext(),
+		ReadinessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/usr/bin/dashboard-api", "-ready"},
+				},
+			},
+			FailureThreshold:    3,
+			PeriodSeconds:       30,
+			SuccessThreshold:    1,
+			TimeoutSeconds:      5,
+			InitialDelaySeconds: 5,
+		},
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"/usr/bin/dashboard-api", "-ready"},
+				},
+			},
+			FailureThreshold: 3,
+			PeriodSeconds:    30,
+			SuccessThreshold: 1,
+			TimeoutSeconds:   5,
+		},
+	}
+}
+
 // managerUIAPIsContainer returns the ES proxy container
 func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 	var keyPath, certPath string
@@ -656,7 +719,7 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "tigera-ui-apis",
+		Name:            UIAPIsName,
 		Image:           c.uiAPIsImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		LivenessProbe:   c.managerUIAPIsProbe(),
@@ -852,6 +915,12 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				},
 				Verbs: []string{"list"},
 			},
+			// Allow Enterprise Custom Dashboards to access managed clusters
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
@@ -919,17 +988,21 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				Verbs: []string{"get", "create"},
 			},
 			{
-				// Add access to Linseed APIs.
+				// Add access to Linseed APIs. Those multi-cluster variants are for Linseed to query across multiple
+				// clusters for Enterprise Custom Dashboards.
 				APIGroups: []string{"linseed.tigera.io"},
 				Resources: []string{
 					"flows",
 					"flowlogs",
+					"flowlogs-multi-cluster",
 					"bgplogs",
 					"auditlogs",
 					"dnsflows",
 					"dnslogs",
+					"dnslogs-multi-cluster",
 					"l7flows",
 					"l7logs",
+					"l7logs-multi-cluster",
 					"events",
 					"processes",
 				},

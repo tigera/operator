@@ -586,6 +586,7 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 		{Name: "TYPHA_SERVERCERTFILE", Value: typhaSecret.VolumeMountCertificateFilePath()},
 		{Name: "TYPHA_SERVERKEYFILE", Value: typhaSecret.VolumeMountKeyFilePath()},
 		{Name: shutdownTimeoutEnvVar, Value: fmt.Sprint(defaultTyphaTerminationGracePeriod)}, // May get overridden later.
+		{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"},
 	}
 	// We need at least the CN or URISAN set, we depend on the validation
 	// done by the core_controller that the Secret will have one.

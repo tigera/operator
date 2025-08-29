@@ -1230,6 +1230,7 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 	}
 
 	envVars := []corev1.EnvVar{
+		{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"},
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
 		{Name: "CNI_NET_DIR", Value: *c.cfg.Installation.CNI.ConfDir},
@@ -1400,6 +1401,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 	nodeEnv := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
+		{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CLUSTER_TYPE", Value: clusterType},
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},

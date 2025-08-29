@@ -61,7 +61,7 @@ var _ = Describe("GatewayAPI tests", func() {
 			Client: c,
 			Scheme: mgr.GetScheme(),
 		}).SetupWithManager(mgr, options.AddOptions{
-			DetectedProvider:    operator.ProviderNone,
+			DetectedProvider:    operator.ProviderKind,
 			EnterpriseCRDExists: EnterpriseCRDsExist,
 			ManageCRDs:          ManageCRDsDisable,
 			ShutdownContext:     shutdownContext,

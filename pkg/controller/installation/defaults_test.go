@@ -26,7 +26,6 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -46,7 +45,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		}
 
 		instance := &operator.Installation{}
-		err := fillDefaults(instance, &fillDefaultsParams{currentPools: &currentPools})
+		err := fillDefaults(instance, &currentPools)
 		Expect(err).NotTo(HaveOccurred())
 
 		// The resulting resource should pass validation.
@@ -87,7 +86,7 @@ var _ = Describe("Defaulting logic tests", func() {
 
 		instance := &operator.Installation{}
 		instance.Spec.Variant = operator.TigeraSecureEnterprise
-		err := fillDefaults(instance, &fillDefaultsParams{currentPools: &currentPools})
+		err := fillDefaults(instance, &currentPools)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
@@ -310,16 +309,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
-	It("should default to BPF auto install", func() {
-		instance := &operator.Installation{}
-		err := fillDefaults(instance, &fillDefaultsParams{defaultBpfDataplane: ptr.BoolToPtr(true)})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneBPF))
-		Expect(*instance.Spec.CalicoNetwork.BPFNetworkBootstrap).To(Equal(operator.BPFNetworkBootstrapEnabled))
-		Expect(*instance.Spec.CalicoNetwork.KubeProxyManagement).To(Equal(operator.KubeProxyManagementEnabled))
-		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
-	})
-
 	It("should default BGP to enabled for Calico CNI", func() {
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
@@ -400,7 +389,7 @@ var _ = Describe("Defaulting logic tests", func() {
 				},
 			},
 		}
-		err := fillDefaults(instance, &fillDefaultsParams{currentPools: &currentPools})
+		err := fillDefaults(instance, &currentPools)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
@@ -662,8 +651,7 @@ var _ = Describe("Defaulting logic tests", func() {
 	table.DescribeTable("should handle various pool configurations",
 		func(currentPools []crdv1.IPPool) {
 			instance := &operator.Installation{}
-			pools := &crdv1.IPPoolList{Items: currentPools}
-			Expect(fillDefaults(instance, &fillDefaultsParams{currentPools: pools})).NotTo(HaveOccurred())
+			Expect(fillDefaults(instance, &crdv1.IPPoolList{Items: currentPools})).NotTo(HaveOccurred())
 
 			// The resulting instance should be valid.
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())

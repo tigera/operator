@@ -1529,7 +1529,7 @@ func renderObjects(roc renderConfig) []client.Object {
 			},
 		}
 
-		dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, dns.DefaultClusterDomain)
+		dexCfg = render.NewDexKeyValidatorConfig(authentication, nil, nil, dns.DefaultClusterDomain)
 	}
 
 	var tunnelSecret certificatemanagement.KeyPairInterface

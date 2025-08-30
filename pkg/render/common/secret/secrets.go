@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,6 +18,8 @@ import (
 	"bytes"
 	"fmt"
 	"time"
+
+	csisecret "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
 	"github.com/openshift/library-go/pkg/crypto"
 
@@ -115,6 +117,31 @@ func CopyToNamespace(ns string, oSecrets ...*corev1.Secret) []*corev1.Secret {
 
 // ToRuntimeObjects converts the given list of secrets to a list of client.Objects
 func ToRuntimeObjects(secrets ...*corev1.Secret) []client.Object {
+	var objs []client.Object
+	for _, secret := range secrets {
+		if secret == nil {
+			continue
+		}
+		objs = append(objs, secret)
+	}
+	return objs
+}
+
+// CopySecretProviderClassToNamespace returns a new list of SecretProviderClassToNamespace generated from the ones given but with the namespace changed to the
+// given one.
+func CopySecretProviderClassToNamespace(ns string, oSecrets ...*csisecret.SecretProviderClass) []*csisecret.SecretProviderClass {
+	var secrets []*csisecret.SecretProviderClass
+	for _, s := range oSecrets {
+		x := s.DeepCopy()
+		x.ObjectMeta = metav1.ObjectMeta{Name: s.Name, Namespace: ns}
+
+		secrets = append(secrets, x)
+	}
+	return secrets
+}
+
+// ToSecretProviderClassRuntimeObjects converts the given list of SecretProviderClass to a list of client.Objects
+func ToSecretProviderClassRuntimeObjects(secrets ...*csisecret.SecretProviderClass) []client.Object {
 	var objs []client.Object
 	for _, secret := range secrets {
 		if secret == nil {

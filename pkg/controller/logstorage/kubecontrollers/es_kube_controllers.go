@@ -69,6 +69,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
+	if opts.MultiTenant {
+		// This controller is no longer required for multi-tenant environmants
+		// Single tenant and zero tenant will still run es-kube-controllers.
+		// Single tenant need elasticsearch configuration setup for kibana users,
+		// while zero tenant also require the license push to the managed clusters.
+		return nil
+	}
+
 	// Create the reconciler
 	r := &ESKubeControllersController{
 		client:          mgr.GetClient(),
@@ -87,12 +95,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return err
 	}
 
-	// Determine how to handle watch events for cluster-scoped resources. For multi-tenant clusters,
-	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
-	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
-	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
 	if err = c.WatchObject(&operatorv1.LogStorage{}, eventHandler); err != nil {
@@ -109,11 +112,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 	if err = utils.AddTigeraStatusWatch(c, initializer.TigeraStatusLogStorageKubeController); err != nil {
 		return fmt.Errorf("logstorage-controller failed to watch logstorage Tigerastatus: %w", err)
-	}
-	if opts.MultiTenant {
-		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("log-storage-kubecontrollers failed to watch Tenant resource: %w", err)
-		}
 	}
 
 	// Watch secrets this controller cares about.
@@ -153,21 +151,19 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("log-storage-kubecontrollers failed to create periodic reconcile watch: %w", err)
 	}
 
-	if !opts.MultiTenant {
-		// Catch if something modifies the resources that this controller consumes.
-		if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
-			return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
-		}
-		if err := utils.AddServiceWatch(c, esgateway.ServiceName, render.ElasticsearchNamespace); err != nil {
-			return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
-		}
-		if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, render.ElasticsearchNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("log-storage-kubecontrollers failed to watch the ConfigMap resource: %w", err)
-		}
-		go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
-			{Name: esgateway.PolicyName, Namespace: render.ElasticsearchNamespace},
-		})
+	// Catch if something modifies the resources that this controller consumes.
+	if err := utils.AddServiceWatch(c, render.ElasticsearchServiceName, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
+	if err := utils.AddServiceWatch(c, esgateway.ServiceName, render.ElasticsearchNamespace); err != nil {
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
+	}
+	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, render.ElasticsearchNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("log-storage-kubecontrollers failed to watch the ConfigMap resource: %w", err)
+	}
+	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
+		{Name: esgateway.PolicyName, Namespace: render.ElasticsearchNamespace},
+	})
 
 	// Start goroutines to establish watches against projectcalico.org/v3 resources.
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, r.tierWatchReady)
@@ -183,28 +179,10 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - ESKubeControllers")
 
-	// We skip requests without a namespace specified in multi-tenant setups.
-	if r.multiTenant && request.Namespace == "" {
-		return reconcile.Result{}, nil
-	}
-
-	// When running in multi-tenant mode, we need to install es-kubecontrollers in tenant Namespaces. However, the LogStorage
-	// resource is still cluster-scoped (since ES is a cluster-wide resource), so we need to look elsewhere to determine
-	// which tenant namespaces require an es-kubecontrollers instance. We use the tenant API to determine the set of
-	// namespaces that should have an es-kubecontrollers.
-	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
-	if errors.IsNotFound(err) {
-		reqLogger.V(1).Info("No Tenant in this Namespace, skip")
-		return reconcile.Result{}, nil
-	} else if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// Get LogStorage resource.
 	logStorage := &operatorv1.LogStorage{}
 	key := utils.DefaultTSEEInstanceKey
-	err = r.client.Get(ctx, key, logStorage)
+	err := r.client.Get(ctx, key, logStorage)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.OnCRNotFound()
@@ -284,18 +262,15 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// Get secrets needed for kube-controllers to talk to elastic. This is needed for zero-tenants and single-tenants
 	// that deploy es-kube-controllers and need to talk to es-gateway
 	var kubeControllersUserSecret *core.Secret
-	if !r.multiTenant {
-		kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
-			return reconcile.Result{}, err
-		}
+	kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	// Collect the certificates we need to provision es-kube-controllers. These will have been provisioned already by the ES secrets controller.
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
-		certificatemanager.WithTenant(tenant),
 	}
 	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
@@ -321,27 +296,25 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// ESGateway is required in order for kube-controllers to operate successfully, since es-kube-controllers talks to ES
 	// via this gateway. However, in multi-tenant mode, es-kube-controllers doesn't talk to elasticsearch,
 	// so this is only needed in single-tenant clusters and zero tenants clusters
-	if !r.multiTenant {
-		gwNSHelper := utils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace)
-		// Query the trusted bundle from the namespace.
-		gwTrustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, gwNSHelper.InstallNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting trusted bundle in %s", gwNSHelper.InstallNamespace()), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if err := r.createESGateway(
-			ctx,
-			gwNSHelper,
-			install,
-			variant,
-			pullSecrets,
-			hdler,
-			reqLogger,
-			gwTrustedBundle,
-			logStorage,
-		); err != nil {
-			return reconcile.Result{}, err
-		}
+	gwNSHelper := utils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace)
+	// Query the trusted bundle from the namespace.
+	gwTrustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, gwNSHelper.InstallNamespace())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting trusted bundle in %s", gwNSHelper.InstallNamespace()), err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if err := r.createESGateway(
+		ctx,
+		gwNSHelper,
+		install,
+		variant,
+		pullSecrets,
+		hdler,
+		reqLogger,
+		gwTrustedBundle,
+		logStorage,
+	); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	// Query the trusted bundle from the namespace.
@@ -374,7 +347,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		TrustedBundle:                trustedBundle,
 		Namespace:                    helper.InstallNamespace(),
 		BindingNamespaces:            namespaces,
-		Tenant:                       tenant,
+		Tenant:                       nil,
 	}
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 
@@ -395,10 +368,6 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	}
 
 	setupHandler := hdler
-	if tenant.MultiTenant() {
-		// In standard installs, the LogStorage CR owns all the objects. For multi-tenant, pull secrets are owned by the Tenant instance.
-		setupHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant)
-	}
 	if err := setupHandler.CreateOrUpdateOrDelete(ctx, setup, nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating  elasticsearch kube-controllers resource", err, reqLogger)
 		return reconcile.Result{}, err

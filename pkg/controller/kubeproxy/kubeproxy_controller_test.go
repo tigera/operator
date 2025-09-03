@@ -210,7 +210,7 @@ var _ = Describe("kube-proxy controller tests", func() {
 				ds := kubeProxyDS()
 				ds.Labels = labels
 				ds.Annotations = annotations
-				err := utils.ValidateDaemonSetManaged(ds)
+				err := utils.ValidateDaemonSetUnmanaged(ds)
 				Expect(err == nil).Should(Equal(shouldSucceed))
 			},
 			table.Entry("managed by argocd",

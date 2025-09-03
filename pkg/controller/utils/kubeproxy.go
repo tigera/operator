@@ -26,9 +26,9 @@ var (
 	KubeProxyInstanceKey = client.ObjectKey{Name: "kube-proxy", Namespace: "kube-system"}
 )
 
-// ValidateDaemonSetManaged checks whether the DaemonSet is managed by an external tool,
+// ValidateDaemonSetUnmanaged checks whether the DaemonSet is managed by an external tool,
 // based on common labels or annotations typically added by automation.
-func ValidateDaemonSetManaged(ds *appsv1.DaemonSet) error {
+func ValidateDaemonSetUnmanaged(ds *appsv1.DaemonSet) error {
 	if len(ds.Labels) == 0 && len(ds.Annotations) == 0 {
 		return nil
 	}
@@ -56,7 +56,7 @@ func GetManageableKubeProxy(ctx context.Context, c client.Client) (*appsv1.Daemo
 		return nil, fmt.Errorf("failed to get kube-proxy: %w", err)
 	}
 
-	err = ValidateDaemonSetManaged(kubeProxyDS)
+	err = ValidateDaemonSetUnmanaged(kubeProxyDS)
 	if err != nil {
 		return nil, err
 	}

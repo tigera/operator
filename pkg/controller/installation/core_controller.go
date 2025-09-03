@@ -404,7 +404,7 @@ func autoDetectDefaultBPF(ctx context.Context, client client.Client, instance *o
 		return false
 	}
 
-	// linuxDataplane, bpfNetworkingBootstrap, and kubeProxyManagement shouldn't be set, or should be set to their default values.
+	// linuxDataplane, bpfNetworkingBootstrap, and kubeProxyManagement should either be unset or set to their auto-detected target values.
 	calicoNetwork := instance.Spec.CalicoNetwork
 	if calicoNetwork != nil &&
 		((calicoNetwork.LinuxDataplane != nil && *calicoNetwork.LinuxDataplane != operator.LinuxDataplaneBPF) ||

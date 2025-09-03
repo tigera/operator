@@ -15,9 +15,16 @@
 package common
 
 import (
+	"context"
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/cloudflare/cfssl/log"
+	authv1 "k8s.io/api/authentication/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 )
 
 var serviceAccount = ""
@@ -40,13 +47,63 @@ func OperatorServiceAccount() string {
 func getServiceAccount() string {
 	v, ok := os.LookupEnv("OPERATOR_SERVICEACCOUNT")
 	if ok {
+		log.Infof("Detected operator service account %q from environment variable", v)
 		return v
 	}
-	body, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-	if err != nil {
-		log.Info("Failed to read serviceaccount/namespace file")
-	} else {
-		return string(body)
+
+	sa := serviceAccountFromToken()
+	if sa != "" {
+		log.Infof("Detected operator service account %q from token review", sa)
+		return sa
 	}
+	log.Infof("Falling back to default operator service account 'tigera-operator'")
 	return "tigera-operator"
+}
+
+func serviceAccountFromToken() string {
+	// Parse the JWT token to get the service account name.
+	token, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
+	if err != nil {
+		log.Infof("Failed to read serviceaccount token file: %s", err)
+		return ""
+	}
+	ns, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		log.Errorf("Failed to read namespace file: %v", err)
+		return ""
+	}
+	prefix := fmt.Sprintf("system:serviceaccount:%s:", string(ns))
+
+	// Send a TokenReview to the Kubernetes API to validate and parse the token.
+	tokenReview := authv1.TokenReview{
+		Spec: authv1.TokenReviewSpec{
+			Token: string(token),
+		},
+	}
+
+	// Create a Kubernetes client.
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		log.Errorf("Failed to create in-cluster config: %s", err)
+		return ""
+	}
+	cs, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		log.Errorf("Failed to create Kubernetes client: %s", err)
+		return ""
+	}
+	tr, err := cs.AuthenticationV1().TokenReviews().Create(context.Background(), &tokenReview, metav1.CreateOptions{})
+	if err != nil {
+		log.Errorf("Failed to create TokenReview: %s", err)
+		return ""
+	}
+	if !tr.Status.Authenticated {
+		log.Errorf("Failed to authenticate serviceaccount token")
+		return ""
+	}
+	if tr.Status.User.Username == "" || !strings.HasPrefix(tr.Status.User.Username, prefix) {
+		log.Errorf("Failed to get serviceaccount username from token review")
+		return ""
+	}
+	return strings.TrimPrefix(tr.Status.User.Username, prefix)
 }

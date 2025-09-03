@@ -581,6 +581,87 @@ func verifyCRDsExist(c client.Client, variant operator.ProductVariant) {
 	}, 10*time.Second).Should(BeNil())
 }
 
+func logObjectsInNamespace(c client.Client) {
+	log := logf.Log.WithName("logObjectsInNamespace")
+
+	// Pods
+	podList := &corev1.PodList{}
+	err := c.List(context.Background(), podList, client.InNamespace("calico-system"))
+	if err == nil {
+		for _, p := range podList.Items {
+			log.Info(fmt.Sprintf("Pod still exists in calico-system: %+v", p))
+		}
+	} else {
+		log.Error(err, "Error listing pods in calico-system")
+	}
+
+	// ServieAccounts
+	saList := &corev1.ServiceAccountList{}
+	err = c.List(context.Background(), saList, client.InNamespace("calico-system"))
+	if err == nil {
+		for _, sa := range saList.Items {
+			log.Info(fmt.Sprintf("ServiceAccount still exists in calico-system: %+v", sa))
+		}
+	} else {
+		log.Error(err, "Error listing serviceaccounts in calico-system")
+	}
+
+	// RoleBindings
+	rbList := &rbacv1.RoleBindingList{}
+	err = c.List(context.Background(), rbList, client.InNamespace("calico-system"))
+	if err == nil {
+		for _, rb := range rbList.Items {
+			log.Info(fmt.Sprintf("RoleBinding still exists in calico-system: %+v", rb))
+		}
+	} else {
+		log.Error(err, "Error listing rolebindings in calico-system")
+	}
+
+	// Secrets
+	secretList := &corev1.SecretList{}
+	err = c.List(context.Background(), secretList, client.InNamespace("calico-system"))
+	if err == nil {
+		for _, s := range secretList.Items {
+			log.Info(fmt.Sprintf("Secret still exists in calico-system: %+v", s))
+		}
+	} else {
+		log.Error(err, "Error listing secrets in calico-system")
+	}
+
+	// ConfigMaps
+	cmList := &corev1.ConfigMapList{}
+	err = c.List(context.Background(), cmList, client.InNamespace("calico-system"))
+	if err == nil {
+		for _, cm := range cmList.Items {
+			log.Info(fmt.Sprintf("ConfigMap still exists in calico-system: %+v", cm))
+		}
+	} else {
+		log.Error(err, "Error listing configmaps in calico-system")
+	}
+
+	// DaemonSets
+	dsList := &apps.DaemonSetList{}
+	err = c.List(context.Background(), dsList, client.InNamespace("calico-system"))
+	if err == nil {
+		for _, ds := range dsList.Items {
+			log.Info(fmt.Sprintf("DaemonSet still exists in calico-system: %+v", ds))
+		}
+	} else {
+		log.Error(err, "Error listing daemonsets in calico-system")
+	}
+
+	// Deployments
+	deployList := &apps.DeploymentList{}
+	err = c.List(context.Background(), deployList, client.InNamespace("calico-system"))
+	if err == nil {
+		for _, deploy := range deployList.Items {
+			log.Info(fmt.Sprintf("Deployment still exists in calico-system: %+v", deploy))
+		}
+	} else {
+		log.Error(err, "Error listing deployments in calico-system")
+	}
+}
+
 func waitForProductTeardown(c client.Client) {
 	log := logf.Log.WithName("waitForProductTeardown")
 	Eventually(func() error {
@@ -591,6 +672,7 @@ func waitForProductTeardown(c client.Client) {
 		err := GetResource(c, ns)
 		if err == nil {
 			log.Info(fmt.Sprintf("Namespace still exists: %+v", ns))
+			logObjectsInNamespace(c)
 			return fmt.Errorf("Calico namespace still exists")
 		}
 		if !kerror.IsNotFound(err) {

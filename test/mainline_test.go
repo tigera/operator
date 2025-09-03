@@ -48,6 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/render"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 const (
@@ -581,6 +582,7 @@ func verifyCRDsExist(c client.Client, variant operator.ProductVariant) {
 }
 
 func waitForProductTeardown(c client.Client) {
+	log := logf.Log.WithName("waitForProductTeardown")
 	Eventually(func() error {
 		ns := &corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
@@ -588,6 +590,7 @@ func waitForProductTeardown(c client.Client) {
 		}
 		err := GetResource(c, ns)
 		if err == nil {
+			log.Info(fmt.Sprintf("Namespace still exists: %+v", ns))
 			return fmt.Errorf("Calico namespace still exists")
 		}
 		if !kerror.IsNotFound(err) {

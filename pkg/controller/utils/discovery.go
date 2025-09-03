@@ -114,6 +114,13 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 		return operatorv1.ProviderRKE2, nil
 	}
 
+	// Attempt to detect KinD, which also cannot be done via API groups.
+	if kind, err := isKind(ctx, clientset); err != nil {
+		return operatorv1.ProviderNone, fmt.Errorf("failed to check if KinD is the provider: %s", err)
+	} else if kind {
+		return operatorv1.ProviderKind, nil
+	}
+
 	// Couldn't detect any specific platform.
 	return operatorv1.ProviderNone, nil
 }
@@ -237,6 +244,21 @@ func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	}
 
 	return foundRKE2Resource, nil
+}
+
+// isKind checks if the cluster is a kind cluster by evaluating the node.Spec.ProviderID value.
+func isKind(ctx context.Context, c kubernetes.Interface) (bool, error) {
+	nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, fmt.Errorf("failed to get nodes: %w", err)
+	}
+
+	for _, node := range nodes.Items {
+		if strings.HasPrefix(node.Spec.ProviderID, "kind://") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // UseExternalElastic returns true if this cluster is configured to use an external elasticsearch cluster,

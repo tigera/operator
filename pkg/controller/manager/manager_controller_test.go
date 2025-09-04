@@ -271,7 +271,8 @@ var _ = Describe("Manager controller tests", func() {
 
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
 			// Update the internal manager TLS secret with old DNS name.
-			oldKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{"tigera-manager.tigera-manager.svc"})
+			oldKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(),
+				[]string{fmt.Sprintf("%s.%s.svc", render.ManagerServiceName, render.ManagerNamespace)})
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Update(ctx, oldKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 

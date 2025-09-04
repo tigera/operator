@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -67,8 +67,8 @@ type ManagerDeploymentPodSpec struct {
 // ManagerDeploymentContainer is a Manager Deployment container.
 type ManagerDeploymentContainer struct {
 	// Name is an enum which identifies the Manager Deployment container by name.
-	// Supported values are: tigera-voltron, tigera-manager, tigera-ui-apis, and tigera-es-proxy (deprecated).
-	// +kubebuilder:validation:Enum=tigera-voltron;tigera-manager;tigera-es-proxy;tigera-ui-apis
+	// Supported values are: calico-voltron, calico-manager, calico-ui-apis, tigera-voltron (deprecated), tigera-manager (deprecated), tigera-ui-apis (deprecated)
+	// +kubebuilder:validation:Enum=calico-voltron;calico-manager;calico-ui-apis;tigera-voltron;tigera-manager;tigera-ui-apis
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.
@@ -81,8 +81,8 @@ type ManagerDeploymentContainer struct {
 // ManagerDeploymentInitContainer is a Manager Deployment init container.
 type ManagerDeploymentInitContainer struct {
 	// Name is an enum which identifies the Manager Deployment init container by name.
-	// Supported values are: manager-tls-key-cert-provisioner, internal-manager-tls-key-cert-provisioner, tigera-voltron-linseed-tls-key-cert-provisioner
-	// +kubebuilder:validation:Enum=manager-tls-key-cert-provisioner;internal-manager-tls-key-cert-provisioner;tigera-voltron-linseed-tls-key-cert-provisioner
+	// Supported values are: manager-tls-key-cert-provisioner, internal-manager-tls-key-cert-provisioner, calico-voltron-linseed-tls-key-cert-provisioner, tigera-voltron-linseed-tls-key-cert-provisioner (deprecated)
+	// +kubebuilder:validation:Enum=manager-tls-key-cert-provisioner;internal-manager-tls-key-cert-provisioner;calico-voltron-linseed-tls-key-cert-provisioner;tigera-voltron-linseed-tls-key-cert-provisioner
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

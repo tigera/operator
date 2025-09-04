@@ -377,7 +377,7 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 	// Setup all Controllers
 	ctx, cancel := context.WithCancel(context.TODO())
 	err := controller.AddToManager(mgr, options.AddOptions{
-		DetectedProvider:    operator.ProviderNone,
+		DetectedProvider:    operator.ProviderKind,
 		EnterpriseCRDExists: enterpriseCRDsExist,
 		ManageCRDs:          manageCRDs,
 		ShutdownContext:     ctx,

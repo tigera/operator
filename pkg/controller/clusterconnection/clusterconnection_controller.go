@@ -20,9 +20,6 @@ import (
 
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render/goldmane"
-	"github.com/tigera/operator/pkg/render/whisker"
 	"golang.org/x/net/http/httpproxy"
 	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,9 +47,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 

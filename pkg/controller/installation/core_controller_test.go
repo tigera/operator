@@ -1059,6 +1059,9 @@ var _ = Describe("Testing core-controller installation", func() {
 					Variant:               operator.TigeraSecureEnterprise,
 					Registry:              "some.registry.org/",
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
+					ImagePullSecrets: []corev1.LocalObjectReference{{
+						Name: "tigera-pull-secret",
+					}},
 				},
 				Status: operator.InstallationStatus{},
 			}
@@ -1068,6 +1071,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			pullSecrets := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}}
+			Expect(c.Create(ctx, pullSecrets)).NotTo(HaveOccurred())
 		})
 
 		AfterEach(func() {
@@ -1374,6 +1379,46 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("false"))
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
+		})
+
+		It("should reconcile namespace, role binding and pull secrets", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+			namespace := corev1.Namespace{
+				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			}
+			Expect(c.Get(ctx, client.ObjectKey{
+				Name: common.CalicoNamespace,
+			}, &namespace)).NotTo(HaveOccurred())
+			Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
+			Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+
+			// Expect operator role binding to be created
+			rb := rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{},
+			}
+			Expect(c.Get(ctx, client.ObjectKey{
+				Name:      render.TigeraOperatorSecrets,
+				Namespace: common.CalicoNamespace,
+			}, &rb)).NotTo(HaveOccurred())
+			Expect(rb.OwnerReferences).To(HaveLen(1))
+			ownerRoleBinding := rb.OwnerReferences[0]
+			Expect(ownerRoleBinding.Kind).To(Equal("Installation"))
+
+			// Expect pull secrets to be created
+			pullSecrets := corev1.Secret{
+				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			}
+			Expect(c.Get(ctx, client.ObjectKey{
+				Name:      "tigera-pull-secret",
+				Namespace: common.CalicoNamespace,
+			}, &pullSecrets)).NotTo(HaveOccurred())
+			Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
+			pullSecret := pullSecrets.OwnerReferences[0]
+			Expect(pullSecret.Kind).To(Equal("Installation"))
 		})
 
 		It("should set vxlanVNI to 10000 when provider is DockerEE", func() {

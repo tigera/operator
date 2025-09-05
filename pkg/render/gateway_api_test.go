@@ -852,6 +852,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}))
 
+		Expect(envoyDeployment.InitContainers[0].Env).To(ContainElements(GatewayNameEnvVar, GatewayNamespaceEnvVar))
+
 		Expect(envoyDeployment.InitContainers[1].Name).To(Equal("l7-log-collector"))
 		Expect(*envoyDeployment.InitContainers[1].RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
 		Expect(envoyDeployment.InitContainers[1].VolumeMounts).To(HaveLen(2))
@@ -865,9 +867,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 				MountPath: "/var/run/felix",
 			},
 		}))
-
-		// logger gateway name and namespace are set from the k8s downward api pod metadata.
-		Expect(envoyDeployment.InitContainers[0].Env).To(ContainElements(GatewayNameEnvVar, GatewayNamespaceEnvVar))
+		Expect(envoyDeployment.InitContainers[1].Env).To(ContainElement(corev1.EnvVar{
+			Name:  "LISTEN_ADDRESS",
+			Value: ":8081",
+		}))
 
 		Expect(envoyDeployment.Container).ToNot(BeNil())
 		Expect(envoyDeployment.Container.VolumeMounts).To(HaveLen(2))

@@ -752,7 +752,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 					},
 					{
 						Name:  "LISTEN_ADDRESS",
-						Value: ":8080",
+						Value: ":8081",
 					},
 					{
 						Name:  "LISTEN_NETWORK",

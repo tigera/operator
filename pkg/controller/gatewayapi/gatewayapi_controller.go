@@ -44,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/gatewayapi"
 )
 
 var log = logf.Log.WithName("controller_gatewayapi")
@@ -200,7 +201,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// not already exist and cannot be installed.  The "optional" set is everything else that we
 	// would ideally install, to provide more options to our users; but this controller will
 	// only warn if any of those cannot be installed (and do not already exist).
-	essentialCRDs, optionalCRDs := render.GatewayAPICRDs(installation.KubernetesProvider)
+	essentialCRDs, optionalCRDs := gatewayapi.GatewayAPICRDs(installation.KubernetesProvider)
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
@@ -255,7 +256,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	gatewayConfig := &render.GatewayAPIImplementationConfig{
+	gatewayConfig := &gatewayapi.GatewayAPIImplementationConfig{
 		Installation:          installation,
 		PullSecrets:           pullSecrets,
 		GatewayAPI:            gatewayAPI,
@@ -278,13 +279,13 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 			configMap,
 		)
 		if err == nil {
-			if _, ok := configMap.Data[render.EnvoyGatewayConfigKey]; !ok {
-				err = fmt.Errorf("missing '%s' key", render.EnvoyGatewayConfigKey)
+			if _, ok := configMap.Data[gatewayapi.EnvoyGatewayConfigKey]; !ok {
+				err = fmt.Errorf("missing '%s' key", gatewayapi.EnvoyGatewayConfigKey)
 			}
 		}
 		if err == nil {
 			gatewayConfig.CustomEnvoyGateway = &envoyapi.EnvoyGateway{}
-			err = yaml.Unmarshal([]byte(configMap.Data[render.EnvoyGatewayConfigKey]), gatewayConfig.CustomEnvoyGateway)
+			err = yaml.Unmarshal([]byte(configMap.Data[gatewayapi.EnvoyGatewayConfigKey]), gatewayConfig.CustomEnvoyGateway)
 		}
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyGatewayConfigRef", err, log)
@@ -385,7 +386,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// Render non-CRD resources for Gateway API support, i.e. for our specific bundled
 	// implementation of the Gateway API.  For these we specify the GatewayAPI CR as the owner,
 	// so that they all get automatically cleaned up if the GatewayAPI CR is removed again.
-	nonCRDComponent := render.GatewayAPIImplementationComponent(gatewayConfig)
+	nonCRDComponent := gatewayapi.GatewayAPIImplementationComponent(gatewayConfig)
 	err = imageset.ApplyImageSet(ctx, r.client, variant, nonCRDComponent)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error with images from ImageSet", err, log)

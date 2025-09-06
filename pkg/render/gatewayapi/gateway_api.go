@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package gatewayapi
 
 import (
 	_ "embed"
@@ -25,6 +25,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -38,6 +39,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/set"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 )
@@ -47,6 +49,8 @@ var (
 	gatewayAPIResourcesYAML string
 
 	AccessLogType envoyapi.ProxyAccessLogType = "Route"
+
+	log = logf.Log.WithName("gateway_api")
 )
 
 type yamlKind struct {
@@ -387,7 +391,7 @@ type gatewayAPIImplementationComponent struct {
 	L7LogCollectorImage string
 }
 
-func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) Component {
+func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) render.Component {
 	return &gatewayAPIImplementationComponent{
 		cfg: cfg,
 	}
@@ -451,16 +455,16 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// First create the namespace.  We take the name from the read resources, but otherwise
 	// follow our own pattern for namespace creation.
 	objs := []client.Object{
-		CreateNamespace(
+		render.CreateNamespace(
 			resources.namespace.Name,
 			pr.cfg.Installation.KubernetesProvider,
-			PSSPrivileged, // Needed for HostPath volume to write logs to
+			render.PSSPrivileged, // Needed for HostPath volume to write logs to
 			pr.cfg.Installation.Azure,
 		),
 	}
 
 	// Create role binding to allow creating secrets in our namespace.
-	objs = append(objs, CreateOperatorSecretsRoleBinding(resources.namespace.Name))
+	objs = append(objs, render.CreateOperatorSecretsRoleBinding(resources.namespace.Name))
 
 	// Add pull secrets (inferred from the Installation resource).
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)

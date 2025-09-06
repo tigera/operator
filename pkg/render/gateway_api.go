@@ -272,8 +272,8 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 			if resources.namespace == nil {
 				panic("missing Namespace from gateway API YAML")
 			}
-			if len(resources.k8sCRDs) != 10 {
-				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 10)", len(resources.k8sCRDs)))
+			if len(resources.k8sCRDs) != 11 {
+				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 11)", len(resources.k8sCRDs)))
 			}
 			if len(resources.envoyCRDs) != 8 {
 				panic(fmt.Sprintf("missing/extra envoy CRDs from gateway API YAML (%v != 8)", len(resources.envoyCRDs)))

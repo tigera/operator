@@ -665,9 +665,7 @@ var _ = Describe("monitor rendering tests", func() {
 			},
 		}
 
-		dexCfg := render.NewDexKeyValidatorConfig(authentication,
-			nil,
-			dns.DefaultClusterDomain)
+		dexCfg := render.NewDexKeyValidatorConfig(authentication, dns.DefaultClusterDomain)
 		cfg.KeyValidatorConfig = dexCfg
 		cfg.ServerTLSSecret = prometheusKeyPair
 		component := monitor.Monitor(cfg)

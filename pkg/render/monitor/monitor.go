@@ -224,6 +224,8 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.serviceMonitorFluentd(),
 		mc.serviceMonitorQueryServer(),
 		mc.serviceMonitorCalicoKubeControllers(),
+		mc.podMonitorGatewayController(),
+		mc.podMonitorGatewayProxy(),
 	)
 
 	if mc.cfg.KeyValidatorConfig != nil {
@@ -1526,6 +1528,74 @@ func (mc *monitorComponent) typhaServiceMonitor() client.Object {
 			Selector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					render.AppLabelName: render.TyphaMetricsName,
+				},
+			},
+		},
+	}
+}
+
+func (mc *monitorComponent) podMonitorGatewayController() client.Object {
+	return &monitoringv1.PodMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PodMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-gateway-controller",
+			Namespace: common.TigeraPrometheusNamespace,
+			Labels:    map[string]string{"team": "network-operators"},
+		},
+		Spec: monitoringv1.PodMonitorSpec{
+			Selector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"gateway-managed-by": "tigera",
+					"control-plane":      "controller-manager",
+				},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{"tigera-gateway"},
+			},
+			PodMetricsEndpoints: []monitoringv1.PodMetricsEndpoint{
+				{
+					HonorLabels:   true,
+					Interval:      "30s",
+					Port:          ptr.ToPtr("metrics"),
+					Scheme:        "http",
+					ScrapeTimeout: "30s",
+				},
+			},
+		},
+	}
+}
+
+func (mc *monitorComponent) podMonitorGatewayProxy() client.Object {
+	return &monitoringv1.PodMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PodMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-gateway-proxy",
+			Namespace: common.TigeraPrometheusNamespace,
+			Labels:    map[string]string{"team": "network-operators"},
+		},
+		Spec: monitoringv1.PodMonitorSpec{
+			Selector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"gateway-managed-by": "tigera",
+				},
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      "app.kubernetes.io/name",
+						Operator: metav1.LabelSelectorOpIn,
+						Values:   []string{"envoy", "envoy-gateway"},
+					},
+				},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{"tigera-gateway"},
+			},
+			PodMetricsEndpoints: []monitoringv1.PodMetricsEndpoint{
+				{
+					HonorLabels:   true,
+					Interval:      "30s",
+					Port:          ptr.ToPtr("metrics"),
+					Scheme:        "http",
+					ScrapeTimeout: "30s",
 				},
 			},
 		},

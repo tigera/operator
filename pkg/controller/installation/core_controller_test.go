@@ -1278,6 +1278,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				table.DescribeTable("reconciles correctly for different variants",
 					func(variant operator.ProductVariant) {
 						mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+						By("Creating required resources")
 						createKubeProxy()
 						createK8sService()
 						createEndpointSlice()
@@ -1288,6 +1289,16 @@ var _ = Describe("Testing core-controller installation", func() {
 						By("r.Reconcile()")
 						_, err := r.Reconcile(ctx, reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
+
+						By("Checking LinuxDataplane in Installation CR")
+						instance := &operator.Installation{}
+						err = c.Get(ctx, types.NamespacedName{Name: "default"}, instance)
+						Expect(err).ShouldNot(HaveOccurred())
+						if variant == operator.Calico {
+							Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneBPF))
+						} else {
+							Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
+						}
 					},
 					table.Entry("variant is TigeraSecureEnterprise", operator.TigeraSecureEnterprise),
 					table.Entry("variant is Calico", operator.Calico),

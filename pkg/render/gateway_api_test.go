@@ -269,6 +269,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		)))
 		Expect(deploy.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("fast", "slow"))
 		Expect(deploy.Spec.Template.Spec.Tolerations).To(Equal(tolerations))
+		// Verify the gateway-managed-by label is present on controller pods even with overrides
+		Expect(deploy.Spec.Template.Labels).To(HaveKeyWithValue("gateway-managed-by", "tigera"))
 
 		job, err := rtest.GetResourceOfType[*batchv1.Job](objsToCreate, "tigera-gateway-api-gateway-helm-certgen", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
@@ -296,6 +298,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.TopologySpreadConstraints).To(Equal(topologySpreadConstraints))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Resources).To(Equal(resourceRequirements))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Strategy.RollingUpdate).To(Equal(rollingUpdate))
+		// Verify the gateway-managed-by label is present on proxy pods even with overrides
+		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("gateway-managed-by", "tigera"))
 	})
 
 	It("should honour private registry (OSS)", func() {
@@ -359,6 +363,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 			HaveField("Image", "myregistry.io/calico/envoy-gateway:"+components.ComponentCalicoEnvoyGateway.Version),
 		)))
 		Expect(deploy.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
+		// Verify the gateway-managed-by label is present on controller pods
+		Expect(deploy.Spec.Template.Labels).To(HaveKeyWithValue("gateway-managed-by", "tigera"))
 
 		job, err := rtest.GetResourceOfType[*batchv1.Job](objsToCreate, "tigera-gateway-api-gateway-helm-certgen", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
@@ -372,6 +378,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Image).To(Equal("myregistry.io/calico/envoy-proxy:" + components.ComponentCalicoEnvoyProxy.Version))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
+		// Verify the gateway-managed-by label is present on proxy pods
+		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("gateway-managed-by", "tigera"))
 
 		gatewayCM, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, "envoy-gateway-config", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
@@ -449,6 +457,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 			HaveField("Image", "myregistry.io/tigera/envoy-gateway:"+components.ComponentGatewayAPIEnvoyGateway.Version),
 		)))
 		Expect(deploy.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
+		// Verify the gateway-managed-by label is present on controller pods
+		Expect(deploy.Spec.Template.Labels).To(HaveKeyWithValue("gateway-managed-by", "tigera"))
 
 		job, err := rtest.GetResourceOfType[*batchv1.Job](objsToCreate, "tigera-gateway-api-gateway-helm-certgen", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
@@ -462,6 +472,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(*proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.Image).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.ImagePullSecrets).To(ContainElement(pullSecretRefs[0]))
+		// Verify the gateway-managed-by label is present on proxy pods
+		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("gateway-managed-by", "tigera"))
 
 		gatewayCM, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, "envoy-gateway-config", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())

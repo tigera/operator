@@ -557,6 +557,12 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// Add a k8s-app label that we can use to provide API access for the controller.
 	controllerDeployment.Spec.Template.Labels["k8s-app"] = GatewayControllerLabel
 
+	// Add hard-coded label to indicate Tigera management
+	if controllerDeployment.Spec.Template.Labels == nil {
+		controllerDeployment.Spec.Template.Labels = make(map[string]string)
+	}
+	controllerDeployment.Spec.Template.Labels["gateway-managed-by"] = "tigera"
+
 	// Apply customizations from the GatewayControllerDeployment field of the GatewayAPI CR.
 	rcomp.ApplyDeploymentOverrides(controllerDeployment, pr.cfg.GatewayAPI.Spec.GatewayControllerDeployment)
 
@@ -702,6 +708,27 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 		rcomp.ApplyEnvoyProxyOverrides(envoyProxy, classSpec.GatewayDeployment)
 	}
 	applyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
+
+	// Add hard-coded label to indicate Tigera management for proxy pods
+	if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod == nil {
+			envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod = &envoyapi.KubernetesPodSpec{}
+		}
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.Labels == nil {
+			envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.Labels = make(map[string]string)
+		}
+		envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.Labels["gateway-managed-by"] = "tigera"
+	} else {
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {
+			if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod == nil {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod = &envoyapi.KubernetesPodSpec{}
+			}
+			if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels == nil {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels = make(map[string]string)
+			}
+			envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels["gateway-managed-by"] = "tigera"
+		}
+	}
 
 	// Setup WAF HTTP Filter and l7 Log collector on Enterprise.
 	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {

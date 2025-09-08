@@ -1008,6 +1008,8 @@ func expectedBaseResources() []client.Object {
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
+		&monitoringv1.PodMonitor{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-controller", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "PodMonitor", APIVersion: "monitoring.coreos.com/v1"}},
+		&monitoringv1.PodMonitor{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-proxy", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "PodMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 	}
 }

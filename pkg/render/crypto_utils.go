@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,23 +17,7 @@ package render
 import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/tigera/operator/pkg/common"
-	calicrypto "github.com/tigera/operator/pkg/crypto"
 )
-
-func CreateDexClientSecret() *corev1.Secret {
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-dex",
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: map[string][]byte{
-			ClientSecretSecretField: []byte(calicrypto.GeneratePassword(24)),
-		},
-	}
-}
 
 // CreateCertificateSecret is a convenience method for creating a secret that contains only a ca or cert to trust.
 func CreateCertificateSecret(caPem []byte, secretName string, namespace string) *corev1.Secret {

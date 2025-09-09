@@ -132,6 +132,11 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		c.clusterRoleBinding(),
 		c.configMap(),
 	}
+	objectsToDelete := []client.Object{
+		// Delete the secret called tigera-dex which in the past was used to store a client secret.
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: DexObjectName, Name: DexObjectName}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: common.OperatorNamespace(), Name: DexObjectName}},
+	}
 
 	// TODO Some of the secrets created in the operator namespace are created by the customer (i.e. oidc credentials)
 	// TODO so we can't just do a blanket delete of the secrets in the operator namespace. We need to refactor
@@ -149,10 +154,9 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if c.cfg.DeleteDex {
-		return nil, objs
+		return nil, append(objs, objectsToDelete...)
 	}
-
-	return objs, nil
+	return objs, objectsToDelete
 }
 
 func (c *dexComponent) Ready() bool {
@@ -380,7 +384,6 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 				"id":           DexClientId,
 				"redirectURIs": c.cfg.DexConfig.RedirectURIs(),
 				"name":         "Calico Enterprise Manager",
-				"secretEnv":    dexSecretEnv,
 				// When public is true, it enables the code PKCE flow as opposed to a client_secret,
 				// which is not secure for SPA.
 				"public": true,

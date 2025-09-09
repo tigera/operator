@@ -40,7 +40,6 @@ const (
 	authenticationAnnotation = "hash.operator.tigera.io/tigera-dex-auth"
 	dexConfigMapAnnotation   = "hash.operator.tigera.io/tigera-dex-config"
 	dexIdpSecretAnnotation   = "hash.operator.tigera.io/tigera-idp-secret"
-	dexSecretAnnotation      = "hash.operator.tigera.io/tigera-dex-secret"
 
 	// Constants related to secrets.
 	serviceAccountSecretField    = "serviceAccountSecret"
@@ -64,7 +63,6 @@ const (
 	googleAdminEmailEnv = "ADMIN_EMAIL"
 	clientIDEnv         = "CLIENT_ID"
 	clientSecretEnv     = "CLIENT_SECRET"
-	dexSecretEnv        = "DEX_SECRET"
 	bindDNEnv           = "BIND_DN"
 	bindPWEnv           = "BIND_PW"
 
@@ -91,17 +89,16 @@ func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
 	idpSecret *corev1.Secret,
 	clusterDomain string) authentication.KeyValidatorConfig {
-	return &DexKeyValidatorConfig{baseCfg(nil, authentication, nil, idpSecret, clusterDomain)}
+	return &DexKeyValidatorConfig{baseCfg(nil, authentication, idpSecret, clusterDomain)}
 }
 
 // Create a new DexConfig.
 func NewDexConfig(
 	certificateManagement *oprv1.CertificateManagement,
 	authentication *oprv1.Authentication,
-	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
 	clusterDomain string) DexConfig {
-	return &dexConfig{baseCfg(certificateManagement, authentication, dexSecret, idpSecret, clusterDomain)}
+	return &dexConfig{baseCfg(certificateManagement, authentication, idpSecret, clusterDomain)}
 }
 
 type DexKeyValidatorConfig struct {
@@ -124,7 +121,6 @@ type dexConfig struct {
 func baseCfg(
 	certificateManagement *oprv1.CertificateManagement,
 	authentication *oprv1.Authentication,
-	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
 	clusterDomain string) *dexBaseCfg {
 
@@ -151,7 +147,6 @@ func baseCfg(
 		certificateManagement: certificateManagement,
 		authentication:        authentication,
 		idpSecret:             idpSecret,
-		dexSecret:             dexSecret,
 		connectorType:         connType,
 		baseURL:               baseUrl,
 		clusterDomain:         clusterDomain,
@@ -163,7 +158,6 @@ type dexBaseCfg struct {
 	authentication        *oprv1.Authentication
 	tlsSecret             certificatemanagement.KeyPairInterface
 	idpSecret             *corev1.Secret
-	dexSecret             *corev1.Secret
 	baseURL               string
 	connectorType         string
 	clusterDomain         string
@@ -211,10 +205,6 @@ func (d *dexBaseCfg) UsernameClaim() string {
 	return claim
 }
 
-func (d *dexBaseCfg) ClientSecret() []byte {
-	return d.dexSecret.Data[ClientSecretSecretField]
-}
-
 func (d *dexBaseCfg) RequestedScopes() []string {
 	if d.authentication.Spec.OIDC != nil && d.authentication.Spec.OIDC.RequestedScopes != nil {
 		return d.authentication.Spec.OIDC.RequestedScopes
@@ -226,9 +216,6 @@ func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
 	var secrets []*corev1.Secret
 	if d.tlsSecret != nil {
 		secrets = append(secrets, d.tlsSecret.Secret(namespace))
-	}
-	if d.dexSecret != nil {
-		secrets = append(secrets, secret.CopyToNamespace(namespace, d.dexSecret)...)
 	}
 	if d.idpSecret != nil {
 		secrets = append(secrets, secret.CopyToNamespace(namespace, d.idpSecret)...)
@@ -248,9 +235,6 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 
 	if d.idpSecret != nil {
 		annotations[dexIdpSecretAnnotation] = rmeta.AnnotationHash(d.idpSecret.Data)
-	}
-	if d.dexSecret != nil {
-		annotations[dexSecretAnnotation] = rmeta.AnnotationHash(d.dexSecret.Data)
 	}
 	return annotations
 }
@@ -281,9 +265,7 @@ func (d *DexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 
 // Append variables that are necessary for configuring dex.
 func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
-	env := []corev1.EnvVar{
-		{Name: dexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.dexSecret.Name}}}},
-	}
+	var env []corev1.EnvVar
 	if d.idpSecret != nil {
 		addIfPresent := func(fieldName, envName string) {
 			if _, found := d.idpSecret.Data[fieldName]; found {

@@ -443,8 +443,6 @@ var _ = Describe("LogStorage controller", func() {
 					Status: operatorv1.AuthenticationStatus{State: operatorv1.TigeraStatusReady},
 				})).ToNot(HaveOccurred())
 
-				Expect(cli.Create(ctx, render.CreateDexClientSecret())).ToNot(HaveOccurred())
-
 				Expect(cli.Create(ctx, &storagev1.StorageClass{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: storageClassName,

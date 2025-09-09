@@ -352,9 +352,11 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 			"allowedOrigins":          []string{"*"},
 			"discoveryAllowedOrigins": []string{"*"},
 			"headers": map[string]string{
-				"X-Content-Type-Options":    "nosniff",
-				"X-XSS-Protection":          "1; mode=block",
-				"X-Frame-Options":           "DENY",
+				"X-Content-Type-Options": "nosniff",
+				"X-XSS-Protection":       "1; mode=block",
+				// Since Dex is running on the same domain as the manager, this will allow an iFrame
+				// to make a silent-callback to refresh access tokens.
+				"X-Frame-Options":           "SAMEORIGIN",
 				"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 			},
 		},
@@ -369,6 +371,9 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 				"redirectURIs": c.cfg.DexConfig.RedirectURIs(),
 				"name":         "Calico Enterprise Manager",
 				"secretEnv":    dexSecretEnv,
+				// When public is true, it enables the code PKCE flow as opposed to a client_secret,
+				// which is not secure for SPA.
+				"public": true,
 			},
 		},
 		"expiry": map[string]string{

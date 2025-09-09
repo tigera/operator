@@ -16,6 +16,7 @@ package render
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -480,6 +481,15 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		objs = append(objs, resource.DeepCopyObject().(client.Object))
 	}
 
+	// Add WAF HTTP Filter RBAC resources for Enterprise variant
+	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		objs = append(objs,
+			pr.wafHttpFilterServiceAccount(),
+			pr.wafHttpFilterClusterRole(),
+			pr.wafHttpFilterClusterRoleBinding(),
+		)
+	}
+
 	// Prepare EnvoyGateway config, either from upstream or from a custom EnvoyGatewayConfigRef
 	// provided by the user.
 	envoyGatewayConfig := pr.cfg.CustomEnvoyGateway
@@ -915,6 +925,28 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, AccessLogsVolume...)
 			}
 
+			// Configure service account for WAF HTTP Filter license client
+			// Use EnvoyProxy patch mechanism to set serviceAccountName and automountServiceAccountToken
+			serviceAccountPatch := map[string]interface{}{
+				"spec": map[string]interface{}{
+					"template": map[string]interface{}{
+						"spec": map[string]interface{}{
+							"serviceAccountName":           wafFilterName,
+							"automountServiceAccountToken": true,
+						},
+					},
+				},
+			}
+
+			// Convert patch to JSON
+			patchBytes, err := json.Marshal(serviceAccountPatch)
+			if err == nil {
+				if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch == nil {
+					envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch = &envoyapi.KubernetesPatchSpec{}
+				}
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Value = apiextenv1.JSON{Raw: patchBytes}
+			}
+
 			if envoyProxy.Spec.Telemetry != nil {
 				if envoyProxy.Spec.Telemetry.AccessLog == nil {
 					envoyProxy.Spec.Telemetry.AccessLog = &envoyapi.ProxyAccessLog{
@@ -1032,5 +1064,60 @@ func applyEnvoyProxyServiceOverrides(ep *envoyapi.EnvoyProxy, overrides *operato
 				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP = overrides.Spec.LoadBalancerIP
 			}
 		}
+	}
+}
+
+// wafHttpFilterServiceAccount creates the ServiceAccount for WAF HTTP Filter
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      wafFilterName,
+			Namespace: "tigera-gateway",
+		},
+	}
+}
+
+// wafHttpFilterClusterRole creates the ClusterRole for WAF HTTP Filter
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: wafFilterName,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "watch"},
+			},
+			{
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
+			},
+		},
+	}
+}
+
+// wafHttpFilterClusterRoleBinding creates the ClusterRoleBinding for WAF HTTP Filter
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: wafFilterName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     wafFilterName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      wafFilterName,
+				Namespace: "tigera-gateway",
+			},
+		},
 	}
 }

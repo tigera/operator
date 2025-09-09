@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -444,8 +444,6 @@ var _ = Describe("LogStorage controller", func() {
 					},
 					Status: operatorv1.AuthenticationStatus{State: operatorv1.TigeraStatusReady},
 				})).ToNot(HaveOccurred())
-
-				Expect(cli.Create(ctx, render.CreateDexClientSecret())).ToNot(HaveOccurred())
 
 				Expect(cli.Create(ctx, &storagev1.StorageClass{
 					ObjectMeta: metav1.ObjectMeta{

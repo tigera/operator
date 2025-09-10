@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,6 +45,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+)
+
+const (
+	DefaultPolicySyncPrefix = "/var/run/nodeagent"
 )
 
 var log = logf.Log.WithName("controller_gatewayapi")
@@ -255,6 +260,12 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	// patch felix config for l7-collector socket path.
+	if err = r.patchFelixConfiguration(ctx); err != nil {
+		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	gatewayConfig := &render.GatewayAPIImplementationConfig{
 		Installation:          installation,
 		PullSecrets:           pullSecrets,
@@ -429,4 +440,21 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 		}
 	}
 	return resource, "", nil
+}
+
+// patchFelixConfiguration takes all application layer specs as arguments and patches felix config.
+// If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
+func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error {
+	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+
+		fc.Spec.PolicySyncPathPrefix = DefaultPolicySyncPrefix
+
+		log.Info(
+			"Patching FelixConfiguration: ",
+			"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
+		)
+		return true, nil
+	})
+
+	return err
 }

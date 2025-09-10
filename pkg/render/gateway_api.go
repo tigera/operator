@@ -84,6 +84,7 @@ const (
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 	wafFilterName                       = "waf-http-filter"
+	DefaultPolicySyncPrefix             = "/var/run/nodeagent"
 )
 
 var (

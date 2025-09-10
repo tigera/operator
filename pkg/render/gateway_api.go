@@ -84,7 +84,6 @@ const (
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 	wafFilterName                       = "waf-http-filter"
-	DefaultPolicySyncPrefix             = "/var/run/nodeagent"
 )
 
 var (
@@ -753,7 +752,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 					},
 					{
 						Name:  "LISTEN_ADDRESS",
-						Value: ":8081",
+						Value: ":8080",
 					},
 					{
 						Name:  "LISTEN_NETWORK",

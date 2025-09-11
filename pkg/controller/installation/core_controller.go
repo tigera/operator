@@ -1914,16 +1914,28 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		updated = true
 	}
 	vxlanVNI := 4096
+	vxlanPort := 4789
 	// MKE uses a vxlanVNI:4096 and vxlanPort:4789 for its docker swarm vxlan.
 	// This results in a conflict with calico's VXLAN and the vxlan.calico interface
 	// gets deleted. To fix this we change the vxlanVNI to 10000 as recommended by
 	// MKE docs (https://docs.mirantis.com/mke/3.7/cli-ref/mke-cli-install.html).
 	if install.Spec.KubernetesProvider == operator.ProviderDockerEE {
 		vxlanVNI = 10000
+		// We are using a flow based VXLAN device for
+		// ebpf dataplane. This requires changing the default VXLAN port to
+		// 8472 to avoid conflict with the host's VXLAN interface.
+		if install.Spec.BPFEnabled() {
+			vxlanPort = 8472
+		}
 	}
 
 	if fc.Spec.VXLANVNI == nil {
 		fc.Spec.VXLANVNI = &vxlanVNI
+		updated = true
+	}
+
+	if fc.Spec.VXLANPort == nil {
+		fc.Spec.VXLANPort = &vxlanPort
 		updated = true
 	}
 

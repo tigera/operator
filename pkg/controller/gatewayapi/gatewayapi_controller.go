@@ -442,8 +442,7 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 	return resource, "", nil
 }
 
-// patchFelixConfiguration takes all application layer specs as arguments and patches felix config.
-// If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
+// patchFelixConfiguration patches the FelixConfiguration resource with the desired policy sync path prefix.
 func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error {
 	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 

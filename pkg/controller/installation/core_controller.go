@@ -1921,7 +1921,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	// MKE docs (https://docs.mirantis.com/mke/3.7/cli-ref/mke-cli-install.html).
 	if install.Spec.KubernetesProvider == operator.ProviderDockerEE {
 		vxlanVNI = 10000
-		// Starting Calico v3.31, we are using a flow based VXLAN device for
+		// We are using a flow based VXLAN device for
 		// ebpf dataplane. This requires changing the default VXLAN port to
 		// 8472 to avoid conflict with the host's VXLAN interface.
 		if install.Spec.BPFEnabled() {

@@ -998,7 +998,9 @@ func (s *InstallationSpec) BPFEnabled() bool {
 // IsNftables is an extension method that returns true if the Installation resource
 // has Calico Network Linux Dataplane set and equal to value "Nftables" or "BPF", otherwise false.
 //
-// BPF is included here as it uses nftables to program some rules, except when on DockerEE.
+// BPF is included here as it uses nftables to program some rules, except when on DockerEE,
+// since docker-ee programs some rules in iptables. These rules does not interact well with the
+// nftable rules that calico programs, so we exclude BPF when on DockerEE.
 func (s *InstallationSpec) IsNftables() bool {
 	if s.CalicoNetwork != nil && s.CalicoNetwork.LinuxDataplane != nil {
 		if s.KubernetesProvider.IsDockerEE() &&

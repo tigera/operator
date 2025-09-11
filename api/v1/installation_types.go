@@ -82,7 +82,7 @@ type InstallationSpec struct {
 	// If the specified value is not empty, the Operator will still attempt auto-detection, but
 	// will additionally compare the auto-detected value to the specified value to confirm they match.
 	// +optional
-	// +kubebuilder:validation:Enum="";EKS;GKE;AKS;OpenShift;DockerEnterprise;RKE2;TKG;Kind;
+	// +kubebuilder:validation:Enum="";EKS;GKE;AKS;OpenShift;DockerEnterprise;RKE2;TKG;
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 
 	// CNI specifies the CNI that will be used by this installation.
@@ -220,8 +220,8 @@ type InstallationSpec struct {
 type BPFNetworkBootstrapType string
 
 const (
-	BPFNetworkBootstrapEnabled  BPFNetworkBootstrapType = "Enabled"
-	BPFNetworkBootstrapDisabled BPFNetworkBootstrapType = "Disabled"
+	BPFNetworkAutoEnabled  BPFNetworkBootstrapType = "Enabled"
+	BPFNetworkAutoDisabled BPFNetworkBootstrapType = "Disabled"
 )
 
 // KubeProxyManagementType specifies whether kube-proxy management is enabled.
@@ -386,7 +386,7 @@ type ComponentResource struct {
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options
-// are: EKS, GKE, AKS, RKE2, OpenShift, DockerEnterprise, TKG, Kind.
+// are: EKS, GKE, AKS, RKE2, OpenShift, DockerEnterprise, TKG.
 type Provider string
 
 var (
@@ -398,7 +398,6 @@ var (
 	ProviderOpenShift Provider = "OpenShift"
 	ProviderDockerEE  Provider = "DockerEnterprise"
 	ProviderTKG       Provider = "TKG"
-	ProviderKind      Provider = "Kind"
 )
 
 func (p Provider) IsNone() bool {
@@ -431,10 +430,6 @@ func (p Provider) IsRKE2() bool {
 
 func (p Provider) IsTKG() bool {
 	return p == ProviderTKG
-}
-
-func (p Provider) IsKind() bool {
-	return p == ProviderKind
 }
 
 // ProductVariant represents the variant of the product.
@@ -1017,7 +1012,7 @@ func (installation *InstallationSpec) BPFNetworkBootstrapEnabled() bool {
 	return installation != nil &&
 		installation.CalicoNetwork != nil &&
 		installation.CalicoNetwork.BPFNetworkBootstrap != nil &&
-		*installation.CalicoNetwork.BPFNetworkBootstrap == BPFNetworkBootstrapEnabled
+		*installation.CalicoNetwork.BPFNetworkBootstrap == BPFNetworkAutoEnabled
 }
 
 func (installation *InstallationSpec) KubeProxyManagementEnabled() bool {

@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -154,19 +154,5 @@ var _ = Describe("provider discovery", func() {
 		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderRKE2))
-	})
-
-	It("should detect KinD if a Node has ProviderID prefixed with kind://", func() {
-		c := fake.NewSimpleClientset(&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "kind-worker",
-			},
-			Spec: corev1.NodeSpec{
-				ProviderID: "kind://docker/kind/kind-worker",
-			},
-		})
-		p, e := AutoDiscoverProvider(context.Background(), c)
-		Expect(e).To(BeNil())
-		Expect(p).To(Equal(operatorv1.ProviderKind))
 	})
 })

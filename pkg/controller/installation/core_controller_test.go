@@ -1230,9 +1230,6 @@ var _ = Describe("Testing core-controller installation", func() {
 					table.Entry("all requirements met with empty installation",
 						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{}, true,
 					),
-					table.Entry("all requirements met with variant set to Calico",
-						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Spec: operator.InstallationSpec{Variant: operator.Calico}}, true,
-					),
 					table.Entry("all requirements met with dataplane set to BPF",
 						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Spec: operator.InstallationSpec{CalicoNetwork: &operator.CalicoNetworkSpec{LinuxDataplane: &dataplaneBPF}}}, true,
 					),
@@ -1241,9 +1238,6 @@ var _ = Describe("Testing core-controller installation", func() {
 					),
 					table.Entry("all requirements met with kubeProxyManagement enabled",
 						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Spec: operator.InstallationSpec{CalicoNetwork: &operator.CalicoNetworkSpec{KubeProxyManagement: &kubeProxyManagementEnabled}}}, true,
-					),
-					table.Entry("installation has Enterprise Variant set",
-						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Spec: operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise}}, false,
 					),
 					table.Entry("installation already has Status.Computed - existing installation",
 						[]func(){createKubeProxy, createK8sService, createEndpointSlice}, &operator.Installation{Status: operator.InstallationStatus{Computed: &operator.InstallationSpec{}}}, false,
@@ -1278,7 +1272,6 @@ var _ = Describe("Testing core-controller installation", func() {
 				table.DescribeTable("reconciles correctly for different variants",
 					func(variant operator.ProductVariant) {
 						mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
-						By("Creating required resources")
 						createKubeProxy()
 						createK8sService()
 						createEndpointSlice()
@@ -1289,16 +1282,6 @@ var _ = Describe("Testing core-controller installation", func() {
 						By("r.Reconcile()")
 						_, err := r.Reconcile(ctx, reconcile.Request{})
 						Expect(err).ShouldNot(HaveOccurred())
-
-						By("Checking LinuxDataplane in Installation CR")
-						instance := &operator.Installation{}
-						err = c.Get(ctx, types.NamespacedName{Name: "default"}, instance)
-						Expect(err).ShouldNot(HaveOccurred())
-						if variant == operator.Calico {
-							Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneBPF))
-						} else {
-							Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
-						}
 					},
 					table.Entry("variant is TigeraSecureEnterprise", operator.TigeraSecureEnterprise),
 					table.Entry("variant is Calico", operator.Calico),

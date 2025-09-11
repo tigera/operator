@@ -404,11 +404,6 @@ func autoDetectDefaultBPF(ctx context.Context, client client.Client, instance *o
 		return false
 	}
 
-	// Should apply BPF as default only for OSS product.
-	if len(instance.Spec.Variant) != 0 && instance.Spec.Variant != operator.Calico {
-		return false
-	}
-
 	// linuxDataplane, bpfNetworkingBootstrap, and kubeProxyManagement should either be unset or set to their auto-detected target values.
 	calicoNetwork := instance.Spec.CalicoNetwork
 	if calicoNetwork != nil &&

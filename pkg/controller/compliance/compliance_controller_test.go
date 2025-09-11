@@ -158,7 +158,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).NotTo(BeTrue())
 
 		dpl := appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{},
@@ -196,7 +196,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).NotTo(BeTrue())
 
 		By("replacing the server certs with user-supplied certs")
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
@@ -225,7 +225,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("checking that an error occurred and the cert didn't change")
 		result, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).NotTo(BeTrue())
 		assertExpectedCertDNSNames(c, oldDNSNames...)
 	})
 
@@ -233,7 +233,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).NotTo(BeTrue())
 
 		By("replacing the server certs with ones that include the expected DNS names")
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
@@ -262,7 +262,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("checking that an error occurred and the cert didn't change")
 		result, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).NotTo(BeTrue())
 		assertExpectedCertDNSNames(c, dnsNames...)
 	})
 
@@ -299,7 +299,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).NotTo(BeTrue())
 
 		By("creating a compliance-server deployment")
 		dpl := appsv1.Deployment{
@@ -385,7 +385,7 @@ var _ = Describe("Compliance controller tests", func() {
 	It("create namespace, operator secrets role and pull secrets", func() {
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+		Expect(result.RequeueAfterAfter).To(Equal(0 * time.Second))
 
 		// Expect namespace to be created
 		namespace := corev1.Namespace{
@@ -655,7 +655,7 @@ var _ = Describe("Compliance controller tests", func() {
 
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+			Expect(result.RequeueAfterAfter).To(Equal(0 * time.Second))
 
 			d := appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
@@ -965,7 +965,7 @@ var _ = Describe("Compliance controller tests", func() {
 
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+			Expect(result.RequeueAfterAfter).To(Equal(0 * time.Second))
 
 			// We check for correct rendering of all resources in compliance_test.go, so use the SA
 			// merely as a proxy here that the creation of our Compliance went smoothly
@@ -1040,7 +1040,7 @@ var _ = Describe("Compliance controller tests", func() {
 
 			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+			Expect(result.RequeueAfterAfter).To(Equal(0 * time.Second))
 
 			// Expect operator role binding to be created
 			rb := rbacv1.RoleBinding{

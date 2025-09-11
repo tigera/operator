@@ -158,7 +158,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
 
 		dpl := appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{},
@@ -196,7 +196,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
 
 		By("replacing the server certs with user-supplied certs")
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
@@ -225,7 +225,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("checking that an error occurred and the cert didn't change")
 		result, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
 		assertExpectedCertDNSNames(c, oldDNSNames...)
 	})
 

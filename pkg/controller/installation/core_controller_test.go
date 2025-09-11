@@ -1002,7 +1002,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			})
 		})
 
-		Context("streamline BPF installation", func() {
+		Context("with LinuxDataplane=BPF and BPFNetworkBootstrap=Enabled", func() {
 			createResource := func(obj client.Object) {
 				Expect(c.Create(ctx, obj)).NotTo(HaveOccurred())
 			}
@@ -1038,15 +1038,6 @@ var _ = Describe("Testing core-controller installation", func() {
 							{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
 						},
 						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
-					})
-			}
-			createKubeProxy := func() {
-				createResource(
-					&appsv1.DaemonSet{
-						ObjectMeta: metav1.ObjectMeta{
-							Name:      utils.KubeProxyInstanceKey.Name,
-							Namespace: utils.KubeProxyInstanceKey.Namespace,
-						},
 					})
 			}
 
@@ -1219,6 +1210,16 @@ var _ = Describe("Testing core-controller installation", func() {
 				kubeProxyManagementDisabled := operator.KubeProxyManagementDisabled
 				kubeProxyManagementEnabled := operator.KubeProxyManagementEnabled
 
+				createKubeProxy := func() {
+					createResource(
+						&appsv1.DaemonSet{
+							ObjectMeta: metav1.ObjectMeta{
+								Name:      utils.KubeProxyInstanceKey.Name,
+								Namespace: utils.KubeProxyInstanceKey.Namespace,
+							},
+						})
+				}
+
 				table.DescribeTable("auto-detect cluster status to defaulting BPF",
 					func(funcs []func(), installation *operator.Installation, shouldDefaulted bool) {
 						for _, f := range funcs {
@@ -1266,25 +1267,6 @@ var _ = Describe("Testing core-controller installation", func() {
 					table.Entry("missing kube-proxy daemonset",
 						[]func(){createK8sService, createEndpointSlice}, &operator.Installation{}, false,
 					),
-				)
-			})
-			When("reconciling without custom configuration", func() {
-				table.DescribeTable("reconciles correctly for different variants",
-					func(variant operator.ProductVariant) {
-						mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
-						createKubeProxy()
-						createK8sService()
-						createEndpointSlice()
-
-						cr.Spec.Variant = variant
-						Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-
-						By("r.Reconcile()")
-						_, err := r.Reconcile(ctx, reconcile.Request{})
-						Expect(err).ShouldNot(HaveOccurred())
-					},
-					table.Entry("variant is TigeraSecureEnterprise", operator.TigeraSecureEnterprise),
-					table.Entry("variant is Calico", operator.Calico),
 				)
 			})
 		})

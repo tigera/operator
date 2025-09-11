@@ -438,10 +438,6 @@ func checkAndApplyBPFDefaults(ctx context.Context, client client.Client, instanc
 
 	// defaultBpfDataplane == true indicates that this is a new installation, and that automatic BPF installation can be set by default.
 	if defaultBpfDataplane {
-		if instance.Spec.CalicoNetwork == nil {
-			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
-		}
-
 		dpBPF := operator.LinuxDataplaneBPF
 		instance.Spec.CalicoNetwork.LinuxDataplane = &dpBPF
 		bpfNetworkEnabled := operator.BPFNetworkBootstrapEnabled

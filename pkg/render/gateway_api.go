@@ -557,6 +557,85 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// Add a k8s-app label that we can use to provide API access for the controller.
 	controllerDeployment.Spec.Template.Labels["k8s-app"] = GatewayControllerLabel
 
+	// Setup l7 Log collector as sidecar to gateway controller on Enterprise.
+	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// Create l7-log-collector sidecar container for controller with custom volume mounts and env vars
+		customVolumeMounts := []corev1.VolumeMount{
+			{
+				Name:      "pod-logs",
+				MountPath: "/var/log/containers",
+			},
+			{
+				Name:      "felix-sync",
+				MountPath: "/var/run/felix",
+			},
+		}
+		customEnv := []corev1.EnvVar{
+			{
+				Name:  "ENABLE_LOG_TAIL",
+				Value: "true",
+			},
+			{
+				Name:  "FELIX_DIAL_TARGET",
+				Value: "/var/run/felix/nodeagent/socket",
+			},
+			{
+				Name:  "LISTEN_ADDRESS",
+				Value: ":8080",
+			},
+			{
+				Name:  "LISTEN_NETWORK",
+				Value: "tcp",
+			},
+			{
+				Name:  "ENVOY_ACCESS_LOG_PATH",
+				Value: "/var/log/containers/envoy-gateway_*.log",
+			},
+		}
+		l7LogCollectorGatewayControllerSidecar := pr.createL7LogCollectorContainer("l7-log-collector", customEnv, customVolumeMounts)
+
+		// Add the sidecar container
+		controllerDeployment.Spec.Template.Spec.Containers = append(controllerDeployment.Spec.Template.Spec.Containers, l7LogCollectorGatewayControllerSidecar)
+
+		// Add required volumes for the sidecar
+		podLogsVolume := corev1.Volume{
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/var/log/containers",
+					Type: ptr.ToPtr(corev1.HostPathDirectoryOrCreate),
+				},
+			},
+			Name: "pod-logs",
+		}
+		felixSyncVolume := corev1.Volume{
+			VolumeSource: corev1.VolumeSource{
+				CSI: &corev1.CSIVolumeSource{
+					Driver: "csi.tigera.io",
+				},
+			},
+			Name: "felix-sync",
+		}
+
+		// Check if volumes already exist
+		hasPodLogsVolume := false
+		hasFelixSyncVolume := false
+		for _, volume := range controllerDeployment.Spec.Template.Spec.Volumes {
+			if volume.Name == "pod-logs" {
+				hasPodLogsVolume = true
+			}
+			if volume.Name == "felix-sync" {
+				hasFelixSyncVolume = true
+			}
+		}
+
+		if !hasPodLogsVolume {
+			controllerDeployment.Spec.Template.Spec.Volumes = append(controllerDeployment.Spec.Template.Spec.Volumes, podLogsVolume)
+		}
+		if !hasFelixSyncVolume {
+			controllerDeployment.Spec.Template.Spec.Volumes = append(controllerDeployment.Spec.Template.Spec.Volumes, felixSyncVolume)
+		}
+	}
+
 	// Apply customizations from the GatewayControllerDeployment field of the GatewayAPI CR.
 	rcomp.ApplyDeploymentOverrides(controllerDeployment, pr.cfg.GatewayAPI.Spec.GatewayControllerDeployment)
 
@@ -738,44 +817,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				SecurityContext: securitycontext.NewRootContext(true),
 			}
 			// need to make changes to the envoy container to mount the socket
-			l7LogCollector := corev1.Container{
-				Name:  "l7-log-collector",
-				Image: pr.L7LogCollectorImage,
-				Env: []corev1.EnvVar{
-					{
-						Name:  "ENABLE_LOG_TAIL",
-						Value: "true",
-					},
-					{
-						Name:  "FELIX_DIAL_TARGET",
-						Value: "/var/run/felix/nodeagent/socket",
-					},
-					{
-						Name:  "LISTEN_ADDRESS",
-						Value: ":8080",
-					},
-					{
-						Name:  "LISTEN_NETWORK",
-						Value: "tcp",
-					},
-					{
-						Name:  "ENVOY_ACCESS_LOG_PATH",
-						Value: "/access_logs/access.log",
-					},
-				},
-				RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
-				VolumeMounts: []corev1.VolumeMount{
-					{
-						Name:      "access-logs",
-						MountPath: "/access_logs",
-					},
-					{
-						Name:      "felix-sync",
-						MountPath: "/var/run/felix",
-					},
-				},
-				SecurityContext: securitycontext.NewRootContext(true),
-			}
+			l7LogCollectorProxyControllerSidecar := pr.createL7LogCollectorContainer("l7-log-collector", nil, nil)
 
 			hasWAFHTTPFilter := false
 			hasL7LogCollector := false
@@ -787,15 +829,15 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i] = wafHTTPFilter
 					}
 				}
-				if initContainer.Name == l7LogCollector.Name {
+				if initContainer.Name == l7LogCollectorProxyControllerSidecar.Name {
 					hasL7LogCollector = true
 					// Handle update
-					if initContainer.Image != l7LogCollector.Image {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].Image = l7LogCollector.Image
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].Env = l7LogCollector.Env
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].VolumeMounts = l7LogCollector.VolumeMounts
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].RestartPolicy = l7LogCollector.RestartPolicy
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].SecurityContext = l7LogCollector.SecurityContext
+					if initContainer.Image != l7LogCollectorProxyControllerSidecar.Image {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].Image = l7LogCollectorProxyControllerSidecar.Image
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].Env = l7LogCollectorProxyControllerSidecar.Env
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].VolumeMounts = l7LogCollectorProxyControllerSidecar.VolumeMounts
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].RestartPolicy = l7LogCollectorProxyControllerSidecar.RestartPolicy
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].SecurityContext = l7LogCollectorProxyControllerSidecar.SecurityContext
 					}
 				}
 			}
@@ -804,7 +846,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			}
 
 			if !hasL7LogCollector {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, l7LogCollector)
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, l7LogCollectorProxyControllerSidecar)
 			}
 
 			accessLogsName := "access-logs"
@@ -999,6 +1041,90 @@ type GatewayAPIImplementationConfigInterface interface {
 
 func (pr *gatewayAPIImplementationComponent) GetConfig() *GatewayAPIImplementationConfig {
 	return pr.cfg
+}
+
+// createL7LogCollectorContainer creates an l7-log-collector container with customizable name, env vars and volume mounts
+func (pr *gatewayAPIImplementationComponent) createL7LogCollectorContainer(containerName string, customEnv []corev1.EnvVar, customVolumeMounts []corev1.VolumeMount) corev1.Container {
+	// Use default name if not provided
+	if containerName == "" {
+		containerName = "l7-log-collector"
+	}
+	// Default env vars
+	defaultEnv := []corev1.EnvVar{
+		{
+			Name:  "ENABLE_LOG_TAIL",
+			Value: "true",
+		},
+		{
+			Name:  "FELIX_DIAL_TARGET",
+			Value: "/var/run/felix/nodeagent/socket",
+		},
+		{
+			Name:  "LISTEN_ADDRESS",
+			Value: ":8080",
+		},
+		{
+			Name:  "LISTEN_NETWORK",
+			Value: "tcp",
+		},
+		{
+			Name:  "ENVOY_ACCESS_LOG_PATH",
+			Value: "/access_logs/access.log",
+		},
+	}
+
+	// Default volume mounts
+	defaultVolumeMounts := []corev1.VolumeMount{
+		{
+			Name:      "access-logs",
+			MountPath: "/access_logs",
+		},
+		{
+			Name:      "felix-sync",
+			MountPath: "/var/run/felix",
+		},
+	}
+
+	// Merge custom env vars with defaults (custom takes precedence)
+	env := defaultEnv
+	for _, custom := range customEnv {
+		found := false
+		for i, def := range env {
+			if def.Name == custom.Name {
+				env[i] = custom
+				found = true
+				break
+			}
+		}
+		if !found {
+			env = append(env, custom)
+		}
+	}
+
+	// Merge custom volume mounts with defaults (custom takes precedence)
+	volumeMounts := defaultVolumeMounts
+	for _, custom := range customVolumeMounts {
+		found := false
+		for i, def := range volumeMounts {
+			if def.Name == custom.Name {
+				volumeMounts[i] = custom
+				found = true
+				break
+			}
+		}
+		if !found {
+			volumeMounts = append(volumeMounts, custom)
+		}
+	}
+
+	return corev1.Container{
+		Name:            containerName,
+		Image:           pr.L7LogCollectorImage,
+		Env:             env,
+		RestartPolicy:   ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+		VolumeMounts:    volumeMounts,
+		SecurityContext: securitycontext.NewRootContext(true),
+	}
 }
 
 // applyEnvoyProxyServiceOverrides applies the overrides to the given EnvoyProxy.

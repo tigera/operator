@@ -1357,7 +1357,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
 		})
 
-		It("should set vxlanPort to 4798 when provider is DockerEE", func() {
+		It("should set vxlanVNI to 10000 when provider is DockerEE", func() {
 			cr.Spec.KubernetesProvider = operator.ProviderDockerEE
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1369,6 +1369,22 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			Expect(fc.Spec.VXLANVNI).NotTo(BeNil())
 			Expect(*fc.Spec.VXLANVNI).To(Equal(10000))
+		})
+
+		It("should set vxlanPort to 8472 and nftables to disabled when provider is DockerEE and BPF is enabled", func() {
+			cr.Spec.KubernetesProvider = operator.ProviderDockerEE
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.VXLANPort).NotTo(BeNil())
+			Expect(*fc.Spec.VXLANPort).To(Equal(8472))
+			Expect(fc.Spec.NFTablesMode).NotTo(BeNil())
+			Expect(*fc.Spec.NFTablesMode).To(Equal(crdv1.NFTablesModeDisabled))
 		})
 
 		It("should set bpfHostConntrackByPass to false when provider is DockerEE and BPF enabled", func() {

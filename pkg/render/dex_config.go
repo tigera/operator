@@ -20,6 +20,8 @@ import (
 	"strconv"
 	"strings"
 
+	csisecret "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
+
 	oprv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -48,6 +50,7 @@ const (
 	serviceAccountFilePathField  = "serviceAccountFilePath"
 	RootCASecretField            = "rootCA"
 	OIDCSecretName               = "tigera-oidc-credentials"
+	OIDCSecretProviderClassName  = "tigera-oidc-credentials"
 	OpenshiftSecretName          = "tigera-openshift-credentials"
 	LDAPSecretName               = "tigera-ldap-credentials"
 	serviceAccountSecretLocation = "/etc/dex/secrets/google-groups.json"
@@ -76,20 +79,39 @@ const (
 
 // DexConfig is a config for DexIdP itself.
 type DexConfig interface {
+	// Connector returns the dex connector configuration block.
 	Connector() map[string]interface{}
+	// RedirectURIs returns the list of redirect URIs for the dex static client.
 	RedirectURIs() []string
-	// RequiredVolumeMounts returns volume mounts that the KeyValidatorConfig implementation requires.
+	// Issuer returns the issuer URL for dex.
+	Issuer() string
+	// RequiredEnv returns env variables required by the dex deployment.
+	RequiredEnv(prefix string) []corev1.EnvVar
+	// RequiredAnnotations returns pod annotations required by the dex deployment.
+	RequiredAnnotations() map[string]string
+	// RequiredSecrets returns secrets required by the dex deployment in the given namespace.
+	RequiredSecrets(namespace string) []*corev1.Secret
+	// RequiredVolumeMounts returns volume mounts required by the dex deployment.
 	RequiredVolumeMounts() []corev1.VolumeMount
-	// RequiredVolumes returns volumes that the KeyValidatorConfig implementation requires.
+	// RequiredVolumes returns volumes required by the dex deployment.
 	RequiredVolumes() []corev1.Volume
-	authentication.KeyValidatorConfig
+	// RequiredSecretProviderClass returns SecretProviderClass objects required by the dex deployment.
+	RequiredSecretProviderClass(namespace string) []*csisecret.SecretProviderClass
 }
 
 func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
-	idpSecret *corev1.Secret,
 	clusterDomain string) authentication.KeyValidatorConfig {
-	return &DexKeyValidatorConfig{baseCfg(nil, authentication, idpSecret, clusterDomain)}
+	// Compute baseURL similar to baseCfg but without creating dexBaseCfg.
+	baseUrl := authentication.Spec.ManagerDomain
+	if !strings.HasPrefix(baseUrl, "http://") && !strings.HasPrefix(baseUrl, "https://") {
+		baseUrl = fmt.Sprintf("https://%s", baseUrl)
+	}
+	return &DexKeyValidatorConfig{
+		authentication: authentication,
+		baseURL:        baseUrl,
+		clusterDomain:  clusterDomain,
+	}
 }
 
 // Create a new DexConfig.
@@ -97,13 +119,36 @@ func NewDexConfig(
 	certificateManagement *oprv1.CertificateManagement,
 	authentication *oprv1.Authentication,
 	idpSecret *corev1.Secret,
+	secretProviderClass *csisecret.SecretProviderClass,
 	clusterDomain string) DexConfig {
-	return &dexConfig{baseCfg(certificateManagement, authentication, idpSecret, clusterDomain)}
+	return &dexConfig{
+		dexBaseCfg:          baseCfg(certificateManagement, authentication, idpSecret, clusterDomain),
+		secretProviderClass: secretProviderClass,
+	}
 }
 
 type DexKeyValidatorConfig struct {
-	*dexBaseCfg
+	authentication *oprv1.Authentication
+	baseURL        string
+	clusterDomain  string
+	tlsSecret      certificatemanagement.KeyPairInterface
 }
+
+func (d *DexKeyValidatorConfig) BaseURL() string { return d.baseURL }
+
+func (d *DexKeyValidatorConfig) Issuer() string { return fmt.Sprintf("%s/dex", d.baseURL) }
+
+func (d *DexKeyValidatorConfig) ClientID() string { return DexClientId }
+
+func (d *DexKeyValidatorConfig) UsernameClaim() string {
+	claim := defaultUsernameClaim
+	if d.authentication != nil && d.authentication.Spec.OIDC != nil && d.authentication.Spec.OIDC.UsernameClaim != "" {
+		claim = d.authentication.Spec.OIDC.UsernameClaim
+	}
+	return claim
+}
+
+func (d *DexKeyValidatorConfig) RequiredConfigMaps(string) []*corev1.ConfigMap { return nil }
 
 func (d *DexKeyValidatorConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 	return []corev1.VolumeMount{}
@@ -114,6 +159,7 @@ func (d *DexKeyValidatorConfig) RequiredVolumes() []corev1.Volume {
 }
 
 type dexConfig struct {
+	secretProviderClass *csisecret.SecretProviderClass
 	*dexBaseCfg
 }
 
@@ -223,6 +269,14 @@ func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
 	return secrets
 }
 
+func (d *dexConfig) RequiredSecretProviderClass(namespace string) []*csisecret.SecretProviderClass {
+	var secrets []*csisecret.SecretProviderClass
+	if d.secretProviderClass != nil {
+		secrets = append(secrets, secret.CopySecretProviderClassToNamespace(namespace, d.secretProviderClass)...)
+	}
+	return secrets
+}
+
 // RequiredAnnotations returns the annotations that are relevant for a Dex deployment.
 func (d *dexConfig) RequiredAnnotations() map[string]string {
 	var annotations = map[string]string{
@@ -237,6 +291,14 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 		annotations[dexIdpSecretAnnotation] = rmeta.AnnotationHash(d.idpSecret.Data)
 	}
 	return annotations
+}
+
+func (d *DexKeyValidatorConfig) RequiredSecrets(namespace string) []*corev1.Secret {
+	var secrets []*corev1.Secret
+	if d.tlsSecret != nil {
+		secrets = append(secrets, d.tlsSecret.Secret(namespace))
+	}
+	return secrets
 }
 
 // RequiredAnnotations returns the annotations that are relevant for a validator config.
@@ -309,6 +371,24 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 			},
 		)
 	}
+
+	if d.secretProviderClass != nil {
+		isReadOnly := true
+		volumes = append(volumes,
+			corev1.Volume{
+				Name: "secrets-store",
+				VolumeSource: corev1.VolumeSource{
+					CSI: &corev1.CSIVolumeSource{
+						Driver:   "secrets-store.csi.k8s.io",
+						ReadOnly: &isReadOnly,
+						VolumeAttributes: map[string]string{
+							"secretProviderClass": d.secretProviderClass.Name,
+						},
+					},
+				},
+			},
+		)
+	}
 	return volumes
 }
 
@@ -321,17 +401,25 @@ func (d *dexConfig) RequiredVolumeMounts() []corev1.VolumeMount {
 			ReadOnly:  true,
 		},
 	}
-	if d.idpSecret.Data[serviceAccountSecretField] != nil {
+	if d.idpSecret != nil && d.idpSecret.Data[serviceAccountSecretField] != nil {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "secrets",
 			MountPath: "/etc/dex/secrets",
 			ReadOnly:  true,
 		})
 	}
-	if d.idpSecret.Data[RootCASecretField] != nil {
+	if d.idpSecret != nil && d.idpSecret.Data[RootCASecretField] != nil {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      "secrets",
 			MountPath: "/etc/ssl/certs/",
+			ReadOnly:  true,
+		})
+	}
+
+	if d.secretProviderClass != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      "secrets-store",
+			MountPath: "/mnt/secrets-store",
 			ReadOnly:  true,
 		})
 	}
@@ -394,7 +482,7 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.BaseURL()),
 			"scopes":       d.RequestedScopes(),
 		}
-		if d.idpSecret.Data[serviceAccountSecretField] != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
+		if d.idpSecret != nil && d.idpSecret.Data[serviceAccountSecretField] != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
 			config[serviceAccountFilePathField] = serviceAccountSecretLocation
 			config[adminEmailSecretField] = fmt.Sprintf("$%s", googleAdminEmailEnv)
 		}

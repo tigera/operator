@@ -35,6 +35,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -115,7 +116,8 @@ var _ = Describe("Tigera License polling test", func() {
 				Kind: "LicenseKey",
 			}},
 		})
-		Expect(isCalicoResourceReady(client, v3.KindLicenseKey)).To(BeTrue())
+		gvk := schema.GroupVersionKind{Kind: v3.KindLicenseKey}
+		Expect(isResourceReady(client, gvk)).To(BeTrue())
 		discovery.AssertExpectations(GinkgoT())
 	})
 
@@ -125,7 +127,8 @@ var _ = Describe("Tigera License polling test", func() {
 				Kind: "Deployment",
 			}},
 		})
-		Expect(isCalicoResourceReady(client, v3.KindLicenseKey)).To(BeFalse())
+		gvk := schema.GroupVersionKind{Kind: v3.KindLicenseKey}
+		Expect(isResourceReady(client, gvk)).To(BeFalse())
 		discovery.AssertExpectations(GinkgoT())
 	})
 })

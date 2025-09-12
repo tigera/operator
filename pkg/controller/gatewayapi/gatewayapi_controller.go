@@ -445,6 +445,12 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 // patchFelixConfiguration patches the FelixConfiguration resource with the desired policy sync path prefix.
 func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error {
 	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec)
+		policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
+
+		if policySyncPrefixSetDesired {
+			return false, nil
+		}
 
 		fc.Spec.PolicySyncPathPrefix = DefaultPolicySyncPrefix
 
@@ -456,4 +462,15 @@ func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error
 	})
 
 	return err
+}
+
+func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigurationSpec) string {
+	// Respect existing policySyncPathPrefix if it's already set (e.g. EGW)
+	// This will cause policySyncPathPrefix value to remain when ApplicationLayer is disabled.
+	existing := fcSpec.PolicySyncPathPrefix
+	if existing != "" {
+		return existing
+	}
+
+	return DefaultPolicySyncPrefix
 }

@@ -396,88 +396,6 @@ func getActivePools(ctx context.Context, client client.Client) (*crdv1.IPPoolLis
 	return &filtered, nil
 }
 
-// autoDetectDefaultBPF checks whether the Operator can default to the BPF dataplane and install it automatically without user intervention.
-func autoDetectDefaultBPF(ctx context.Context, client client.Client, instance *operator.Installation) bool {
-	// Check if it's a new installation. `instance.Status.Computed` is set at the end of a successful reconcile. Thus, if it's
-	// nil, it's likely a new installation.
-	if instance == nil || instance.Status.Computed != nil {
-		return false
-	}
-
-	// Should apply BPF as default only for OSS product.
-	if len(instance.Spec.Variant) != 0 && instance.Spec.Variant != operator.Calico {
-		return false
-	}
-
-	// linuxDataplane, bpfNetworkingBootstrap, and kubeProxyManagement should either be unset or set to their auto-detected target values.
-	calicoNetwork := instance.Spec.CalicoNetwork
-	if calicoNetwork != nil &&
-		((calicoNetwork.LinuxDataplane != nil && *calicoNetwork.LinuxDataplane != operator.LinuxDataplaneBPF) ||
-			(calicoNetwork.BPFNetworkBootstrap != nil && *calicoNetwork.BPFNetworkBootstrap != operator.BPFNetworkBootstrapEnabled) ||
-			(calicoNetwork.KubeProxyManagement != nil && *calicoNetwork.KubeProxyManagement != operator.KubeProxyManagementEnabled)) {
-		return false
-	}
-
-	// At the time of this implementation, we're avoiding managed platforms (EKS, GKE, AKS, OpenShift) as they often come with complex networking
-	// setups, automation layers, or restrictions that could lead to unintended behavior when applying BPF configurations automatically.
-	if !instance.Spec.KubernetesProvider.IsNone() {
-		return false
-	}
-
-	// Check if the cluster has the required resources.
-	if _, err := utils.CheckBPFClusterResourcesReq(ctx, client); err != nil {
-		return false
-	}
-
-	// Check if it can retrieve kube-proxy DaemonSet and validate it's not managed.
-	if _, err := utils.GetManageableKubeProxy(ctx, client); err != nil {
-		return false
-	}
-
-	return true
-}
-
-// checkAndApplyBPFDefaults updates the Installation CR to set defaults for BPF dataplane installation if the cluster meets the requirements.
-func checkAndApplyBPFDefaults(ctx context.Context, client client.Client, instance *operator.Installation) {
-	defaultBpfDataplane := autoDetectDefaultBPF(ctx, client, instance)
-
-	// defaultBpfDataplane == true indicates that this is a new installation, and that automatic BPF installation can be set by default.
-	if defaultBpfDataplane {
-		if instance.Spec.CalicoNetwork == nil {
-			instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
-		}
-
-		dpBPF := operator.LinuxDataplaneBPF
-		instance.Spec.CalicoNetwork.LinuxDataplane = &dpBPF
-		bpfNetworkEnabled := operator.BPFNetworkBootstrapEnabled
-		instance.Spec.CalicoNetwork.BPFNetworkBootstrap = &bpfNetworkEnabled
-		kpEnabled := operator.KubeProxyManagementEnabled
-		instance.Spec.CalicoNetwork.KubeProxyManagement = &kpEnabled
-
-		log.V(1).Info("Defaulting dataplane to BPF, since the cluster meets the requirements.")
-	}
-}
-
-func checkAndApplyAWSNode(ctx context.Context, client client.Client, instance *operator.Installation) error {
-	awsNode := &appsv1.DaemonSet{}
-	key := types.NamespacedName{Name: "aws-node", Namespace: metav1.NamespaceSystem}
-	if err := client.Get(ctx, key, awsNode); err != nil {
-		if apierrors.IsNotFound(err) {
-			awsNode = nil
-		} else {
-			return fmt.Errorf("unable to read aws-node daemonset: %s", err.Error())
-		}
-	}
-
-	if awsNode != nil {
-		if err := updateInstallationForAWSNode(instance, awsNode); err != nil {
-			return fmt.Errorf("could not resolve AWS node configuration: %s", err.Error())
-		}
-	}
-
-	return nil
-}
-
 // updateInstallationWithDefaults returns the default installation instance with defaults populated.
 func updateInstallationWithDefaults(ctx context.Context, client client.Client, instance *operator.Installation, provider operator.Provider) error {
 	// Determine the provider in use by combining any auto-detected value with any value
@@ -487,12 +405,14 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 		return err
 	}
 
-	// Check if we can default to BPF dataplane and update installation instance if so.
-	checkAndApplyBPFDefaults(ctx, client, instance)
-
-	// Check if there is an aws-node DaemonSet in kube-system and update CNI.Type if it's not specified.
-	if err := checkAndApplyAWSNode(ctx, client, instance); err != nil {
-		return err
+	awsNode := &appsv1.DaemonSet{}
+	key := types.NamespacedName{Name: "aws-node", Namespace: metav1.NamespaceSystem}
+	err = client.Get(ctx, key, awsNode)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return fmt.Errorf("unable to read aws-node daemonset: %s", err.Error())
+		}
+		awsNode = nil
 	}
 
 	currentPools, err := getActivePools(ctx, client)
@@ -500,7 +420,23 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 		return fmt.Errorf("unable to list IPPools: %s", err.Error())
 	}
 
-	return fillDefaults(instance, currentPools)
+	err = MergeAndFillDefaults(instance, awsNode, currentPools)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// MergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
+// populates defaults in the Installation instance.
+func MergeAndFillDefaults(i *operator.Installation, awsNode *appsv1.DaemonSet, currentPools *crdv1.IPPoolList) error {
+	if awsNode != nil {
+		if err := updateInstallationForAWSNode(i, awsNode); err != nil {
+			return fmt.Errorf("could not resolve AWS node configuration: %s", err.Error())
+		}
+	}
+
+	return fillDefaults(i, currentPools)
 }
 
 // fillDefaults populates the default values onto an Installation object.
@@ -1557,6 +1493,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
 		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.K8sService)
 		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfBootstrapReq.K8sServiceEndpoints)
+
+		if !instance.Spec.KubernetesProvider.IsNone() {
+			reqLogger.Info(fmt.Sprintf("[WARNING] Auto bootstrapping BPF network may result in unexpected behavior in %s.", instance.Spec.KubernetesProvider))
+		}
 	}
 	components = append(components, render.Node(&nodeCfg))
 

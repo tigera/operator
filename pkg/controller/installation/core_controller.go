@@ -1493,6 +1493,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
 		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.K8sService)
 		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfBootstrapReq.K8sServiceEndpoints)
+
+		if !instance.Spec.KubernetesProvider.IsNone() {
+			reqLogger.Info(fmt.Sprintf("[WARNING] Auto bootstrapping BPF network may result in unexpected behavior in %s.", instance.Spec.KubernetesProvider))
+		}
 	}
 	components = append(components, render.Node(&nodeCfg))
 

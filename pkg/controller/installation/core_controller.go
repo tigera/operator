@@ -1482,7 +1482,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
 	}
 	// Check if BPFNetworkBootstrap is Enabled and its requirements are met.
-	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(r.client, ctx, &instance.Spec)
+	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(ctx, r.client, &instance.Spec)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceValidationError, "bpfNetworkBootstrap is Enabled but the requirements are not met", err, reqLogger)
 		return reconcile.Result{}, err

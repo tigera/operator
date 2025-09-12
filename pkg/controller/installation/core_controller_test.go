@@ -1002,7 +1002,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			})
 		})
 
-		Context("with LinuxDataplane=BPF and BPFNetworkBootstrap=Enabled", func() {
+		Context("streamline BPF installation", func() {
 			createResource := func(obj client.Object) {
 				Expect(c.Create(ctx, obj)).NotTo(HaveOccurred())
 			}

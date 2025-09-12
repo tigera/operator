@@ -137,11 +137,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	kubeProxyDS := &appsv1.DaemonSet{}
 	err = r.cli.Get(ctx, utils.KubeProxyInstanceKey, kubeProxyDS)
 	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceNotFound, "failed to retrieve kube-proxy DaemonSet", err, reqLogger)
 		return reconcile.Result{}, fmt.Errorf("failed to get kube-proxy: %w", err)
 	}
 
 	// Validate that the kube-proxy DaemonSet is not managed by an external tool.
-	err = validateDaemonSetManaged(kubeProxyDS)
+	err = validateDaemonSetUnmanaged(kubeProxyDS)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "failed to validate kube-proxy DaemonSet", err, reqLogger)
 		return reconcile.Result{}, err
@@ -177,6 +178,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 		}
 		reqLogger.Info("kube-proxy DaemonSet patched to disable kube-proxy, since kubeProxyManagement is Enabled and BPFEnabled is true.")
+		if !installationCR.KubernetesProvider.IsNone() {
+			reqLogger.Info(fmt.Sprintf("[WARNING] Auto disabling kube-proxy may result in unexpected behavior in %s.", installationCR.KubernetesProvider))
+		}
 	} else {
 		// If the dataplane is not BPF, we'll try to re-enable kube-proxy:
 		// 1. Check if kube-proxy DaemonSet is disabled by verifying whether render.DisableKubeProxyKey exists in the NodeSelector.
@@ -199,9 +203,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-// validateDaemonSetManaged checks whether the DaemonSet is managed by an external tool,
+// validateDaemonSetUnmanaged checks whether the DaemonSet is managed by an external tool,
 // based on common labels or annotations typically added by automation.
-func validateDaemonSetManaged(ds *appsv1.DaemonSet) error {
+func validateDaemonSetUnmanaged(ds *appsv1.DaemonSet) error {
 	if len(ds.Labels) == 0 && len(ds.Annotations) == 0 {
 		return nil
 	}

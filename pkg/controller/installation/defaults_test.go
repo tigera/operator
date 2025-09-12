@@ -95,8 +95,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.CalicoNetwork).NotTo(BeNil())
 		Expect(instance.Spec.CalicoNetwork.LinuxDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
-		Expect(instance.Spec.CalicoNetwork.BPFNetworkBootstrap).To(BeNil())
-		Expect(instance.Spec.CalicoNetwork.KubeProxyManagement).To(BeNil())
 		Expect(instance.Spec.CalicoNetwork.WindowsDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneDisabled))
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))

@@ -38,7 +38,7 @@ var _ = Describe("provider discovery", func() {
 		Expect(p).To(Equal(operatorv1.ProviderNone))
 	})
 
-	It("should detect DockerEE if a Master Node has labels prefixed with com.docker.ucp", func() {
+	It("should detect MKE if a Master Node has labels prefixed with com.docker.ucp", func() {
 		c := fake.NewSimpleClientset(&corev1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "master1",
@@ -50,7 +50,7 @@ var _ = Describe("provider discovery", func() {
 		})
 		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
-		Expect(p).To(Equal(operatorv1.ProviderDockerEE))
+		Expect(p).To(Equal(operatorv1.ProviderMKE))
 	})
 
 	It("should detect openshift based on API resource clusterversion.config.openshift.io existence", func() {

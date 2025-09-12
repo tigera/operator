@@ -107,7 +107,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			}
 		},
 		table.Entry("Same detected/configured provider", operator.ProviderOpenShift, operator.ProviderOpenShift, nil),
-		table.Entry("Different detected/configured provider", operator.ProviderOpenShift, operator.ProviderDockerEE, errMismatchedError),
+		table.Entry("Different detected/configured provider", operator.ProviderOpenShift, operator.ProviderMKE, errMismatchedError),
 		table.Entry("Same detected/configured managed provider", operator.ProviderEKS, operator.ProviderEKS, nil),
 	)
 
@@ -558,7 +558,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		It("Sets the default ipv4 autodetection method to skipInterface", func() {
 			installation := &operator.Installation{
 				Spec: operator.InstallationSpec{
-					KubernetesProvider: operator.ProviderDockerEE,
+					KubernetesProvider: operator.ProviderMKE,
 				},
 			}
 			currentPools := crdv1.IPPoolList{}
@@ -610,9 +610,9 @@ var _ = Describe("Testing core-controller installation", func() {
 				},
 			}},
 		),
-		table.Entry("Expect no default value for DockerEE provider",
+		table.Entry("Expect no default value for MKE provider",
 			false,
-			operator.ProviderDockerEE,
+			operator.ProviderMKE,
 			[]corev1.NodeSelectorTerm{},
 		),
 	)
@@ -1357,8 +1357,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
 		})
 
-		It("should set vxlanVNI to 10000 when provider is DockerEE", func() {
-			cr.Spec.KubernetesProvider = operator.ProviderDockerEE
+		It("should set vxlanVNI to 10000 when provider is MKE", func() {
+			cr.Spec.KubernetesProvider = operator.ProviderMKE
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -1371,8 +1371,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.VXLANVNI).To(Equal(10000))
 		})
 
-		It("should set vxlanPort to 8472 and nftables to disabled when provider is DockerEE and BPF is enabled", func() {
-			cr.Spec.KubernetesProvider = operator.ProviderDockerEE
+		It("should set vxlanPort to 8472 and nftables to disabled when provider is MKE and BPF is enabled", func() {
+			cr.Spec.KubernetesProvider = operator.ProviderMKE
 			network := operator.LinuxDataplaneBPF
 			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
@@ -1387,8 +1387,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.NFTablesMode).To(Equal(crdv1.NFTablesModeDisabled))
 		})
 
-		It("should set bpfHostConntrackByPass to false when provider is DockerEE and BPF enabled", func() {
-			cr.Spec.KubernetesProvider = operator.ProviderDockerEE
+		It("should set bpfHostConntrackByPass to false when provider is MKE and BPF enabled", func() {
+			cr.Spec.KubernetesProvider = operator.ProviderMKE
 			network := operator.LinuxDataplaneBPF
 			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())

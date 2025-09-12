@@ -993,7 +993,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should not add the KUBERNETES_SERVICE_... variables on docker EE using proxy.local", func() {
 		k8sServiceEp.Host = "proxy.local"
 		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider = operatorv1.ProviderDockerEE
+		instance.KubernetesProvider = operatorv1.ProviderMKE
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

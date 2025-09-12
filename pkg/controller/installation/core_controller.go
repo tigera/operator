@@ -666,7 +666,7 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 
 	if needIPv4Autodetection && instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 == nil {
 		switch instance.Spec.KubernetesProvider {
-		case operator.ProviderDockerEE:
+		case operator.ProviderMKE:
 			// firstFound finds the Docker Enterprise interface prefixed with br-, which is unusable for the
 			// node address, so instead skip the interface br-.
 			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
@@ -1919,7 +1919,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	// This results in a conflict with calico's VXLAN and the vxlan.calico interface
 	// gets deleted. To fix this we change the vxlanVNI to 10000 as recommended by
 	// MKE docs (https://docs.mirantis.com/mke/3.7/cli-ref/mke-cli-install.html).
-	if install.Spec.KubernetesProvider == operator.ProviderDockerEE {
+	if install.Spec.KubernetesProvider == operator.ProviderMKE {
 		vxlanVNI = 10000
 		// We are using a flow based VXLAN device for
 		// ebpf dataplane. This requires changing the default VXLAN port to
@@ -1939,7 +1939,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		updated = true
 	}
 
-	if install.Spec.KubernetesProvider == operator.ProviderDockerEE {
+	if install.Spec.KubernetesProvider == operator.ProviderMKE {
 		// Set bpfHostConntrackBypass to false for eBPF dataplane to work with MKE
 		if install.Spec.BPFEnabled() && fc.Spec.BPFHostConntrackBypass == nil {
 			disableBPFHostConntrackBypass(fc)

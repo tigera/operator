@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -54,7 +54,7 @@ func (k8s ServiceEndpoint) EnvVars(hostNetworked bool, provider operator.Provide
 		return nil
 	}
 
-	if provider == operator.ProviderDockerEE && !hostNetworked && k8s.Host == dockerEEProxyLocal {
+	if provider == operator.ProviderMKE && !hostNetworked && k8s.Host == dockerEEProxyLocal {
 		// Special case: Docker EE (now MKE) has a proxy on each host that is only accessible from the host
 		// namespace.  Don't try to use it from non-host network pods.
 		//

@@ -97,7 +97,7 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 	if dockeree, err := isDockerEE(ctx, clientset); err != nil {
 		return operatorv1.ProviderNone, fmt.Errorf("failed to check if Docker EE is the provider: %s", err)
 	} else if dockeree {
-		return operatorv1.ProviderDockerEE, nil
+		return operatorv1.ProviderMKE, nil
 	}
 
 	// We failed to determine the platform based on API groups. Some platforms can be detected in other ways, though.

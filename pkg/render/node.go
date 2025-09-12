@@ -245,7 +245,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, btcm)
 	}
 
-	if c.cfg.Installation.KubernetesProvider.IsDockerEE() {
+	if c.cfg.Installation.KubernetesProvider.IsMKE() {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
 	}
 
@@ -640,7 +640,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	// Determine per-provider settings.
 	nodenameFileOptional := false
 	switch c.cfg.Installation.KubernetesProvider {
-	case operatorv1.ProviderDockerEE:
+	case operatorv1.ProviderMKE:
 		nodenameFileOptional = true
 	}
 
@@ -859,7 +859,7 @@ func (c *nodeComponent) birdTemplateConfigMap() *corev1.ConfigMap {
 	return &cm
 }
 
-// clusterAdminClusterRoleBinding returns a ClusterRoleBinding for DockerEE to give
+// clusterAdminClusterRoleBinding returns a ClusterRoleBinding for MKE to give
 // the cluster-admin role to calico-node and calico-cni-plugin, this is needed for calico-node/calico-cni-plugin to be
 // able to use hostNetwork in Docker Enterprise.
 func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {

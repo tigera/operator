@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -110,7 +110,7 @@ func (e *eck) Objects() ([]client.Object, []client.Object) {
 	)
 	// This is needed for the operator to be able to set privileged mode for pods.
 	// https://docs.docker.com/ee/ucp/authorization/#secure-kubernetes-defaults
-	if e.cfg.Provider.IsDockerEE() {
+	if e.cfg.Provider.IsMKE() {
 		toCreate = append(toCreate, e.operatorClusterAdminClusterRoleBinding())
 	}
 

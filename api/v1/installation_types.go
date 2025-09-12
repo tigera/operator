@@ -396,7 +396,7 @@ var (
 	ProviderAKS       Provider = "AKS"
 	ProviderRKE2      Provider = "RKE2"
 	ProviderOpenShift Provider = "OpenShift"
-	ProviderDockerEE  Provider = "DockerEnterprise"
+	ProviderMKE       Provider = "DockerEnterprise"
 	ProviderTKG       Provider = "TKG"
 	ProviderKind      Provider = "Kind"
 )
@@ -409,8 +409,8 @@ func (p Provider) IsAKS() bool {
 	return p == ProviderAKS
 }
 
-func (p Provider) IsDockerEE() bool {
-	return p == ProviderDockerEE
+func (p Provider) IsMKE() bool {
+	return p == ProviderMKE
 }
 
 func (p Provider) IsEKS() bool {
@@ -998,12 +998,12 @@ func (s *InstallationSpec) BPFEnabled() bool {
 // IsNftables is an extension method that returns true if the Installation resource
 // has Calico Network Linux Dataplane set and equal to value "Nftables" or "BPF", otherwise false.
 //
-// BPF is included here as it uses nftables to program some rules, except when on DockerEE,
-// since docker-ee programs some rules in iptables. These rules does not interact well with the
-// nftable rules that calico programs, so we exclude BPF when on DockerEE.
+// BPF is included here as it uses nftables to program some rules, except when on MKE,
+// since MKE programs some rules in iptables. These rules does not interact well with the
+// nftable rules that calico programs, so we exclude BPF when on MKE.
 func (s *InstallationSpec) IsNftables() bool {
 	if s.CalicoNetwork != nil && s.CalicoNetwork.LinuxDataplane != nil {
-		if s.KubernetesProvider.IsDockerEE() &&
+		if s.KubernetesProvider.IsMKE() &&
 			(*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF) {
 			return false
 		}

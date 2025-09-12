@@ -190,7 +190,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// pod configuration.
 	objs = append(objs, c.daemonset())
 
-	if c.config.Installation.KubernetesProvider.IsDockerEE() {
+	if c.config.Installation.KubernetesProvider.IsMKE() {
 		objs = append(objs, c.clusterAdminClusterRoleBinding())
 	}
 
@@ -586,7 +586,7 @@ func (c *component) serviceAccount() *corev1.ServiceAccount {
 	}
 }
 
-// In DockerEE (Mirantis) cluster-admin role is needed for envoy proxy to be able to use hostNetwork.
+// In MKE (Mirantis) cluster-admin role is needed for envoy proxy to be able to use hostNetwork.
 func (c *component) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},

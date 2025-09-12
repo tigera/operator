@@ -261,9 +261,9 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		)
 	}
 
-	// Need to grant cluster admin permissions in DockerEE to the controller since a pod starting pods with
+	// Need to grant cluster admin permissions in MKE to the controller since a pod starting pods with
 	// host path volumes requires cluster admin permissions.
-	if c.cfg.Installation.KubernetesProvider.IsDockerEE() && !c.cfg.Tenant.MultiTenant() {
+	if c.cfg.Installation.KubernetesProvider.IsMKE() && !c.cfg.Tenant.MultiTenant() {
 		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
 	}
 
@@ -382,7 +382,7 @@ func (c *complianceComponent) complianceControllerClusterRoleBinding() *rbacv1.C
 	return rcomponents.ClusterRoleBinding(ComplianceControllerServiceAccount, ComplianceControllerServiceAccount, ComplianceControllerServiceAccount, c.cfg.BindingNamespaces)
 }
 
-// This clusterRoleBinding is only needed in DockerEE since a pod starting pods with host path volumes requires cluster admin permissions.
+// This clusterRoleBinding is only needed in MKE since a pod starting pods with host path volumes requires cluster admin permissions.
 func (c *complianceComponent) complianceControllerClusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},

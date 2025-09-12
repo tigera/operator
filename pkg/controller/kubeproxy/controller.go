@@ -145,6 +145,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	err = validateDaemonSetUnmanaged(kubeProxyDS)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "failed to validate kube-proxy DaemonSet", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "failed to validate kube-proxy DaemonSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

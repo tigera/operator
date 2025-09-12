@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,24 +15,12 @@
 package render
 
 import (
-	"github.com/tigera/operator/pkg/common"
-	calicrypto "github.com/tigera/operator/pkg/crypto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-)
 
-func CreateDexClientSecret() *corev1.Secret {
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-dex",
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: map[string][]byte{
-			ClientSecretSecretField: []byte(calicrypto.GeneratePassword(24)),
-		},
-	}
-}
+	"github.com/tigera/operator/pkg/common"
+	calicrypto "github.com/tigera/operator/pkg/crypto"
+)
 
 // CreateElasticsearchKeystoreSecret creates a secret to be used for initializing the keystore on Elasticsearch.
 func CreateElasticsearchKeystoreSecret() *corev1.Secret {

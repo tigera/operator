@@ -290,17 +290,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	dexSecret := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: render.DexObjectName, Namespace: common.OperatorNamespace()}, dexSecret); err != nil {
-		if errors.IsNotFound(err) {
-			// We need to render a new one.
-			dexSecret = render.CreateDexClientSecret()
-		} else {
-			r.status.SetDegraded(oprv1.ResourceReadError, "Failed to read tigera-operator/tigera-dex secret", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
 	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
 	if err != nil {
 		r.status.SetDegraded(oprv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
@@ -310,7 +299,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	enableDex := utils.DexEnabled(authentication)
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
-	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, dexSecret, idpSecret, r.clusterDomain)
+	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, idpSecret, r.clusterDomain)
 
 	// Create a component handler to manage the rendered component.
 	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)

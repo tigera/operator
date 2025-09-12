@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -67,7 +67,6 @@ var _ = Describe("dex rendering tests", func() {
 
 		var (
 			authentication *operatorv1.Authentication
-			dexSecret      *corev1.Secret
 			idpSecret      *corev1.Secret
 			pullSecrets    []*corev1.Secret
 			replicas       int32
@@ -162,7 +161,6 @@ var _ = Describe("dex rendering tests", func() {
 				},
 			}
 
-			dexSecret = render.CreateDexClientSecret()
 			idpSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.OIDCSecretName,
@@ -188,7 +186,7 @@ var _ = Describe("dex rendering tests", func() {
 
 			replicas = 2
 
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, dexSecret, idpSecret, clusterName)
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, idpSecret, clusterName)
 			trustedCaBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
 			Expect(err).NotTo(HaveOccurred())
 
@@ -222,9 +220,7 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexObjectName, "", rbac, "v1", "ClusterRole"},
 				{render.DexObjectName, "", rbac, "v1", "ClusterRoleBinding"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ConfigMap"},
-				{render.DexObjectName, common.OperatorNamespace(), "", "v1", "Secret"},
 				{render.OIDCSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},
 			}
@@ -292,7 +288,7 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(config.Web.Headers.ContentSecurityPolicy).To(Equal(""))
 			Expect(config.Web.Headers.XXSSProtection).To(Equal("1; mode=block"))
-			Expect(config.Web.Headers.XFrameOptions).To(Equal("DENY"))
+			Expect(config.Web.Headers.XFrameOptions).To(Equal("SAMEORIGIN"))
 			Expect(config.Web.Headers.StrictTransportSecurity).To(Equal("max-age=31536000; includeSubDomains"))
 			Expect(config.Web.Headers.XContentTypeOptions).To(Equal("nosniff"))
 		})
@@ -341,7 +337,7 @@ var _ = Describe("dex rendering tests", func() {
 
 		It("should render all resources for a certificate management", func() {
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{}
-			cfg.DexConfig = render.NewDexConfig(cfg.Installation.CertificateManagement, authentication, dexSecret, idpSecret, clusterName)
+			cfg.DexConfig = render.NewDexConfig(cfg.Installation.CertificateManagement, authentication, idpSecret, clusterName)
 
 			component := render.Dex(cfg)
 			resources, _ := component.Objects()
@@ -362,9 +358,7 @@ var _ = Describe("dex rendering tests", func() {
 				{render.DexObjectName, "", rbac, "v1", "ClusterRole"},
 				{render.DexObjectName, "", rbac, "v1", "ClusterRoleBinding"},
 				{render.DexObjectName, render.DexNamespace, "", "v1", "ConfigMap"},
-				{render.DexObjectName, common.OperatorNamespace(), "", "v1", "Secret"},
 				{render.OIDCSecretName, common.OperatorNamespace(), "", "v1", "Secret"},
-				{render.DexObjectName, render.DexNamespace, "", "v1", "Secret"},
 				{render.OIDCSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{pullSecretName, render.DexNamespace, "", "v1", "Secret"},
 				{"tigera-dex:csr-creator", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding"},

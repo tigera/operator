@@ -471,27 +471,8 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	setUp := render.NewSetup(&render.SetUpConfiguration{
-		OpenShift:       r.provider.IsOpenShift(),
-		Installation:    installation,
-		PullSecrets:     pullSecrets,
-		Namespace:       helper.InstallNamespace(),
-		PSS:             render.PSSRestricted,
-		CreateNamespace: !tenant.MultiTenant(),
-	})
-
 	// Prepend PolicyRecommendation before certificate creation
 	components = append([]render.Component{component}, components...)
-	setupHandler := defaultHandler
-	if tenant.MultiTenant() {
-		// In standard installs, the PolicyRecommendation CR owns all the objects. For multi-tenant, pull secrets are owned by the Tenant instance.
-		setupHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant)
-	}
-	if err := setupHandler.CreateOrUpdateOrDelete(ctx, setUp, r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
-		return reconcile.Result{}, err
-	}
-
 	for _, cmp := range components {
 		if err := defaultHandler.CreateOrUpdateOrDelete(context.Background(), cmp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)

@@ -54,8 +54,8 @@ import (
 )
 
 const (
-	ResourceName      = "manager"
-	TrustedBundleName = render.ManagerName + certificatemanagement.TrustedCertConfigMapSuffix
+	ResourceName        = "manager"
+	TrustedBundlePrefix = render.ManagerName
 )
 
 var log = logf.Log.WithName("controller_manager")
@@ -463,7 +463,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
 	}
 
-	bundleMaker, err := certificateManager.CreateNamedTrustedBundleFromSecrets(TrustedBundleName, r.client,
+	bundleMaker, err := certificateManager.CreateNamedTrustedBundleFromSecrets(TrustedBundlePrefix, r.client,
 		helper.TruthNamespace(), false, trustedSecretNames...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating trusted bundle for manager", err, logc)

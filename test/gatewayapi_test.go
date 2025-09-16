@@ -483,7 +483,7 @@ func cleanupGatewayResources(c client.Client) {
 		}
 		err := GetResource(c, ns)
 		if err == nil {
-			return fmt.Errorf("Calico namespace still exists")
+			return fmt.Errorf("namespace 'tigera-gateway' still exists")
 		}
 		if !kerror.IsNotFound(err) {
 			return err

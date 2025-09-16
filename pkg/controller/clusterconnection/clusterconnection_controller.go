@@ -16,13 +16,11 @@ package clusterconnection
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render/goldmane"
-	"github.com/tigera/operator/pkg/render/whisker"
 	"golang.org/x/net/http/httpproxy"
 	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,9 +48,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -258,12 +259,18 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	if err := utils.ApplyDefaults(ctx, r.cli, managementClusterConnection); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
+	if err = validate(managementClusterConnection, instl.Variant); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "ManagementClusterConnection.Spec.Impersonation must be unset when Installation.Spec.Variant = Calico", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	if err := r.maintainFinalizer(ctx, managementClusterConnection); err != nil {
+	preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
+	fillDefaults(managementClusterConnection, instl.Variant)
+	if err = r.cli.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
+	}
+
+	if err = r.maintainFinalizer(ctx, managementClusterConnection); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -498,4 +505,27 @@ func (r *ReconcileConnection) maintainFinalizer(ctx context.Context, managementC
 	// These objects require graceful termination before the CNI plugin is torn down.
 	guardianDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.cli, managementClusterConnection, render.GuardianFinalizer, &guardianDeployment)
+}
+
+func validate(cr *operatorv1.ManagementClusterConnection, variant operatorv1.ProductVariant) error {
+	if variant == operatorv1.Calico && cr.Spec.Impersonation != nil {
+		return errors.New("ManagementClusterConnection.Spec.Impersonation must be unset when Installation.Spec.Variant = Calico")
+	}
+	return nil
+}
+func fillDefaults(cr *operatorv1.ManagementClusterConnection, variant operatorv1.ProductVariant) {
+	if cr.Spec.TLS == nil {
+		cr.Spec.TLS = &operatorv1.ManagementClusterTLS{}
+	}
+	if cr.Spec.TLS.CA == "" {
+		cr.Spec.TLS.CA = operatorv1.CATypeTigera
+	}
+	if variant == operatorv1.TigeraSecureEnterprise && cr.Spec.Impersonation == nil {
+		var wildcard = []string{"*"}
+		cr.Spec.Impersonation = &operatorv1.Impersonation{
+			Users:           wildcard,
+			Groups:          wildcard,
+			ServiceAccounts: wildcard,
+		}
+	}
 }

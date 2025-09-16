@@ -1082,19 +1082,33 @@ func MaintainInstallationFinalizer(
 
 		// Check if the namespaced secondaryResources are still present.
 		// Keep track of all the secondary resources that the main resource creates.
-		// Only delete the finalizer if all of the secondary resources are deleted.
+		// Only delete the finalizer if all of the secondary resources are deleted and there are no lingering Pods.
 		for _, secondaryResource := range secondaryResources {
 			err := c.Get(ctx, types.NamespacedName{Namespace: secondaryResource.GetNamespace(), Name: secondaryResource.GetName()}, secondaryResource)
 			if err != nil && !errors.IsNotFound(err) {
 				return err
-			} else if errors.IsNotFound(err) {
-				log.Info("Object no longer exists.", "object", secondaryResource)
-			} else {
+			} else if err == nil {
 				log.Info("Object is still present, waiting for termination", "object", secondaryResource)
 				return nil
 			}
+
+			// If the secondary resource itself is gone, ensure there are no Pods left over that would still rely on CNI.
+			// We key off the standard k8s-app label which we set to the resource name for our Deployments/DaemonSets.
+			podList := &corev1.PodList{}
+			if listErr := c.List(
+				ctx,
+				podList,
+				client.InNamespace(secondaryResource.GetNamespace()),
+				client.MatchingLabels{"k8s-app": secondaryResource.GetName()},
+			); listErr != nil {
+				return listErr
+			}
+			if len(podList.Items) > 0 {
+				log.Info("Lingering Pods still present for object, delaying finalizer removal", "object", secondaryResource, "pods", len(podList.Items))
+				return nil
+			}
 		}
-		log.Info("All objects no longer exist. Removing finalizer", "finalizer", finalizer)
+		log.Info("All objects and their Pods no longer exist. Removing finalizer", "finalizer", finalizer)
 		RemoveInstallationFinalizer(installation, finalizer)
 	}
 

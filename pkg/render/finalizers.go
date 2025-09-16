@@ -39,4 +39,8 @@ const (
 	// GoldmaneFinalizer is added to the Installation by the goldmane controller when the goldmane CR is created so that
 	// Calico CNI resources are not removed until the goldmane controller has had time to properly delete the goldmane deployment.
 	GoldmaneFinalizer = "operator.tigera.io/goldmane-controller"
+
+	// GatewayAPIFinalizer is added to the GatewayAPI by the gatewayapi controller to ensure the tigera-gateway namespace
+	// is deleted before the GatewayAPI CR is deleted.
+	GatewayAPIFinalizer = "operator.tigera.io/gatewayapi-controller"
 )

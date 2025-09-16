@@ -80,10 +80,11 @@ var _ = Describe("Rendering tests", func() {
 					Namespace: common.OperatorNamespace(),
 				},
 			}},
-			Installation:      &i,
-			TunnelSecret:      secret,
-			TrustedCertBundle: bundle,
-			OpenShift:         openshift,
+			Installation:                &i,
+			TunnelSecret:                secret,
+			TrustedCertBundle:           bundle,
+			OpenShift:                   openshift,
+			ManagementClusterConnection: &operatorv1.ManagementClusterConnection{},
 		}
 	}
 

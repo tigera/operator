@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,6 +46,10 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
+)
+
+const (
+	DefaultPolicySyncPrefix = "/var/run/nodeagent"
 )
 
 var log = logf.Log.WithName("controller_gatewayapi")
@@ -436,4 +441,37 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 		}
 	}
 	return resource, "", nil
+}
+
+// patchFelixConfiguration patches the FelixConfiguration resource with the desired policy sync path prefix.
+func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error {
+	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec)
+		policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
+
+		if policySyncPrefixSetDesired {
+			return false, nil
+		}
+
+		fc.Spec.PolicySyncPathPrefix = DefaultPolicySyncPrefix
+
+		log.Info(
+			"Patching FelixConfiguration: ",
+			"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
+		)
+		return true, nil
+	})
+
+	return err
+}
+
+func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigurationSpec) string {
+	// Respect existing policySyncPathPrefix if it's already set (e.g. EGW)
+	// This will cause policySyncPathPrefix value to remain when ApplicationLayer is disabled.
+	existing := fcSpec.PolicySyncPathPrefix
+	if existing != "" {
+		return existing
+	}
+
+	return DefaultPolicySyncPrefix
 }

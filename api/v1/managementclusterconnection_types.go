@@ -41,7 +41,7 @@ type ManagementClusterConnectionSpec struct {
 	// WARNING: If this field is specified, it completely replaces the default permissions.
 	// For example, providing an empty `impersonation: {}` block will result in guardian
 	// having NO impersonation permissions. Similarly, if you specify `users` but omit `groups`,
-	// the guardian will lose its default permissions to impersonate groups.
+	// guardian will lose its default permissions to impersonate groups.
 	// +optional
 	Impersonation *Impersonation `json:"impersonation,omitempty"`
 }

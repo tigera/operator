@@ -171,6 +171,21 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	}
 	r.status.OnCRFound()
 
+	// Check if the GatewayAPI CR is marked for deletion.
+	if gatewayAPI.DeletionTimestamp != nil {
+		reqLogger.Info("GatewayAPI object is terminating")
+		return r.handleDeletion(ctx, gatewayAPI, reqLogger)
+	}
+
+	// Ensure the finalizer is present.
+	if !controllerutil.ContainsFinalizer(gatewayAPI, render.GatewayAPIFinalizer) {
+		controllerutil.AddFinalizer(gatewayAPI, render.GatewayAPIFinalizer)
+		if err := r.client.Update(ctx, gatewayAPI); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to add finalizer", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// SetMetaData in the TigeraStatus such as observedGenerations.
 	defer r.status.SetMetaData(&gatewayAPI.ObjectMeta)
 
@@ -474,4 +489,25 @@ func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigu
 	}
 
 	return DefaultPolicySyncPrefix
+}
+
+func (r *ReconcileGatewayAPI) handleDeletion(ctx context.Context, gatewayAPI *operatorv1.GatewayAPI, reqLogger logr.Logger) (reconcile.Result, error) {
+	// Delete the tigera-gateway namespace.
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"},
+	}
+	if err := r.client.Delete(ctx, ns); err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to delete tigera-gateway namespace", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Remove the finalizer.
+	controllerutil.RemoveFinalizer(gatewayAPI, render.GatewayAPIFinalizer)
+	if err := r.client.Update(ctx, gatewayAPI); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to remove finalizer", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	reqLogger.Info("GatewayAPI deletion complete")
+	return reconcile.Result{}, nil
 }

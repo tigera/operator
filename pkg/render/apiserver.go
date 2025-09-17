@@ -565,9 +565,13 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 		{
-			// Kubernetes admin network policy resources.
+			// Kubernetes cluster network policy resources.
 			APIGroups: []string{"policy.networking.k8s.io"},
-			Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
+			Resources: []string{
+				"clusternetworkpolicies",
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
+			},
 			Verbs: []string{
 				"get",
 				"list",
@@ -1620,6 +1624,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"policy.networking.k8s.io"},
 			Resources: []string{
+				"clusternetworkpolicies",
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},
@@ -1826,6 +1831,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"policy.networking.k8s.io",
 			},
 			Resources: []string{
+				"clusternetworkpolicies",
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},

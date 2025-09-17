@@ -1093,19 +1093,25 @@ func MaintainInstallationFinalizer(
 			}
 
 			// If the secondary resource itself is gone, ensure there are no Pods left over that would still rely on CNI.
-			// We key off the standard k8s-app label which we set to the resource name for our Deployments/DaemonSets.
-			podList := &corev1.PodList{}
-			if listErr := c.List(
-				ctx,
-				podList,
-				client.InNamespace(secondaryResource.GetNamespace()),
-				client.MatchingLabels{"k8s-app": secondaryResource.GetName()},
-			); listErr != nil {
-				return listErr
-			}
-			if len(podList.Items) > 0 {
-				log.Info("Lingering Pods still present for object, delaying finalizer removal", "object", secondaryResource, "pods", len(podList.Items))
-				return nil
+			// Only applicable for workload types that create Pods.
+			switch secondaryResource.(type) {
+			case *appsv1.Deployment, *appsv1.DaemonSet, *appsv1.StatefulSet:
+				// We key off the standard k8s-app label which we set to the resource name for our Deployments/DaemonSets.
+				podList := &corev1.PodList{}
+				if listErr := c.List(
+					ctx,
+					podList,
+					client.InNamespace(secondaryResource.GetNamespace()),
+					client.MatchingLabels{"k8s-app": secondaryResource.GetName()},
+				); listErr != nil {
+					return listErr
+				}
+				if len(podList.Items) > 0 {
+					log.Info("Lingering Pods still present for object, delaying finalizer removal", "object", secondaryResource, "pods", len(podList.Items))
+					return nil
+				}
+			default:
+				// Non-workload resource; no Pod listing needed.
 			}
 		}
 		log.Info("All objects and their Pods no longer exist. Removing finalizer", "finalizer", finalizer)

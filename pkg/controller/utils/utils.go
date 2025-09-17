@@ -1087,37 +1087,59 @@ func MaintainInstallationFinalizer(
 			err := c.Get(ctx, types.NamespacedName{Namespace: secondaryResource.GetNamespace(), Name: secondaryResource.GetName()}, secondaryResource)
 			if err != nil && !errors.IsNotFound(err) {
 				return err
+			} else if errors.IsNotFound(err) {
+				log.V(2).Info("Object no longer exists.", "object", secondaryResource)
 			} else if err == nil {
-				log.Info("Object is still present, waiting for termination", "object", secondaryResource)
+				log.V(2).Info("Object is still present, waiting for termination", "object", secondaryResource)
 				return nil
 			}
 
 			// If the secondary resource itself is gone, ensure there are no Pods left over that would still rely on CNI.
 			// Only applicable for workload types that create Pods.
-			switch secondaryResource.(type) {
-			case *appsv1.Deployment, *appsv1.DaemonSet, *appsv1.StatefulSet:
-				// We key off the standard k8s-app label which we set to the resource name for our Deployments/DaemonSets.
-				podList := &corev1.PodList{}
-				if listErr := c.List(
-					ctx,
-					podList,
-					client.InNamespace(secondaryResource.GetNamespace()),
-					client.MatchingLabels{"k8s-app": secondaryResource.GetName()},
-				); listErr != nil {
-					return listErr
+			switch obj := secondaryResource.(type) {
+			case *appsv1.Deployment:
+				if exists, count, err := hasLingeringPods(ctx, c, obj.Namespace, obj.Spec.Selector.MatchLabels); err != nil {
+					return err
+				} else if exists {
+					log.V(2).Info("Lingering Pods still exist for Deployment", "deployment", obj.Name, "count", count)
+					return nil
 				}
-				if len(podList.Items) > 0 {
-					log.Info("Lingering Pods still present for object, delaying finalizer removal", "object", secondaryResource, "pods", len(podList.Items))
+			case *appsv1.DaemonSet:
+				if exists, count, err := hasLingeringPods(ctx, c, obj.Namespace, obj.Spec.Selector.MatchLabels); err != nil {
+					return err
+				} else if exists {
+					log.V(2).Info("Lingering Pods still exist for DaemonSet", "daemonset", obj.Name, "count", count)
+					return nil
+				}
+			case *appsv1.StatefulSet:
+				if exists, count, err := hasLingeringPods(ctx, c, obj.Namespace, obj.Spec.Selector.MatchLabels); err != nil {
+					return err
+				} else if exists {
+					log.V(2).Info("Lingering Pods still exist for StatefulSet", "statefulset", obj.Name, "count", count)
 					return nil
 				}
 			default:
 				// Non-workload resource; no Pod listing needed.
 			}
 		}
-		log.Info("All objects and their Pods no longer exist. Removing finalizer", "finalizer", finalizer)
+		log.V(2).Info("All objects and their Pods no longer exist. Removing finalizer", "finalizer", finalizer)
 		RemoveInstallationFinalizer(installation, finalizer)
 	}
 
 	// Update the installation with any finalizer changes.
 	return c.Patch(ctx, installation, patchFrom)
+}
+
+func hasLingeringPods(ctx context.Context, c client.Client, namespace string, matchLabels map[string]string) (bool, int, error) {
+	podList := &corev1.PodList{}
+	if err := c.List(
+		ctx,
+		podList,
+		client.InNamespace(namespace),
+		client.MatchingLabels(matchLabels),
+	); err != nil {
+		return false, 0, err
+	}
+	count := len(podList.Items)
+	return count > 0, count, nil
 }

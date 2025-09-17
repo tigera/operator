@@ -1081,26 +1081,14 @@ func MaintainInstallationFinalizer(
 			// Only applicable for workload types that create Pods.
 			switch obj := secondaryResource.(type) {
 			case *appsv1.Deployment:
-				if exists, count, err := hasLingeringPods(ctx, c, obj.Namespace, obj.Spec.Selector.MatchLabels); err != nil {
-					return err
-				} else if exists {
-					log.V(2).Info("Lingering Pods still exist for Deployment", "deployment", obj.Name, "count", count)
-					return nil
-				}
+				matchLabels := getWorkloadMatchLabels(obj)
+				return checkLingeringPodsForWorkload(ctx, c, obj, matchLabels, "Deployment", "deployment")
 			case *appsv1.DaemonSet:
-				if exists, count, err := hasLingeringPods(ctx, c, obj.Namespace, obj.Spec.Selector.MatchLabels); err != nil {
-					return err
-				} else if exists {
-					log.V(2).Info("Lingering Pods still exist for DaemonSet", "daemonset", obj.Name, "count", count)
-					return nil
-				}
+				matchLabels := getWorkloadMatchLabels(obj)
+				return checkLingeringPodsForWorkload(ctx, c, obj, matchLabels, "DaemonSet", "daemonset")
 			case *appsv1.StatefulSet:
-				if exists, count, err := hasLingeringPods(ctx, c, obj.Namespace, obj.Spec.Selector.MatchLabels); err != nil {
-					return err
-				} else if exists {
-					log.V(2).Info("Lingering Pods still exist for StatefulSet", "statefulset", obj.Name, "count", count)
-					return nil
-				}
+				matchLabels := getWorkloadMatchLabels(obj)
+				return checkLingeringPodsForWorkload(ctx, c, obj, matchLabels, "StatefulSet", "statefulset")
 			default:
 				// Non-workload resource; no Pod listing needed.
 			}
@@ -1114,6 +1102,9 @@ func MaintainInstallationFinalizer(
 }
 
 func hasLingeringPods(ctx context.Context, c client.Client, namespace string, matchLabels map[string]string) (bool, int, error) {
+	if matchLabels == nil {
+		return false, 0, nil
+	}
 	podList := &corev1.PodList{}
 	if err := c.List(
 		ctx,
@@ -1125,4 +1116,32 @@ func hasLingeringPods(ctx context.Context, c client.Client, namespace string, ma
 	}
 	count := len(podList.Items)
 	return count > 0, count, nil
+}
+
+func getWorkloadMatchLabels(obj client.Object) map[string]string {
+	if d, ok := obj.(*appsv1.Deployment); ok {
+		if d.Spec.Selector != nil && d.Spec.Selector.MatchLabels != nil {
+			return d.Spec.Selector.MatchLabels
+		}
+	} else if ds, ok := obj.(*appsv1.DaemonSet); ok {
+		if ds.Spec.Selector != nil && ds.Spec.Selector.MatchLabels != nil {
+			return ds.Spec.Selector.MatchLabels
+		}
+	} else if ss, ok := obj.(*appsv1.StatefulSet); ok {
+		if ss.Spec.Selector != nil && ss.Spec.Selector.MatchLabels != nil {
+			return ss.Spec.Selector.MatchLabels
+		}
+	}
+	// Fallback to the assumed label pattern for backward compatibility
+	return map[string]string{"k8s-app": obj.GetName()}
+}
+
+func checkLingeringPodsForWorkload(ctx context.Context, c client.Client, obj client.Object, matchLabels map[string]string, workloadType string, logKey string) error {
+	if exists, count, err := hasLingeringPods(ctx, c, obj.GetNamespace(), matchLabels); err != nil {
+		return err
+	} else if exists {
+		log.V(2).Info(fmt.Sprintf("Lingering Pods still exist for %s", workloadType), logKey, obj.GetName(), "count", count)
+		return nil
+	}
+	return nil
 }

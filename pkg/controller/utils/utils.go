@@ -24,6 +24,7 @@ import (
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
+	csiv1 "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
 	"github.com/go-logr/logr"
 
@@ -35,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
@@ -68,6 +70,7 @@ var (
 	DefaultInstanceKey     = client.ObjectKey{Name: "default"}
 	DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 	OverlayInstanceKey     = client.ObjectKey{Name: "overlay"}
+	KubeProxyInstanceKey   = client.ObjectKey{Name: "kube-proxy", Namespace: "kube-system"}
 
 	PeriodicReconcileTime = 5 * time.Minute
 
@@ -133,6 +136,18 @@ func AddSecretsWatch(c ctrlruntime.Controller, name, namespace string) error {
 func AddSecretsWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
 	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	return AddNamespacedWatch(c, s, h)
+}
+
+func AddSecretProviderClassWatch(c ctrlruntime.Controller, name, namespace string) error {
+	return AddSecretProviderClassWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{})
+}
+
+func AddSecretProviderClassWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
+	s := &csiv1.SecretProviderClass{
+		TypeMeta:   metav1.TypeMeta{Kind: "SecretProviderClass", APIVersion: "secrets-store.csi.x-k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
 	return AddNamespacedWatch(c, s, h)
@@ -493,23 +508,6 @@ func GetIfExists[E any, ClientObj ClientObjType[E]](ctx context.Context, key cli
 	return obj, nil
 }
 
-type Defaultable[E any, O ClientObjType[E]] interface {
-	ClientObjType[E]
-	client.Object
-	FillDefaults()
-	DeepCopy() O
-}
-
-// ApplyDefaults sets any defaults that haven't been set on the given object and writes it to the k8s server.
-func ApplyDefaults[E any, O ClientObjType[E], D Defaultable[E, O]](ctx context.Context, c client.Client, obj D) error {
-	preDefaultPatchFrom := client.MergeFrom(obj.DeepCopy())
-	obj.FillDefaults()
-
-	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
-	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	return c.Patch(ctx, obj, preDefaultPatchFrom)
-}
-
 // GetNonClusterHost finds the NonClusterHost CR in your cluster.
 func GetNonClusterHost(ctx context.Context, cli client.Client) (*operatorv1.NonClusterHost, error) {
 	nonclusterhost := &operatorv1.NonClusterHost{}
@@ -680,8 +678,8 @@ type resourceWatchContext struct {
 	logger    logr.Logger
 }
 
-// WaitToAddResourceWatch will check if projectcalico.org APIs are available and if so, it will add a watch for resource
-// The completion of this operation will be signaled on a ready channel
+// WaitToAddResourceWatch will check if the required CRD APIs are available and if so, it will add a watch for the
+// resource. The completion of this operation will be signaled on a ready channel
 func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object) {
 	// Track resources left to watch and establish their watch context.
 	resourcesToWatch := map[client.Object]resourceWatchContext{}
@@ -706,7 +704,8 @@ func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Inte
 		for obj := range resourcesToWatch {
 			objLog := resourcesToWatch[obj].logger
 			predicateFn := resourcesToWatch[obj].predicate
-			if ok, err := isCalicoResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
+			gvk := obj.GetObjectKind().GroupVersionKind()
+			if ok, err := isResourceReady(c, gvk); err != nil {
 				msg := "Failed to check if resource is ready - will retry"
 				if errors.IsNotFound(err) {
 					objLog.WithValues("Error", err).V(2).Info(msg)
@@ -732,17 +731,27 @@ func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Inte
 	}
 }
 
-// isCalicoResourceReady checks if the specified resourceKind is available.
-// the resourceKind must be of the calico resource group.
-func isCalicoResourceReady(client kubernetes.Interface, resourceKind string) (bool, error) {
+// isResourceReady checks if the specified resource is available.
+func isResourceReady(client kubernetes.Interface, gvk schema.GroupVersionKind) (bool, error) {
+	gv := gvk.GroupVersion()
+	if gv.Empty() {
+		// Default to the Calico group and version if not specified so existing callers that only
+		// provide the Kind continue to function.
+		var err error
+		gv, err = schema.ParseGroupVersion(v3.GroupVersionCurrent)
+		if err != nil {
+			return false, err
+		}
+	}
+
 	// Only get the resources for the groupVersion we care about so that we are resilient to other
 	// apiservices being down.
-	res, err := client.Discovery().ServerResourcesForGroupVersion(v3.GroupVersionCurrent)
+	res, err := client.Discovery().ServerResourcesForGroupVersion(gv.String())
 	if err != nil {
 		return false, err
 	}
 	for _, r := range res.APIResources {
-		if resourceKind == r.Kind {
+		if gvk.Kind == r.Kind {
 			return true, nil
 		}
 	}

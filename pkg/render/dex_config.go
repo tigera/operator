@@ -255,7 +255,15 @@ func (d *dexBaseCfg) RequestedScopes() []string {
 	if d.authentication.Spec.OIDC != nil && d.authentication.Spec.OIDC.RequestedScopes != nil {
 		return d.authentication.Spec.OIDC.RequestedScopes
 	}
-	return []string{"openid", "email", "profile"}
+	return []string{
+		// openid: Standard OIDC scope, always required.
+		"openid",
+		// email: This is the one that requests the `email` and `email_verified` claims. It is the most commonly used username claim.
+		"email",
+		// profile: Gets user metadata claims like name, picture, etc.
+		"profile",
+		// offline_access: This claim is necessary for the PKCE flow in order to refresh access_tokens.
+		"offline_access"}
 }
 
 func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {

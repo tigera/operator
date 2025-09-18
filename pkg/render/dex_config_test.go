@@ -152,7 +152,7 @@ var _ = Describe("dex config tests", func() {
 					"clientID":                  "$CLIENT_ID",
 					"clientSecret":              "$CLIENT_SECRET",
 					"redirectURI":               "https://example.com/dex/callback",
-					"scopes":                    []string{"openid", "email", "profile"},
+					"scopes":                    []string{"openid", "email", "profile", "offline_access"},
 					"userNameKey":               "email",
 					"userIDKey":                 "email",
 					"claimMapping":              map[string]string{"groups": "group"},

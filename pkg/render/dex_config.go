@@ -354,20 +354,18 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 		},
 	}
 
+	var secretItems []corev1.KeyToPath
 	if d.idpSecret != nil && d.idpSecret.Data[serviceAccountSecretField] != nil {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name:         "secrets",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: d.idpSecret.Name, Items: []corev1.KeyToPath{{Key: serviceAccountSecretField, Path: "google-groups.json"}}}},
-			},
-		)
+		secretItems = append(secretItems, corev1.KeyToPath{Key: serviceAccountSecretField, Path: "google-groups.json"})
 	}
-
 	if d.idpSecret != nil && d.idpSecret.Data[RootCASecretField] != nil {
+		secretItems = append(secretItems, corev1.KeyToPath{Key: RootCASecretField, Path: "idp.pem"})
+	}
+	if len(secretItems) > 0 {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name:         "secrets",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: d.idpSecret.Name, Items: []corev1.KeyToPath{{Key: RootCASecretField, Path: "idp.pem"}}}},
+				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: d.idpSecret.Name, Items: secretItems}},
 			},
 		)
 	}
@@ -481,6 +479,8 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"clientSecret": fmt.Sprintf("$%s", clientSecretEnv),
 			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.BaseURL()),
 			"scopes":       d.RequestedScopes(),
+			"insecureSkipEmailVerified": d.authentication.Spec.OIDC.EmailVerification != nil &&
+				*d.authentication.Spec.OIDC.EmailVerification == oprv1.EmailVerificationTypeSkip,
 		}
 		if d.idpSecret != nil && d.idpSecret.Data[serviceAccountSecretField] != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
 			config[serviceAccountFilePathField] = serviceAccountSecretLocation

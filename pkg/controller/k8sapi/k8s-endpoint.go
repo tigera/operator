@@ -27,6 +27,8 @@ import (
 )
 
 const dockerEEProxyLocal = "proxy.local"
+const talosKubePrismHost = "localhost"
+const talosKubePrismPort = "7445"
 
 // Endpoint is the default ServiceEndpoint learned from environment variables.
 var Endpoint ServiceEndpoint
@@ -59,6 +61,10 @@ func (k8s ServiceEndpoint) EnvVars(hostNetworked bool, provider operator.Provide
 		// namespace.  Don't try to use it from non-host network pods.
 		//
 		// It's also possible for the user to configure a different route to the API server; we let those through.
+		return nil
+	}
+
+	if provider == operator.ProviderTalos && !hostNetworked && k8s.Host == talosKubePrismHost && k8s.Port == talosKubePrismPort {
 		return nil
 	}
 

@@ -95,6 +95,23 @@ var _ = Describe("provider discovery", func() {
 		Expect(p).To(Equal(operatorv1.ProviderTKG))
 	})
 
+	It("should detect Talos if a control-plane node has annotations prefixed with talos.dev", func() {
+		c := fake.NewSimpleClientset(&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "control-plane-1",
+				Labels: map[string]string{
+					"node-role.kubernetes.io/control-plane": "",
+				},
+				Annotations: map[string]string{
+					"talos.dev/owned-labels": "[\"node-role.kubernetes.io/control-plane\"]",
+				},
+			},
+		})
+		p, e := AutoDiscoverProvider(context.Background(), c)
+		Expect(e).To(BeNil())
+		Expect(p).To(Equal(operatorv1.ProviderTalos))
+	})
+
 	It("should detect EKS based on eks-certificates-controller ConfigMap", func() {
 		c := fake.NewSimpleClientset(&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{

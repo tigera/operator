@@ -69,14 +69,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return nil
 	}
 
-	if opts.MultiTenant {
-		// This controller is no longer required for multi-tenant environmants
-		// Single tenant and zero tenant will still run es-kube-controllers.
-		// Single tenant need elasticsearch configuration setup for kibana users,
-		// while zero tenant also require the license push to the managed clusters.
-		return nil
-	}
-
 	// Create the reconciler
 	r := &ESKubeControllersController{
 		client:          mgr.GetClient(),
@@ -179,10 +171,28 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - ESKubeControllers")
 
+	// We skip requests without a namespace specified in multi-tenant setups.
+	if r.multiTenant && request.Namespace == "" {
+		return reconcile.Result{}, nil
+	}
+
+	// When running in multi-tenant mode, we need to install es-kubecontrollers in tenant Namespaces. However, the LogStorage
+	// resource is still cluster-scoped (since ES is a cluster-wide resource), so we need to look elsewhere to determine
+	// which tenant namespaces require an es-kubecontrollers instance. We use the tenant API to determine the set of
+	// namespaces that should have an es-kubecontrollers.
+	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	if errors.IsNotFound(err) {
+		reqLogger.V(1).Info("No Tenant in this Namespace, skip")
+		return reconcile.Result{}, nil
+	} else if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Get LogStorage resource.
 	logStorage := &operatorv1.LogStorage{}
 	key := utils.DefaultTSEEInstanceKey
-	err := r.client.Get(ctx, key, logStorage)
+	err = r.client.Get(ctx, key, logStorage)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.OnCRNotFound()
@@ -296,25 +306,27 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// ESGateway is required in order for kube-controllers to operate successfully, since es-kube-controllers talks to ES
 	// via this gateway. However, in multi-tenant mode, es-kube-controllers doesn't talk to elasticsearch,
 	// so this is only needed in single-tenant clusters and zero tenants clusters
-	gwNSHelper := utils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace)
-	// Query the trusted bundle from the namespace.
-	gwTrustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, gwNSHelper.InstallNamespace())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting trusted bundle in %s", gwNSHelper.InstallNamespace()), err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if err := r.createESGateway(
-		ctx,
-		gwNSHelper,
-		install,
-		variant,
-		pullSecrets,
-		hdler,
-		reqLogger,
-		gwTrustedBundle,
-		logStorage,
-	); err != nil {
-		return reconcile.Result{}, err
+	if !r.multiTenant {
+		gwNSHelper := utils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace)
+		// Query the trusted bundle from the namespace.
+		gwTrustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, gwNSHelper.InstallNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting trusted bundle in %s", gwNSHelper.InstallNamespace()), err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if err := r.createESGateway(
+			ctx,
+			gwNSHelper,
+			install,
+			variant,
+			pullSecrets,
+			hdler,
+			reqLogger,
+			gwTrustedBundle,
+			logStorage,
+		); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Query the trusted bundle from the namespace.
@@ -347,7 +359,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		TrustedBundle:                trustedBundle,
 		Namespace:                    helper.InstallNamespace(),
 		BindingNamespaces:            namespaces,
-		Tenant:                       nil,
+		Tenant:                       tenant,
 	}
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 

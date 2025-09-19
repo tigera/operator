@@ -53,12 +53,13 @@ const (
 	KubeControllerMetrics           = "calico-kube-controllers-metrics"
 	KubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "kube-controller-access"
 
-	EsKubeController                    = "es-calico-kube-controllers"
-	EsKubeControllerRole                = "es-calico-kube-controllers"
-	EsKubeControllerRoleBinding         = "es-calico-kube-controllers"
-	EsKubeControllerMetrics             = "es-calico-kube-controllers-metrics"
-	EsKubeControllerNetworkPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
-	ManagedClustersWatchRoleBindingName = "es-calico-kube-controllers-managed-cluster-watch"
+	EsKubeController                                = "es-calico-kube-controllers"
+	EsKubeControllerRole                            = "es-calico-kube-controllers"
+	EsKubeControllerRoleBinding                     = "es-calico-kube-controllers"
+	EsKubeControllerMetrics                         = "es-calico-kube-controllers-metrics"
+	EsKubeControllerNetworkPolicyName               = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
+	MultiTenantManagedClustersAccessRoleBindingName = "es-calico-kube-controllers-managed-cluster-access"
+	ManagedClustersWatchRoleBindingName             = "es-calico-kube-controllers-managed-cluster-watch"
 
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
@@ -260,6 +261,11 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		objectsToDelete = append(objectsToDelete, c.controllersDeployment())
 	}
 
+	if c.cfg.Tenant.MultiTenant() {
+		objectsToDelete = append(objectsToDelete, c.multiTenantManagedClustersAccess()...)
+		objectsToDelete = append(objectsToDelete, objectsToCreate...)
+	}
+
 	if c.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		objectsToCreate = append(objectsToCreate, c.controllersOCPFederationRoleBinding())
 	}
@@ -280,6 +286,20 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	}
 
 	return objectsToCreate, objectsToDelete
+}
+
+func (c *kubeControllersComponent) multiTenantManagedClustersAccess() []client.Object {
+	var objects []client.Object
+
+	// In a multi-tenant setup ES-Kube-Controllers from the tenant's namespace impersonates service
+	// calico-kube-controllers from calico-system namespace. (This is done via an additional ClusterRole and a
+	// ClusterRoleBinding)
+	objects = append(objects, &rbacv1.RoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessRoleBindingName, Namespace: c.cfg.Namespace},
+	})
+
+	return objects
 }
 
 func (c *kubeControllersComponent) Ready() bool {
@@ -647,8 +667,14 @@ func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.Clust
 
 func (c *kubeControllersComponent) managedClusterRoleBindings() []client.Object {
 	if c.cfg.ManagementCluster != nil {
-		return []client.Object{
-			rcomp.ClusterRoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, []string{c.cfg.Namespace}),
+		if c.cfg.Tenant.MultiTenant() {
+			return []client.Object{
+				rcomp.RoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, c.cfg.Namespace),
+			}
+		} else {
+			return []client.Object{
+				rcomp.ClusterRoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, []string{c.cfg.Namespace}),
+			}
 		}
 	}
 	return []client.Object{}

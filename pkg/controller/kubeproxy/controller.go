@@ -179,7 +179,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 		reqLogger.Info("kube-proxy DaemonSet patched to disable kube-proxy, since kubeProxyManagement is Enabled and BPFEnabled is true.")
 		if !installationCR.KubernetesProvider.IsNone() {
-			reqLogger.Info(fmt.Sprintf("[WARNING] Auto disabling kube-proxy may result in unexpected behavior in %s.", installationCR.KubernetesProvider))
+			reqLogger.Info(fmt.Sprintf("[WARNING] Auto disabling kube-proxy may result in unexpected behavior in %s. ", installationCR.KubernetesProvider) +
+				"If you experience issues while patching the kube-proxy DaemonSet, disable 'kubeProxyManagement' in the Installation CR " +
+				"and follow the eBPF installation guide at https://docs.tigera.io.")
 		}
 	} else {
 		// If the dataplane is not BPF, we'll try to re-enable kube-proxy:

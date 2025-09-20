@@ -128,6 +128,8 @@ const InstallationName string = "calico"
 var (
 	log                    = logf.Log.WithName("controller_installation")
 	openshiftNetworkConfig = "cluster"
+
+	warnOnce = utils.OnceFlag{}
 )
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -1482,7 +1484,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
 	}
 	// Check if BPFNetworkBootstrap is Enabled and its requirements are met.
-	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(r.client, ctx, &instance.Spec)
+	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(ctx, r.client, &instance.Spec)
 	if err != nil {
 		r.status.SetDegraded(operator.ResourceValidationError, "bpfNetworkBootstrap is Enabled but the requirements are not met", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1493,7 +1495,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
 		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.K8sService)
 		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfBootstrapReq.K8sServiceEndpoints)
+
+		if !instance.Spec.KubernetesProvider.IsNone() {
+			// Warn once about potential issues with API server connectivity.
+			// This lock is necessary to prevent multiple warnings, since this Reconcile is called by multiple workers.
+			if warnOnce.TrySet() {
+				reqLogger.Info(fmt.Sprintf("[WARNING] Auto bootstrapping BPF network may result in unexpected behavior in %s. ", instance.Spec.KubernetesProvider) +
+					"If you experience API server communication issues, disable 'bpfBootstrapNetworking' in the Installation CR " +
+					"and follow the eBPF installation guide at https://docs.tigera.io.")
+			}
+		}
 	}
+
+	if !instance.Spec.BPFNetworkBootstrapEnabled() {
+		warnOnce.Reset()
+	}
+
 	components = append(components, render.Node(&nodeCfg))
 
 	csiCfg := render.CSIConfiguration{

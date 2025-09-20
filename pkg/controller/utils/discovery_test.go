@@ -155,4 +155,18 @@ var _ = Describe("provider discovery", func() {
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderRKE2))
 	})
+
+	It("should detect KinD if a Node has ProviderID prefixed with kind://", func() {
+		c := fake.NewSimpleClientset(&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "kind-worker",
+			},
+			Spec: corev1.NodeSpec{
+				ProviderID: "kind://docker/kind/kind-worker",
+			},
+		})
+		p, e := AutoDiscoverProvider(context.Background(), c)
+		Expect(e).To(BeNil())
+		Expect(p).To(Equal(operatorv1.ProviderKind))
+	})
 })

@@ -290,7 +290,6 @@ var _ = Describe("guardian", func() {
 			rtest.ExpectEnv(container.Env, "GUARDIAN_VOLTRON_CA_TYPE", "Public")
 		})
 		It("should render guardian with resource requests and limits when configured", func() {
-
 			guardianResources := corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					"cpu":     resource.MustParse("2"),

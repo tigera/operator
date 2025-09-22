@@ -303,7 +303,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(controller).ToNot(BeNil())
 				Expect(controller.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentTigeraKubeControllers.Image,
+						components.ComponentTigeraKubeControllers.Image(),
 						components.ComponentTigeraKubeControllers.Version)))
 
 				d = appsv1.Deployment{
@@ -319,14 +319,14 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(typha).ToNot(BeNil())
 				Expect(typha.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentTigeraTypha.Image,
+						components.ComponentTigeraTypha.Image(),
 						components.ComponentTigeraTypha.Version)))
 				Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 				csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentTigeraCSRInitContainer.Image,
+						components.ComponentTigeraCSRInitContainer.Image(),
 						components.ComponentTigeraCSRInitContainer.Version)))
 
 				ds := appsv1.DaemonSet{
@@ -342,38 +342,38 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(node).ToNot(BeNil())
 				Expect(node.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentTigeraNode.Image,
+						components.ComponentTigeraNode.Image(),
 						components.ComponentTigeraNode.Version)))
 				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
 				fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 				Expect(fv).ToNot(BeNil())
 				Expect(fv.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentTigeraFlexVolume.Image,
+						components.ComponentTigeraFlexVolume.Image(),
 						components.ComponentTigeraFlexVolume.Version)))
 				cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				Expect(cni).ToNot(BeNil())
 				Expect(cni.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentTigeraCNI.Image,
+						components.ComponentTigeraCNI.Image(),
 						components.ComponentTigeraCNI.Version)))
 				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentTigeraCSRInitContainer.Image,
+						components.ComponentTigeraCSRInitContainer.Image(),
 						components.ComponentTigeraCSRInitContainer.Version)))
 				csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 				Expect(csrinit2).ToNot(BeNil())
 				Expect(csrinit2.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentTigeraCSRInitContainer.Image,
+						components.ComponentTigeraCSRInitContainer.Image(),
 						components.ComponentTigeraCSRInitContainer.Version)))
 				bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 				Expect(bpfInit).ToNot(BeNil())
 				Expect(bpfInit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentTigeraNode.Image,
+						components.ComponentTigeraNode.Image(),
 						components.ComponentTigeraNode.Version)))
 			})
 
@@ -411,7 +411,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(controller).ToNot(BeNil())
 				Expect(controller.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentTigeraKubeControllers.Image,
+						components.ComponentTigeraKubeControllers.Image(),
 						"sha256:tigerakubecontrollerhash")))
 
 				d = appsv1.Deployment{
@@ -427,14 +427,14 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(typha).ToNot(BeNil())
 				Expect(typha.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentTigeraTypha.Image,
+						components.ComponentTigeraTypha.Image(),
 						"sha256:tigeratyphahash")))
 				Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 				csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentTigeraCSRInitContainer.Image,
+						components.ComponentTigeraCSRInitContainer.Image(),
 						"sha256:calicocsrinithash")))
 
 				ds := appsv1.DaemonSet{
@@ -450,39 +450,39 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(node).ToNot(BeNil())
 				Expect(node.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentTigeraNode.Image,
+						components.ComponentTigeraNode.Image(),
 						"sha256:tigeranodehash")))
 				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
 				fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 				Expect(fv).ToNot(BeNil())
 				Expect(fv.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentTigeraFlexVolume.Image,
+						components.ComponentTigeraFlexVolume.Image(),
 						"sha256:calicoflexvolhash")))
 				cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				Expect(cni).ToNot(BeNil())
 				Expect(cni.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentTigeraCNI.Image,
+						components.ComponentTigeraCNI.Image(),
 						"sha256:tigeracnihash")))
 				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentTigeraCSRInitContainer.Image,
+						components.ComponentTigeraCSRInitContainer.Image(),
 						"sha256:calicocsrinithash")))
 				csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 				Expect(csrinit2).ToNot(BeNil())
 				Expect(csrinit2.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentTigeraCSRInitContainer.Image,
+						components.ComponentTigeraCSRInitContainer.Image(),
 						"sha256:calicocsrinithash")))
 
 				bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 				Expect(bpfInit).ToNot(BeNil())
 				Expect(bpfInit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s@%s",
-						components.ComponentTigeraNode.Image,
+						components.ComponentTigeraNode.Image(),
 						"sha256:tigeranodehash")))
 				inst := operator.Installation{
 					ObjectMeta: metav1.ObjectMeta{
@@ -524,7 +524,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(controller).ToNot(BeNil())
 				Expect(controller.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s:%s",
-						components.ComponentTigeraKubeControllers.Image,
+						components.ComponentTigeraKubeControllers.Image(),
 						components.ComponentTigeraKubeControllers.Version)))
 			})
 

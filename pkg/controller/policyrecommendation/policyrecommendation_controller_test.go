@@ -227,7 +227,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
-				components.ComponentPolicyRecommendation.Image,
+				components.ComponentPolicyRecommendation.Image(),
 				components.ComponentPolicyRecommendation.Version)))
 		})
 
@@ -258,7 +258,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentPolicyRecommendation.Image,
+					components.ComponentPolicyRecommendation.Image(),
 					"sha256:policyrecommendationcontrollerhash")))
 		})
 	})

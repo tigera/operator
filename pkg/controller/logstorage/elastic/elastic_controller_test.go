@@ -864,7 +864,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(initset).ToNot(BeNil())
 					Expect(initset.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
-							components.ComponentElasticsearch.Image,
+							components.ComponentElasticsearch.Image(),
 							components.ComponentElasticsearch.Version)))
 
 					kb := kbv1.Kibana{
@@ -876,7 +876,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(test.GetResource(cli, &kb)).To(BeNil())
 					Expect(kb.Spec.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
-							components.ComponentKibana.Image,
+							components.ComponentKibana.Image(),
 							components.ComponentKibana.Version)))
 
 					ss := appsv1.StatefulSet{
@@ -892,7 +892,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
-							components.ComponentElasticsearchOperator.Image,
+							components.ComponentElasticsearchOperator.Image(),
 							components.ComponentElasticsearchOperator.Version)))
 				})
 
@@ -948,7 +948,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(initset).ToNot(BeNil())
 					Expect(initset.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
-							components.ComponentElasticsearch.Image,
+							components.ComponentElasticsearch.Image(),
 							"sha256:elasticsearchhash")))
 
 					kb := kbv1.Kibana{
@@ -960,7 +960,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(test.GetResource(cli, &kb)).To(BeNil())
 					Expect(kb.Spec.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
-							components.ComponentKibana.Image,
+							components.ComponentKibana.Image(),
 							"sha256:kibanahash")))
 
 					ss := appsv1.StatefulSet{
@@ -976,7 +976,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
-							components.ComponentElasticsearchOperator.Image,
+							components.ComponentElasticsearchOperator.Image(),
 							"sha256:eckoperatorhash")))
 				})
 			})

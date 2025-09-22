@@ -444,7 +444,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentComplianceController.Image,
+					components.ComponentComplianceController.Image(),
 					components.ComponentComplianceController.Version)))
 
 			pt := corev1.PodTemplate{
@@ -460,7 +460,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(reporter).ToNot(BeNil())
 			Expect(reporter.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentComplianceReporter.Image,
+					components.ComponentComplianceReporter.Image(),
 					components.ComponentComplianceReporter.Version)))
 
 			d = appsv1.Deployment{
@@ -476,7 +476,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(snap).ToNot(BeNil())
 			Expect(snap.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentComplianceSnapshotter.Image,
+					components.ComponentComplianceSnapshotter.Image(),
 					components.ComponentComplianceSnapshotter.Version)))
 
 			ds := appsv1.DaemonSet{
@@ -492,7 +492,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(bench).ToNot(BeNil())
 			Expect(bench.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentComplianceBenchmarker.Image,
+					components.ComponentComplianceBenchmarker.Image(),
 					components.ComponentComplianceBenchmarker.Version)))
 
 			d = appsv1.Deployment{
@@ -508,7 +508,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(server).ToNot(BeNil())
 			Expect(server.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentComplianceServer.Image,
+					components.ComponentComplianceServer.Image(),
 					components.ComponentComplianceServer.Version)))
 		})
 		It("should use images from imageset", func() {
@@ -542,7 +542,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentComplianceController.Image,
+					components.ComponentComplianceController.Image(),
 					"sha256:controllerhash")))
 
 			pt := corev1.PodTemplate{
@@ -558,7 +558,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(reporter).ToNot(BeNil())
 			Expect(reporter.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentComplianceReporter.Image,
+					components.ComponentComplianceReporter.Image(),
 					"sha256:reporterhash")))
 
 			d = appsv1.Deployment{
@@ -574,7 +574,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(snap).ToNot(BeNil())
 			Expect(snap.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentComplianceSnapshotter.Image,
+					components.ComponentComplianceSnapshotter.Image(),
 					"sha256:snapshotterhash")))
 
 			ds := appsv1.DaemonSet{
@@ -590,7 +590,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(bench).ToNot(BeNil())
 			Expect(bench.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentComplianceBenchmarker.Image,
+					components.ComponentComplianceBenchmarker.Image(),
 					"sha256:benchmarkerhash")))
 
 			d = appsv1.Deployment{
@@ -606,7 +606,7 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(server).ToNot(BeNil())
 			Expect(server.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentComplianceServer.Image,
+					components.ComponentComplianceServer.Image(),
 					"sha256:serverhash")))
 		})
 	})
@@ -897,7 +897,6 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
 		})
-
 	})
 
 	Context("Multi-tenant/namespaced reconciliation", func() {

@@ -348,6 +348,12 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Resources: []string{"tiers"},
 			Verbs:     []string{"create"},
 		},
+		{
+			// Namespaces are watched for LoadBalancer IP allocation with namespace selector support
+			APIGroups: []string{""},
+			Resources: []string{"namespaces"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}
 
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {

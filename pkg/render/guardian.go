@@ -237,18 +237,28 @@ func (c *GuardianComponent) serviceAccount() *corev1.ServiceAccount {
 	}
 }
 
+func formatImpersonationResourceNames(resourceNames []string) []string {
+	for _, resourceName := range resourceNames {
+		// If the resource name is "*", then we need to return an empty list as * signifies all resources.
+		if resourceName == "*" {
+			return []string{}
+		}
+	}
+
+	return resourceNames
+}
+
 func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 	var policyRules []rbacv1.PolicyRule
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		impersonation := c.cfg.ManagementClusterConnection.Spec.Impersonation
 		if impersonation != nil {
-
 			if len(impersonation.Users) > 0 {
 				policyRules = append(policyRules,
 					rbacv1.PolicyRule{
 						APIGroups:     []string{""},
 						Resources:     []string{"users"},
-						ResourceNames: impersonation.Users,
+						ResourceNames: formatImpersonationResourceNames(impersonation.Users),
 						Verbs:         []string{"impersonate"},
 					})
 			}
@@ -257,7 +267,7 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 					rbacv1.PolicyRule{
 						APIGroups:     []string{""},
 						Resources:     []string{"groups"},
-						ResourceNames: impersonation.Groups,
+						ResourceNames: formatImpersonationResourceNames(impersonation.Groups),
 						Verbs:         []string{"impersonate"},
 					})
 			}
@@ -266,7 +276,7 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 					rbacv1.PolicyRule{
 						APIGroups:     []string{""},
 						Resources:     []string{"serviceaccounts"},
-						ResourceNames: impersonation.ServiceAccounts,
+						ResourceNames: formatImpersonationResourceNames(impersonation.ServiceAccounts),
 						Verbs:         []string{"impersonate"},
 					})
 			}

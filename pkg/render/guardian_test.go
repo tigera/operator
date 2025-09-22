@@ -175,6 +175,88 @@ var _ = Describe("Rendering tests", func() {
 				Effect:   corev1.TaintEffectNoSchedule,
 			}))
 		})
+
+		It("should render guardian with unlimited impersonation", func() {
+			cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					Impersonation: &operatorv1.Impersonation{
+						Users:           []string{"*"},
+						Groups:          []string{"*"},
+						ServiceAccounts: []string{"*"},
+					},
+				},
+			}
+
+			g := render.Guardian(cfg)
+			resources, _ := g.Objects()
+			Expect(resources).ToNot(BeNil())
+
+			clusterRole, ok := rtest.GetResource(resources, render.GuardianClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(ok).To(BeTrue())
+
+			foundUserImp, foundGroupImp, foundSaImp := false, false, false
+			for _, rule := range clusterRole.Rules {
+				if rule.Verbs[0] == "impersonate" {
+					if rule.Resources[0] == "users" {
+						Expect(rule.ResourceNames).To(Equal([]string{}))
+						foundUserImp = true
+					}
+					if rule.Resources[0] == "groups" {
+						Expect(rule.ResourceNames).To(Equal([]string{}))
+						foundGroupImp = true
+					}
+					if rule.Resources[0] == "serviceaccounts" {
+						Expect(rule.ResourceNames).To(Equal([]string{}))
+						foundSaImp = true
+					}
+				}
+			}
+
+			Expect(foundUserImp).To(BeTrue())
+			Expect(foundGroupImp).To(BeTrue())
+			Expect(foundSaImp).To(BeTrue())
+		})
+
+		It("should render guardian with specific impersonation", func() {
+			cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					Impersonation: &operatorv1.Impersonation{
+						Users:           []string{"foo"},
+						Groups:          []string{"bar"},
+						ServiceAccounts: []string{"zaz"},
+					},
+				},
+			}
+
+			g := render.Guardian(cfg)
+			resources, _ := g.Objects()
+			Expect(resources).ToNot(BeNil())
+
+			clusterRole, ok := rtest.GetResource(resources, render.GuardianClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(ok).To(BeTrue())
+
+			foundUserImp, foundGroupImp, foundSaImp := false, false, false
+			for _, rule := range clusterRole.Rules {
+				if rule.Verbs[0] == "impersonate" {
+					if rule.Resources[0] == "users" {
+						Expect(rule.ResourceNames).To(Equal([]string{"foo"}))
+						foundUserImp = true
+					}
+					if rule.Resources[0] == "groups" {
+						Expect(rule.ResourceNames).To(Equal([]string{"bar"}))
+						foundGroupImp = true
+					}
+					if rule.Resources[0] == "serviceaccounts" {
+						Expect(rule.ResourceNames).To(Equal([]string{"zaz"}))
+						foundSaImp = true
+					}
+				}
+			}
+
+			Expect(foundUserImp).To(BeTrue())
+			Expect(foundGroupImp).To(BeTrue())
+			Expect(foundSaImp).To(BeTrue())
+		})
 	})
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
@@ -290,7 +372,6 @@ var _ = Describe("guardian", func() {
 			rtest.ExpectEnv(container.Env, "GUARDIAN_VOLTRON_CA_TYPE", "Public")
 		})
 		It("should render guardian with resource requests and limits when configured", func() {
-
 			guardianResources := corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{
 					"cpu":     resource.MustParse("2"),

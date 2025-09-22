@@ -751,7 +751,6 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	})
 
 	val := []string{"some-value"}
-	star := []string{"*"}
 	DescribeTable("should render impersonation permissions correctly", func(impersonation *operatorv1.Impersonation, expectedUser, expectedGroup, expectedSA []string) {
 		By("ensuring a tigerastatus exists")
 		ts := &operatorv1.TigeraStatus{
@@ -795,8 +794,9 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Expect(groups).To(Equal(expectedGroup))
 		Expect(sas).To(Equal(expectedSA))
 	},
-		Entry("no impersonation configured", nil, star, star, star),
+		Entry("no impersonation configured", nil, nil, nil, nil),
 		Entry("all set", &operatorv1.Impersonation{Users: val, Groups: val, ServiceAccounts: val}, val, val, val),
+		Entry("all set to empty", &operatorv1.Impersonation{Users: []string{}, Groups: []string{}, ServiceAccounts: []string{}}, nil, nil, nil),
 		Entry("user set", &operatorv1.Impersonation{Users: val}, val, nil, nil),
 		Entry("groups set", &operatorv1.Impersonation{Groups: val}, nil, val, nil),
 		Entry("service accounts set", &operatorv1.Impersonation{ServiceAccounts: val}, nil, nil, val),

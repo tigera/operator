@@ -521,11 +521,10 @@ func fillDefaults(cr *operatorv1.ManagementClusterConnection, variant operatorv1
 		cr.Spec.TLS.CA = operatorv1.CATypeTigera
 	}
 	if variant == operatorv1.TigeraSecureEnterprise && cr.Spec.Impersonation == nil {
-		var wildcard = []string{"*"}
 		cr.Spec.Impersonation = &operatorv1.Impersonation{
-			Users:           wildcard,
-			Groups:          wildcard,
-			ServiceAccounts: wildcard,
+			Users:           []string{},
+			Groups:          []string{},
+			ServiceAccounts: []string{},
 		}
 	}
 }

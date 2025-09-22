@@ -242,8 +242,7 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		impersonation := c.cfg.ManagementClusterConnection.Spec.Impersonation
 		if impersonation != nil {
-
-			if len(impersonation.Users) > 0 {
+			if impersonation.Users != nil {
 				policyRules = append(policyRules,
 					rbacv1.PolicyRule{
 						APIGroups:     []string{""},
@@ -252,7 +251,7 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 						Verbs:         []string{"impersonate"},
 					})
 			}
-			if len(impersonation.Groups) > 0 {
+			if impersonation.Groups != nil {
 				policyRules = append(policyRules,
 					rbacv1.PolicyRule{
 						APIGroups:     []string{""},
@@ -261,7 +260,7 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 						Verbs:         []string{"impersonate"},
 					})
 			}
-			if len(impersonation.ServiceAccounts) > 0 {
+			if impersonation.ServiceAccounts != nil {
 				policyRules = append(policyRules,
 					rbacv1.PolicyRule{
 						APIGroups:     []string{""},

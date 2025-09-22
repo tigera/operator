@@ -16,20 +16,30 @@ package components
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	operator "github.com/tigera/operator/api/v1"
 )
 
 type Component struct {
-	// Image is the full image path and name for this component (e.g., tigera/node, calico/cni)
-	Image   string
+	// ImageName is the image name for this component (e.g., node, cni)
+	ImageName string
+
+	// ImagePath is the path to an image (e.g., tigera/, calico/).
+	ImagePath string
+
 	Version string
 
 	// Registry is only used for developer workflows. For production builds, the registry
 	// is always determined from user configuration. This field can be overridden
 	// as part of a developer workflow to deploy custom dev images on an individual basis.
 	Registry string
+}
+
+// FullImage is the image path and image name combined, without the registry or version.
+func (c Component) Image() string {
+	return fmt.Sprintf("%s%s", c.ImagePath, c.ImageName)
 }
 
 const UseDefault = "UseDefault"
@@ -39,35 +49,10 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 	// If a user did not supply a registry, use the default registry
 	// based on component
 	if registry == "" || registry == UseDefault {
-		switch c {
-		case ComponentCalicoNode,
-			ComponentCalicoNodeFIPS,
-			ComponentCalicoNodeWindows,
-			ComponentCalicoCNI,
-			ComponentCalicoCNIFIPS,
-			ComponentCalicoCNIWindows,
-			ComponentCalicoTypha,
-			ComponentCalicoTyphaFIPS,
-			ComponentCalicoKubeControllers,
-			ComponentCalicoKubeControllersFIPS,
-			ComponentCalicoFlexVolume,
-			ComponentCalicoAPIServer,
-			ComponentCalicoAPIServerFIPS,
-			ComponentCalicoCSRInitContainer,
-			ComponentCalicoCSI,
-			ComponentCalicoCSIFIPS,
-			ComponentCalicoCSIRegistrar,
-			ComponentCalicoCSIRegistrarFIPS,
-			ComponentCalicoEnvoyGateway,
-			ComponentCalicoEnvoyProxy,
-			ComponentCalicoEnvoyRatelimit,
-			ComponentCalicoGoldmane,
-			ComponentCalicoWhisker,
-			ComponentCalicoWhiskerBackend,
-			ComponentCalicoGuardian:
-
+		switch {
+		case slices.Contains(CalicoImages, c):
 			registry = CalicoRegistry
-		case ComponentOperatorInit:
+		case c == ComponentOperatorInit:
 			registry = InitRegistry
 		default:
 			registry = TigeraRegistry
@@ -85,12 +70,14 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 		registry = fmt.Sprintf("%s/", registry)
 	}
 
-	image := c.Image
+	image := c.ImageName
 	if imagePrefix != "" && imagePrefix != UseDefault {
-		image = insertPrefix(image, imagePrefix)
+		image = fmt.Sprintf("%s%s", imagePrefix, image)
 	}
 	if imagePath != "" && imagePath != UseDefault {
-		image = ReplaceImagePath(image, imagePath)
+		image = fmt.Sprintf("%s%s", imagePath, image)
+	} else {
+		image = fmt.Sprintf("%s%s", c.ImagePath, image)
 	}
 
 	if is == nil {
@@ -98,28 +85,10 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 	}
 
 	for _, img := range is.Spec.Images {
-		if img.Image == c.Image {
+		if img.Image == c.Image() {
 			return fmt.Sprintf("%s%s@%s", registry, image, img.Digest), nil
 		}
 	}
 
-	return "", fmt.Errorf("ImageSet did not contain image %s", c.Image)
-}
-
-func ReplaceImagePath(image, imagePath string) string {
-	subs := strings.SplitAfterN(image, "/", 2)
-	if len(subs) == 2 {
-		return fmt.Sprintf("%s/%s", imagePath, subs[1])
-	}
-	return fmt.Sprintf("%s/%s", imagePath, subs[0])
-}
-
-func insertPrefix(image, prefix string) string {
-	subs := strings.Split(image, "/")
-	if len(subs) == 1 {
-		// The given image is just a single image with no prefix.
-		return fmt.Sprintf("%s%s", prefix, image)
-	}
-	subs = append(subs[:len(subs)-1], fmt.Sprintf("%s%s", prefix, subs[len(subs)-1]))
-	return strings.Join(subs, "/")
+	return "", fmt.Errorf("ImageSet did not contain image %s", c.Image())
 }

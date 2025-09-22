@@ -34,7 +34,7 @@ type BPFBootstrap struct {
 // BPFBootstrapRequirements checks whether the BPF auto-bootstrap requirements are met.
 // If so, it retrieves the kube-proxy DaemonSet, the Kubernetes service, and its EndpointSlices, returning them in a BPFBootstrap struct.
 // If it's not possible to retrieve any of these resources, it returns an error.
-func BPFBootstrapRequirements(c client.Client, ctx context.Context, install *operator.InstallationSpec) (*BPFBootstrap, error) {
+func BPFBootstrapRequirements(ctx context.Context, c client.Client, install *operator.InstallationSpec) (*BPFBootstrap, error) {
 	// If BPFNetworkBootstrap is not Enabled, skip further processing.
 	if !install.BPFNetworkBootstrapEnabled() {
 		return nil, nil

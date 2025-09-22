@@ -371,7 +371,6 @@ var _ = Describe("Linseed rendering tests", func() {
 			initContainer = test.GetContainer(d.Spec.Template.Spec.InitContainers, "tigera-secure-linseed-cert-key-cert-provisioner")
 			Expect(initContainer).NotTo(BeNil())
 			Expect(initContainer.Resources).To(Equal(linseedResources))
-
 		})
 
 		Context("allow-tigera rendering", func() {

@@ -75,6 +75,10 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 		image = fmt.Sprintf("%s%s", imagePrefix, image)
 	}
 	if imagePath != "" && imagePath != UseDefault {
+		// Ensure image path ends with a slash.
+		if !strings.HasSuffix(imagePath, "/") {
+			imagePath = fmt.Sprintf("%s/", imagePath)
+		}
 		image = fmt.Sprintf("%s%s", imagePath, image)
 	} else {
 		image = fmt.Sprintf("%s%s", c.ImagePath, image)

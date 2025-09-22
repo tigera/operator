@@ -42,6 +42,7 @@ type matchObject struct {
 func (m *matchObject) Match(actual any) (success bool, err error) {
 	return actual.(client.Object).GetName() == m.name, nil
 }
+
 func (m *matchObject) FailureMessage(actual any) (message string) {
 	return "" // not used within ContainElement
 }
@@ -51,8 +52,7 @@ func (m *matchObject) NegatedFailureMessage(actual any) (message string) {
 }
 
 var _ = Describe("Gateway API rendering tests", func() {
-
-	var AccessLogSettings = []envoyapi.ProxyAccessLogSetting{
+	AccessLogSettings := []envoyapi.ProxyAccessLogSetting{
 		{
 			Sinks: []envoyapi.ProxyAccessLogSink{
 				{

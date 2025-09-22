@@ -457,7 +457,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"update"},
-			}}))
+			},
+		}))
 		roleBindingUpdateManagedClusters := rtest.GetResource(resources, render.ManagerManagedClustersUpdateRBACName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(roleBindingUpdateManagedClusters.RoleRef.Name).To(Equal(render.ManagerManagedClustersUpdateRBACName))
 		Expect(roleBindingWatchManagedClusters.Subjects).To(ConsistOf([]rbacv1.Subject{
@@ -467,7 +468,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Namespace: render.ManagerNamespace,
 			},
 		}))
-
 	})
 
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {

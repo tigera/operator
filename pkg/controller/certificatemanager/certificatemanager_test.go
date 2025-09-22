@@ -728,7 +728,6 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 		It("should create a hash for both secrets even if the same pem is used twice", func() {
 			By("creating 2 secrets with identical pem in the datastore", func() {
-
 				byoSecretCopy := byoSecret.DeepCopyObject().(*corev1.Secret)
 
 				byoSecret.Name, byoSecret.Namespace = "byo-secret", common.OperatorNamespace()

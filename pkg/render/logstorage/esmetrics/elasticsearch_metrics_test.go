@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -241,7 +241,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 		})
 
 		It("should renders the Elasticsearch metrics with resource requests and limits", func() {
-
 			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
@@ -303,7 +302,6 @@ var _ = Describe("Elasticsearch metrics", func() {
 			initContainer := test.GetContainer(d.Spec.Template.Spec.InitContainers, "tigera-ee-elasticsearch-metrics-tls-key-cert-provisioner")
 			Expect(initContainer).NotTo(BeNil())
 			Expect(initContainer.Resources).To(Equal(esMetricsResources))
-
 		})
 
 		It("should render toleration on GKE", func() {

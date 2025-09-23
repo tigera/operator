@@ -109,7 +109,7 @@ var (
 
 func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 	var lock sync.Mutex
-	var resources = &gatewayAPIResources{}
+	resources := &gatewayAPIResources{}
 	const yamlDelimiter = "\n---\n"
 	return func() *gatewayAPIResources {
 		lock.Lock()
@@ -820,7 +820,6 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			accessLogsName := "access-logs"
 			// Add or update Container volume mount
 			wafSocketVolumeMount := corev1.VolumeMount{
-
 				Name:      wafFilterName,
 				MountPath: "/var/run/waf-http-filter",
 			}
@@ -834,7 +833,6 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			hasAccessLogsVolumeMount := false
 
 			for i, volumeMount := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts {
-
 				if volumeMount.Name == wafSocketVolumeMount.Name {
 					hasWAFFilterSocketVolumeMount = true
 					if volumeMount.MountPath != wafSocketVolumeMount.MountPath {

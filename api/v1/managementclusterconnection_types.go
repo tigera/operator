@@ -54,7 +54,7 @@ type Impersonation struct {
 	Users []string `json:"users"`
 
 	// Groups is a list of group names that can be impersonated. An empty list infers all groups can be impersonated,
-	//	// a null values means none.
+	// a null values means none.
 	// +optional
 	Groups []string `json:"groups"`
 

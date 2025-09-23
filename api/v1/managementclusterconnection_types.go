@@ -48,17 +48,20 @@ type ManagementClusterConnectionSpec struct {
 
 // Impersonation defines the rules for allowing impersonation.
 type Impersonation struct {
-	// Users is a list of users that can be impersonated.
+	// Users is a list of users that can be impersonated. An empty list infers all users can be impersonated, a null
+	// value means none.
 	// +optional
-	Users []string `json:"users,omitempty"`
+	Users []string `json:"users"`
 
-	// Groups is a list of group names that can be impersonated.
+	// Groups is a list of group names that can be impersonated. An empty list infers all groups can be impersonated,
+	// a null values means none.
 	// +optional
-	Groups []string `json:"groups,omitempty"`
+	Groups []string `json:"groups"`
 
-	// ServiceAccounts is a list of service account names that can be impersonated.
+	// ServiceAccounts is a list of service account names that can be impersonated. An empty list infers all service accounts can
+	// be impersonated, a null values means none.
 	// +optional
-	ServiceAccounts []string `json:"serviceAccounts,omitempty"`
+	ServiceAccounts []string `json:"serviceAccounts"`
 }
 
 type ManagementClusterTLS struct {

@@ -753,6 +753,10 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				Image: pr.L7LogCollectorImage,
 				Env: []corev1.EnvVar{
 					{
+						Name:  "LOG_LEVEL",
+						Value: "Info",
+					},
+					{
 						Name:  "FELIX_DIAL_TARGET",
 						Value: "/var/run/felix/nodeagent/socket",
 					},

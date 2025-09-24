@@ -142,6 +142,9 @@ components:
   l7-collector:
     image: tigera/l7-collector
     version: master
+  gateway-l7-collector:
+    image: tigera/gateway-l7-collector
+    version: master
   envoy:
     image: tigera/envoy
     version: master

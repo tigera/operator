@@ -180,7 +180,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		Expect(c.Get(ctx, client.ObjectKey{
 			Name: render.PolicyRecommendationNamespace,
 		}, &namespace)).NotTo(HaveOccurred())
-		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
+		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
 		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 		// Expect operator role binding to be created

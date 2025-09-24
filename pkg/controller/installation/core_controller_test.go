@@ -1052,7 +1052,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 					ipt := operator.LinuxDataplaneIptables
-					enabled := operator.BPFNetworkAutoEnabled
+					enabled := operator.BPFNetworkBootstrapEnabled
 					cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
 						LinuxDataplane:      &ipt,
 						BPFNetworkBootstrap: &enabled,
@@ -1075,7 +1075,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 					bpf := operator.LinuxDataplaneBPF
-					enabled := operator.BPFNetworkAutoEnabled
+					enabled := operator.BPFNetworkBootstrapEnabled
 					cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
 						LinuxDataplane:      &bpf,
 						BPFNetworkBootstrap: &enabled,
@@ -1134,7 +1134,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(install.Spec.CalicoNetwork).ToNot(BeNil())
 					Expect(install.Spec.CalicoNetwork.BPFNetworkBootstrap).ToNot(BeNil())
-					Expect(*install.Spec.CalicoNetwork.BPFNetworkBootstrap).To(Equal(operator.BPFNetworkAutoEnabled))
+					Expect(*install.Spec.CalicoNetwork.BPFNetworkBootstrap).To(Equal(operator.BPFNetworkBootstrapEnabled))
 					Expect(install.Spec.BPFNetworkBootstrapEnabled()).To(BeTrue())
 
 					By("Checking that the FelixConfiguration has BPF Enabled")

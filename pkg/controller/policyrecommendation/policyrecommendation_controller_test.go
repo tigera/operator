@@ -180,6 +180,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		Expect(c.Get(ctx, client.ObjectKey{
 			Name: render.PolicyRecommendationNamespace,
 		}, &namespace)).NotTo(HaveOccurred())
+		// We expect privileged PSS because we're using calico-system namespace in this setup (single-tenant)
+		Expect(namespace.Name).To(Equal("calico-system"))
 		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
 		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 

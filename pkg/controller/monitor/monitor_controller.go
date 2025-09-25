@@ -113,6 +113,10 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
 	})
 
+	r.status.AddDeployments([]types.NamespacedName{
+		{Namespace: common.TigeraPrometheusNamespace, Name: monitor.CalicoPrometheusOperator},
+	})
+
 	r.status.Run(opts.ShutdownContext)
 	return r
 }

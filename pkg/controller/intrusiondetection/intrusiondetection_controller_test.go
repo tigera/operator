@@ -217,7 +217,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentIntrusionDetectionController.Image,
+					components.ComponentIntrusionDetectionController.Image(),
 					components.ComponentIntrusionDetectionController.Version)))
 
 			training_pt := corev1.PodTemplate{
@@ -283,7 +283,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentIntrusionDetectionController.Image,
+					components.ComponentIntrusionDetectionController.Image(),
 					"sha256:intrusiondetectioncontrollerhash")))
 
 			ds := appsv1.DaemonSet{
@@ -299,7 +299,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(dpiContainer).ToNot(BeNil())
 			Expect(dpiContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentDeepPacketInspection.Image,
+					components.ComponentDeepPacketInspection.Image(),
 					"sha256:deeppacketinspectionhash")))
 		})
 	})
@@ -426,7 +426,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
 			pullSecret := pullSecrets.OwnerReferences[0]
 			Expect(pullSecret.Kind).To(Equal("IntrusionDetection"))
-
 		})
 
 		It("should Reconcile with default values for intrusion detection resource", func() {
@@ -707,7 +706,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 	})
 
 	Context("Multi-tenant mode", func() {
-		var tenantANamespace = "tenantANamespace"
+		tenantANamespace := "tenantANamespace"
 
 		BeforeEach(func() {
 			mockStatus = &status.MockStatus{}

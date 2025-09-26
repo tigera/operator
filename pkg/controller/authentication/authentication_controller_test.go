@@ -426,7 +426,7 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(dexC).ToNot(BeNil())
 			Expect(dexC.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentDex.Image,
+					components.ComponentDex.Image(),
 					components.ComponentDex.Version)))
 		})
 		It("should use images from imageset", func() {
@@ -463,7 +463,7 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentDex.Image,
+					components.ComponentDex.Image(),
 					"sha256:dexhash")))
 		})
 	})

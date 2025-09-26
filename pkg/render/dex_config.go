@@ -209,7 +209,15 @@ func (d *dexBaseCfg) RequestedScopes() []string {
 	if d.authentication.Spec.OIDC != nil && d.authentication.Spec.OIDC.RequestedScopes != nil {
 		return d.authentication.Spec.OIDC.RequestedScopes
 	}
-	return []string{"openid", "email", "profile"}
+	return []string{
+		// openid: Standard OIDC scope, always required.
+		"openid",
+		// email: This is the one that requests the `email` and `email_verified` claims. It is the most commonly used username claim.
+		"email",
+		// profile: Gets user metadata claims like name, picture, etc.
+		"profile",
+		// offline_access: This claim is necessary for the PKCE flow in order to refresh access_tokens.
+		"offline_access"}
 }
 
 func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
@@ -292,20 +300,18 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 		},
 	}
 
+	var secretItems []corev1.KeyToPath
 	if d.idpSecret != nil && d.idpSecret.Data[serviceAccountSecretField] != nil {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name:         "secrets",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: d.idpSecret.Name, Items: []corev1.KeyToPath{{Key: serviceAccountSecretField, Path: "google-groups.json"}}}},
-			},
-		)
+		secretItems = append(secretItems, corev1.KeyToPath{Key: serviceAccountSecretField, Path: "google-groups.json"})
 	}
-
 	if d.idpSecret != nil && d.idpSecret.Data[RootCASecretField] != nil {
+		secretItems = append(secretItems, corev1.KeyToPath{Key: RootCASecretField, Path: "idp.pem"})
+	}
+	if len(secretItems) > 0 {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name:         "secrets",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: d.idpSecret.Name, Items: []corev1.KeyToPath{{Key: RootCASecretField, Path: "idp.pem"}}}},
+				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: d.idpSecret.Name, Items: secretItems}},
 			},
 		)
 	}
@@ -393,6 +399,8 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"clientSecret": fmt.Sprintf("$%s", clientSecretEnv),
 			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.BaseURL()),
 			"scopes":       d.RequestedScopes(),
+			"insecureSkipEmailVerified": d.authentication.Spec.OIDC.EmailVerification != nil &&
+				*d.authentication.Spec.OIDC.EmailVerification == oprv1.EmailVerificationTypeSkip,
 		}
 		if d.idpSecret.Data[serviceAccountSecretField] != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
 			config[serviceAccountFilePathField] = serviceAccountSecretLocation

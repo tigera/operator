@@ -185,21 +185,24 @@ var _ = Describe("apiserver controller tests", func() {
 			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-apiserver")
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentAPIServer.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentAPIServer.Image,
 					components.ComponentAPIServer.Version)))
 			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-queryserver")
 			Expect(qserver).ToNot(BeNil())
 			Expect(qserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentQueryServer.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentQueryServer.Image,
 					components.ComponentQueryServer.Version)))
 			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, "calico-apiserver-certs-key-cert-provisioner")
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraCSRInitContainer.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentTigeraCSRInitContainer.Image,
 					components.ComponentTigeraCSRInitContainer.Version)))
 		})
 		It("should use images from imageset", func() {
@@ -240,20 +243,23 @@ var _ = Describe("apiserver controller tests", func() {
 			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-apiserver")
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentAPIServer.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentAPIServer.Image,
 					"sha256:apiserverhash")))
 			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-queryserver")
 			Expect(qserver).ToNot(BeNil())
 			Expect(qserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentQueryServer.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentQueryServer.Image,
 					"sha256:queryserverhash")))
 			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, "calico-apiserver-certs-key-cert-provisioner")
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentTigeraCSRInitContainer.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentTigeraCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
 		})
 

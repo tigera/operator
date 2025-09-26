@@ -310,7 +310,7 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 		Expect(test.GetResource(cli, &dep)).To(BeNil())
 		kc := test.GetContainer(dep.Spec.Template.Spec.Containers, kubecontrollers.EsKubeController)
 		Expect(kc).ToNot(BeNil())
-		Expect(kc.Image).To(Equal(fmt.Sprintf("some.registry.org/%s@%s", components.ComponentTigeraKubeControllers.Image(), "sha256:kubecontrollershash")))
+		Expect(kc.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentTigeraKubeControllers.Image, "sha256:kubecontrollershash")))
 	})
 
 	Context("External ES mode", func() {

@@ -180,8 +180,9 @@ var _ = Describe("packet capture controller tests", func() {
 			pcContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.Containers, render.PacketCaptureContainerName)
 			Expect(pcContainer).ToNot(BeNil())
 			Expect(pcContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentPacketCapture.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentPacketCapture.Image,
 					components.ComponentPacketCapture.Version)))
 			Expect(pcContainer.VolumeMounts).To(ConsistOf([]corev1.VolumeMount{
 				{
@@ -198,8 +199,9 @@ var _ = Describe("packet capture controller tests", func() {
 			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, "tigera-packetcapture-server-tls-key-cert-provisioner")
 			Expect(csrinitContainer).ToNot(BeNil())
 			Expect(csrinitContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraCSRInitContainer.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentTigeraCSRInitContainer.Image,
 					components.ComponentTigeraCSRInitContainer.Version)))
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -240,14 +242,16 @@ var _ = Describe("packet capture controller tests", func() {
 			pcContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.Containers, render.PacketCaptureContainerName)
 			Expect(pcContainer).ToNot(BeNil())
 			Expect(pcContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentPacketCapture.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentPacketCapture.Image,
 					"sha256:packetcapturehash")))
 			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, "tigera-packetcapture-server-tls-key-cert-provisioner")
 			Expect(csrinitContainer).ToNot(BeNil())
 			Expect(csrinitContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentTigeraCSRInitContainer.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentTigeraCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},

@@ -235,8 +235,9 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianContainerName)
 			Expect(dexC).ToNot(BeNil())
 			Expect(dexC.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentGuardian.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentGuardian.Image,
 					components.ComponentGuardian.Version)))
 		})
 		It("should use images from imageset", func() {
@@ -266,8 +267,9 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianContainerName)
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentGuardian.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentGuardian.Image,
 					"sha256:guardianhash")))
 		})
 	})

@@ -178,7 +178,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		// Image override results in correct image.
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(
-			fmt.Sprintf("test-reg/%s:%s", components.ComponentCalicoKubeControllers.Image(), components.ComponentCalicoKubeControllers.Version),
+			fmt.Sprintf("test-reg/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoKubeControllers.Image, components.ComponentCalicoKubeControllers.Version),
 		))
 
 		// Verify env

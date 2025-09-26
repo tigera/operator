@@ -152,7 +152,7 @@ var _ = Describe("dex config tests", func() {
 					"clientID":                  "$CLIENT_ID",
 					"clientSecret":              "$CLIENT_SECRET",
 					"redirectURI":               "https://example.com/dex/callback",
-					"scopes":                    []string{"openid", "email", "profile"},
+					"scopes":                    []string{"openid", "email", "profile", "offline_access"},
 					"userNameKey":               "email",
 					"userIDKey":                 "email",
 					"claimMapping":              map[string]string{"groups": "group"},
@@ -265,7 +265,7 @@ var _ = Describe("dex config tests", func() {
 		Entry("Compare actual and expected Openshift config", ocp),
 	)
 
-	DescribeTable("Test dex connector for Google ", func(secretData map[string][]byte, expectPresent bool) {
+	DescribeTable("Test dex connector for Google ", func(secretData map[string][]byte, expectPresent bool, emailVerification operatorv1.EmailVerificationType) {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.OIDCSecretName,
@@ -274,11 +274,17 @@ var _ = Describe("dex config tests", func() {
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			Data:     secretData,
 		}
+		google.Spec.OIDC.EmailVerification = &emailVerification
 		dexConfig := render.NewDexConfig(nil, google, secret, dns.DefaultClusterDomain)
 		connector := dexConfig.Connector()["config"].(map[string]interface{})
 
 		email, emailFound := connector["adminEmail"]
 		saPath, saFound := connector["serviceAccountFilePath"]
+		if emailVerification == operatorv1.EmailVerificationTypeSkip {
+			Expect(connector["insecureSkipEmailVerified"]).To(Equal(true))
+		} else {
+			Expect(connector["insecureSkipEmailVerified"]).To(Equal(false))
+		}
 		if expectPresent {
 			Expect(email).To(Equal(email))
 			Expect(emailFound).To(BeTrue())
@@ -294,21 +300,34 @@ var _ = Describe("dex config tests", func() {
 			"clientID":             []byte("a.b.com"),
 			"clientSecret":         []byte("my-secret"),
 			"serviceAccountSecret": []byte("my-secret2"),
-		}, true),
+		}, true, nil),
 		Entry("Compare actual and expected OIDC config", map[string][]byte{
 			"clientID":     []byte("a.b.com"),
 			"clientSecret": []byte("my-secret"),
-		}, false),
+		}, false, nil),
 		Entry("Compare actual and expected OIDC config", map[string][]byte{
 			"clientID":             []byte("a.b.com"),
 			"clientSecret":         []byte("my-secret"),
 			"serviceAccountSecret": []byte("my-secret2"),
-		}, false),
+		}, false, nil),
 		Entry("Compare actual and expected OIDC config", map[string][]byte{
 			"adminEmail":   []byte(email),
 			"clientID":     []byte("a.b.com"),
 			"clientSecret": []byte("my-secret"),
-		}, false))
+		}, false, nil),
+		Entry("Check that EmailVerificationTypeSkip is properly propagated", map[string][]byte{
+			"adminEmail":           []byte(email),
+			"clientID":             []byte("a.b.com"),
+			"clientSecret":         []byte("my-secret"),
+			"serviceAccountSecret": []byte("my-secret2"),
+		}, true, operatorv1.EmailVerificationTypeSkip),
+		Entry("Check that EmailVerificationTypeVerify is properly propagated", map[string][]byte{
+			"adminEmail":           []byte(email),
+			"clientID":             []byte("a.b.com"),
+			"clientSecret":         []byte("my-secret"),
+			"serviceAccountSecret": []byte("my-secret2"),
+		}, true, operatorv1.EmailVerificationTypeVerify),
+	)
 
 	DescribeTable("Test values for promptTypes ", func(in []operatorv1.PromptType, result string) {
 		auth := oidc.DeepCopy()

@@ -45,11 +45,13 @@ components:
   dex:
     image: dex
     version: master
+  # eck-kibana holds the version of Kibana built for tigera/kibana
   eck-kibana:
     version: 8.18.4
   kibana:
     image: kibana
     version: master
+  # eck-elasticsearch holds the version of Elasticsearch built for tigera/elasticsearch
   eck-elasticsearch:
     version: 8.18.4
   elasticsearch:
@@ -110,7 +112,7 @@ components:
   prometheus:
     image: prometheus
     version: master
-  # coreos-prometheus holds the version of alertmanager built for tigera/alertmanager,
+  # coreos-alertmanager holds the version of alertmanager built for tigera/alertmanager,
   # which prometheus operator uses to validate.
   coreos-alertmanager:
     version: v0.28.0
@@ -132,11 +134,11 @@ components:
   csi-node-driver-registrar:
     image: node-driver-registrar
     version: master
-  # The components below are third-party images that have been retagged under
-  # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:
     image: eck-operator
     version: master
+  # eck-elasticsearch-operator holds the version of the ECK operator used to manage
+  # Elasticsearch
   eck-elasticsearch-operator:
     version: 2.16.0
   l7-collector:

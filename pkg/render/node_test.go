@@ -248,7 +248,7 @@ var _ = Describe("Node rendering tests", func() {
 
 				// Node image override results in correct image.
 				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image(), components.ComponentCalicoNode.Version)))
+				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
 				Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 				Expect(*ds.Spec.Template.Spec.Containers[0].SecurityContext.Privileged).To(BeTrue())
@@ -452,7 +452,7 @@ var _ = Describe("Node rendering tests", func() {
 				rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "NO_DEFAULT_POOLS", "true")
 
 				// Node image override results in correct image.
-				calicoNodeImage := fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image(), components.ComponentCalicoNode.Version)
+				calicoNodeImage := fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(calicoNodeImage))
 
 				verifyInitContainers(ds, defaultInstance)
@@ -831,7 +831,7 @@ var _ = Describe("Node rendering tests", func() {
 				verifyInitContainers(ds, defaultInstance)
 
 				// Node image override results in correct image.
-				calicoNodeImage := fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image(), components.ComponentCalicoNode.Version)
+				calicoNodeImage := fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
 				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(calicoNodeImage))
 
 				// Verify volumes.
@@ -976,7 +976,7 @@ var _ = Describe("Node rendering tests", func() {
 				rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "NO_DEFAULT_POOLS", "true")
 
 				// Node image override results in correct image.
-				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image(), components.ComponentCalicoNode.Version)))
+				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
 				verifyInitContainers(ds, defaultInstance)
 				// Verify env
@@ -1378,7 +1378,7 @@ var _ = Describe("Node rendering tests", func() {
 				rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "NO_DEFAULT_POOLS", "true")
 
 				// Node image override results in correct image.
-				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image(), components.ComponentCalicoNode.Version)))
+				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
 				verifyInitContainers(ds, defaultInstance)
 				// Verify env
@@ -1656,7 +1656,7 @@ var _ = Describe("Node rendering tests", func() {
 
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image(), components.ComponentCalicoNode.Version)))
+				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
 				// The pod template should have node critical priority
 				Expect(ds.Spec.Template.Spec.PriorityClassName).To(Equal(render.NodePriorityClassName))
@@ -2908,7 +2908,7 @@ var _ = Describe("Node rendering tests", func() {
 				rtest.ExpectEnv(ds.Spec.Template.Spec.Containers[0].Env, "NO_DEFAULT_POOLS", "true")
 
 				// Node image override results in correct image.
-				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image(), components.ComponentCalicoNode.Version)))
+				Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)))
 
 				verifyInitContainers(ds, defaultInstance)
 				// Verify env
@@ -3434,10 +3434,10 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 		Expect(cniContainer).NotTo(BeNil())
 		rtest.ExpectEnv(cniContainer.Env, "CNI_CONF_NAME", "10-calico.conflist")
 		rtest.ExpectEnv(cniContainer.Env, "SLEEP", "false")
-		cniImage := fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoCNI.Image(), components.ComponentCalicoCNI.Version)
+		cniImage := fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)
 		if instance.FIPSMode != nil && *instance.FIPSMode == operatorv1.FIPSModeEnabled {
 			// Calico CNI image should have -fips suffix when FIPS mode is enabled.
-			cniImage = fmt.Sprintf("quay.io/%s:%s-fips", components.ComponentCalicoCNI.Image(), components.ComponentCalicoCNI.Version)
+			cniImage = fmt.Sprintf("quay.io/%s%s:%s-fips", components.CalicoImagePath, components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)
 		}
 		if instance.Variant == operatorv1.TigeraSecureEnterprise {
 			cniImage = components.TigeraRegistry + "tigera/cni:" + components.ComponentTigeraCNI.Version
@@ -3491,10 +3491,10 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 	// Verify the ebpf-bootstrap container image and security context.
 	ebpfBootstrap := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 	Expect(ebpfBootstrap).NotTo(BeNil())
-	ebpfImage := fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoNode.Image(), components.ComponentCalicoNode.Version)
+	ebpfImage := fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
 	if instance.FIPSMode != nil && *instance.FIPSMode == operatorv1.FIPSModeEnabled {
 		// Calico Node image should have -fips suffix when FIPS mode is enabled.
-		ebpfImage = fmt.Sprintf("quay.io/%s:%s-fips", components.ComponentCalicoNode.Image(), components.ComponentCalicoNode.Version)
+		ebpfImage = fmt.Sprintf("quay.io/%s%s:%s-fips", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
 	}
 	if instance.Variant == operatorv1.TigeraSecureEnterprise {
 		ebpfImage = components.TigeraRegistry + "tigera/node:" + components.ComponentTigeraNode.Version
@@ -3527,9 +3527,9 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 	if instance.FlexVolumePath != "None" {
 		Expect(flexvolContainer).NotTo(BeNil())
 		if instance.Variant == operatorv1.TigeraSecureEnterprise {
-			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("%s%s:%s", components.TigeraRegistry, components.ComponentTigeraFlexVolume.Image(), components.ComponentTigeraFlexVolume.Version)))
+			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraFlexVolume.Image, components.ComponentTigeraFlexVolume.Version)))
 		} else {
-			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s:%s", components.ComponentCalicoFlexVolume.Image(), components.ComponentCalicoFlexVolume.Version)))
+			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
 		}
 
 		Expect(*flexvolContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())

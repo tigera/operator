@@ -425,8 +425,9 @@ var _ = Describe("authentication controller tests", func() {
 			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.DexObjectName)
 			Expect(dexC).ToNot(BeNil())
 			Expect(dexC.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentDex.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentDex.Image,
 					components.ComponentDex.Version)))
 		})
 		It("should use images from imageset", func() {
@@ -462,8 +463,9 @@ var _ = Describe("authentication controller tests", func() {
 			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, render.DexObjectName)
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentDex.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentDex.Image,
 					"sha256:dexhash")))
 		})
 	})

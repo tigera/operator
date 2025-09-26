@@ -216,8 +216,9 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentIntrusionDetectionController.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentIntrusionDetectionController.Image,
 					components.ComponentIntrusionDetectionController.Version)))
 
 			training_pt := corev1.PodTemplate{
@@ -282,8 +283,9 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentIntrusionDetectionController.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentIntrusionDetectionController.Image,
 					"sha256:intrusiondetectioncontrollerhash")))
 
 			ds := appsv1.DaemonSet{
@@ -298,8 +300,9 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			dpiContainer := test.GetContainer(ds.Spec.Template.Spec.Containers, dpi.DeepPacketInspectionName)
 			Expect(dpiContainer).ToNot(BeNil())
 			Expect(dpiContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentDeepPacketInspection.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentDeepPacketInspection.Image,
 					"sha256:deeppacketinspectionhash")))
 		})
 	})

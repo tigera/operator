@@ -23,37 +23,51 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-// default images for components that do not specify an image in versions.yml
 var (
+	// default images for components that do not specify an image in versions.yml
+	// For now, it includes "calico/<imageName>" as well as "<imageName>" to handle
+	// older versions.yml files that have not been updated to remove the imagePath.
 	defaultImages = map[string]string{
 		"calico/cni":                  "cni",
+		"cni":                         "cni",
 		"calico/cni-windows":          "cni-windows",
+		"cni-windows":                 "cni-windows",
 		"calico/dikastes":             "dikastes",
+		"dikastes":                    "dikastes",
 		"calico/kube-controllers":     "kube-controllers",
+		"kube-controllers":            "kube-controllers",
 		"calico/node":                 "node",
+		"node":                        "node",
 		"calico/node-windows":         "node-windows",
+		"node-windows":                "node-windows",
 		"calico/goldmane":             "goldmane",
+		"goldmane":                    "goldmane",
 		"calico/guardian":             "guardian",
+		"guardian":                    "guardian",
 		"calico/whisker":              "whisker",
+		"whisker":                     "whisker",
 		"calico/whisker-backend":      "whisker-backend",
+		"whisker-backend":             "whisker-backend",
 		"calicoctl":                   "ctl",
 		"flexvol":                     "pod2daemon-flexvol",
 		"calico/csi":                  "csi",
+		"csi":                         "csi",
 		"csi-node-driver-registrar":   "node-driver-registrar",
 		"typha":                       "typha",
 		"key-cert-provisioner":        "key-cert-provisioner",
 		"calico/apiserver":            "apiserver",
+		"apiserver":                   "apiserver",
 		"calico/envoy-gateway":        "envoy-gateway",
+		"envoy-gateway":               "envoy-gateway",
 		"calico/envoy-proxy":          "envoy-proxy",
+		"envoy-proxy":                 "envoy-proxy",
 		"calico/envoy-ratelimit":      "envoy-ratelimit",
+		"envoy-ratelimit":             "envoy-ratelimit",
 		"eck-elasticsearch":           "unused-image",
 		"eck-elasticsearch-operator":  "unused-image",
 		"eck-kibana":                  "unused-image",
 		"coreos-prometheus":           "unused-image",
 		"coreos-alertmanager":         "unused-image",
-		"guardian":                    "guardian",
-		"node":                        "node",
-		"node-windows":                "node-windows",
 		"tigera-cni":                  "cni",
 		"tigera-cni-windows":          "cni-windows",
 		"linseed":                     "linseed",
@@ -61,17 +75,17 @@ var (
 		"gateway-api-envoy-proxy":     "envoy-proxy",
 		"gateway-api-envoy-ratelimit": "envoy-ratelimit",
 	}
-)
 
-var ignoredImages = map[string]struct{}{
-	"calico":            {},
-	"networking-calico": {},
-	"calico-private":    {},
-	"manager-proxy":     {},
-	"busybox":           {},
-	"calico/api":        {},
-	"libcalico-go":      {},
-}
+	ignoredImages = map[string]struct{}{
+		"calico":            {},
+		"networking-calico": {},
+		"calico-private":    {},
+		"manager-proxy":     {},
+		"busybox":           {},
+		"calico/api":        {},
+		"libcalico-go":      {},
+	}
+)
 
 type Release struct {
 	// Title is the Release version and should match the major.minor.patch of the

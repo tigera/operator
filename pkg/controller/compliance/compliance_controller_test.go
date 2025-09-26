@@ -443,8 +443,9 @@ var _ = Describe("Compliance controller tests", func() {
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceControllerName)
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentComplianceController.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentComplianceController.Image,
 					components.ComponentComplianceController.Version)))
 
 			pt := corev1.PodTemplate{
@@ -459,8 +460,9 @@ var _ = Describe("Compliance controller tests", func() {
 			reporter := test.GetContainer(pt.Template.Spec.Containers, "reporter")
 			Expect(reporter).ToNot(BeNil())
 			Expect(reporter.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentComplianceReporter.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentComplianceReporter.Image,
 					components.ComponentComplianceReporter.Version)))
 
 			d = appsv1.Deployment{
@@ -475,8 +477,9 @@ var _ = Describe("Compliance controller tests", func() {
 			snap := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceSnapshotterName)
 			Expect(snap).ToNot(BeNil())
 			Expect(snap.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentComplianceSnapshotter.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentComplianceSnapshotter.Image,
 					components.ComponentComplianceSnapshotter.Version)))
 
 			ds := appsv1.DaemonSet{
@@ -491,8 +494,9 @@ var _ = Describe("Compliance controller tests", func() {
 			bench := test.GetContainer(ds.Spec.Template.Spec.Containers, "compliance-benchmarker")
 			Expect(bench).ToNot(BeNil())
 			Expect(bench.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentComplianceBenchmarker.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentComplianceBenchmarker.Image,
 					components.ComponentComplianceBenchmarker.Version)))
 
 			d = appsv1.Deployment{
@@ -507,8 +511,9 @@ var _ = Describe("Compliance controller tests", func() {
 			server := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceServerName)
 			Expect(server).ToNot(BeNil())
 			Expect(server.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentComplianceServer.Image(),
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
+					components.ComponentComplianceServer.Image,
 					components.ComponentComplianceServer.Version)))
 		})
 		It("should use images from imageset", func() {
@@ -541,8 +546,9 @@ var _ = Describe("Compliance controller tests", func() {
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceControllerName)
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentComplianceController.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentComplianceController.Image,
 					"sha256:controllerhash")))
 
 			pt := corev1.PodTemplate{
@@ -557,8 +563,9 @@ var _ = Describe("Compliance controller tests", func() {
 			reporter := test.GetContainer(pt.Template.Spec.Containers, "reporter")
 			Expect(reporter).ToNot(BeNil())
 			Expect(reporter.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentComplianceReporter.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentComplianceReporter.Image,
 					"sha256:reporterhash")))
 
 			d = appsv1.Deployment{
@@ -573,8 +580,9 @@ var _ = Describe("Compliance controller tests", func() {
 			snap := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceSnapshotterName)
 			Expect(snap).ToNot(BeNil())
 			Expect(snap.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentComplianceSnapshotter.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentComplianceSnapshotter.Image,
 					"sha256:snapshotterhash")))
 
 			ds := appsv1.DaemonSet{
@@ -589,8 +597,9 @@ var _ = Describe("Compliance controller tests", func() {
 			bench := test.GetContainer(ds.Spec.Template.Spec.Containers, "compliance-benchmarker")
 			Expect(bench).ToNot(BeNil())
 			Expect(bench.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentComplianceBenchmarker.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentComplianceBenchmarker.Image,
 					"sha256:benchmarkerhash")))
 
 			d = appsv1.Deployment{
@@ -605,8 +614,9 @@ var _ = Describe("Compliance controller tests", func() {
 			server := test.GetContainer(d.Spec.Template.Spec.Containers, render.ComplianceServerName)
 			Expect(server).ToNot(BeNil())
 			Expect(server.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentComplianceServer.Image(),
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
+					components.ComponentComplianceServer.Image,
 					"sha256:serverhash")))
 		})
 	})

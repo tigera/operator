@@ -23,11 +23,13 @@ import (
 )
 
 type Component struct {
-	// ImageName is the image name for this component (e.g., node, cni)
-	ImageName string
+	// Image is the image name for this component (e.g., node, cni)
+	Image string
 
-	// ImagePath is the path to an image (e.g., tigera/, calico/).
-	ImagePath string
+	// imagePath is the path within the registry to the image (e.g., calico/, tigera/)
+	// Only used to differentiate between Calico and Tigera components when determining
+	// default registry and imagePath.
+	imagePath string
 
 	Version string
 
@@ -37,27 +39,33 @@ type Component struct {
 	Registry string
 }
 
-// FullImage is the image path and image name combined, without the registry or version.
-func (c Component) Image() string {
-	return fmt.Sprintf("%s%s", c.ImagePath, c.ImageName)
-}
-
 const UseDefault = "UseDefault"
+
+// getDefaults returns the default registry and imagePath for a given component.
+// This is used when no registry is explicitly defined by the component
+// and user does not explicitly specify a registry or imagePath.
+func getDefaults(c Component) (registry string, imagePath string) {
+	switch {
+	case slices.Contains(CalicoImages, c):
+		registry = CalicoRegistry
+		imagePath = CalicoImagePath
+	case c == ComponentOperatorInit:
+		registry = InitRegistry
+		imagePath = InitImagePath
+	default:
+		registry = TigeraRegistry
+		imagePath = TigeraImagePath
+	}
+	return
+}
 
 // GetReference returns the fully qualified image to use, including registry and version.
 func GetReference(c Component, registry, imagePath, imagePrefix string, is *operator.ImageSet) (string, error) {
-	// If a user did not supply a registry, use the default registry
-	// based on component
-	if registry == "" || registry == UseDefault {
-		switch {
-		case slices.Contains(CalicoImages, c):
-			registry = CalicoRegistry
-		case c == ComponentOperatorInit:
-			registry = InitRegistry
-		default:
-			registry = TigeraRegistry
-		}
+	defaultRegistry, defaultImagePath := getDefaults(c)
 
+	// If a user did not supply a registry, use the default registry
+	if registry == "" || registry == UseDefault {
+		registry = defaultRegistry
 		// If the component asks for an explicit registry, and the user
 		// did not provide a custom registry, use the one specified by
 		// the component.
@@ -70,29 +78,30 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 		registry = fmt.Sprintf("%s/", registry)
 	}
 
-	image := c.ImageName
+	// If a user supplies an imaagePrefix, prepend it to the image name.
+	imageName := c.Image
 	if imagePrefix != "" && imagePrefix != UseDefault {
-		image = fmt.Sprintf("%s%s", imagePrefix, image)
+		imageName = fmt.Sprintf("%s%s", imagePrefix, imageName)
 	}
-	if imagePath != "" && imagePath != UseDefault {
-		// Ensure image path ends with a slash.
-		if !strings.HasSuffix(imagePath, "/") {
-			imagePath = fmt.Sprintf("%s/", imagePath)
-		}
-		image = fmt.Sprintf("%s%s", imagePath, image)
-	} else {
-		image = fmt.Sprintf("%s%s", c.ImagePath, image)
+
+	// If a user did not supply an imagePath, use the default imagePath
+	if imagePath == "" || imagePath == UseDefault {
+		imagePath = defaultImagePath
+	} else if !strings.HasSuffix(imagePath, "/") {
+		// If the imagePath is explicitly set, make sure it ends with a slash so that the
+		// image can be appended correctly below.
+		imagePath = fmt.Sprintf("%s/", imagePath)
 	}
 
 	if is == nil {
-		return fmt.Sprintf("%s%s:%s", registry, image, c.Version), nil
+		return fmt.Sprintf("%s%s%s:%s", registry, imagePath, imageName, c.Version), nil
 	}
 
 	for _, img := range is.Spec.Images {
-		if img.Image == c.Image() {
-			return fmt.Sprintf("%s%s@%s", registry, image, img.Digest), nil
+		if img.Image == fmt.Sprintf("%s%s", defaultImagePath, c.Image) {
+			return fmt.Sprintf("%s%s%s@%s", registry, imagePath, imageName, img.Digest), nil
 		}
 	}
 
-	return "", fmt.Errorf("ImageSet did not contain image %s", c.Image())
+	return "", fmt.Errorf("ImageSet did not contain image %s", fmt.Sprintf("%s%s", defaultImagePath, c.Image))
 }

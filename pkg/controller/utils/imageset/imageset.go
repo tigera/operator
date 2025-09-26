@@ -147,7 +147,7 @@ func ValidateImageSet(is *operator.ImageSet) error {
 	for _, img := range is.Spec.Images {
 		valid := false
 		for _, x := range components.CalicoImages {
-			if img.Image == x.Image() {
+			if img.Image == fmt.Sprintf("%s%s", components.CalicoImagePath, x.Image) {
 				valid = true
 				break
 			}
@@ -156,7 +156,7 @@ func ValidateImageSet(is *operator.ImageSet) error {
 			continue
 		}
 		for _, x := range components.EnterpriseImages {
-			if img.Image == x.Image() {
+			if img.Image == fmt.Sprintf("%s%s", components.TigeraImagePath, x.Image) {
 				valid = true
 				break
 			}

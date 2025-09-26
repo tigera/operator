@@ -188,7 +188,6 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		render.LogCollectorNamespace,
 		render.IntrusionDetectionNamespace,
 		kibana.Namespace,
-		render.ManagerNamespace,
 		eck.OperatorNamespace,
 		render.PacketCaptureNamespace,
 		common.TigeraPrometheusNamespace,

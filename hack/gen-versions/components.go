@@ -17,48 +17,51 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"text/template"
 
 	"gopkg.in/yaml.v2"
 )
 
-var defaultImages = map[string]string{
-	"calico/cni":                 "calico/cni",
-	"calico/cni-windows":         "calico/cni-windows",
-	"calico/dikastes":            "calico/dikastes",
-	"calico/kube-controllers":    "calico/kube-controllers",
-	"calico/node":                "calico/node",
-	"calico/node-windows":        "calico/node-windows",
-	"calico/goldmane":            "calico/goldmane",
-	"calico/guardian":            "calico/guardian",
-	"calico/whisker":             "calico/whisker",
-	"calico/whisker-backend":     "calico/whisker-backend",
-	"calicoctl":                  "calico/ctl",
-	"flannel":                    "coreos/flannel",
-	"flexvol":                    "calico/pod2daemon-flexvol",
-	"calico/csi":                 "calico/csi",
-	"csi-node-driver-registrar":  "calico/node-driver-registrar",
-	"typha":                      "calico/typha",
-	"key-cert-provisioner":       "calico/key-cert-provisioner",
-	"eck-elasticsearch":          "unused/image",
-	"eck-elasticsearch-operator": "unused/image",
-	"eck-kibana":                 "unused/image",
-	"coreos-prometheus":          "unused/image",
-	"coreos-alertmanager":        "unused/image",
-	"guardian":                   "tigera/guardian",
-	"node":                       "tigera/node",
-	"node-windows":               "tigera/node-windows",
-	"tigera-cni":                 "tigera/cni",
-	"tigera-cni-windows":         "tigera/cni-windows",
-	"calico/apiserver":           "calico/apiserver",
-	"tigera/linseed":             "tigera/linseed",
-	"calico/envoy-gateway":       "calico/envoy-gateway",
-	"calico/envoy-proxy":         "calico/envoy-proxy",
-	"calico/envoy-ratelimit":     "calico/envoy-ratelimit",
-	"tigera/envoy-gateway":       "tigera/envoy-gateway",
-	"tigera/envoy-proxy":         "tigera/envoy-proxy",
-	"tigera/envoy-ratelimit":     "tigera/envoy-ratelimit",
-}
+// default images for components that do not specify an image in versions.yml
+var (
+	defaultImages = map[string]string{
+		"calico/cni":                  "cni",
+		"calico/cni-windows":          "cni-windows",
+		"calico/dikastes":             "dikastes",
+		"calico/kube-controllers":     "kube-controllers",
+		"calico/node":                 "node",
+		"calico/node-windows":         "node-windows",
+		"calico/goldmane":             "goldmane",
+		"calico/guardian":             "guardian",
+		"calico/whisker":              "whisker",
+		"calico/whisker-backend":      "whisker-backend",
+		"calicoctl":                   "ctl",
+		"flexvol":                     "pod2daemon-flexvol",
+		"calico/csi":                  "csi",
+		"csi-node-driver-registrar":   "node-driver-registrar",
+		"typha":                       "typha",
+		"key-cert-provisioner":        "key-cert-provisioner",
+		"calico/apiserver":            "apiserver",
+		"calico/envoy-gateway":        "envoy-gateway",
+		"calico/envoy-proxy":          "envoy-proxy",
+		"calico/envoy-ratelimit":      "envoy-ratelimit",
+		"eck-elasticsearch":           "unused-image",
+		"eck-elasticsearch-operator":  "unused-image",
+		"eck-kibana":                  "unused-image",
+		"coreos-prometheus":           "unused-image",
+		"coreos-alertmanager":         "unused-image",
+		"guardian":                    "guardian",
+		"node":                        "node",
+		"node-windows":                "node-windows",
+		"tigera-cni":                  "cni",
+		"tigera-cni-windows":          "cni-windows",
+		"linseed":                     "linseed",
+		"gateway-api-envoy-gateway":   "envoy-gateway",
+		"gateway-api-envoy-proxy":     "envoy-proxy",
+		"gateway-api-envoy-ratelimit": "envoy-ratelimit",
+	}
+)
 
 var ignoredImages = map[string]struct{}{
 	"calico":            {},
@@ -82,7 +85,9 @@ type Components map[string]*Component
 type Component struct {
 	Version  string `json:"version"`
 	Registry string `json:"registry"`
-	Image    string `json:"image"`
+
+	// Image is the image name without any image path (e.g. cni, api-server)
+	Image string `json:"image"`
 }
 
 // GetComponents parses a versions.yml file, scrubs the data of known issues,
@@ -97,7 +102,10 @@ func GetComponents(versionsPath string) (Release, error) {
 	cv.Components = make(Components)
 	cv.Title = v.Title
 
-	// add known default images to any components that are missing them.
+	// parse through the components listed in versions.yml to:
+	// - add known default images to any components that are missing them.
+	// - ignore any components that are not actually images.
+	// - trim imagePath from image names.
 	for key, component := range v.Components {
 		if _, ignore := ignoredImages[key]; ignore {
 			continue
@@ -110,6 +118,15 @@ func GetComponents(versionsPath string) (Release, error) {
 					"Either fill in the 'image' field or update this code with a defaultImage.", key)
 			}
 			component.Image = image
+		}
+
+		// Trim off the imagePath from the image name if a '/' exists.
+		// If there is no '/', the image name is left unchanged.
+		// TODO: Remove this logic once all versions.yml files have been updated to
+		// only contain imageName without imagePath.
+		imageParts := strings.SplitAfterN(component.Image, "/", 2)
+		if len(imageParts) == 2 {
+			component.Image = imageParts[1]
 		}
 
 		cv.Components[key] = component

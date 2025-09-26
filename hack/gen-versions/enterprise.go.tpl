@@ -21,368 +21,411 @@ var (
 	EnterpriseRelease string = "{{ .Title }}"
 {{ with index .Components "apiserver" }}
 	ComponentAPIServer = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "compliance-benchmarker" }}
 	ComponentComplianceBenchmarker = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "compliance-controller" }}
 	ComponentComplianceController = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "compliance-reporter" }}
 	ComponentComplianceReporter = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "compliance-server" }}
 	ComponentComplianceServer = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "compliance-snapshotter" }}
 	ComponentComplianceSnapshotter = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "key-cert-provisioner" }}
 	ComponentTigeraCSRInitContainer = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "deep-packet-inspection" }}
 	ComponentDeepPacketInspection = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "eck-elasticsearch" }}
 	ComponentEckElasticsearch = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
 	}
 {{- end }}
 {{ with index .Components "eck-kibana" }}
 	ComponentEckKibana = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
 	}
 {{- end }}
 {{ with index .Components "elastic-tsee-installer" }}
 	ComponentElasticTseeInstaller = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.elasticsearch }}
 	ComponentElasticsearch = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "eck-elasticsearch-operator" }}
 	ComponentECKElasticsearchOperator = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
 	}
 {{- end }}
 {{ with index .Components "elasticsearch-operator" }}
 	ComponentElasticsearchOperator = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "ui-apis" }}
 	ComponentUIAPIs = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "es-gateway" }}
 	ComponentESGateway = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "linseed" }}
 	ComponentLinseed = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.fluentd }}
 	ComponentFluentd = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "fluentd-windows" }}
 	ComponentFluentdWindows = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.guardian }}
 	ComponentGuardian = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "intrusion-detection-controller" }}
 	ComponentIntrusionDetectionController = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "waf-http-filter" }}
 	ComponentWAFHTTPFilter = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "webhooks-processor" }}
 	ComponentSecurityEventWebhooksProcessor = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.kibana }}
 	ComponentKibana = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "manager" }}
 	ComponentManager = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "dex" }}
 	ComponentDex = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.voltron }}
 	ComponentManagerProxy = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "packetcapture" }}
 	ComponentPacketCapture = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "policy-recommendation" }}
 	ComponentPolicyRecommendation = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "egress-gateway" }}
 	ComponentEgressGateway = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "l7-collector" }}
 	ComponentL7Collector = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "envoy" }}
 	ComponentEnvoyProxy = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "dikastes" }}
 	ComponentDikastes = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "l7-admission-controller" }}
 	ComponentL7AdmissionController = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
 	}
 {{- end }}
 {{ with index .Components "prometheus" }}
 	ComponentPrometheus = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "tigera-prometheus-service" }}
 	ComponentTigeraPrometheusService = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "coreos-alertmanager" }}
 	ComponentCoreOSAlertmanager = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
 	}
 {{- end }}
 {{ with index .Components "alertmanager" }}
 	ComponentPrometheusAlertmanager = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "queryserver" }}
 	ComponentQueryServer = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "kube-controllers" }}
 	ComponentTigeraKubeControllers = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "node" }}
 	ComponentTigeraNode = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "node-windows" }}
 	ComponentTigeraNodeWindows = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.typha }}
 	ComponentTigeraTypha = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "tigera-cni" }}
 	ComponentTigeraCNI = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "tigera-cni-windows" }}
 	ComponentTigeraCNIWindows = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "elasticsearch-metrics" }}
 	ComponentElasticsearchMetrics = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "flexvol" }}
 	ComponentTigeraFlexVolume = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "csi" }}
 	ComponentTigeraCSI = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar" }}
 	ComponentTigeraCSINodeDriverRegistrar = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "gateway-api-envoy-gateway" }}
 	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "gateway-api-envoy-proxy" }}
 	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "gateway-api-envoy-ratelimit" }}
 	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:  "{{ .Version }}",
-		Image:    "{{ .Image }}",
-		Registry: "{{ .Registry }}",
+		Version:   "{{ .Version }}",
+		ImageName: "{{ .Image }}",
+		ImagePath: TigeraImagePath,
+		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
 	// Only components that correspond directly to images should be included in this list,

@@ -626,25 +626,25 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
-							components.ComponentManager.Image,
+							components.ComponentManager.Image(),
 							components.ComponentManager.Version)))
 					dashboard := test.GetContainer(d.Spec.Template.Spec.Containers, render.DashboardAPIName)
 					Expect(dashboard).ToNot(BeNil())
 					Expect(dashboard.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
-							components.ComponentUIAPIs.Image,
+							components.ComponentUIAPIs.Image(),
 							components.ComponentUIAPIs.Version)))
 					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
-							components.ComponentUIAPIs.Image,
+							components.ComponentUIAPIs.Image(),
 							components.ComponentUIAPIs.Version)))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
-							components.ComponentManagerProxy.Image,
+							components.ComponentManagerProxy.Image(),
 							components.ComponentManagerProxy.Version)))
 				})
 				It("should use images from imageset", func() {
@@ -676,25 +676,25 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
-							components.ComponentManager.Image,
+							components.ComponentManager.Image(),
 							"sha256:managerhash")))
 					dashboard := test.GetContainer(d.Spec.Template.Spec.Containers, render.DashboardAPIName)
 					Expect(dashboard).ToNot(BeNil())
 					Expect(dashboard.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
-							components.ComponentUIAPIs.Image,
+							components.ComponentUIAPIs.Image(),
 							"sha256:uiapihash")))
 					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
-							components.ComponentUIAPIs.Image,
+							components.ComponentUIAPIs.Image(),
 							"sha256:uiapihash")))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
-							components.ComponentManagerProxy.Image,
+							components.ComponentManagerProxy.Image(),
 							"sha256:voltronhash")))
 				})
 			})

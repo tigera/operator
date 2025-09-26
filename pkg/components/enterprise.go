@@ -21,316 +21,311 @@ var (
 	EnterpriseRelease string = "master"
 
 	ComponentAPIServer = Component{
-		Version:  "master",
-		Image:    "tigera/apiserver",
-		Registry: "",
+		Version:   "master",
+		ImageName: "apiserver",
+		Registry:  "",
 	}
 
 	ComponentComplianceBenchmarker = Component{
-		Version:  "master",
-		Image:    "tigera/compliance-benchmarker",
-		Registry: "",
+		Version:   "master",
+		ImageName: "compliance-benchmarker",
+		Registry:  "",
 	}
 
 	ComponentComplianceController = Component{
-		Version:  "master",
-		Image:    "tigera/compliance-controller",
-		Registry: "",
+		Version:   "master",
+		ImageName: "compliance-controller",
+		Registry:  "",
 	}
 
 	ComponentComplianceReporter = Component{
-		Version:  "master",
-		Image:    "tigera/compliance-reporter",
-		Registry: "",
+		Version:   "master",
+		ImageName: "compliance-reporter",
+		Registry:  "",
 	}
 
 	ComponentComplianceServer = Component{
-		Version:  "master",
-		Image:    "tigera/compliance-server",
-		Registry: "",
+		Version:   "master",
+		ImageName: "compliance-server",
+		Registry:  "",
 	}
 
 	ComponentComplianceSnapshotter = Component{
-		Version:  "master",
-		Image:    "tigera/compliance-snapshotter",
-		Registry: "",
+		Version:   "master",
+		ImageName: "compliance-snapshotter",
+		Registry:  "",
 	}
 
 	ComponentTigeraCSRInitContainer = Component{
-		Version:  "master",
-		Image:    "tigera/key-cert-provisioner",
-		Registry: "",
+		Version:   "master",
+		ImageName: "key-cert-provisioner",
+		Registry:  "",
 	}
 
 	ComponentDeepPacketInspection = Component{
-		Version:  "master",
-		Image:    "tigera/deep-packet-inspection",
-		Registry: "",
+		Version:   "master",
+		ImageName: "deep-packet-inspection",
+		Registry:  "",
 	}
 
 	ComponentEckElasticsearch = Component{
-		Version:  "8.18.4",
-		Registry: "",
+		Version: "8.18.4",
 	}
 
 	ComponentEckKibana = Component{
-		Version:  "8.18.4",
-		Registry: "",
+		Version: "8.18.4",
 	}
 
 	ComponentElasticTseeInstaller = Component{
-		Version:  "master",
-		Image:    "tigera/intrusion-detection-job-installer",
-		Registry: "",
+		Version:   "master",
+		ImageName: "intrusion-detection-job-installer",
+		Registry:  "",
 	}
 
 	ComponentElasticsearch = Component{
-		Version:  "master",
-		Image:    "tigera/elasticsearch",
-		Registry: "",
+		Version:   "master",
+		ImageName: "elasticsearch",
+		Registry:  "",
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version:  "2.16.0",
-		Registry: "",
+		Version: "2.16.0",
 	}
 
 	ComponentElasticsearchOperator = Component{
-		Version:  "master",
-		Image:    "tigera/eck-operator",
-		Registry: "",
+		Version:   "master",
+		ImageName: "eck-operator",
+		Registry:  "",
 	}
 
 	ComponentUIAPIs = Component{
-		Version:  "master",
-		Image:    "tigera/ui-apis",
-		Registry: "",
+		Version:   "master",
+		ImageName: "ui-apis",
+		Registry:  "",
 	}
 
 	ComponentESGateway = Component{
-		Version:  "master",
-		Image:    "tigera/es-gateway",
-		Registry: "",
+		Version:   "master",
+		ImageName: "es-gateway",
+		Registry:  "",
 	}
 
 	ComponentLinseed = Component{
-		Version:  "master",
-		Image:    "tigera/linseed",
-		Registry: "",
+		Version:   "master",
+		ImageName: "linseed",
+		Registry:  "",
 	}
 
 	ComponentFluentd = Component{
-		Version:  "master",
-		Image:    "tigera/fluentd",
-		Registry: "",
+		Version:   "master",
+		ImageName: "fluentd",
+		Registry:  "",
 	}
 
 	ComponentFluentdWindows = Component{
-		Version:  "master",
-		Image:    "tigera/fluentd-windows",
-		Registry: "",
+		Version:   "master",
+		ImageName: "fluentd-windows",
+		Registry:  "",
 	}
 
 	ComponentGuardian = Component{
-		Version:  "master",
-		Image:    "tigera/guardian",
-		Registry: "",
+		Version:   "master",
+		ImageName: "guardian",
+		Registry:  "",
 	}
 
 	ComponentIntrusionDetectionController = Component{
-		Version:  "master",
-		Image:    "tigera/intrusion-detection-controller",
-		Registry: "",
+		Version:   "master",
+		ImageName: "intrusion-detection-controller",
+		Registry:  "",
 	}
 
 	ComponentWAFHTTPFilter = Component{
-		Version:  "master",
-		Image:    "tigera/waf-http-filter",
-		Registry: "",
+		Version:   "master",
+		ImageName: "waf-http-filter",
+		Registry:  "",
 	}
 
 	ComponentSecurityEventWebhooksProcessor = Component{
-		Version:  "master",
-		Image:    "tigera/webhooks-processor",
-		Registry: "",
+		Version:   "master",
+		ImageName: "webhooks-processor",
+		Registry:  "",
 	}
 
 	ComponentKibana = Component{
-		Version:  "master",
-		Image:    "tigera/kibana",
-		Registry: "",
+		Version:   "master",
+		ImageName: "kibana",
+		Registry:  "",
 	}
 
 	ComponentManager = Component{
-		Version:  "master",
-		Image:    "tigera/manager",
-		Registry: "",
+		Version:   "master",
+		ImageName: "manager",
+		Registry:  "",
 	}
 
 	ComponentDex = Component{
-		Version:  "master",
-		Image:    "tigera/dex",
-		Registry: "",
+		Version:   "master",
+		ImageName: "dex",
+		Registry:  "",
 	}
 
 	ComponentManagerProxy = Component{
-		Version:  "master",
-		Image:    "tigera/voltron",
-		Registry: "",
+		Version:   "master",
+		ImageName: "voltron",
+		Registry:  "",
 	}
 
 	ComponentPacketCapture = Component{
-		Version:  "master",
-		Image:    "tigera/packetcapture",
-		Registry: "",
+		Version:   "master",
+		ImageName: "packetcapture",
+		Registry:  "",
 	}
 
 	ComponentPolicyRecommendation = Component{
-		Version:  "master",
-		Image:    "tigera/policy-recommendation",
-		Registry: "",
+		Version:   "master",
+		ImageName: "policy-recommendation",
+		Registry:  "",
 	}
 
 	ComponentEgressGateway = Component{
-		Version:  "master",
-		Image:    "tigera/egress-gateway",
-		Registry: "",
+		Version:   "master",
+		ImageName: "egress-gateway",
+		Registry:  "",
 	}
 
 	ComponentL7Collector = Component{
-		Version:  "master",
-		Image:    "tigera/l7-collector",
-		Registry: "",
+		Version:   "master",
+		ImageName: "l7-collector",
+		Registry:  "",
 	}
 
 	ComponentEnvoyProxy = Component{
-		Version:  "master",
-		Image:    "tigera/envoy",
-		Registry: "",
+		Version:   "master",
+		ImageName: "envoy",
+		Registry:  "",
 	}
 
 	ComponentDikastes = Component{
-		Version:  "master",
-		Image:    "tigera/dikastes",
-		Registry: "",
+		Version:   "master",
+		ImageName: "dikastes",
+		Registry:  "",
 	}
 
 	ComponentL7AdmissionController = Component{
-		Version:  "master",
-		Image:    "tigera/l7-admission-controller",
-		Registry: "",
+		Version:   "master",
+		ImageName: "l7-admission-controller",
+		Registry:  "",
 	}
 
 	ComponentCoreOSPrometheus = Component{
-		Version:  "v3.4.1",
-		Registry: "",
+		Version: "v3.4.1",
 	}
 
 	ComponentPrometheus = Component{
-		Version:  "master",
-		Image:    "tigera/prometheus",
-		Registry: "",
+		Version:   "master",
+		ImageName: "prometheus",
+		Registry:  "",
 	}
 
 	ComponentTigeraPrometheusService = Component{
-		Version:  "master",
-		Image:    "tigera/prometheus-service",
-		Registry: "",
+		Version:   "master",
+		ImageName: "prometheus-service",
+		Registry:  "",
 	}
 
 	ComponentCoreOSAlertmanager = Component{
-		Version:  "v0.28.0",
-		Registry: "",
+		Version: "v0.28.0",
 	}
 
 	ComponentPrometheusAlertmanager = Component{
-		Version:  "master",
-		Image:    "tigera/alertmanager",
-		Registry: "",
+		Version:   "master",
+		ImageName: "alertmanager",
+		Registry:  "",
 	}
 
 	ComponentQueryServer = Component{
-		Version:  "master",
-		Image:    "tigera/queryserver",
-		Registry: "",
+		Version:   "master",
+		ImageName: "queryserver",
+		Registry:  "",
 	}
 
 	ComponentTigeraKubeControllers = Component{
-		Version:  "master",
-		Image:    "tigera/kube-controllers",
-		Registry: "",
+		Version:   "master",
+		ImageName: "kube-controllers",
+		Registry:  "",
 	}
 
 	ComponentTigeraNode = Component{
-		Version:  "master",
-		Image:    "tigera/node",
-		Registry: "",
+		Version:   "master",
+		ImageName: "node",
+		Registry:  "",
 	}
 
 	ComponentTigeraNodeWindows = Component{
-		Version:  "master",
-		Image:    "tigera/node-windows",
-		Registry: "",
+		Version:   "master",
+		ImageName: "node-windows",
+		Registry:  "",
 	}
 
 	ComponentTigeraTypha = Component{
-		Version:  "master",
-		Image:    "tigera/typha",
-		Registry: "",
+		Version:   "master",
+		ImageName: "typha",
+		Registry:  "",
 	}
 
 	ComponentTigeraCNI = Component{
-		Version:  "master",
-		Image:    "tigera/cni",
-		Registry: "",
+		Version:   "master",
+		ImageName: "cni",
+		Registry:  "",
 	}
 
 	ComponentTigeraCNIWindows = Component{
-		Version:  "master",
-		Image:    "tigera/cni-windows",
-		Registry: "",
+		Version:   "master",
+		ImageName: "cni-windows",
+		Registry:  "",
 	}
 
 	ComponentElasticsearchMetrics = Component{
-		Version:  "master",
-		Image:    "tigera/elasticsearch-metrics",
-		Registry: "",
+		Version:   "master",
+		ImageName: "elasticsearch-metrics",
+		Registry:  "",
 	}
 
 	ComponentTigeraFlexVolume = Component{
-		Version:  "master",
-		Image:    "tigera/pod2daemon-flexvol",
-		Registry: "",
+		Version:   "master",
+		ImageName: "pod2daemon-flexvol",
+		Registry:  "",
 	}
 
 	ComponentTigeraCSI = Component{
-		Version:  "master",
-		Image:    "tigera/csi",
-		Registry: "",
+		Version:   "master",
+		ImageName: "csi",
+		Registry:  "",
 	}
 
 	ComponentTigeraCSINodeDriverRegistrar = Component{
-		Version:  "master",
-		Image:    "tigera/node-driver-registrar",
-		Registry: "",
+		Version:   "master",
+		ImageName: "node-driver-registrar",
+		Registry:  "",
 	}
 
 	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:  "master",
-		Image:    "tigera/envoy-gateway",
-		Registry: "",
+		Version:   "master",
+		ImageName: "envoy-gateway",
+		Registry:  "",
 	}
 
 	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:  "master",
-		Image:    "tigera/envoy-proxy",
-		Registry: "",
+		Version:   "master",
+		ImageName: "envoy-proxy",
+		Registry:  "",
 	}
 
 	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:  "master",
-		Image:    "tigera/envoy-ratelimit",
-		Registry: "",
+		Version:   "master",
+		ImageName: "envoy-ratelimit",
+		Registry:  "",
 	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.

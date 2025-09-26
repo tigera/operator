@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -341,7 +341,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 			Expect(job.Spec.Template.Spec.Containers[0].Name).To(Equal(Name))
 			Expect(job.Spec.Template.Spec.Containers[0].Resources).To(Equal(dashboardsJobResources))
 		})
-
 	})
 
 	Context("single-tenant with external elastic rendering", func() {
@@ -686,7 +685,8 @@ func expectedContainers() []corev1.Container {
 							Key: "password",
 						},
 					},
-				}},
+				},
+			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
 					Name:      "tigera-ca-bundle",

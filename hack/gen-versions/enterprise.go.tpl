@@ -23,7 +23,6 @@ var (
 	ComponentAPIServer = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -31,7 +30,6 @@ var (
 	ComponentComplianceBenchmarker = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -39,7 +37,6 @@ var (
 	ComponentComplianceController = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -47,7 +44,6 @@ var (
 	ComponentComplianceReporter = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -55,7 +51,6 @@ var (
 	ComponentComplianceServer = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -63,7 +58,6 @@ var (
 	ComponentComplianceSnapshotter = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -71,7 +65,6 @@ var (
 	ComponentTigeraCSRInitContainer = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -79,7 +72,6 @@ var (
 	ComponentDeepPacketInspection = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -97,7 +89,6 @@ var (
 	ComponentElasticTseeInstaller = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -105,7 +96,6 @@ var (
 	ComponentElasticsearch = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -118,7 +108,6 @@ var (
 	ComponentElasticsearchOperator = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -126,7 +115,6 @@ var (
 	ComponentUIAPIs = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -134,7 +122,6 @@ var (
 	ComponentESGateway = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -142,7 +129,6 @@ var (
 	ComponentLinseed = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -150,7 +136,6 @@ var (
 	ComponentFluentd = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -158,7 +143,6 @@ var (
 	ComponentFluentdWindows = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -166,7 +150,6 @@ var (
 	ComponentGuardian = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -174,7 +157,6 @@ var (
 	ComponentIntrusionDetectionController = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -182,7 +164,6 @@ var (
 	ComponentWAFHTTPFilter = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -190,7 +171,6 @@ var (
 	ComponentSecurityEventWebhooksProcessor = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -198,7 +178,6 @@ var (
 	ComponentKibana = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -206,7 +185,6 @@ var (
 	ComponentManager = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -214,7 +192,6 @@ var (
 	ComponentDex = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -222,7 +199,6 @@ var (
 	ComponentManagerProxy = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -230,7 +206,6 @@ var (
 	ComponentPacketCapture = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -238,7 +213,6 @@ var (
 	ComponentPolicyRecommendation = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -246,7 +220,6 @@ var (
 	ComponentEgressGateway = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -254,7 +227,6 @@ var (
 	ComponentL7Collector = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -262,7 +234,6 @@ var (
 	ComponentEnvoyProxy = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -270,7 +241,6 @@ var (
 	ComponentDikastes = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -278,7 +248,6 @@ var (
 	ComponentL7AdmissionController = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -291,7 +260,6 @@ var (
 	ComponentPrometheus = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -299,7 +267,6 @@ var (
 	ComponentTigeraPrometheusService = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -312,7 +279,6 @@ var (
 	ComponentPrometheusAlertmanager = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -320,7 +286,6 @@ var (
 	ComponentQueryServer = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -328,7 +293,6 @@ var (
 	ComponentTigeraKubeControllers = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -336,7 +300,6 @@ var (
 	ComponentTigeraNode = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -344,7 +307,6 @@ var (
 	ComponentTigeraNodeWindows = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -352,7 +314,6 @@ var (
 	ComponentTigeraTypha = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -360,7 +321,6 @@ var (
 	ComponentTigeraCNI = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -368,7 +328,6 @@ var (
 	ComponentTigeraCNIWindows = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -376,7 +335,6 @@ var (
 	ComponentElasticsearchMetrics = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -384,7 +342,6 @@ var (
 	ComponentTigeraFlexVolume = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -392,7 +349,6 @@ var (
 	ComponentTigeraCSI = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -400,7 +356,6 @@ var (
 	ComponentTigeraCSINodeDriverRegistrar = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -408,7 +363,6 @@ var (
 	ComponentGatewayAPIEnvoyGateway = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -416,7 +370,6 @@ var (
 	ComponentGatewayAPIEnvoyProxy = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}
@@ -424,7 +377,6 @@ var (
 	ComponentGatewayAPIEnvoyRatelimit = Component{
 		Version:   "{{ .Version }}",
 		ImageName: "{{ .Image }}",
-		ImagePath: TigeraImagePath,
 		Registry:  "{{ .Registry }}",
 	}
 {{- end }}

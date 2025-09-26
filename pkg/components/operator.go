@@ -19,5 +19,4 @@ import "github.com/tigera/operator/version"
 var ComponentOperatorInit = Component{
 	Version:   version.VERSION,
 	ImageName: "operator",
-	ImagePath: InitImagePath,
 }

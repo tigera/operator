@@ -75,10 +75,6 @@ var _ = Describe("Monitor controller tests", func() {
 
 		// Create an object we can use throughout the test to do the monitor reconcile loops.
 		mockStatus = &status.MockStatus{}
-		mockStatus.On("AddCronJobs", mock.Anything)
-		mockStatus.On("AddDaemonsets", mock.Anything)
-		mockStatus.On("AddDeployments", mock.Anything).Return()
-		mockStatus.On("AddStatefulSets", mock.Anything)
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()

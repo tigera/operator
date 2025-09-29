@@ -69,7 +69,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	tierWatchReady := &utils.ReadyFlag{}
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady)
+	status := status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion)
+	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady, status)
 
 	// Create a new controller
 	c, err := ctrlruntime.NewController("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
@@ -96,12 +97,12 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	return add(mgr, c)
 }
 
-func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag, statusMgr status.StatusManager) reconcile.Reconciler {
 	r := &ReconcileMonitor{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		provider:        opts.DetectedProvider,
-		status:          status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
+		status:          statusMgr,
 		prometheusReady: prometheusReady,
 		tierWatchReady:  tierWatchReady,
 		clusterDomain:   opts.ClusterDomain,
@@ -111,6 +112,10 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 	r.status.AddStatefulSets([]types.NamespacedName{
 		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
 		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
+	})
+
+	r.status.AddDeployments([]types.NamespacedName{
+		{Namespace: common.TigeraPrometheusNamespace, Name: monitor.CalicoPrometheusOperator},
 	})
 
 	r.status.Run(opts.ShutdownContext)

@@ -17,6 +17,7 @@ package monitor
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -31,7 +32,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/rest"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -40,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -75,10 +80,6 @@ var _ = Describe("Monitor controller tests", func() {
 
 		// Create an object we can use throughout the test to do the monitor reconcile loops.
 		mockStatus = &status.MockStatus{}
-		mockStatus.On("AddCronJobs", mock.Anything)
-		mockStatus.On("AddDaemonsets", mock.Anything)
-		mockStatus.On("AddDeployments", mock.Anything).Return()
-		mockStatus.On("AddStatefulSets", mock.Anything)
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
@@ -594,6 +595,38 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
+	})
+
+	Context("Prometheus monitoring", func() {
+		It("should monitor Prometheus related resources", func() {
+
+			mgr, _ := ctrl.NewManager(&rest.Config{}, manager.Options{})
+
+			opts := options.AddOptions{}
+
+			prometheusReady := &utils.ReadyFlag{}
+			tierWatchReady := &utils.ReadyFlag{}
+
+			expectedStatefulSets := []types.NamespacedName{
+				{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
+				{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
+			}
+			expectedDeployments := []types.NamespacedName{
+				{Namespace: common.TigeraPrometheusNamespace, Name: monitor.CalicoPrometheusOperator},
+			}
+
+			mockStatus := &status.MockStatus{}
+			mockStatus.On("AddStatefulSets", expectedStatefulSets).Return()
+			mockStatus.On("AddDeployments", expectedDeployments).Return()
+			mockStatus.On("Run", mock.Anything).Return()
+
+			_ = newReconciler(mgr, opts, prometheusReady, tierWatchReady, mockStatus)
+
+			mockStatus.AssertExpectations(GinkgoT())
+			mockStatus.AssertCalled(GinkgoT(), "AddStatefulSets", expectedStatefulSets)
+			mockStatus.AssertCalled(GinkgoT(), "AddDeployments", expectedDeployments)
+			mockStatus.AssertCalled(GinkgoT(), "Run", mock.Anything)
 		})
 	})
 })

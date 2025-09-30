@@ -471,25 +471,14 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	// Determine the appropriate PSS based on the namespace
-	// calico-system requires privileged access, so don't override its PSS
 	targetNamespace := helper.InstallNamespace()
-	var pss render.PodSecurityStandard
-	if targetNamespace == common.CalicoNamespace {
-		// Don't apply PSS restrictions to calico-system as it needs privileged access
-		pss = render.PSSPrivileged
-	} else {
-		// Other namespaces can use restricted PSS
-		pss = render.PSSRestricted
-	}
 
 	setUp := render.NewSetup(&render.SetUpConfiguration{
 		OpenShift:       r.provider.IsOpenShift(),
 		Installation:    installation,
 		PullSecrets:     pullSecrets,
 		Namespace:       targetNamespace,
-		PSS:             pss,
-		CreateNamespace: !tenant.MultiTenant(),
+		CreateNamespace: false,
 	})
 
 	// Prepend PolicyRecommendation before certificate creation

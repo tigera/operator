@@ -169,21 +169,10 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		r.policyRecScopeWatchReady.MarkAsReady()
 	})
 
-	It("should reconcile namespace, role binding and pull secrts", func() {
+	It("should reconcile role binding and pull secrets", func() {
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
-
-		namespace := corev1.Namespace{
-			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-		}
-		Expect(c.Get(ctx, client.ObjectKey{
-			Name: render.PolicyRecommendationNamespace,
-		}, &namespace)).NotTo(HaveOccurred())
-		// We expect privileged PSS because we're using calico-system namespace in this setup (single-tenant)
-		Expect(namespace.Name).To(Equal("calico-system"))
-		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
-		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 
 		// Expect operator role binding to be created
 		rb := rbacv1.RoleBinding{

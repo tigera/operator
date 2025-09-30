@@ -471,13 +471,14 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
+	targetNamespace := helper.InstallNamespace()
+
 	setUp := render.NewSetup(&render.SetUpConfiguration{
 		OpenShift:       r.provider.IsOpenShift(),
 		Installation:    installation,
 		PullSecrets:     pullSecrets,
-		Namespace:       helper.InstallNamespace(),
-		PSS:             render.PSSRestricted,
-		CreateNamespace: !tenant.MultiTenant(),
+		Namespace:       targetNamespace,
+		CreateNamespace: false,
 	})
 
 	// Prepend PolicyRecommendation before certificate creation

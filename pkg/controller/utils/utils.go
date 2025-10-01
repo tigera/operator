@@ -1065,7 +1065,7 @@ func MaintainInstallationFinalizer(
 
 		// Check if the namespaced secondaryResources are still present.
 		// Keep track of all the secondary resources that the main resource creates.
-		// Only delete the finalizer if all of the secondary resources are deleted.
+		// Only delete the finalizer if all of the secondary resources are deleted and there are no lingering Pods.
 		for _, secondaryResource := range secondaryResources {
 			err := c.Get(ctx, types.NamespacedName{Namespace: secondaryResource.GetNamespace(), Name: secondaryResource.GetName()}, secondaryResource)
 			if err != nil && !errors.IsNotFound(err) {
@@ -1076,11 +1076,58 @@ func MaintainInstallationFinalizer(
 				log.Info("Object is still present, waiting for termination", "object", secondaryResource)
 				return nil
 			}
+
+			// If the secondary resource itself is gone, ensure there are no Pods left over from this resource.
+			terminated, err := allPodsTerminated(ctx, c, secondaryResource)
+			if err != nil {
+				return err
+			}
+			if !terminated {
+				log.Info("Pods for object are still present, waiting for termination", "object", secondaryResource)
+				return nil
+			}
 		}
-		log.Info("All objects no longer exist. Removing finalizer", "finalizer", finalizer)
+		log.Info("All objects and their Pods no longer exist. Removing finalizer", "finalizer", finalizer)
 		RemoveInstallationFinalizer(installation, finalizer)
 	}
 
 	// Update the installation with any finalizer changes.
 	return c.Patch(ctx, installation, patchFrom)
+}
+
+func allPodsTerminated(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
+	// Find the selector to use for listing Pods owned by obj.
+	matchLabels := getMatchLabels(obj)
+	if matchLabels == nil {
+		// This resource doesn't have a selector, so it can't own Pods.
+		return true, nil
+	}
+
+	// List the Pods in the same namespace as obj, matching the selector.
+	podList := &corev1.PodList{}
+	if err := c.List(ctx, podList, client.InNamespace(obj.GetNamespace()), client.MatchingLabels(matchLabels)); err != nil {
+		return false, err
+	}
+	return len(podList.Items) == 0, nil
+}
+
+// getMatchLabels extracts the matchLabels from the given workload object.
+// Returns nil if the object is not a supported workload type or if it has no matchLabels.
+// TODO: This should be extended with full label selector support if we ever need to support more complex matching.
+func getMatchLabels(obj client.Object) map[string]string {
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+	case *appsv1.DaemonSet:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+	case *appsv1.StatefulSet:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+	}
+	return nil
 }

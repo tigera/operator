@@ -1087,7 +1087,7 @@ func MaintainInstallationFinalizer(
 				return nil
 			}
 		}
-		log.Info("All objects and their Pods no longer exist. Removing finalizer", "finalizer", finalizer)
+		log.Info("All objects no longer exist. Removing finalizer", "finalizer", finalizer)
 		RemoveInstallationFinalizer(installation, finalizer)
 	}
 

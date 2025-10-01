@@ -63,9 +63,6 @@ func ValidatePools(instance *operator.Installation) error {
 		switch pool.NATOutgoing {
 		case operator.NATOutgoingEnabled:
 		case operator.NATOutgoingDisabled:
-			if isLoadBalancer {
-				return fmt.Errorf("IP pool %s NATOutgoing cannot be disabled with allowedUse LoadBalancer", pool.Name)
-			}
 		default:
 			return fmt.Errorf("%s is invalid for natOutgoing, should be one of %s",
 				pool.NATOutgoing, strings.Join(operator.NATOutgoingTypesString, ","))

@@ -59,7 +59,9 @@ const (
 )
 
 var (
-	TyphaTLSSecretName   = "typha-certs"
+	TyphaTLSSecretName               = "typha-certs"
+	TyphaTLSSecretNameNonClusterHost = TyphaTLSSecretName + TyphaNonClusterHostSuffix
+
 	TyphaCAConfigMapName = "typha-ca"
 	TyphaCABundleName    = "caBundle"
 )
@@ -640,23 +642,30 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 }
 
 func (c *typhaComponent) typhaEnvVarsNonClusterHost() []corev1.EnvVar {
+	// Update Typha client common name or URISAN for non-cluster hosts.
+	// At least one of TYPHA_CLIENTCN or TYPHA_CLIENTURISAN must be set.
 	envVars := c.typhaEnvVars(c.cfg.TLS.TyphaSecretNonClusterHost)
-	// Update Typha client common name for non-cluster host.
-	typhaClientCommonName := c.cfg.TLS.NodeCommonName + TyphaNonClusterHostSuffix
-	found := false
-	for i, envVar := range envVars {
-		if envVar.Name == "TYPHA_CLIENTCN" {
-			envVars[i].Value = typhaClientCommonName
-			found = true
-			break
-		}
-	}
-	if !found {
-		envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: typhaClientCommonName})
-	}
+	envVars = replaceOrAppendEnvVar(envVars, "TYPHA_CLIENTCN", c.cfg.TLS.NodeNonClusterHostCommonName)
+	envVars = replaceOrAppendEnvVar(envVars, "TYPHA_CLIENTURISAN", c.cfg.TLS.NodeNonClusterHostURISAN)
+
 	// Tell the health aggregator to listen on all interfaces.
 	envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"})
 	return envVars
+}
+
+func replaceOrAppendEnvVar(envvars []corev1.EnvVar, key, value string) []corev1.EnvVar {
+	found := false
+	for i := range envvars {
+		if envvars[i].Name == key {
+			envvars[i].Value = value
+			found = true
+		}
+	}
+
+	if !found {
+		envvars = append(envvars, corev1.EnvVar{Name: key, Value: value})
+	}
+	return envvars
 }
 
 // typhaHealthPort returns the liveness and readiness port to use for typha.

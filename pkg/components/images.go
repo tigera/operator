@@ -24,3 +24,11 @@ const (
 	// and Init image when testing.
 	InitRegistry = "quay.io/"
 )
+
+// Default image paths for Calico and Tigera components.
+const (
+	CalicoImagePath = "calico/"
+	TigeraImagePath = "tigera/"
+	// Image path for operator init image.
+	InitImagePath = "tigera/"
+)

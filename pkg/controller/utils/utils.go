@@ -1079,7 +1079,7 @@ func MaintainInstallationFinalizer(
 			}
 
 			// If the secondary resource itself is gone, ensure there are no Pods left over from this resource.
-			terminated, err := AllPodsTerminated(ctx, c, secondaryResource)
+			terminated, err := allPodsTerminated(ctx, c, secondaryResource)
 			if err != nil {
 				return err
 			}
@@ -1096,7 +1096,7 @@ func MaintainInstallationFinalizer(
 	return c.Patch(ctx, installation, patchFrom)
 }
 
-func AllPodsTerminated(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
+func allPodsTerminated(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
 	// Find the selector to use for listing Pods owned by obj.
 	matchLabels := getMatchLabels(obj)
 	if matchLabels == nil {

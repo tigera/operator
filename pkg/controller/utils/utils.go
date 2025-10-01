@@ -1071,29 +1071,24 @@ func MaintainInstallationFinalizer(
 			if err != nil && !errors.IsNotFound(err) {
 				return err
 			} else if errors.IsNotFound(err) {
-				log.V(2).Info("Object no longer exists.", "object", secondaryResource)
+				log.Info("Object no longer exists.", "object", secondaryResource)
 			} else if err == nil {
-				log.V(2).Info("Object is still present, waiting for termination", "object", secondaryResource)
+				log.Info("Object is still present, waiting for termination", "object", secondaryResource)
 				return nil
 			}
 
 			// If the secondary resource itself is gone, ensure there are no Pods left over that would still rely on CNI.
 			// Only applicable for workload types that create Pods.
-			switch obj := secondaryResource.(type) {
-			case *appsv1.Deployment:
-				matchLabels := getWorkloadMatchLabels(obj)
-				return checkLingeringPodsForWorkload(ctx, c, obj, matchLabels, "Deployment", "deployment")
-			case *appsv1.DaemonSet:
-				matchLabels := getWorkloadMatchLabels(obj)
-				return checkLingeringPodsForWorkload(ctx, c, obj, matchLabels, "DaemonSet", "daemonset")
-			case *appsv1.StatefulSet:
-				matchLabels := getWorkloadMatchLabels(obj)
-				return checkLingeringPodsForWorkload(ctx, c, obj, matchLabels, "StatefulSet", "statefulset")
-			default:
-				// Non-workload resource; no Pod listing needed.
+			terminated, err := allPodsTerminated(ctx, c, secondaryResource)
+			if err != nil {
+				return err
+			}
+			if !terminated {
+				log.Info("Pods for object are still present, waiting for termination", "object", secondaryResource)
+				return nil
 			}
 		}
-		log.V(2).Info("All objects and their Pods no longer exist. Removing finalizer", "finalizer", finalizer)
+		log.Info("All objects and their Pods no longer exist. Removing finalizer", "finalizer", finalizer)
 		RemoveInstallationFinalizer(installation, finalizer)
 	}
 
@@ -1101,47 +1096,39 @@ func MaintainInstallationFinalizer(
 	return c.Patch(ctx, installation, patchFrom)
 }
 
-func hasLingeringPods(ctx context.Context, c client.Client, namespace string, matchLabels map[string]string) (bool, int, error) {
+func allPodsTerminated(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
+	// Find the selector to use for listing Pods owned by obj.
+	matchLabels := getMatchLabels(obj)
 	if matchLabels == nil {
-		return false, 0, nil
+		// This resource doesn't have a selector, so it can't own Pods.
+		return true, nil
 	}
+
+	// List the Pods in the same namespace as obj, matching the selector.
 	podList := &corev1.PodList{}
-	if err := c.List(
-		ctx,
-		podList,
-		client.InNamespace(namespace),
-		client.MatchingLabels(matchLabels),
-	); err != nil {
-		return false, 0, err
+	if err := c.List(ctx, podList, client.InNamespace(obj.GetNamespace()), client.MatchingLabels(matchLabels)); err != nil {
+		return false, err
 	}
-	count := len(podList.Items)
-	return count > 0, count, nil
+	return len(podList.Items) == 0, nil
 }
 
-func getWorkloadMatchLabels(obj client.Object) map[string]string {
-	if d, ok := obj.(*appsv1.Deployment); ok {
-		if d.Spec.Selector != nil && d.Spec.Selector.MatchLabels != nil {
-			return d.Spec.Selector.MatchLabels
+// getMatchLabels extracts the matchLabels from the given workload object.
+// Returns nil if the object is not a supported workload type or if it has no matchLabels.
+// TODO: This should be extended with full label selector support if we ever need to support more complex matching.
+func getMatchLabels(obj client.Object) map[string]string {
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
 		}
-	} else if ds, ok := obj.(*appsv1.DaemonSet); ok {
-		if ds.Spec.Selector != nil && ds.Spec.Selector.MatchLabels != nil {
-			return ds.Spec.Selector.MatchLabels
+	case *appsv1.DaemonSet:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
 		}
-	} else if ss, ok := obj.(*appsv1.StatefulSet); ok {
-		if ss.Spec.Selector != nil && ss.Spec.Selector.MatchLabels != nil {
-			return ss.Spec.Selector.MatchLabels
+	case *appsv1.StatefulSet:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
 		}
-	}
-	// Fallback to the assumed label pattern for backward compatibility
-	return map[string]string{"k8s-app": obj.GetName()}
-}
-
-func checkLingeringPodsForWorkload(ctx context.Context, c client.Client, obj client.Object, matchLabels map[string]string, workloadType string, logKey string) error {
-	if exists, count, err := hasLingeringPods(ctx, c, obj.GetNamespace(), matchLabels); err != nil {
-		return err
-	} else if exists {
-		log.V(2).Info(fmt.Sprintf("Lingering Pods still exist for %s", workloadType), logKey, obj.GetName(), "count", count)
-		return nil
 	}
 	return nil
 }

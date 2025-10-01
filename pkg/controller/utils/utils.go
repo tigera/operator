@@ -508,23 +508,6 @@ func GetIfExists[E any, ClientObj ClientObjType[E]](ctx context.Context, key cli
 	return obj, nil
 }
 
-type Defaultable[E any, O ClientObjType[E]] interface {
-	ClientObjType[E]
-	client.Object
-	FillDefaults()
-	DeepCopy() O
-}
-
-// ApplyDefaults sets any defaults that haven't been set on the given object and writes it to the k8s server.
-func ApplyDefaults[E any, O ClientObjType[E], D Defaultable[E, O]](ctx context.Context, c client.Client, obj D) error {
-	preDefaultPatchFrom := client.MergeFrom(obj.DeepCopy())
-	obj.FillDefaults()
-
-	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
-	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	return c.Patch(ctx, obj, preDefaultPatchFrom)
-}
-
 // GetNonClusterHost finds the NonClusterHost CR in your cluster.
 func GetNonClusterHost(ctx context.Context, cli client.Client) (*operatorv1.NonClusterHost, error) {
 	nonclusterhost := &operatorv1.NonClusterHost{}
@@ -1082,7 +1065,7 @@ func MaintainInstallationFinalizer(
 
 		// Check if the namespaced secondaryResources are still present.
 		// Keep track of all the secondary resources that the main resource creates.
-		// Only delete the finalizer if all of the secondary resources are deleted.
+		// Only delete the finalizer if all of the secondary resources are deleted and there are no lingering Pods.
 		for _, secondaryResource := range secondaryResources {
 			err := c.Get(ctx, types.NamespacedName{Namespace: secondaryResource.GetNamespace(), Name: secondaryResource.GetName()}, secondaryResource)
 			if err != nil && !errors.IsNotFound(err) {
@@ -1093,6 +1076,16 @@ func MaintainInstallationFinalizer(
 				log.Info("Object is still present, waiting for termination", "object", secondaryResource)
 				return nil
 			}
+
+			// If the secondary resource itself is gone, ensure there are no Pods left over from this resource.
+			terminated, err := allPodsTerminated(ctx, c, secondaryResource)
+			if err != nil {
+				return err
+			}
+			if !terminated {
+				log.Info("Pods for object are still present, waiting for termination", "object", secondaryResource)
+				return nil
+			}
 		}
 		log.Info("All objects no longer exist. Removing finalizer", "finalizer", finalizer)
 		RemoveInstallationFinalizer(installation, finalizer)
@@ -1100,4 +1093,41 @@ func MaintainInstallationFinalizer(
 
 	// Update the installation with any finalizer changes.
 	return c.Patch(ctx, installation, patchFrom)
+}
+
+func allPodsTerminated(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
+	// Find the selector to use for listing Pods owned by obj.
+	matchLabels := getMatchLabels(obj)
+	if matchLabels == nil {
+		// This resource doesn't have a selector, so it can't own Pods.
+		return true, nil
+	}
+
+	// List the Pods in the same namespace as obj, matching the selector.
+	podList := &corev1.PodList{}
+	if err := c.List(ctx, podList, client.InNamespace(obj.GetNamespace()), client.MatchingLabels(matchLabels)); err != nil {
+		return false, err
+	}
+	return len(podList.Items) == 0, nil
+}
+
+// getMatchLabels extracts the matchLabels from the given workload object.
+// Returns nil if the object is not a supported workload type or if it has no matchLabels.
+// TODO: This should be extended with full label selector support if we ever need to support more complex matching.
+func getMatchLabels(obj client.Object) map[string]string {
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+	case *appsv1.DaemonSet:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+	case *appsv1.StatefulSet:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+	}
+	return nil
 }

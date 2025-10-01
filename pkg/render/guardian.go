@@ -21,8 +21,9 @@ import (
 	"net"
 	"net/url"
 
-	operatorurl "github.com/tigera/operator/pkg/url"
 	"golang.org/x/net/http/httpproxy"
+
+	operatorurl "github.com/tigera/operator/pkg/url"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -238,13 +239,37 @@ func (c *GuardianComponent) serviceAccount() *corev1.ServiceAccount {
 
 func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 	var policyRules []rbacv1.PolicyRule
-
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		policyRules = append(policyRules, rbacv1.PolicyRule{
-			APIGroups: []string{""},
-			Resources: []string{"users", "groups", "serviceaccounts"},
-			Verbs:     []string{"impersonate"},
-		})
+		impersonation := c.cfg.ManagementClusterConnection.Spec.Impersonation
+		if impersonation != nil {
+			if impersonation.Users != nil {
+				policyRules = append(policyRules,
+					rbacv1.PolicyRule{
+						APIGroups:     []string{""},
+						Resources:     []string{"users"},
+						ResourceNames: impersonation.Users,
+						Verbs:         []string{"impersonate"},
+					})
+			}
+			if impersonation.Groups != nil {
+				policyRules = append(policyRules,
+					rbacv1.PolicyRule{
+						APIGroups:     []string{""},
+						Resources:     []string{"groups"},
+						ResourceNames: impersonation.Groups,
+						Verbs:         []string{"impersonate"},
+					})
+			}
+			if impersonation.ServiceAccounts != nil {
+				policyRules = append(policyRules,
+					rbacv1.PolicyRule{
+						APIGroups:     []string{""},
+						Resources:     []string{"serviceaccounts"},
+						ResourceNames: impersonation.ServiceAccounts,
+						Verbs:         []string{"impersonate"},
+					})
+			}
+		}
 
 		policyRules = append(policyRules, rulesForManagementClusterRequests(c.cfg.OpenShift)...)
 
@@ -825,15 +850,7 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 		{
 			APIGroups: []string{""},
 			Resources: []string{"serviceaccounts"},
-			Verbs:     []string{"impersonate", "list"},
-		},
-		{
-			// When a request is made in the manager UI, they are proxied through the Voltron backend server. If the
-			// request is targeting a k8s api or when it is targeting a managed cluster, Voltron will authenticate the
-			// user based on the auth header and then impersonate the user.
-			APIGroups: []string{""},
-			Resources: []string{"groups", "users"},
-			Verbs:     []string{"impersonate"},
+			Verbs:     []string{"list"},
 		},
 		{
 			// Allow query server talk to Prometheus via the manager user.

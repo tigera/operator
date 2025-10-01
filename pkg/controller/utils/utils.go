@@ -1077,8 +1077,7 @@ func MaintainInstallationFinalizer(
 				return nil
 			}
 
-			// If the secondary resource itself is gone, ensure there are no Pods left over that would still rely on CNI.
-			// Only applicable for workload types that create Pods.
+			// If the secondary resource itself is gone, ensure there are no Pods left over from this resource.
 			terminated, err := allPodsTerminated(ctx, c, secondaryResource)
 			if err != nil {
 				return err

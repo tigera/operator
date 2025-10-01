@@ -640,20 +640,38 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 }
 
 func (c *typhaComponent) typhaEnvVarsNonClusterHost() []corev1.EnvVar {
+	// Update Typha client common name or URISAN for non-cluster hosts.
+	// At least one of TYPHA_CLIENTCN or TYPHA_CLIENTURISAN must be set.
 	envVars := c.typhaEnvVars(c.cfg.TLS.TyphaSecretNonClusterHost)
-	// Update Typha client common name for non-cluster host.
+
 	typhaClientCommonName := c.cfg.TLS.NodeCommonName + TyphaNonClusterHostSuffix
-	found := false
-	for i, envVar := range envVars {
-		if envVar.Name == "TYPHA_CLIENTCN" {
+	if c.cfg.TLS.NodeNonClusterHostCommonName != "" {
+		typhaClientCommonName = c.cfg.TLS.NodeNonClusterHostCommonName
+	}
+	typhaClientURISAN := c.cfg.TLS.NodeURISAN + TyphaNonClusterHostSuffix
+	if c.cfg.TLS.NodeNonClusterHostURISAN != "" {
+		typhaClientURISAN = c.cfg.TLS.NodeNonClusterHostURISAN
+	}
+
+	var foundCN, foundURISAN bool
+	for i := range envVars {
+		switch envVars[i].Name {
+		case "TYPHA_CLIENTCN":
 			envVars[i].Value = typhaClientCommonName
-			found = true
-			break
+			foundCN = true
+		case "TYPHA_CLIENTURISAN":
+			envVars[i].Value = typhaClientURISAN
+			foundURISAN = true
 		}
 	}
-	if !found {
+
+	if !foundCN && typhaClientCommonName != "" {
 		envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: typhaClientCommonName})
 	}
+	if !foundURISAN && typhaClientURISAN != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_CLIENTURISAN", Value: typhaClientURISAN})
+	}
+
 	// Tell the health aggregator to listen on all interfaces.
 	envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"})
 	return envVars

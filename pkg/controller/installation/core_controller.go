@@ -1321,20 +1321,33 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
 			return reconcile.Result{}, err
-		} else if nonclusterhost != nil && r.typhaAutoscalerNonClusterHost == nil {
-			calicoClient, err := calicoclient.NewForConfig(r.config)
-			if err != nil {
-				r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to initialize Calico client", err, reqLogger)
-				return reconcile.Result{}, err
+		} else if nonclusterhost != nil {
+			// This is the default common name in CSR from non-cluster hosts.
+			typhaNodeTLS.NodeNonClusterHostCommonName = render.FelixCommonName + render.TyphaNonClusterHostSuffix
+			// Attempt to retrieve the BYO node certificates for non-cluster hosts if they are present.
+			secret, err := utils.GetSecret(context.TODO(), r.client, render.NodeTLSSecretNameNonClusterHost, common.OperatorNamespace())
+			if err == nil && secret != nil {
+				data := secret.Data
+				if data != nil {
+					typhaNodeTLS.NodeNonClusterHostCommonName, typhaNodeTLS.NodeNonClusterHostURISAN = string(data[render.CommonName]), string(data[render.URISAN])
+				}
 			}
 
-			hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
-			hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
-			go hepIndexInformer.Run(r.shutdownContext.Done())
+			if r.typhaAutoscalerNonClusterHost == nil {
+				calicoClient, err := calicoclient.NewForConfig(r.config)
+				if err != nil {
+					r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to initialize Calico client", err, reqLogger)
+					return reconcile.Result{}, err
+				}
 
-			typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.clientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
-			r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.clientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
-			r.typhaAutoscalerNonClusterHost.start(r.shutdownContext)
+				hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
+				hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
+				go hepIndexInformer.Run(r.shutdownContext.Done())
+
+				typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.clientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
+				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.clientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
+				r.typhaAutoscalerNonClusterHost.start(r.shutdownContext)
+			}
 		}
 	}
 

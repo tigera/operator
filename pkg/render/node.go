@@ -92,6 +92,9 @@ type TyphaNodeTLS struct {
 	NodeSecret                certificatemanagement.KeyPairInterface
 	NodeCommonName            string
 	NodeURISAN                string
+
+	NodeNonClusterHostCommonName string
+	NodeNonClusterHostURISAN     string
 }
 
 // NodeConfiguration is the public API used to provide information to the render code to

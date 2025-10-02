@@ -31,7 +31,6 @@ spec:
                     type: string
                   type: array
                 assignmentMode:
-                  default: Automatic
                   enum:
                     - Automatic
                     - Manual
@@ -54,8 +53,6 @@ spec:
                       type: string
                   type: object
                 ipipMode:
-                  type: string
-                namespaceSelector:
                   type: string
                 nat-outgoing:
                   type: boolean

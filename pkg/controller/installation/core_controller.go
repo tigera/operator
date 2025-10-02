@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
+	"github.com/sirupsen/logrus"
 
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
@@ -1321,20 +1322,41 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
 			return reconcile.Result{}, err
-		} else if nonclusterhost != nil && r.typhaAutoscalerNonClusterHost == nil {
-			calicoClient, err := calicoclient.NewForConfig(r.config)
-			if err != nil {
-				r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to initialize Calico client", err, reqLogger)
-				return reconcile.Result{}, err
+		} else if nonclusterhost != nil {
+			if typhaNodeTLS.NodeNonClusterHostCommonName == "" && typhaNodeTLS.NodeNonClusterHostURISAN == "" {
+				// This is the default common name in CSR from non-cluster hosts.
+				typhaNodeTLS.NodeNonClusterHostCommonName = render.FelixCommonName + render.TyphaNonClusterHostSuffix
+
+				// Attempt to retrieve the BYO node certificates for non-cluster hosts if they are present.
+				secret, err := utils.GetSecret(context.TODO(), r.client, render.NodeTLSSecretNameNonClusterHost, common.OperatorNamespace())
+				if err != nil {
+					logrus.WithError(err).Warn("failed to retrieve BYO non-cluster host node TLS secret. Using default common name instead.")
+				} else if secret != nil {
+					cn, urisan, err := parseCommonNameAndURISAN(secret)
+					if err != nil {
+						logrus.WithError(err).Warn("failed to parse common name or URI SAN in BYO non-cluster host node TLS secret. Using default common name instead.")
+					}
+
+					typhaNodeTLS.NodeNonClusterHostCommonName = cn
+					typhaNodeTLS.NodeNonClusterHostURISAN = urisan
+				}
 			}
 
-			hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
-			hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
-			go hepIndexInformer.Run(r.shutdownContext.Done())
+			if r.typhaAutoscalerNonClusterHost == nil {
+				calicoClient, err := calicoclient.NewForConfig(r.config)
+				if err != nil {
+					r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to initialize Calico client", err, reqLogger)
+					return reconcile.Result{}, err
+				}
 
-			typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.clientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
-			r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.clientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
-			r.typhaAutoscalerNonClusterHost.start(r.shutdownContext)
+				hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
+				hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
+				go hepIndexInformer.Run(r.shutdownContext.Done())
+
+				typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.clientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
+				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.clientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
+				r.typhaAutoscalerNonClusterHost.start(r.shutdownContext)
+			}
 		}
 	}
 
@@ -1733,7 +1755,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 	// accumulate all the error messages so all problems with the certs
 	// and CA are reported.
 	var errMsgs []string
-	getOrCreateKeyPair := func(secretName, commonName string) (keyPair certificatemanagement.KeyPairInterface, cn string, uriSAN string) {
+	getOrCreateKeyPair := func(secretName, commonName string, deprecatedSecretFormat bool) (keyPair certificatemanagement.KeyPairInterface, cn string, uriSAN string) {
 		keyPair, err := createKeyPairFunc(cli, secretName, common.OperatorNamespace(), []string{commonName})
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
@@ -1753,15 +1775,15 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 					}
 				}
 			}
-			if cn == "" && uriSAN == "" {
+			if deprecatedSecretFormat && cn == "" && uriSAN == "" {
 				errMsgs = append(errMsgs, "CertPair for Felix does not contain common-name or uri-san")
 			}
 		}
 		return
 	}
-	node, nodeCommonName, nodeURISAN := getOrCreateKeyPair(render.NodeTLSSecretName, render.FelixCommonName)
-	typha, typhaCommonName, typhaURISAN := getOrCreateKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName)
-	typhaNonClusterHost, _, _ := getOrCreateKeyPair(render.TyphaTLSSecretName+render.TyphaNonClusterHostSuffix, render.TyphaCommonName+render.TyphaNonClusterHostSuffix)
+	node, nodeCommonName, nodeURISAN := getOrCreateKeyPair(render.NodeTLSSecretName, render.FelixCommonName, true)
+	typha, typhaCommonName, typhaURISAN := getOrCreateKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName, true)
+	typhaNonClusterHost, _, _ := getOrCreateKeyPair(render.TyphaTLSSecretName+render.TyphaNonClusterHostSuffix, render.TyphaCommonName+render.TyphaNonClusterHostSuffix, false)
 	var trustedBundle certificatemanagement.TrustedBundle
 	configMap, err := getConfigMap(cli, render.TyphaCAConfigMapName)
 	if err != nil {
@@ -2213,4 +2235,22 @@ func allowTigeraDefaultDenyForCalicoSystem() *v3.NetworkPolicy {
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 		},
 	}
+}
+
+func parseCommonNameAndURISAN(secret *corev1.Secret) (cn, urisan string, err error) {
+	certData, ok := secret.Data[corev1.TLSCertKey]
+	if !ok {
+		return "", "", fmt.Errorf("failed to find cert data in secret")
+	}
+
+	cert, err := certificatemanagement.ParseCertificate(certData)
+	if err != nil {
+		return "", "", err
+	}
+
+	cn = cert.Subject.CommonName
+	if len(cert.URIs) > 0 {
+		urisan = cert.URIs[0].String()
+	}
+	return cn, urisan, nil
 }

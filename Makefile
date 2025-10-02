@@ -117,7 +117,7 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.24.6-llvm18.1.8-k8s1.32.8
+GO_BUILD_VER?=1.24.6-llvm18.1.8-k8s1.33.3
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -266,11 +266,11 @@ $(ENVOY_GATEWAY_RESOURCES): $(HACK_BIN)/helm-$(BUILDARCH)
 		--include-crds \
 	>> $@
 
-$(HELM_BUILDARCH_BINARY): $(HACK_BIN) $(HELM_BUILDARCH_VERSIONED_BINARY)
+$(HELM_BUILDARCH_BINARY): $(HELM_BUILDARCH_VERSIONED_BINARY)
 	$(info ░▒▓ symlink $(HELM_BUILDARCH_VERSIONED_BINARY) -> $(HELM_BUILDARCH_BINARY))
 	@ln -sf helm-$(BUILDARCH)-$(HELM3_VERSION) $(HACK_BIN)/helm-$(BUILDARCH)
 
-$(HELM_BUILDARCH_VERSIONED_BINARY): $(HACK_BIN)
+$(HELM_BUILDARCH_VERSIONED_BINARY): | $(HACK_BIN)
 	$(info ░▒▓ Downloading helm3 $(HELM3_VERSION) for $(BUILDARCH) to $(HELM_BUILDARCH_VERSIONED_BINARY))
 	@rm -f $(HELM_BUILDARCH_VERSIONED_BINARY)
 	@curl -fsSL --retry 5 $(HELM3_URL) | tar --extract --gzip -C $(HACK_BIN) --strip-components=1 $(NATIVE_OS)-$(BUILDARCH)/helm -O > $(HELM_BUILDARCH_VERSIONED_BINARY)

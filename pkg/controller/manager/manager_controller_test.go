@@ -20,7 +20,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -272,7 +271,8 @@ var _ = Describe("Manager controller tests", func() {
 
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
 			// Update the internal manager TLS secret with old DNS name.
-			oldKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{"tigera-manager.tigera-manager.svc"})
+			oldKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(),
+				[]string{fmt.Sprintf("%s.%s.svc", render.ManagerServiceName, render.ManagerNamespace)})
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Update(ctx, oldKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
@@ -566,45 +566,6 @@ var _ = Describe("Manager controller tests", func() {
 				// Mark that watches were successful.
 				r.licenseAPIReady.MarkAsReady()
 				r.tierWatchReady.MarkAsReady()
-			})
-
-			It("should reconcile manager namespace, role bindings and pull secrets", func() {
-				result, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(Equal(0 * time.Second))
-
-				namespace := corev1.Namespace{
-					TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name: render.ManagerNamespace,
-				}, &namespace)).NotTo(HaveOccurred())
-				Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
-				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
-
-				// Expect operator rolebinding to be created
-				rb := rbacv1.RoleBinding{
-					ObjectMeta: metav1.ObjectMeta{},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name:      render.TigeraOperatorSecrets,
-					Namespace: render.ManagerNamespace,
-				}, &rb)).NotTo(HaveOccurred())
-				Expect(rb.OwnerReferences).To(HaveLen(1))
-				ownerRoleBinding := rb.OwnerReferences[0]
-				Expect(ownerRoleBinding.Kind).To(Equal("Manager"))
-
-				// Expect pull secrets to be created
-				pullSecrets := corev1.Secret{
-					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name:      "tigera-pull-secret",
-					Namespace: render.ManagerNamespace,
-				}, &pullSecrets)).NotTo(HaveOccurred())
-				Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
-				pullSecret := pullSecrets.OwnerReferences[0]
-				Expect(pullSecret.Kind).To(Equal("Manager"))
 			})
 
 			Context("image reconciliation", func() {
@@ -1489,39 +1450,6 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(tenantARoutes.Data).ToNot(BeEmpty())
 
 				Expect(kerror.IsNotFound(test.GetResource(c, &tenantBRoutes))).Should(BeTrue())
-			})
-
-			It("should reconcile pull secrets and rolebindings", func() {
-				_, err := r.Reconcile(ctx, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Namespace: tenantANamespace,
-					},
-				})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// Expect operator role binding to be created
-				rb := rbacv1.RoleBinding{
-					ObjectMeta: metav1.ObjectMeta{},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name:      render.TigeraOperatorSecrets,
-					Namespace: tenantANamespace,
-				}, &rb)).NotTo(HaveOccurred())
-				Expect(rb.OwnerReferences).To(HaveLen(1))
-				ownerRoleBinding := rb.OwnerReferences[0]
-				Expect(ownerRoleBinding.Kind).To(Equal("Tenant"))
-
-				// Expect pull secrets to be created
-				pullSecrets := corev1.Secret{
-					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name:      "tigera-pull-secret",
-					Namespace: tenantANamespace,
-				}, &pullSecrets)).NotTo(HaveOccurred())
-				Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
-				pullSecret := pullSecrets.OwnerReferences[0]
-				Expect(pullSecret.Kind).To(Equal("Tenant"))
 			})
 		})
 	})

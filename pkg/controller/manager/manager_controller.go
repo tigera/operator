@@ -53,7 +53,10 @@ import (
 	"github.com/tigera/operator/pkg/url"
 )
 
-const ResourceName = "manager"
+const (
+	ResourceName        = "manager"
+	TrustedBundlePrefix = render.ManagerName
+)
 
 var log = logf.Log.WithName("controller_manager")
 
@@ -460,18 +463,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
 	}
 
-	bundleMaker := certificateManager.CreateTrustedBundle()
-	for _, secret := range trustedSecretNames {
-		certificate, err := certificateManager.GetCertificate(r.client, secret, helper.TruthNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Failed to retrieve %s", secret), err, logc)
-			return reconcile.Result{}, err
-		} else if certificate == nil {
-			logc.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secret))
-			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret '%s' to become available", secret), nil, logc)
-			return reconcile.Result{}, nil
-		}
-		bundleMaker.AddCertificates(certificate)
+	bundleMaker, err := certificateManager.CreateNamedTrustedBundleFromSecrets(TrustedBundlePrefix, r.client,
+		helper.TruthNamespace(), false, trustedSecretNames...)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating trusted bundle for manager", err, logc)
 	}
 	certificateManager.AddToStatusManager(r.status, helper.InstallNamespace())
 
@@ -694,14 +689,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	setup := render.NewSetup(&render.SetUpConfiguration{
-		OpenShift:       r.provider.IsOpenShift(),
-		Installation:    installation,
-		PullSecrets:     pullSecrets,
-		Namespace:       helper.InstallNamespace(),
-		PSS:             render.PSSRestricted,
-		CreateNamespace: !tenant.MultiTenant(),
-	})
 	components := []render.Component{
 		// Install manager components.
 		component,
@@ -723,16 +710,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	if tunnelSecretPassthrough != nil {
 		components = append(components, tunnelSecretPassthrough)
-	}
-
-	setupHandler := defaultHandler
-	if tenant.MultiTenant() {
-		// In standard installs, the Manager CR owns all the objects. For multi-tenant, pull secrets are owned by the Tenant instance.
-		setupHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant)
-	}
-	if err := setupHandler.CreateOrUpdateOrDelete(ctx, setup, r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
-		return reconcile.Result{}, err
 	}
 
 	for _, component := range components {

@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,9 +63,6 @@ func ValidatePools(instance *operator.Installation) error {
 		switch pool.NATOutgoing {
 		case operator.NATOutgoingEnabled:
 		case operator.NATOutgoingDisabled:
-			if isLoadBalancer {
-				return fmt.Errorf("IP pool %s NATOutgoing cannot be disabled with allowedUse LoadBalancer", pool.Name)
-			}
 		default:
 			return fmt.Errorf("%s is invalid for natOutgoing, should be one of %s",
 				pool.NATOutgoing, strings.Join(operator.NATOutgoingTypesString, ","))

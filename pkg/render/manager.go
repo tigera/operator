@@ -95,9 +95,16 @@ const (
 	VoltronTunnelSecretName  = "tigera-management-cluster-connection"
 	defaultVoltronPort       = "9443"
 	defaultTunnelVoltronPort = "9449"
+	VoltronPort              = 9449
 	DashboardAPIPort         = "8444"
 	DashboardAPIHealthPort   = "8090"
 	DashboardAPIName         = "tigera-dashboard-api"
+)
+
+var (
+	VoltronEntityRule                = networkpolicy.CreateEntityRule(ManagerNamespace, ManagerDeploymentName, VoltronPort)
+	VoltronSourceEntityRule          = networkpolicy.CreateSourceEntityRule(ManagerNamespace, ManagerDeploymentName)
+	VoltronServiceSelectorEntityRule = networkpolicy.CreateServiceSelectorEntityRule(ManagerNamespace, VoltronName)
 )
 
 // Manager returns a component for rendering namespaced manager resources.

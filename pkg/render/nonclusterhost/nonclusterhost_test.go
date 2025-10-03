@@ -163,6 +163,15 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 				Resources: []string{"hostendpoints"},
 				Verbs:     []string{"list", "update"},
 			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get"},
+				ResourceNames: []string{
+					"node-certs-noncluster-host",
+					"typha-certs-noncluster-host",
+				},
+			},
 		))
 	})
 })

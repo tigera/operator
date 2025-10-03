@@ -22,314 +22,309 @@ var (
 
 	ComponentAPIServer = Component{
 		Version:  "master",
-		Image:    "tigera/apiserver",
+		Image:    "apiserver",
 		Registry: "",
 	}
 
 	ComponentComplianceBenchmarker = Component{
 		Version:  "master",
-		Image:    "tigera/compliance-benchmarker",
+		Image:    "compliance-benchmarker",
 		Registry: "",
 	}
 
 	ComponentComplianceController = Component{
 		Version:  "master",
-		Image:    "tigera/compliance-controller",
+		Image:    "compliance-controller",
 		Registry: "",
 	}
 
 	ComponentComplianceReporter = Component{
 		Version:  "master",
-		Image:    "tigera/compliance-reporter",
+		Image:    "compliance-reporter",
 		Registry: "",
 	}
 
 	ComponentComplianceServer = Component{
 		Version:  "master",
-		Image:    "tigera/compliance-server",
+		Image:    "compliance-server",
 		Registry: "",
 	}
 
 	ComponentComplianceSnapshotter = Component{
 		Version:  "master",
-		Image:    "tigera/compliance-snapshotter",
+		Image:    "compliance-snapshotter",
 		Registry: "",
 	}
 
 	ComponentTigeraCSRInitContainer = Component{
 		Version:  "master",
-		Image:    "tigera/key-cert-provisioner",
+		Image:    "key-cert-provisioner",
 		Registry: "",
 	}
 
 	ComponentDeepPacketInspection = Component{
 		Version:  "master",
-		Image:    "tigera/deep-packet-inspection",
+		Image:    "deep-packet-inspection",
 		Registry: "",
 	}
 
 	ComponentEckElasticsearch = Component{
-		Version:  "8.18.4",
-		Registry: "",
+		Version: "8.18.4",
 	}
 
 	ComponentEckKibana = Component{
-		Version:  "8.18.4",
-		Registry: "",
+		Version: "8.18.4",
 	}
 
 	ComponentElasticTseeInstaller = Component{
 		Version:  "master",
-		Image:    "tigera/intrusion-detection-job-installer",
+		Image:    "intrusion-detection-job-installer",
 		Registry: "",
 	}
 
 	ComponentElasticsearch = Component{
 		Version:  "master",
-		Image:    "tigera/elasticsearch",
+		Image:    "elasticsearch",
 		Registry: "",
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version:  "2.16.0",
-		Registry: "",
+		Version: "2.16.0",
 	}
 
 	ComponentElasticsearchOperator = Component{
 		Version:  "master",
-		Image:    "tigera/eck-operator",
+		Image:    "eck-operator",
 		Registry: "",
 	}
 
 	ComponentUIAPIs = Component{
 		Version:  "master",
-		Image:    "tigera/ui-apis",
+		Image:    "ui-apis",
 		Registry: "",
 	}
 
 	ComponentESGateway = Component{
 		Version:  "master",
-		Image:    "tigera/es-gateway",
+		Image:    "es-gateway",
 		Registry: "",
 	}
 
 	ComponentLinseed = Component{
 		Version:  "master",
-		Image:    "tigera/linseed",
+		Image:    "linseed",
 		Registry: "",
 	}
 
 	ComponentFluentd = Component{
 		Version:  "master",
-		Image:    "tigera/fluentd",
+		Image:    "fluentd",
 		Registry: "",
 	}
 
 	ComponentFluentdWindows = Component{
 		Version:  "master",
-		Image:    "tigera/fluentd-windows",
+		Image:    "fluentd-windows",
 		Registry: "",
 	}
 
 	ComponentGuardian = Component{
 		Version:  "master",
-		Image:    "tigera/guardian",
+		Image:    "guardian",
 		Registry: "",
 	}
 
 	ComponentIntrusionDetectionController = Component{
 		Version:  "master",
-		Image:    "tigera/intrusion-detection-controller",
+		Image:    "intrusion-detection-controller",
 		Registry: "",
 	}
 
 	ComponentWAFHTTPFilter = Component{
 		Version:  "master",
-		Image:    "tigera/waf-http-filter",
+		Image:    "waf-http-filter",
 		Registry: "",
 	}
 
 	ComponentSecurityEventWebhooksProcessor = Component{
 		Version:  "master",
-		Image:    "tigera/webhooks-processor",
+		Image:    "webhooks-processor",
 		Registry: "",
 	}
 
 	ComponentKibana = Component{
 		Version:  "master",
-		Image:    "tigera/kibana",
+		Image:    "kibana",
 		Registry: "",
 	}
 
 	ComponentManager = Component{
 		Version:  "master",
-		Image:    "tigera/manager",
+		Image:    "manager",
 		Registry: "",
 	}
 
 	ComponentDex = Component{
 		Version:  "master",
-		Image:    "tigera/dex",
+		Image:    "dex",
 		Registry: "",
 	}
 
 	ComponentManagerProxy = Component{
 		Version:  "master",
-		Image:    "tigera/voltron",
+		Image:    "voltron",
 		Registry: "",
 	}
 
 	ComponentPacketCapture = Component{
 		Version:  "master",
-		Image:    "tigera/packetcapture",
+		Image:    "packetcapture",
 		Registry: "",
 	}
 
 	ComponentPolicyRecommendation = Component{
 		Version:  "master",
-		Image:    "tigera/policy-recommendation",
+		Image:    "policy-recommendation",
 		Registry: "",
 	}
 
 	ComponentEgressGateway = Component{
 		Version:  "master",
-		Image:    "tigera/egress-gateway",
+		Image:    "egress-gateway",
 		Registry: "",
 	}
 
 	ComponentL7Collector = Component{
 		Version:  "master",
-		Image:    "tigera/l7-collector",
+		Image:    "l7-collector",
 		Registry: "",
 	}
 
 	ComponentEnvoyProxy = Component{
 		Version:  "master",
-		Image:    "tigera/envoy",
+		Image:    "envoy",
 		Registry: "",
 	}
 
 	ComponentDikastes = Component{
 		Version:  "master",
-		Image:    "tigera/dikastes",
+		Image:    "dikastes",
 		Registry: "",
 	}
 
 	ComponentL7AdmissionController = Component{
 		Version:  "master",
-		Image:    "tigera/l7-admission-controller",
+		Image:    "l7-admission-controller",
 		Registry: "",
 	}
 
 	ComponentCoreOSPrometheus = Component{
-		Version:  "v3.4.1",
-		Registry: "",
+		Version: "v3.4.1",
 	}
 
 	ComponentPrometheus = Component{
 		Version:  "master",
-		Image:    "tigera/prometheus",
+		Image:    "prometheus",
 		Registry: "",
 	}
 
 	ComponentTigeraPrometheusService = Component{
 		Version:  "master",
-		Image:    "tigera/prometheus-service",
+		Image:    "prometheus-service",
 		Registry: "",
 	}
 
 	ComponentCoreOSAlertmanager = Component{
-		Version:  "v0.28.0",
-		Registry: "",
+		Version: "v0.28.0",
 	}
 
 	ComponentPrometheusAlertmanager = Component{
 		Version:  "master",
-		Image:    "tigera/alertmanager",
+		Image:    "alertmanager",
 		Registry: "",
 	}
 
 	ComponentQueryServer = Component{
 		Version:  "master",
-		Image:    "tigera/queryserver",
+		Image:    "queryserver",
 		Registry: "",
 	}
 
 	ComponentTigeraKubeControllers = Component{
 		Version:  "master",
-		Image:    "tigera/kube-controllers",
+		Image:    "kube-controllers",
 		Registry: "",
 	}
 
 	ComponentTigeraNode = Component{
 		Version:  "master",
-		Image:    "tigera/node",
+		Image:    "node",
 		Registry: "",
 	}
 
 	ComponentTigeraNodeWindows = Component{
 		Version:  "master",
-		Image:    "tigera/node-windows",
+		Image:    "node-windows",
 		Registry: "",
 	}
 
 	ComponentTigeraTypha = Component{
 		Version:  "master",
-		Image:    "tigera/typha",
+		Image:    "typha",
 		Registry: "",
 	}
 
 	ComponentTigeraCNI = Component{
 		Version:  "master",
-		Image:    "tigera/cni",
+		Image:    "cni",
 		Registry: "",
 	}
 
 	ComponentTigeraCNIWindows = Component{
 		Version:  "master",
-		Image:    "tigera/cni-windows",
+		Image:    "cni-windows",
 		Registry: "",
 	}
 
 	ComponentElasticsearchMetrics = Component{
 		Version:  "master",
-		Image:    "tigera/elasticsearch-metrics",
+		Image:    "elasticsearch-metrics",
 		Registry: "",
 	}
 
 	ComponentTigeraFlexVolume = Component{
 		Version:  "master",
-		Image:    "tigera/pod2daemon-flexvol",
+		Image:    "pod2daemon-flexvol",
 		Registry: "",
 	}
 
 	ComponentTigeraCSI = Component{
 		Version:  "master",
-		Image:    "tigera/csi",
+		Image:    "csi",
 		Registry: "",
 	}
 
 	ComponentTigeraCSINodeDriverRegistrar = Component{
 		Version:  "master",
-		Image:    "tigera/node-driver-registrar",
+		Image:    "node-driver-registrar",
 		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyGateway = Component{
 		Version:  "master",
-		Image:    "tigera/envoy-gateway",
+		Image:    "envoy-gateway",
 		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyProxy = Component{
 		Version:  "master",
-		Image:    "tigera/envoy-proxy",
+		Image:    "envoy-proxy",
 		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyRatelimit = Component{
 		Version:  "master",
-		Image:    "tigera/envoy-ratelimit",
+		Image:    "envoy-ratelimit",
 		Registry: "",
 	}
 	// Only components that correspond directly to images should be included in this list,

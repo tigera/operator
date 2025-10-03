@@ -77,14 +77,12 @@ var (
 {{- end }}
 {{ with index .Components "eck-elasticsearch" }}
 	ComponentEckElasticsearch = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
 	}
 {{- end }}
 {{ with index .Components "eck-kibana" }}
 	ComponentEckKibana = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
 	}
 {{- end }}
 {{ with index .Components "elastic-tsee-installer" }}
@@ -103,8 +101,7 @@ var (
 {{- end }}
 {{ with index .Components "eck-elasticsearch-operator" }}
 	ComponentECKElasticsearchOperator = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
 	}
 {{- end }}
 {{ with index .Components "elasticsearch-operator" }}
@@ -256,8 +253,7 @@ var (
 {{- end }}
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
 	}
 {{- end }}
 {{ with index .Components "prometheus" }}
@@ -276,8 +272,7 @@ var (
 {{- end }}
 {{ with index .Components "coreos-alertmanager" }}
 	ComponentCoreOSAlertmanager = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
 	}
 {{- end }}
 {{ with index .Components "alertmanager" }}

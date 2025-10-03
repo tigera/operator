@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/gatewayapi"
 )
 
 var _ = Describe("Gateway API controller tests", func() {
@@ -229,7 +230,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(fakeComponentHandlers[1].createOnly).To(BeFalse())
 
 		By("checking that the custom EnvoyGateway was passed through")
-		gatewayAPIImplementationConfig := fakeComponentHandlers[1].lastComponent.(render.GatewayAPIImplementationConfigInterface).GetConfig()
+		gatewayAPIImplementationConfig := fakeComponentHandlers[1].lastComponent.(gatewayapi.GatewayAPIImplementationConfigInterface).GetConfig()
 		Expect(gatewayAPIImplementationConfig.CustomEnvoyGateway).NotTo(BeNil())
 		Expect(*gatewayAPIImplementationConfig.CustomEnvoyGateway).To(Equal(*envoyGateway))
 	})
@@ -299,7 +300,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("checking that the custom EnvoyGateway was passed through")
-		gatewayAPIImplementationConfig := fakeComponentHandlers[1].lastComponent.(render.GatewayAPIImplementationConfigInterface).GetConfig()
+		gatewayAPIImplementationConfig := fakeComponentHandlers[1].lastComponent.(gatewayapi.GatewayAPIImplementationConfigInterface).GetConfig()
 		Expect(gatewayAPIImplementationConfig.CustomEnvoyGateway).NotTo(BeNil())
 		Expect(*gatewayAPIImplementationConfig.CustomEnvoyGateway).To(Equal(*envoyGateway))
 	})
@@ -471,7 +472,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(fakeComponentHandlers[1].createOnly).To(BeFalse())
 
 		By("checking that the custom EnvoyProxies were passed through")
-		gatewayAPIImplementationConfig := fakeComponentHandlers[1].lastComponent.(render.GatewayAPIImplementationConfigInterface).GetConfig()
+		gatewayAPIImplementationConfig := fakeComponentHandlers[1].lastComponent.(gatewayapi.GatewayAPIImplementationConfigInterface).GetConfig()
 		Expect(gatewayAPIImplementationConfig.CustomEnvoyProxies).NotTo(BeNil())
 		Expect(gatewayAPIImplementationConfig.CustomEnvoyProxies).To(HaveKeyWithValue("custom-class-1", envoyProxy1))
 		Expect(gatewayAPIImplementationConfig.CustomEnvoyProxies).To(HaveKeyWithValue("custom-class-2", envoyProxy2))

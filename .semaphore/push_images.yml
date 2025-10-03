@@ -3,7 +3,7 @@ name: Operator CD
 agent:
   machine:
     type: f1-standard-2
-    os_image: ubuntu2204
+    os_image: ubuntu2404
 global_job_config:
   secrets:
     - name: docker-hub

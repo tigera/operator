@@ -108,11 +108,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 		multiTenant:     opts.MultiTenant,
 	}
 
-	r.status.AddStatefulSets([]types.NamespacedName{
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
-	})
-
 	r.status.Run(opts.ShutdownContext)
 	return r
 }
@@ -429,6 +424,15 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 	}
+
+	r.status.AddStatefulSets([]types.NamespacedName{
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
+	})
+
+	r.status.AddDeployments([]types.NamespacedName{
+		{Namespace: common.TigeraPrometheusNamespace, Name: monitor.CalicoPrometheusOperator},
+	})
 
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()

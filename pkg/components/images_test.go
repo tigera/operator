@@ -24,18 +24,35 @@ import (
 	op "github.com/tigera/operator/api/v1"
 )
 
+func calicoImageEntries() []TableEntry {
+	var entries []TableEntry
+	for _, c := range CalicoImages {
+		entries = append(entries, Entry(fmt.Sprintf("a %s image correctly", c.Image), c, CalicoRegistry, CalicoImagePath))
+	}
+	return entries
+}
+
+func tigeraImageEntries() []TableEntry {
+	var entries []TableEntry
+	for _, c := range EnterpriseImages {
+		entries = append(entries, Entry(fmt.Sprintf("a tigera image correctly - %s", c.Image), c, TigeraRegistry, TigeraImagePath))
+	}
+	return entries
+}
+
 var _ = Describe("test GetReference", func() {
 	Context("No registry override", func() {
 		DescribeTable("should render",
 			func(c Component, registry, imagePath string) {
 				Expect(GetReference(c, "", "", "", nil)).To(Equal(fmt.Sprintf("%s%s%s:%s", registry, imagePath, c.Image, c.Version)))
 			},
-			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, CalicoImagePath),
-			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, TigeraImagePath),
-			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry, TigeraImagePath),
-			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry, InitImagePath),
-			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoRegistry, CalicoImagePath),
-			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraRegistry, TigeraImagePath),
+			append(
+				append(
+					calicoImageEntries(),
+					tigeraImageEntries()...,
+				),
+				Entry("an operator init image correctly", ComponentOperatorInit, OperatorRegistry, OperatorImagePath),
+			)...,
 		)
 	})
 
@@ -45,12 +62,13 @@ var _ = Describe("test GetReference", func() {
 				ud := "UseDefault"
 				Expect(GetReference(c, ud, ud, "", nil)).To(Equal(fmt.Sprintf("%s%s%s:%s", registry, imagePath, c.Image, c.Version)))
 			},
-			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry, CalicoImagePath),
-			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry, TigeraImagePath),
-			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry, TigeraImagePath),
-			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry, InitImagePath),
-			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoRegistry, CalicoImagePath),
-			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraRegistry, TigeraImagePath),
+			append(
+				append(
+					calicoImageEntries(),
+					tigeraImageEntries()...,
+				),
+				Entry("an operator init image correctly", ComponentOperatorInit, OperatorRegistry, OperatorImagePath),
+			)...,
 		)
 	})
 
@@ -62,7 +80,7 @@ var _ = Describe("test GetReference", func() {
 			Entry("a calico image correctly", ComponentCalicoNode, CalicoImagePath),
 			Entry("a tigera image correctly", ComponentTigeraNode, TigeraImagePath),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraImagePath),
-			Entry("an operator init image correctly", ComponentOperatorInit, InitImagePath),
+			Entry("an operator init image correctly", ComponentOperatorInit, OperatorImagePath),
 			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoImagePath),
 			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraImagePath),
 		)
@@ -90,7 +108,7 @@ var _ = Describe("test GetReference", func() {
 			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry),
 			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry),
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry),
-			Entry("an operator init image correctly", ComponentOperatorInit, InitRegistry),
+			Entry("an operator init image correctly", ComponentOperatorInit, OperatorRegistry),
 			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoRegistry),
 			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraRegistry),
 		)

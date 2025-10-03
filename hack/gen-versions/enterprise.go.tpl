@@ -21,10 +21,9 @@ var (
 	EnterpriseRelease string = "{{ .Title }}"
 {{ with index .Components "apiserver" }}
 	ComponentAPIServer = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "compliance-benchmarker" }}
@@ -64,10 +63,9 @@ var (
 {{- end }}
 {{ with index .Components "key-cert-provisioner" }}
 	ComponentTigeraCSRInitContainer = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "deep-packet-inspection" }}
@@ -150,10 +148,9 @@ var (
 {{- end }}
 {{ with .Components.guardian }}
 	ComponentGuardian = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "intrusion-detection-controller" }}
@@ -294,50 +291,44 @@ var (
 {{- end }}
 {{ with index .Components "kube-controllers" }}
 	ComponentTigeraKubeControllers = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "node" }}
 	ComponentTigeraNode = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "node-windows" }}
 	ComponentTigeraNodeWindows = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with .Components.typha }}
 	ComponentTigeraTypha = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "tigera-cni" }}
 	ComponentTigeraCNI = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "tigera-cni-windows" }}
 	ComponentTigeraCNIWindows = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "elasticsearch-metrics" }}
@@ -349,50 +340,44 @@ var (
 {{- end }}
 {{ with index .Components "flexvol" }}
 	ComponentTigeraFlexVolume = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "csi" }}
 	ComponentTigeraCSI = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar" }}
 	ComponentTigeraCSINodeDriverRegistrar = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "gateway-api-envoy-gateway" }}
 	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "gateway-api-envoy-proxy" }}
 	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 {{ with index .Components "gateway-api-envoy-ratelimit" }}
 	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		imagePath: TigeraImagePath,
-		Registry:  "{{ .Registry }}",
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
 	}
 {{- end }}
 	// Only components that correspond directly to images should be included in this list,

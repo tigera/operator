@@ -17,18 +17,17 @@ package components
 const (
 	CalicoRegistry = "quay.io/"
 	TigeraRegistry = "gcr.io/unique-caldron-775/cnx/"
-	// For production InitRegistry should match TigeraRegistry.
+	// For production OperatorRegistry should match TigeraRegistry.
 	// For the master branch and other testing scenarios we switch TigeraRegistry to
 	// point to a testing repo but the init image will be pushed to quay, so having
 	// these separate allows pulling the proper test images for the Tigera components
 	// and Init image when testing.
-	InitRegistry = "quay.io/"
+	OperatorRegistry = "quay.io/"
 )
 
-// Default image paths for Calico and Tigera components.
+// Default image paths for components.
 const (
-	CalicoImagePath = "calico/"
-	TigeraImagePath = "tigera/"
-	// Image path for operator init image.
-	InitImagePath = "tigera/"
+	CalicoImagePath   = "calico/"
+	TigeraImagePath   = "tigera/"
+	OperatorImagePath = "tigera/"
 )

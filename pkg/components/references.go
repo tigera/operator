@@ -16,27 +16,31 @@ package components
 
 import (
 	"fmt"
-	"slices"
 	"strings"
 
 	operator "github.com/tigera/operator/api/v1"
 )
 
+// variant is used to differentiate between components across product variants.
+type variant string
+
+const calicoVariant variant = "calico"
+
 type Component struct {
 	// Image is the image name for this component (e.g., node, cni)
 	Image string
 
-	// imagePath is the path within the registry to the image (e.g., calico/, tigera/)
-	// Only used to differentiate between Calico and Tigera components when determining
-	// default registry and imagePath.
-	imagePath string
-
+	// Version is the image version for this component (e.g., v3.8.1)
 	Version string
 
 	// Registry is only used for developer workflows. For production builds, the registry
 	// is always determined from user configuration. This field can be overridden
 	// as part of a developer workflow to deploy custom dev images on an individual basis.
 	Registry string
+
+	// variant is specify which product variant this component belongs to.
+	// It is used when determining default registry and image path.
+	variant variant
 }
 
 const UseDefault = "UseDefault"
@@ -46,12 +50,15 @@ const UseDefault = "UseDefault"
 // and user does not explicitly specify a registry or imagePath.
 func getDefaults(c Component) (registry string, imagePath string) {
 	switch {
-	case slices.Contains(CalicoImages, c):
+	// If the component does not specify a variant, it is assumed to be an operator component.
+	case c == ComponentOperatorInit:
+		registry = OperatorRegistry
+		imagePath = OperatorImagePath
+	// If the component is a Calico component (variant: calico), use the Calico defaults.
+	case c.variant == calicoVariant:
 		registry = CalicoRegistry
 		imagePath = CalicoImagePath
-	case c == ComponentOperatorInit:
-		registry = InitRegistry
-		imagePath = InitImagePath
+	// Otherwise, it is assumed to be a Tigera component (variant: tigera).
 	default:
 		registry = TigeraRegistry
 		imagePath = TigeraImagePath

@@ -28,40 +28,25 @@ var (
 	// For now, it includes "calico/<imageName>" as well as "<imageName>" to handle
 	// older versions.yml files that have not been updated to remove the imagePath.
 	defaultImages = map[string]string{
-		"calico/cni":                  "cni",
 		"cni":                         "cni",
-		"calico/cni-windows":          "cni-windows",
 		"cni-windows":                 "cni-windows",
-		"calico/dikastes":             "dikastes",
 		"dikastes":                    "dikastes",
-		"calico/kube-controllers":     "kube-controllers",
 		"kube-controllers":            "kube-controllers",
-		"calico/node":                 "node",
 		"node":                        "node",
-		"calico/node-windows":         "node-windows",
 		"node-windows":                "node-windows",
-		"calico/goldmane":             "goldmane",
 		"goldmane":                    "goldmane",
-		"calico/guardian":             "guardian",
 		"guardian":                    "guardian",
-		"calico/whisker":              "whisker",
 		"whisker":                     "whisker",
-		"calico/whisker-backend":      "whisker-backend",
 		"whisker-backend":             "whisker-backend",
 		"calicoctl":                   "ctl",
 		"flexvol":                     "pod2daemon-flexvol",
-		"calico/csi":                  "csi",
 		"csi":                         "csi",
 		"csi-node-driver-registrar":   "node-driver-registrar",
 		"typha":                       "typha",
 		"key-cert-provisioner":        "key-cert-provisioner",
-		"calico/apiserver":            "apiserver",
 		"apiserver":                   "apiserver",
-		"calico/envoy-gateway":        "envoy-gateway",
 		"envoy-gateway":               "envoy-gateway",
-		"calico/envoy-proxy":          "envoy-proxy",
 		"envoy-proxy":                 "envoy-proxy",
-		"calico/envoy-ratelimit":      "envoy-ratelimit",
 		"envoy-ratelimit":             "envoy-ratelimit",
 		"eck-elasticsearch":           "unused-image",
 		"eck-elasticsearch-operator":  "unused-image",
@@ -82,7 +67,7 @@ var (
 		"calico-private":    {},
 		"manager-proxy":     {},
 		"busybox":           {},
-		"calico/api":        {},
+		"api":               {},
 		"libcalico-go":      {},
 	}
 )
@@ -121,6 +106,11 @@ func GetComponents(versionsPath string) (Release, error) {
 	// - ignore any components that are not actually images.
 	// - trim imagePath from image names.
 	for key, component := range v.Components {
+		// Trim off the "calico/" prefix from the key if it exists.
+		// This is to handle older versions.yml files
+		// that have not been updated to remove the imagePath.
+		// TODO: Remove this logic eventually.
+		key = strings.TrimPrefix(key, "calico/")
 		if _, ignore := ignoredImages[key]; ignore {
 			continue
 		}

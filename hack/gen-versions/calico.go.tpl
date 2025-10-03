@@ -24,12 +24,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCNIFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components.cni }}
@@ -37,12 +39,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCNIFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "calico/cni-windows" }}
@@ -50,6 +54,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components "cni-windows" }}
@@ -57,6 +62,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "key-cert-provisioner" }}
@@ -64,6 +70,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "calico/kube-controllers" }}
@@ -71,12 +78,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoKubeControllersFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components "kube-controllers" }}
@@ -84,12 +93,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoKubeControllersFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components  "calico/node" }}
@@ -97,12 +108,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoNodeFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components.node }}
@@ -110,12 +123,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoNodeFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components  "calico/node-windows" }}
@@ -123,6 +138,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components  "node-windows" }}
@@ -130,6 +146,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with .Components.typha }}
@@ -137,12 +154,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoTyphaFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with .Components.flexvol }}
@@ -150,6 +169,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "calico/apiserver" }}
@@ -157,12 +177,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoAPIServerFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components.apiserver }}
@@ -170,12 +192,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoAPIServerFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "calico/csi" }}
@@ -183,12 +207,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCSIFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components.csi }}
@@ -196,12 +222,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCSIFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar" }}
@@ -209,12 +237,14 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCSIRegistrarFIPS = Component{
 		Version:  "{{ .Version }}-fips",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "calico/goldmane" }}
@@ -222,6 +252,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components.goldmane }}
@@ -229,6 +260,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "calico/whisker" }}
@@ -236,6 +268,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components.whisker }}
@@ -243,6 +276,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "calico/whisker-backend" }}
@@ -250,6 +284,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components "whisker-backend" }}
@@ -257,6 +292,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "calico/envoy-gateway" }}
@@ -264,6 +300,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components "envoy-gateway" }}
@@ -271,6 +308,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "calico/envoy-proxy" }}
@@ -278,6 +316,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components "envoy-proxy" }}
@@ -285,6 +324,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "calico/envoy-ratelimit" }}
@@ -292,6 +332,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components "envoy-ratelimit" }}
@@ -299,6 +340,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 {{ with index .Components "calico/guardian" }}
@@ -306,6 +348,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end -}}
 {{ with index .Components "guardian" }}
@@ -313,6 +356,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
 	}
 {{- end }}
 

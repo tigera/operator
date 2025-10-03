@@ -21,10 +21,9 @@ var (
 	EnterpriseRelease string = "master"
 
 	ComponentAPIServer = Component{
-		Version:   "master",
-		Image:     "apiserver",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "apiserver",
+		Registry: "",
 	}
 
 	ComponentComplianceBenchmarker = Component{
@@ -58,10 +57,9 @@ var (
 	}
 
 	ComponentTigeraCSRInitContainer = Component{
-		Version:   "master",
-		Image:     "key-cert-provisioner",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "key-cert-provisioner",
+		Registry: "",
 	}
 
 	ComponentDeepPacketInspection = Component{
@@ -131,10 +129,9 @@ var (
 	}
 
 	ComponentGuardian = Component{
-		Version:   "master",
-		Image:     "guardian",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "guardian",
+		Registry: "",
 	}
 
 	ComponentIntrusionDetectionController = Component{
@@ -254,45 +251,39 @@ var (
 	}
 
 	ComponentTigeraKubeControllers = Component{
-		Version:   "master",
-		Image:     "kube-controllers",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "kube-controllers",
+		Registry: "",
 	}
 
 	ComponentTigeraNode = Component{
-		Version:   "master",
-		Image:     "node",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "node",
+		Registry: "",
 	}
 
 	ComponentTigeraNodeWindows = Component{
-		Version:   "master",
-		Image:     "node-windows",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "node-windows",
+		Registry: "",
 	}
 
 	ComponentTigeraTypha = Component{
-		Version:   "master",
-		Image:     "typha",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "typha",
+		Registry: "",
 	}
 
 	ComponentTigeraCNI = Component{
-		Version:   "master",
-		Image:     "cni",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "cni",
+		Registry: "",
 	}
 
 	ComponentTigeraCNIWindows = Component{
-		Version:   "master",
-		Image:     "cni-windows",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "cni-windows",
+		Registry: "",
 	}
 
 	ComponentElasticsearchMetrics = Component{
@@ -302,45 +293,39 @@ var (
 	}
 
 	ComponentTigeraFlexVolume = Component{
-		Version:   "master",
-		Image:     "pod2daemon-flexvol",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "pod2daemon-flexvol",
+		Registry: "",
 	}
 
 	ComponentTigeraCSI = Component{
-		Version:   "master",
-		Image:     "csi",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "csi",
+		Registry: "",
 	}
 
 	ComponentTigeraCSINodeDriverRegistrar = Component{
-		Version:   "master",
-		Image:     "node-driver-registrar",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "node-driver-registrar",
+		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:   "master",
-		Image:     "envoy-gateway",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "envoy-gateway",
+		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:   "master",
-		Image:     "envoy-proxy",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "envoy-proxy",
+		Registry: "",
 	}
 
 	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:   "master",
-		Image:     "envoy-ratelimit",
-		imagePath: TigeraImagePath,
-		Registry:  "",
+		Version:  "master",
+		Image:    "envoy-ratelimit",
+		Registry: "",
 	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.

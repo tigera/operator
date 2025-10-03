@@ -1026,11 +1026,18 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 	}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 	if c.cfg.ManagedCluster {
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: GuardianEntityRule,
-		})
+		egressRules = append(egressRules, []v3.Rule{
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: GuardianEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: VoltronEntityRule,
+			},
+		}...)
 	} else {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,

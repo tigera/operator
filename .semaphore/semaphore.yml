@@ -13,7 +13,7 @@ auto_cancel:
 agent:
   machine:
     type: f1-standard-2
-    os_image: ubuntu2004
+    os_image: ubuntu2204
 global_job_config:
   secrets:
   - name: docker-hub
@@ -138,7 +138,7 @@ blocks:
       agent:
         machine:
           type: f1-standard-2
-          os_image: ubuntu2004
+          os_image: ubuntu2204
       jobs:
         - name: Run FVs
           execution_time_limit:

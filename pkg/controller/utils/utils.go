@@ -538,7 +538,8 @@ func GetTenant(ctx context.Context, mt bool, cli client.Client, ns string) (*ope
 }
 
 // TenantNamespaces returns all namespaces that contain a tenant.
-func TenantNamespaces(ctx context.Context, cli client.Client) ([]string, error) {
+// include is an optional filter function that returns true if the tenant should be included, false otherwise.
+func TenantNamespaces(ctx context.Context, cli client.Client, include TenantFilter) ([]string, error) {
 	namespaces := []string{}
 	tenants := operatorv1.TenantList{}
 	err := cli.List(ctx, &tenants)
@@ -546,7 +547,9 @@ func TenantNamespaces(ctx context.Context, cli client.Client) ([]string, error) 
 		return nil, err
 	}
 	for _, t := range tenants.Items {
-		namespaces = append(namespaces, t.Namespace)
+		if include == nil || include(&t) {
+			namespaces = append(namespaces, t.Namespace)
+		}
 	}
 
 	// Sort the namespaces, so that the output is deterministic.
@@ -985,4 +988,54 @@ func RemoveInstallationFinalizer(i *operatorv1.Installation, finalizer string) {
 	if stringsutil.StringInSlice(finalizer, i.GetFinalizers()) {
 		i.SetFinalizers(stringsutil.RemoveStringInSlice(finalizer, i.GetFinalizers()))
 	}
+}
+
+// MaintainInstallationFinalizer manages a controller's finalizer on the Installation resource.
+// We add a finalizer to the Installation when the mainResource has been installed, and only remove that finalizer when
+// the resource has been deleted and its secondary resources have stopped running. This allows for a graceful cleanup of any resources
+// prior to the CNI plugin being removed.
+func MaintainInstallationFinalizer(
+	ctx context.Context,
+	c client.Client,
+	mainResource client.Object,
+	finalizer string,
+	secondaryResources ...client.Object,
+) error {
+	// Get the Installation.
+	installation := &operatorv1.Installation{}
+	if err := c.Get(ctx, DefaultInstanceKey, installation); err != nil {
+		if errors.IsNotFound(err) {
+			log.V(1).Info("Installation config not found")
+			return nil
+		}
+		log.Error(err, "An error occurred when querying the Installation resource")
+		return err
+	}
+	patchFrom := client.MergeFrom(installation.DeepCopy())
+
+	// Determine the correct finalizers to apply to the Installation.
+	if mainResource != nil {
+		// Add a finalizer indicating that the mainResource is still available.
+		SetInstallationFinalizer(installation, finalizer)
+	} else {
+		// Check if the namespaced secondaryResources are still present.
+		// Keep track of all the secondary resources that the main resource creates.
+		// Only delete the finalizer if all of the secondary resources are deleted.
+		for _, secondaryResource := range secondaryResources {
+			err := c.Get(ctx, types.NamespacedName{Namespace: secondaryResource.GetNamespace(), Name: secondaryResource.GetName()}, secondaryResource)
+			if err != nil && !errors.IsNotFound(err) {
+				return err
+			} else if errors.IsNotFound(err) {
+				log.Info("Object no longer exists.", "object", secondaryResource)
+			} else {
+				log.Info("Object is still present, waiting for termination", "object", secondaryResource)
+				return nil
+			}
+		}
+		log.Info("All objects no longer exist. Removing finalizer", "finalizer", finalizer)
+		RemoveInstallationFinalizer(installation, finalizer)
+	}
+
+	// Update the installation with any finalizer changes.
+	return c.Patch(ctx, installation, patchFrom)
 }

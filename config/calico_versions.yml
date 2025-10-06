@@ -1,42 +1,41 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/calico.go.tpl
-title: release-v3.30
+title: v3.30.3
 components:
   libcalico-go:
-    version: release-v3.30
+    version: v3.30.3
   typha:
-    version: release-v3.30
+    version: v3.30.3
   calico/node:
-    version: release-v3.30
+    version: v3.30.3
   calico/cni:
-    version: release-v3.30
+    version: v3.30.3
   calico/node-windows:
-    version: release-v3.30
+    version: v3.30.3
   calico/cni-windows:
-    version: release-v3.30
+    version: v3.30.3
   calico/kube-controllers:
-    version: release-v3.30
+    version: v3.30.3
   calico/goldmane:
-    version: release-v3.30
+    version: v3.30.3
   flexvol:
-    version: release-v3.30
+    version: v3.30.3
   calico/apiserver:
-    version: release-v3.30
+    version: v3.30.3
   calico/csi:
-    version: release-v3.30
+    version: v3.30.3
   csi-node-driver-registrar:
-    version: release-v3.30
+    version: v3.30.3
   key-cert-provisioner:
-    version: release-v3.30
+    version: v3.30.3
   calico/whisker:
-    version: release-v3.30
+    version: v3.30.3
   calico/whisker-backend:
-    version: release-v3.30
+    version: v3.30.3
   calico/envoy-gateway:
-    version: release-v3.30
+    version: v3.30.3
   calico/envoy-proxy:
-    version: release-v3.30
+    version: v3.30.3
   calico/envoy-ratelimit:
-    version: release-v3.30
+    version: v3.30.3
   calico/guardian:
-    version: release-v3.30
-
+    version: v3.30.3

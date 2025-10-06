@@ -67,7 +67,6 @@ var _ = Describe("dex rendering tests", func() {
 
 		var (
 			authentication *operatorv1.Authentication
-			dexSecret      *corev1.Secret
 			idpSecret      *corev1.Secret
 			pullSecrets    []*corev1.Secret
 			replicas       int32
@@ -162,7 +161,6 @@ var _ = Describe("dex rendering tests", func() {
 				},
 			}
 
-			dexSecret = render.CreateDexClientSecret()
 			idpSecret = &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      render.OIDCSecretName,
@@ -188,7 +186,7 @@ var _ = Describe("dex rendering tests", func() {
 
 			replicas = 2
 
-			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, dexSecret, idpSecret, clusterName)
+			dexCfg := render.NewDexConfig(installation.CertificateManagement, authentication, idpSecret, clusterName)
 			trustedCaBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
 			Expect(err).NotTo(HaveOccurred())
 
@@ -216,9 +214,7 @@ var _ = Describe("dex rendering tests", func() {
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.OIDCSecretName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.OIDCSecretName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: pullSecretName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.DexNamespace}},
@@ -284,7 +280,7 @@ var _ = Describe("dex rendering tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(config.Web.Headers.ContentSecurityPolicy).To(Equal(""))
 			Expect(config.Web.Headers.XXSSProtection).To(Equal("1; mode=block"))
-			Expect(config.Web.Headers.XFrameOptions).To(Equal("DENY"))
+			Expect(config.Web.Headers.XFrameOptions).To(Equal("SAMEORIGIN"))
 			Expect(config.Web.Headers.StrictTransportSecurity).To(Equal("max-age=31536000; includeSubDomains"))
 			Expect(config.Web.Headers.XContentTypeOptions).To(Equal("nosniff"))
 		})
@@ -333,7 +329,7 @@ var _ = Describe("dex rendering tests", func() {
 
 		It("should render all resources for a certificate management", func() {
 			cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{}
-			cfg.DexConfig = render.NewDexConfig(cfg.Installation.CertificateManagement, authentication, dexSecret, idpSecret, clusterName)
+			cfg.DexConfig = render.NewDexConfig(cfg.Installation.CertificateManagement, authentication, idpSecret, clusterName)
 
 			component := render.Dex(cfg)
 			resources, _ := component.Objects()
@@ -348,9 +344,7 @@ var _ = Describe("dex rendering tests", func() {
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.OIDCSecretName, Namespace: common.OperatorNamespace()}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.OIDCSecretName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: pullSecretName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex:csr-creator"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},

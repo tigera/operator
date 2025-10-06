@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -71,11 +71,10 @@ var _ = Describe("dex config tests", func() {
 			"serviceAccountSecret": []byte("my-secret2"),
 		},
 	}
-	dexSecret := render.CreateDexClientSecret()
 
 	Context("OIDC connector config options", func() {
 		It("should configure insecureSkipEmailVerified ", func() {
-			connector := render.NewDexConfig(nil, authentication, dexSecret, idpSecret, dns.DefaultClusterDomain).Connector()
+			connector := render.NewDexConfig(nil, authentication, idpSecret, dns.DefaultClusterDomain).Connector()
 			cfg := connector["config"].(map[string]interface{})
 			Expect(cfg["insecureSkipEmailVerified"]).To(Equal(true))
 		})
@@ -83,12 +82,12 @@ var _ = Describe("dex config tests", func() {
 
 	Context("Hashes should be consistent and not be affected by fields with pointers", func() {
 		It("should produce consistent hashes for dex config", func() {
-			hashes1 := render.NewDexConfig(nil, authentication, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes2 := render.NewDexConfig(nil, authentication.DeepCopy(), dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			hashes3 := render.NewDexConfig(nil, authenticationDiff, dexSecret, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
-			Expect(hashes1).To(HaveLen(3))
-			Expect(hashes2).To(HaveLen(3))
-			Expect(hashes3).To(HaveLen(3))
+			hashes1 := render.NewDexConfig(nil, authentication, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes2 := render.NewDexConfig(nil, authentication.DeepCopy(), idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			hashes3 := render.NewDexConfig(nil, authenticationDiff, idpSecret, dns.DefaultClusterDomain).RequiredAnnotations()
+			Expect(hashes1).To(HaveLen(2))
+			Expect(hashes2).To(HaveLen(2))
+			Expect(hashes3).To(HaveLen(2))
 			Expect(reflect.DeepEqual(hashes1, hashes2)).To(BeTrue())
 			Expect(reflect.DeepEqual(hashes1, hashes3)).To(BeFalse())
 		})
@@ -127,7 +126,7 @@ var _ = Describe("dex config tests", func() {
 	)
 
 	DescribeTable("Test DexConfig methods for various connectors ", func(auth *operatorv1.Authentication, expectedConnector map[string]interface{}, expectedVolumes []corev1.Volume, expectedEnv []corev1.EnvVar, secret *corev1.Secret) {
-		dexConfig := render.NewDexConfig(nil, auth, dexSecret, secret, dns.DefaultClusterDomain)
+		dexConfig := render.NewDexConfig(nil, auth, secret, dns.DefaultClusterDomain)
 		Expect(dexConfig.Connector()).To(BeEquivalentTo(expectedConnector))
 		annotations := dexConfig.RequiredAnnotations()
 
@@ -137,13 +136,11 @@ var _ = Describe("dex config tests", func() {
 		Expect(annotations).To(HaveKey("hash.operator.tigera.io/tigera-idp-secret"))
 		Expect(annotations["hash.operator.tigera.io/tigera-idp-secret"]).NotTo(BeEmpty())
 
-		Expect(annotations).To(HaveKey("hash.operator.tigera.io/tigera-dex-secret"))
-		Expect(annotations["hash.operator.tigera.io/tigera-dex-secret"]).NotTo(BeEmpty())
 		Expect(dexConfig.Issuer()).To(Equal(fmt.Sprintf("%s/dex", domain)))
 
 		Expect(dexConfig.RequiredVolumes()).To(ConsistOf(expectedVolumes))
 		Expect(dexConfig.RequiredEnv("")).To(Equal(expectedEnv))
-		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(dexSecret, secret))
+		Expect(dexConfig.RequiredSecrets("tigera-operator")).To(ConsistOf(secret))
 	},
 		Entry("Compare actual and expected OIDC config",
 			oidc, map[string]interface{}{
@@ -155,7 +152,7 @@ var _ = Describe("dex config tests", func() {
 					"clientID":                  "$CLIENT_ID",
 					"clientSecret":              "$CLIENT_SECRET",
 					"redirectURI":               "https://example.com/dex/callback",
-					"scopes":                    []string{"openid", "email", "profile"},
+					"scopes":                    []string{"openid", "email", "profile", "offline_access"},
 					"userNameKey":               "email",
 					"userIDKey":                 "email",
 					"claimMapping":              map[string]string{"groups": "group"},
@@ -174,7 +171,6 @@ var _ = Describe("dex config tests", func() {
 					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: idpSecret.Name, Items: []corev1.KeyToPath{{Key: "serviceAccountSecret", Path: "google-groups.json"}}}},
 				},
 			}, []corev1.EnvVar{
-				{Name: "DEX_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: dexSecret.Name}}}},
 				{Name: "CLIENT_ID", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: idpSecret.Name}}}},
 				{Name: "CLIENT_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: idpSecret.Name}}}},
 				{Name: "ADMIN_EMAIL", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: "adminEmail", LocalObjectReference: corev1.LocalObjectReference{Name: idpSecret.Name}}}},
@@ -222,7 +218,6 @@ var _ = Describe("dex config tests", func() {
 					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: ldapSecret.Name, Items: []corev1.KeyToPath{{Key: render.RootCASecretField, Path: "idp.pem"}}}},
 				},
 			}, []corev1.EnvVar{
-				{Name: "DEX_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: dexSecret.Name}}}},
 				{Name: "BIND_DN", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.BindDNSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: ldapSecret.Name}}}},
 				{Name: "BIND_PW", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.BindPWSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: ldapSecret.Name}}}},
 			},
@@ -252,7 +247,6 @@ var _ = Describe("dex config tests", func() {
 					VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: ocpSecret.Name, Items: []corev1.KeyToPath{{Key: render.RootCASecretField, Path: "idp.pem"}}}},
 				},
 			}, []corev1.EnvVar{
-				{Name: "DEX_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: dexSecret.Name}}}},
 				{Name: "CLIENT_ID", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientIDSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: ocpSecret.Name}}}},
 				{Name: "CLIENT_SECRET", ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: render.ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: ocpSecret.Name}}}},
 			},
@@ -271,7 +265,7 @@ var _ = Describe("dex config tests", func() {
 		Entry("Compare actual and expected Openshift config", ocp),
 	)
 
-	DescribeTable("Test dex connector for Google ", func(secretData map[string][]byte, expectPresent bool) {
+	DescribeTable("Test dex connector for Google ", func(secretData map[string][]byte, expectPresent bool, emailVerification operatorv1.EmailVerificationType) {
 		secret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      render.OIDCSecretName,
@@ -280,11 +274,17 @@ var _ = Describe("dex config tests", func() {
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			Data:     secretData,
 		}
-		dexConfig := render.NewDexConfig(nil, google, dexSecret, secret, dns.DefaultClusterDomain)
+		google.Spec.OIDC.EmailVerification = &emailVerification
+		dexConfig := render.NewDexConfig(nil, google, secret, dns.DefaultClusterDomain)
 		connector := dexConfig.Connector()["config"].(map[string]interface{})
 
 		email, emailFound := connector["adminEmail"]
 		saPath, saFound := connector["serviceAccountFilePath"]
+		if emailVerification == operatorv1.EmailVerificationTypeSkip {
+			Expect(connector["insecureSkipEmailVerified"]).To(Equal(true))
+		} else {
+			Expect(connector["insecureSkipEmailVerified"]).To(Equal(false))
+		}
 		if expectPresent {
 			Expect(email).To(Equal(email))
 			Expect(emailFound).To(BeTrue())
@@ -300,26 +300,39 @@ var _ = Describe("dex config tests", func() {
 			"clientID":             []byte("a.b.com"),
 			"clientSecret":         []byte("my-secret"),
 			"serviceAccountSecret": []byte("my-secret2"),
-		}, true),
+		}, true, nil),
 		Entry("Compare actual and expected OIDC config", map[string][]byte{
 			"clientID":     []byte("a.b.com"),
 			"clientSecret": []byte("my-secret"),
-		}, false),
+		}, false, nil),
 		Entry("Compare actual and expected OIDC config", map[string][]byte{
 			"clientID":             []byte("a.b.com"),
 			"clientSecret":         []byte("my-secret"),
 			"serviceAccountSecret": []byte("my-secret2"),
-		}, false),
+		}, false, nil),
 		Entry("Compare actual and expected OIDC config", map[string][]byte{
 			"adminEmail":   []byte(email),
 			"clientID":     []byte("a.b.com"),
 			"clientSecret": []byte("my-secret"),
-		}, false))
+		}, false, nil),
+		Entry("Check that EmailVerificationTypeSkip is properly propagated", map[string][]byte{
+			"adminEmail":           []byte(email),
+			"clientID":             []byte("a.b.com"),
+			"clientSecret":         []byte("my-secret"),
+			"serviceAccountSecret": []byte("my-secret2"),
+		}, true, operatorv1.EmailVerificationTypeSkip),
+		Entry("Check that EmailVerificationTypeVerify is properly propagated", map[string][]byte{
+			"adminEmail":           []byte(email),
+			"clientID":             []byte("a.b.com"),
+			"clientSecret":         []byte("my-secret"),
+			"serviceAccountSecret": []byte("my-secret2"),
+		}, true, operatorv1.EmailVerificationTypeVerify),
+	)
 
 	DescribeTable("Test values for promptTypes ", func(in []operatorv1.PromptType, result string) {
 		auth := oidc.DeepCopy()
 		auth.Spec.OIDC.PromptTypes = in
-		dexConfig := render.NewDexConfig(nil, auth, dexSecret, idpSecret, dns.DefaultClusterDomain)
+		dexConfig := render.NewDexConfig(nil, auth, idpSecret, dns.DefaultClusterDomain)
 		config, ok := dexConfig.Connector()["config"].(map[string]interface{})
 		Expect(ok).To(BeTrue())
 		if result == "" {

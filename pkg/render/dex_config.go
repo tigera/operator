@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,7 +40,6 @@ const (
 	authenticationAnnotation = "hash.operator.tigera.io/tigera-dex-auth"
 	dexConfigMapAnnotation   = "hash.operator.tigera.io/tigera-dex-config"
 	dexIdpSecretAnnotation   = "hash.operator.tigera.io/tigera-idp-secret"
-	dexSecretAnnotation      = "hash.operator.tigera.io/tigera-dex-secret"
 
 	// Constants related to secrets.
 	serviceAccountSecretField    = "serviceAccountSecret"
@@ -64,7 +63,6 @@ const (
 	googleAdminEmailEnv = "ADMIN_EMAIL"
 	clientIDEnv         = "CLIENT_ID"
 	clientSecretEnv     = "CLIENT_SECRET"
-	dexSecretEnv        = "DEX_SECRET"
 	bindDNEnv           = "BIND_DN"
 	bindPWEnv           = "BIND_PW"
 
@@ -91,17 +89,16 @@ func NewDexKeyValidatorConfig(
 	authentication *oprv1.Authentication,
 	idpSecret *corev1.Secret,
 	clusterDomain string) authentication.KeyValidatorConfig {
-	return &DexKeyValidatorConfig{baseCfg(nil, authentication, nil, idpSecret, clusterDomain)}
+	return &DexKeyValidatorConfig{baseCfg(nil, authentication, idpSecret, clusterDomain)}
 }
 
 // Create a new DexConfig.
 func NewDexConfig(
 	certificateManagement *oprv1.CertificateManagement,
 	authentication *oprv1.Authentication,
-	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
 	clusterDomain string) DexConfig {
-	return &dexConfig{baseCfg(certificateManagement, authentication, dexSecret, idpSecret, clusterDomain)}
+	return &dexConfig{baseCfg(certificateManagement, authentication, idpSecret, clusterDomain)}
 }
 
 type DexKeyValidatorConfig struct {
@@ -124,7 +121,6 @@ type dexConfig struct {
 func baseCfg(
 	certificateManagement *oprv1.CertificateManagement,
 	authentication *oprv1.Authentication,
-	dexSecret *corev1.Secret,
 	idpSecret *corev1.Secret,
 	clusterDomain string) *dexBaseCfg {
 
@@ -151,7 +147,6 @@ func baseCfg(
 		certificateManagement: certificateManagement,
 		authentication:        authentication,
 		idpSecret:             idpSecret,
-		dexSecret:             dexSecret,
 		connectorType:         connType,
 		baseURL:               baseUrl,
 		clusterDomain:         clusterDomain,
@@ -163,7 +158,6 @@ type dexBaseCfg struct {
 	authentication        *oprv1.Authentication
 	tlsSecret             certificatemanagement.KeyPairInterface
 	idpSecret             *corev1.Secret
-	dexSecret             *corev1.Secret
 	baseURL               string
 	connectorType         string
 	clusterDomain         string
@@ -211,24 +205,25 @@ func (d *dexBaseCfg) UsernameClaim() string {
 	return claim
 }
 
-func (d *dexBaseCfg) ClientSecret() []byte {
-	return d.dexSecret.Data[ClientSecretSecretField]
-}
-
 func (d *dexBaseCfg) RequestedScopes() []string {
 	if d.authentication.Spec.OIDC != nil && d.authentication.Spec.OIDC.RequestedScopes != nil {
 		return d.authentication.Spec.OIDC.RequestedScopes
 	}
-	return []string{"openid", "email", "profile"}
+	return []string{
+		// openid: Standard OIDC scope, always required.
+		"openid",
+		// email: This is the one that requests the `email` and `email_verified` claims. It is the most commonly used username claim.
+		"email",
+		// profile: Gets user metadata claims like name, picture, etc.
+		"profile",
+		// offline_access: This claim is necessary for the PKCE flow in order to refresh access_tokens.
+		"offline_access"}
 }
 
 func (d *dexBaseCfg) RequiredSecrets(namespace string) []*corev1.Secret {
 	var secrets []*corev1.Secret
 	if d.tlsSecret != nil {
 		secrets = append(secrets, d.tlsSecret.Secret(namespace))
-	}
-	if d.dexSecret != nil {
-		secrets = append(secrets, secret.CopyToNamespace(namespace, d.dexSecret)...)
 	}
 	if d.idpSecret != nil {
 		secrets = append(secrets, secret.CopyToNamespace(namespace, d.idpSecret)...)
@@ -248,9 +243,6 @@ func (d *dexConfig) RequiredAnnotations() map[string]string {
 
 	if d.idpSecret != nil {
 		annotations[dexIdpSecretAnnotation] = rmeta.AnnotationHash(d.idpSecret.Data)
-	}
-	if d.dexSecret != nil {
-		annotations[dexSecretAnnotation] = rmeta.AnnotationHash(d.dexSecret.Data)
 	}
 	return annotations
 }
@@ -281,9 +273,7 @@ func (d *DexKeyValidatorConfig) RequiredEnv(prefix string) []corev1.EnvVar {
 
 // Append variables that are necessary for configuring dex.
 func (d *dexConfig) RequiredEnv(string) []corev1.EnvVar {
-	env := []corev1.EnvVar{
-		{Name: dexSecretEnv, ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{Key: ClientSecretSecretField, LocalObjectReference: corev1.LocalObjectReference{Name: d.dexSecret.Name}}}},
-	}
+	var env []corev1.EnvVar
 	if d.idpSecret != nil {
 		addIfPresent := func(fieldName, envName string) {
 			if _, found := d.idpSecret.Data[fieldName]; found {
@@ -310,20 +300,18 @@ func (d *dexConfig) RequiredVolumes() []corev1.Volume {
 		},
 	}
 
+	var secretItems []corev1.KeyToPath
 	if d.idpSecret != nil && d.idpSecret.Data[serviceAccountSecretField] != nil {
-		volumes = append(volumes,
-			corev1.Volume{
-				Name:         "secrets",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: d.idpSecret.Name, Items: []corev1.KeyToPath{{Key: serviceAccountSecretField, Path: "google-groups.json"}}}},
-			},
-		)
+		secretItems = append(secretItems, corev1.KeyToPath{Key: serviceAccountSecretField, Path: "google-groups.json"})
 	}
-
 	if d.idpSecret != nil && d.idpSecret.Data[RootCASecretField] != nil {
+		secretItems = append(secretItems, corev1.KeyToPath{Key: RootCASecretField, Path: "idp.pem"})
+	}
+	if len(secretItems) > 0 {
 		volumes = append(volumes,
 			corev1.Volume{
 				Name:         "secrets",
-				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: d.idpSecret.Name, Items: []corev1.KeyToPath{{Key: RootCASecretField, Path: "idp.pem"}}}},
+				VolumeSource: corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{DefaultMode: &defaultMode, SecretName: d.idpSecret.Name, Items: secretItems}},
 			},
 		)
 	}
@@ -411,6 +399,8 @@ func (d *dexConfig) Connector() map[string]interface{} {
 			"clientSecret": fmt.Sprintf("$%s", clientSecretEnv),
 			"redirectURI":  fmt.Sprintf("%s/dex/callback", d.BaseURL()),
 			"scopes":       d.RequestedScopes(),
+			"insecureSkipEmailVerified": d.authentication.Spec.OIDC.EmailVerification != nil &&
+				*d.authentication.Spec.OIDC.EmailVerification == oprv1.EmailVerificationTypeSkip,
 		}
 		if d.idpSecret.Data[serviceAccountSecretField] != nil && d.idpSecret.Data[adminEmailSecretField] != nil {
 			config[serviceAccountFilePathField] = serviceAccountSecretLocation

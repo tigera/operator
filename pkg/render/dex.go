@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -132,6 +132,11 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		c.clusterRoleBinding(),
 		c.configMap(),
 	}
+	objectsToDelete := []client.Object{
+		// Delete the secret called tigera-dex which in the past was used to store a client secret.
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: DexObjectName, Name: DexObjectName}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: common.OperatorNamespace(), Name: DexObjectName}},
+	}
 
 	// TODO Some of the secrets created in the operator namespace are created by the customer (i.e. oidc credentials)
 	// TODO so we can't just do a blanket delete of the secrets in the operator namespace. We need to refactor
@@ -149,10 +154,9 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if c.cfg.DeleteDex {
-		return nil, objs
+		return nil, append(objs, objectsToDelete...)
 	}
-
-	return objs, nil
+	return objs, objectsToDelete
 }
 
 func (c *dexComponent) Ready() bool {
@@ -221,8 +225,9 @@ func (c *dexComponent) clusterRoleBinding() client.Object {
 
 func (c *dexComponent) deployment() client.Object {
 	var initContainers []corev1.Container
+	sc := securitycontext.NewNonRootContext()
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(DexNamespace))
+		initContainers = append(initContainers, c.cfg.TLSKeyPair.InitContainer(DexNamespace, sc))
 	}
 
 	annotations := c.cfg.DexConfig.RequiredAnnotations()
@@ -273,7 +278,7 @@ func (c *dexComponent) deployment() client.Object {
 							ImagePullPolicy: ImagePullPolicy(),
 							Env:             envVars,
 							LivenessProbe:   c.probe(),
-							SecurityContext: securitycontext.NewNonRootContext(),
+							SecurityContext: sc,
 
 							Command: []string{"/usr/bin/dex", "serve", "/etc/dex/baseCfg/config.yaml"},
 
@@ -361,9 +366,11 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 			"allowedOrigins":          []string{"*"},
 			"discoveryAllowedOrigins": []string{"*"},
 			"headers": map[string]string{
-				"X-Content-Type-Options":    "nosniff",
-				"X-XSS-Protection":          "1; mode=block",
-				"X-Frame-Options":           "DENY",
+				"X-Content-Type-Options": "nosniff",
+				"X-XSS-Protection":       "1; mode=block",
+				// Since Dex is running on the same domain as the manager, this will allow an iFrame
+				// to make a silent-callback to refresh access tokens.
+				"X-Frame-Options":           "SAMEORIGIN",
 				"Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 			},
 		},
@@ -377,7 +384,9 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 				"id":           DexClientId,
 				"redirectURIs": c.cfg.DexConfig.RedirectURIs(),
 				"name":         "Calico Enterprise Manager",
-				"secretEnv":    dexSecretEnv,
+				// When public is true, it enables the code PKCE flow as opposed to a client_secret,
+				// which is not secure for SPA.
+				"public": true,
 			},
 		},
 		"expiry": map[string]string{

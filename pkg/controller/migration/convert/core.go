@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -82,8 +82,17 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	}
 
 	if c.kubeControllers != nil {
-		if err := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "ENABLED_CONTROLLERS", "node"); err != nil {
+		value, err := getEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "ENABLED_CONTROLLERS")
+		if err != nil {
 			return err
+		}
+
+		if value != nil && strings.ToLower(*value) != "node" && strings.ToLower(*value) != "node,loadbalancer" {
+			return ErrIncompatibleCluster{
+				err:       fmt.Sprintf("%s=%s is not supported", "ENABLED_CONTROLLERS", *value),
+				component: ComponentKubeControllers,
+				fix:       fmt.Sprintf("remove the %s env var or set it to '%s' or '%s", "ENABLED_CONTROLLERS", "node", "node,loadbalancer"),
+			}
 		}
 
 		if err := assertEnv(ctx, c.client, c.kubeControllers.Spec.Template.Spec, ComponentKubeControllers, containerKubeControllers, "AUTO_HOST_ENDPOINTS", "disabled"); err != nil {

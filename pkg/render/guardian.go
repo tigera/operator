@@ -154,7 +154,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 			CreateNamespace(ManagerNamespace, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
 			managerServiceAccount(ManagerNamespace),
 			managerClusterRole(true, c.cfg.Installation.KubernetesProvider, nil),
-			managerClusterRoleBinding([]string{ManagerNamespace}),
+			managerClusterRoleBinding(nil, []string{ManagerNamespace}, []string{}),
 
 			// Install default UI settings for this managed cluster.
 			managerClusterWideSettingsGroup(),
@@ -339,7 +339,7 @@ func (c *GuardianComponent) deployment() *appsv1.Deployment {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        GuardianDeploymentName,
-					Namespace:   ManagerNamespace,
+					Namespace:   GuardianNamespace,
 					Annotations: c.annotations(),
 				},
 				Spec: corev1.PodSpec{

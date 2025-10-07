@@ -131,6 +131,9 @@ type NodeConfiguration struct {
 	// and sets this.
 	FelixHealthPort int
 
+	// Node's CgroupV2Path override. The controller reads FelixConfiguration and sets this.
+	NodeCgroupV2Path string
+
 	// The bindMode read from the default BGPConfiguration. Used to trigger rolling updates
 	// should this value change.
 	BindMode string
@@ -1254,10 +1257,22 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 		Name:            "mount-bpffs",
 		Image:           c.nodeImage,
 		ImagePullPolicy: ImagePullPolicy(),
+		Env:             c.bpffsEnvvars(),
 		Command:         command,
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    mounts,
 	}
+}
+
+// bpffsEnvvars creates the environment variables for the BPF filesystem init container.
+func (c *nodeComponent) bpffsEnvvars() []corev1.EnvVar {
+	envVars := []corev1.EnvVar{}
+
+	if c.cfg.NodeCgroupV2Path != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: "CALICO_CGROUP_PATH", Value: c.cfg.NodeCgroupV2Path})
+	}
+
+	return envVars
 }
 
 // cniEnvvars creates the CNI container's envvars.

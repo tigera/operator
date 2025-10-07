@@ -965,13 +965,13 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			By("Checking ebpf-bootstrap init container has correct env var")
+			By("Checking mount-bpffs init container has correct env var")
 			calicoNode := &appsv1.DaemonSet{}
 			err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
 			Expect(err).ShouldNot(HaveOccurred())
-			initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
+			initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "mount-bpffs")
 			Expect(initContainer).NotTo(BeNil())
-			Expect(initContainer.Name).To(Equal("ebpf-bootstrap"))
+			Expect(initContainer.Name).To(Equal("mount-bpffs"))
 			Expect(initContainer.Env).To(ContainElements(
 				corev1.EnvVar{Name: "CALICO_CGROUP_PATH", Value: customPath},
 			))

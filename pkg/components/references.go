@@ -22,9 +22,13 @@ import (
 )
 
 // variant is used to differentiate between components across product variants.
+// Components that are shared across variants (e.g. operator) do not specify a variant.
 type variant string
 
-const calicoVariant variant = "calico"
+const (
+	calicoVariant     variant = "calico"
+	enterpriseVariant variant = "tigera"
+)
 
 type Component struct {
 	// Image is the image name for this component (e.g., node, cni)
@@ -49,19 +53,19 @@ const UseDefault = "UseDefault"
 // This is used when no registry is explicitly defined by the component
 // and user does not explicitly specify a registry or imagePath.
 func getDefaults(c Component) (registry string, imagePath string) {
-	switch {
-	// If the component does not specify a variant, it is assumed to be an operator component.
-	case c == ComponentOperatorInit:
-		registry = OperatorRegistry
-		imagePath = OperatorImagePath
+	switch c.variant {
 	// If the component is a Calico component (variant: calico), use the Calico defaults.
-	case c.variant == calicoVariant:
+	case calicoVariant:
 		registry = CalicoRegistry
 		imagePath = CalicoImagePath
-	// Otherwise, it is assumed to be a Tigera component (variant: tigera).
-	default:
+	// If the component is an Enterprise component (variant: enterprise), use the Enterprise defaults.
+	case enterpriseVariant:
 		registry = TigeraRegistry
 		imagePath = TigeraImagePath
+	// Otherwise it is assumed to be an operator component which does not specify a variant.
+	default:
+		registry = OperatorRegistry
+		imagePath = OperatorImagePath
 	}
 	return
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -569,19 +569,24 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec, al)
 		policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
 		tproxyModeSetDesired := fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode
+		wafEventLogsFileEnabled := al != nil && ((al.Spec.SidecarInjection != nil && *al.Spec.SidecarInjection == operatorv1.SidecarEnabled) ||
+			(al.Spec.WebApplicationFirewall != nil && *al.Spec.WebApplicationFirewall == operatorv1.WAFEnabled))
+		wafEventLogsFileEnabledDesired := fc.Spec.WAFEventLogsFileEnabled != nil && *fc.Spec.WAFEventLogsFileEnabled == wafEventLogsFileEnabled
 
 		// If tproxy mode is already set to desired state return false to indicate patch not needed.
-		if policySyncPrefixSetDesired && tproxyModeSetDesired {
+		if policySyncPrefixSetDesired && tproxyModeSetDesired && wafEventLogsFileEnabledDesired {
 			return false, nil
 		}
 
 		fc.Spec.TPROXYMode = &tproxyMode
 		fc.Spec.PolicySyncPathPrefix = policySyncPrefix
+		fc.Spec.WAFEventLogsFileEnabled = &wafEventLogsFileEnabled
 
 		log.Info(
 			"Patching FelixConfiguration: ",
 			"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
 			"tproxyMode", string(tproxyMode),
+			"wafEventLogsFileEnabled", wafEventLogsFileEnabled,
 		)
 		return true, nil
 	})

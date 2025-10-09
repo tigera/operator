@@ -413,7 +413,7 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 		if err != nil {
 			return err
 		}
-		pr.L7LogCollectorImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, is)
+		pr.L7LogCollectorImage, err = components.GetReference(components.ComponentGatewayL7Collector, reg, path, prefix, is)
 		if err != nil {
 			return err
 		}
@@ -753,8 +753,8 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				Image: pr.L7LogCollectorImage,
 				Env: []corev1.EnvVar{
 					{
-						Name:  "ENABLE_LOG_TAIL",
-						Value: "true",
+						Name:  "LOG_LEVEL",
+						Value: "Info",
 					},
 					{
 						Name:  "FELIX_DIAL_TARGET",

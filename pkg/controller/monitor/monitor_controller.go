@@ -67,9 +67,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	prometheusReady := &utils.ReadyFlag{}
 	tierWatchReady := &utils.ReadyFlag{}
+	ssReady := &utils.ReadyFlag{}
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady)
+	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady, ssReady)
 
 	// Create a new controller
 	c, err := ctrlruntime.NewController("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
@@ -86,17 +87,24 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
 	}
 
+	statefulsets := []types.NamespacedName{
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
+		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
+	}
+
 	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
 	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, tierWatchReady)
 
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, policyNames)
+
+	go utils.WaitToAddStatefulSetWatches(c, opts.K8sClientset, log, ssReady, statefulsets)
 
 	go waitToAddPrometheusWatch(c, opts.K8sClientset, log, prometheusReady)
 
 	return add(mgr, c)
 }
 
-func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady, tierWatchReady, ssReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileMonitor{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
@@ -104,6 +112,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions, prometheusReady
 		status:          status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
 		prometheusReady: prometheusReady,
 		tierWatchReady:  tierWatchReady,
+		ssReady:         ssReady,
 		clusterDomain:   opts.ClusterDomain,
 		multiTenant:     opts.MultiTenant,
 	}
@@ -186,6 +195,7 @@ type ReconcileMonitor struct {
 	status          status.StatusManager
 	prometheusReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
+	ssReady         *utils.ReadyFlag
 	clusterDomain   string
 	multiTenant     bool
 }
@@ -265,6 +275,12 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	if !r.prometheusReady.IsReady() {
 		err = fmt.Errorf("waiting for Prometheus resources")
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Prometheus resources to be ready", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if !r.ssReady.IsReady() {
+		err = fmt.Errorf("waiting for Prometheus statefulsets")
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Prometheus statefulsets to be created", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

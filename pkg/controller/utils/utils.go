@@ -272,6 +272,18 @@ func WaitToAddTierWatch(tierName string, controller ctrlruntime.Controller, c ku
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{obj})
 }
 
+func WaitToAddStatefulSetWatches(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, statefulsets []types.NamespacedName) {
+	objs := []client.Object{}
+	for _, ss := range statefulsets {
+		objs = append(objs, &appsv1.StatefulSet{
+			TypeMeta:   metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "V1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ss.Name, Namespace: ss.Namespace},
+		})
+	}
+
+	WaitToAddResourceWatch(controller, c, log, flag, objs)
+}
+
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.

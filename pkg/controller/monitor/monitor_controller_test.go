@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -95,6 +95,7 @@ var _ = Describe("Monitor controller tests", func() {
 			status:          mockStatus,
 			prometheusReady: &utils.ReadyFlag{},
 			tierWatchReady:  &utils.ReadyFlag{},
+			ssReady:         &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -133,6 +134,7 @@ var _ = Describe("Monitor controller tests", func() {
 		// Mark that watches were successful.
 		r.prometheusReady.MarkAsReady()
 		r.tierWatchReady.MarkAsReady()
+		r.ssReady.MarkAsReady()
 	})
 
 	Context("controller reconciliation", func() {

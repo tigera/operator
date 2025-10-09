@@ -903,6 +903,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		annotations[c.cfg.PrometheusServerTLS.HashAnnotationKey()] = c.cfg.PrometheusServerTLS.HashAnnotationValue()
 	}
 
+	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
+		initContainers = append(initContainers, c.cniContainer())
+	}
+
 	if c.cfg.TLS.NodeSecret.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace, nodeContainer.SecurityContext))
 	}
@@ -1019,10 +1023,6 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 			},
 			UpdateStrategy: c.cfg.Installation.NodeUpdateStrategy,
 		},
-	}
-
-	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
-		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
 	if c.collectProcessPathEnabled() {

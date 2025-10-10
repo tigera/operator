@@ -13,6 +13,6 @@
 // limitations under the License.
 
 // +k8s:deepcopy-gen=package,register
-// +groupName=crd.projectcalico.org
+// +groupName=projectcalico.org
 
 package v1

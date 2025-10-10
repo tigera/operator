@@ -387,8 +387,9 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 		},
 		{
 			// Pools are watched to maintain a mapping of blocks to IP pools.
+			// NetworkPolicies are watched for defaulting.
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"ippools"},
+			Resources: []string{"ippools", "networkpolicies", "globalnetworkpolicies"},
 			Verbs:     []string{"list", "watch", "update"},
 		},
 		{

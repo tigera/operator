@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tigera-prometheus
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: alertmanager-calico-node-alertmanager
+  namespace: tigera-prometheus
+  labels:
+    app: alertmanager
+    alertmanager: calico-node-alertmanager
+spec:
+  replicas: 0
+  serviceName: alertmanager-calico-node-alertmanager
+  selector:
+    matchLabels:
+      app: alertmanager
+      alertmanager: calico-node-alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+        alertmanager: calico-node-alertmanager
+    spec:
+      containers:
+      - name: alertmanager
+        image: quay.io/tigera/alertmanager:v3.21.2

@@ -216,7 +216,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
 					components.ComponentIntrusionDetectionController.Image,
 					components.ComponentIntrusionDetectionController.Version)))
 
@@ -282,7 +283,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
 					components.ComponentIntrusionDetectionController.Image,
 					"sha256:intrusiondetectioncontrollerhash")))
 
@@ -298,7 +300,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			dpiContainer := test.GetContainer(ds.Spec.Template.Spec.Containers, dpi.DeepPacketInspectionName)
 			Expect(dpiContainer).ToNot(BeNil())
 			Expect(dpiContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
 					components.ComponentDeepPacketInspection.Image,
 					"sha256:deeppacketinspectionhash")))
 		})
@@ -426,7 +429,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
 			pullSecret := pullSecrets.OwnerReferences[0]
 			Expect(pullSecret.Kind).To(Equal("IntrusionDetection"))
-
 		})
 
 		It("should Reconcile with default values for intrusion detection resource", func() {
@@ -707,7 +709,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 	})
 
 	Context("Multi-tenant mode", func() {
-		var tenantANamespace = "tenantANamespace"
+		tenantANamespace := "tenantANamespace"
 
 		BeforeEach(func() {
 			mockStatus = &status.MockStatus{}

@@ -17,6 +17,7 @@ package test
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -121,7 +122,7 @@ var _ = Describe("Tests for Whisker installation", func() {
 		operatorDone = createInstallation(c, mgr, shutdownContext, nil)
 		verifyCalicoHasDeployed(c)
 
-		By("Creating a CRD resource not named default")
+		By("Creating a Whisker and Goldmane resource")
 		whiskerCR := &operator.Whisker{
 			TypeMeta:   metav1.TypeMeta{Kind: "Whisker", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -149,20 +150,11 @@ var _ = Describe("Tests for Whisker installation", func() {
 		Eventually(func() error {
 			Expect(GetResource(c, install)).To(BeNil())
 			fmt.Println("Finalizers: ", install.ObjectMeta.Finalizers)
-			if containsFinalizer(install.ObjectMeta.Finalizers, render.WhiskerFinalizer) ||
-				containsFinalizer(install.ObjectMeta.Finalizers, render.GoldmaneFinalizer) {
+			if slices.Contains(install.ObjectMeta.Finalizers, render.WhiskerFinalizer) ||
+				slices.Contains(install.ObjectMeta.Finalizers, render.GoldmaneFinalizer) {
 				return fmt.Errorf("expected finalizers to be removed, but found: %v", install.ObjectMeta.Finalizers)
 			}
 			return nil
 		}, 1*time.Minute, 1*time.Second).Should(BeNil())
 	})
 })
-
-func containsFinalizer(finalizers []string, finalizer string) bool {
-	for _, f := range finalizers {
-		if f == finalizer {
-			return true
-		}
-	}
-	return false
-}

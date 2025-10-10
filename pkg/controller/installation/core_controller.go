@@ -1467,28 +1467,31 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
-		GoldmaneRunning:               goldmaneRunning,
-		K8sServiceEp:                  k8sapi.Endpoint,
-		Installation:                  &instance.Spec,
-		IPPools:                       crdPoolsToOperator(currentPools.Items),
-		LogCollector:                  logCollector,
-		BirdTemplates:                 birdTemplates,
-		TLS:                           typhaNodeTLS,
-		ClusterDomain:                 r.clusterDomain,
-		DefaultDNSPolicy:              defaultDNSPolicy,
-		DefaultDNSConfig:              defaultDNSConfig,
-		GoldmaneIP:                    goldmaneIP,
-		NodeReporterMetricsPort:       nodeReporterMetricsPort,
-		BGPLayouts:                    bgpLayout,
-		NodeAppArmorProfile:           nodeAppArmorProfile,
-		MigrateNamespaces:             needNsMigration,
-		CanRemoveCNIFinalizer:         canRemoveCNI,
-		PrometheusServerTLS:           nodePrometheusTLS,
-		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
-		NodeCgroupV2Path:              felixConfiguration.Spec.CgroupV2Path,
-		BindMode:                      bgpConfiguration.Spec.BindMode,
+		GoldmaneRunning:         goldmaneRunning,
+		K8sServiceEp:            k8sapi.Endpoint,
+		Installation:            &instance.Spec,
+		IPPools:                 crdPoolsToOperator(currentPools.Items),
+		LogCollector:            logCollector,
+		BirdTemplates:           birdTemplates,
+		TLS:                     typhaNodeTLS,
+		ClusterDomain:           r.clusterDomain,
+		DefaultDNSPolicy:        defaultDNSPolicy,
+		DefaultDNSConfig:        defaultDNSConfig,
+		GoldmaneIP:              goldmaneIP,
+		NodeReporterMetricsPort: nodeReporterMetricsPort,
+		BGPLayouts:              bgpLayout,
+		NodeAppArmorProfile:     nodeAppArmorProfile,
+		MigrateNamespaces:       needNsMigration,
+		CanRemoveCNIFinalizer:   canRemoveCNI,
+		PrometheusServerTLS:     nodePrometheusTLS,
+		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
+		// NodeCgroupV2Path:              felixConfiguration.Spec.CgroupV2Path,
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
+	}
+
+	if bgpConfiguration.Spec.BindMode != nil {
+		nodeCfg.BindMode = string(*bgpConfiguration.Spec.BindMode)
 	}
 
 	// Check if BPFNetworkBootstrap is Enabled and its requirements are met.

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package gatewayapi
 
 import (
 	_ "embed"
@@ -26,10 +26,12 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -38,6 +40,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/set"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 )
@@ -47,6 +50,8 @@ var (
 	gatewayAPIResourcesYAML string
 
 	AccessLogType envoyapi.ProxyAccessLogType = "Route"
+
+	log = logf.Log.WithName("gateway_api")
 )
 
 type yamlKind struct {
@@ -57,24 +62,25 @@ type yamlKind struct {
 // This struct defines all of the resources that we expect to read from the rendered Envoy Gateway
 // helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
-	namespace                 *corev1.Namespace
-	k8sCRDs                   []*apiextenv1.CustomResourceDefinition
-	envoyCRDs                 []*apiextenv1.CustomResourceDefinition
-	controllerServiceAccount  *corev1.ServiceAccount
-	envoyGatewayConfigMap     *corev1.ConfigMap
-	envoyGatewayConfig        *envoyapi.EnvoyGateway
-	clusterRole               *rbacv1.ClusterRole
-	clusterRoleBinding        *rbacv1.ClusterRoleBinding
-	role                      *rbacv1.Role
-	roleBinding               *rbacv1.RoleBinding
-	leaderElectionRole        *rbacv1.Role
-	leaderElectionRoleBinding *rbacv1.RoleBinding
-	controllerService         *corev1.Service
-	controllerDeployment      *appsv1.Deployment
-	certgenServiceAccount     *corev1.ServiceAccount
-	certgenRole               *rbacv1.Role
-	certgenRoleBinding        *rbacv1.RoleBinding
-	certgenJob                *batchv1.Job
+	namespace                     *corev1.Namespace
+	k8sCRDs                       []*apiextenv1.CustomResourceDefinition
+	envoyCRDs                     []*apiextenv1.CustomResourceDefinition
+	controllerServiceAccount      *corev1.ServiceAccount
+	envoyGatewayConfigMap         *corev1.ConfigMap
+	envoyGatewayConfig            *envoyapi.EnvoyGateway
+	clusterRoles                  []*rbacv1.ClusterRole
+	clusterRoleBindings           []*rbacv1.ClusterRoleBinding
+	role                          *rbacv1.Role
+	roleBinding                   *rbacv1.RoleBinding
+	leaderElectionRole            *rbacv1.Role
+	leaderElectionRoleBinding     *rbacv1.RoleBinding
+	controllerService             *corev1.Service
+	controllerDeployment          *appsv1.Deployment
+	certgenServiceAccount         *corev1.ServiceAccount
+	certgenRole                   *rbacv1.Role
+	certgenRoleBinding            *rbacv1.RoleBinding
+	certgenJob                    *batchv1.Job
+	mutatingWebhookConfigurations []*admissionregv1.MutatingWebhookConfiguration
 }
 
 const (
@@ -136,7 +142,7 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
-					if strings.HasSuffix(obj.Name, ".gateway.networking.k8s.io") {
+					if strings.HasSuffix(obj.Name, ".gateway.networking.k8s.io") || strings.HasSuffix(obj.Name, ".gateway.networking.x-k8s.io") {
 						resources.k8sCRDs = append(resources.k8sCRDs, obj)
 					} else if strings.HasSuffix(obj.Name, ".gateway.envoyproxy.io") {
 						resources.envoyCRDs = append(resources.envoyCRDs, obj)
@@ -176,21 +182,17 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 						panic("can't unmarshal EnvoyGateway from envoy-gateway-config ConfigMap from gateway API YAML")
 					}
 				case "rbac.authorization.k8s.io/v1/ClusterRole":
-					if resources.clusterRole != nil {
-						panic("already read a ClusterRole from gateway API YAML")
-					}
-					resources.clusterRole = &rbacv1.ClusterRole{}
-					if err := yaml.Unmarshal([]byte(yml), resources.clusterRole); err != nil {
+					obj := &rbacv1.ClusterRole{}
+					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
+					resources.clusterRoles = append(resources.clusterRoles, obj)
 				case "rbac.authorization.k8s.io/v1/ClusterRoleBinding":
-					if resources.clusterRoleBinding != nil {
-						panic("already read a ClusterRoleBinding from gateway API YAML")
-					}
-					resources.clusterRoleBinding = &rbacv1.ClusterRoleBinding{}
-					if err := yaml.Unmarshal([]byte(yml), resources.clusterRoleBinding); err != nil {
+					obj := &rbacv1.ClusterRoleBinding{}
+					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
+					resources.clusterRoleBindings = append(resources.clusterRoleBindings, obj)
 				case "rbac.authorization.k8s.io/v1/Role":
 					obj := &rbacv1.Role{}
 					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
@@ -257,6 +259,12 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 					if err := yaml.Unmarshal([]byte(yml), resources.certgenJob); err != nil {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
+				case "admissionregistration.k8s.io/v1/MutatingWebhookConfiguration":
+					obj := &admissionregv1.MutatingWebhookConfiguration{}
+					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
+						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
+					}
+					resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, obj)
 				case "/":
 					// No-op.  We see this when there is only a comment between
 					// two "---" delimiters.
@@ -269,8 +277,8 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 			if resources.namespace == nil {
 				panic("missing Namespace from gateway API YAML")
 			}
-			if len(resources.k8sCRDs) != 10 {
-				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 10)", len(resources.k8sCRDs)))
+			if len(resources.k8sCRDs) != 11 {
+				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 11)", len(resources.k8sCRDs)))
 			}
 			if len(resources.envoyCRDs) != 8 {
 				panic(fmt.Sprintf("missing/extra envoy CRDs from gateway API YAML (%v != 8)", len(resources.envoyCRDs)))
@@ -281,10 +289,10 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 			if resources.envoyGatewayConfig == nil {
 				panic("missing envoy-gateway-config from gateway API YAML")
 			}
-			if resources.clusterRole == nil {
+			if len(resources.clusterRoles) == 0 {
 				panic("missing ClusterRole from gateway API YAML")
 			}
-			if resources.clusterRoleBinding == nil {
+			if len(resources.clusterRoleBindings) == 0 {
 				panic("missing ClusterRoleBinding from gateway API YAML")
 			}
 			if resources.role == nil {
@@ -384,7 +392,7 @@ type gatewayAPIImplementationComponent struct {
 	L7LogCollectorImage string
 }
 
-func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) Component {
+func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) render.Component {
 	return &gatewayAPIImplementationComponent{
 		cfg: cfg,
 	}
@@ -448,16 +456,16 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// First create the namespace.  We take the name from the read resources, but otherwise
 	// follow our own pattern for namespace creation.
 	objs := []client.Object{
-		CreateNamespace(
+		render.CreateNamespace(
 			resources.namespace.Name,
 			pr.cfg.Installation.KubernetesProvider,
-			PSSPrivileged, // Needed for HostPath volume to write logs to
+			render.PSSPrivileged, // Needed for HostPath volume to write logs to
 			pr.cfg.Installation.Azure,
 		),
 	}
 
 	// Create role binding to allow creating secrets in our namespace.
-	objs = append(objs, CreateOperatorSecretsRoleBinding(resources.namespace.Name))
+	objs = append(objs, render.CreateOperatorSecretsRoleBinding(resources.namespace.Name))
 
 	// Add pull secrets (inferred from the Installation resource).
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)
@@ -465,8 +473,21 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
 	for _, resource := range []client.Object{
 		resources.controllerServiceAccount,
-		resources.clusterRole,
-		resources.clusterRoleBinding,
+	} {
+		// But deep-copy each one so as not to inadvertently modify the cache inside
+		// `GatewayAPIResourcesGetter`.
+		objs = append(objs, resource.DeepCopyObject().(client.Object))
+	}
+	for _, cr := range resources.clusterRoles {
+		objs = append(objs, cr.DeepCopyObject().(client.Object))
+	}
+	for _, crb := range resources.clusterRoleBindings {
+		objs = append(objs, crb.DeepCopyObject().(client.Object))
+	}
+	for _, mwc := range resources.mutatingWebhookConfigurations {
+		objs = append(objs, mwc.DeepCopyObject().(client.Object))
+	}
+	for _, resource := range []client.Object{
 		resources.role,
 		resources.roleBinding,
 		resources.leaderElectionRole,
@@ -753,20 +774,12 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				Image: pr.L7LogCollectorImage,
 				Env: []corev1.EnvVar{
 					{
-						Name:  "ENABLE_LOG_TAIL",
-						Value: "true",
+						Name:  "LOG_LEVEL",
+						Value: "info",
 					},
 					{
 						Name:  "FELIX_DIAL_TARGET",
 						Value: "/var/run/felix/nodeagent/socket",
-					},
-					{
-						Name:  "LISTEN_ADDRESS",
-						Value: ":8080",
-					},
-					{
-						Name:  "LISTEN_NETWORK",
-						Value: "tcp",
 					},
 					{
 						Name:  "ENVOY_ACCESS_LOG_PATH",

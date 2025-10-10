@@ -217,3 +217,5 @@ spec:
 1. Commit everything and post as a `projectcalico/calico` PR.
 
 1. Review, address issues, merge, monitor hashrelease builds, address any further issues, etc.
+
+1. If everything looks good and the update is successful, send a pull request to the [docs repository](https://github.com/tigera/docs) to update any relevant documentation with the new Envoy Gateway version information.

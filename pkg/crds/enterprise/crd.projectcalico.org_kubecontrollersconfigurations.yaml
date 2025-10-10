@@ -61,6 +61,8 @@ spec:
                                     items:
                                       type: string
                                     type: array
+                                  interfacePattern:
+                                    type: string
                                   labels:
                                     additionalProperties:
                                       type: string
@@ -150,6 +152,8 @@ spec:
                                         items:
                                           type: string
                                         type: array
+                                      interfacePattern:
+                                        type: string
                                       labels:
                                         additionalProperties:
                                           type: string

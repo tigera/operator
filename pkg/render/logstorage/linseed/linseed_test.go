@@ -273,7 +273,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			deploy, ok := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue(), "Deployment not found")
 			Expect(deploy.Spec.Template.Spec.Affinity).NotTo(BeNil())
-			Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity(DeploymentName, render.ElasticsearchNamespace)))
+			Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity(DeploymentName, []string{render.ElasticsearchNamespace})))
 		})
 
 		It("should apply controlPlaneNodeSelector correctly", func() {
@@ -595,6 +595,30 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_WAF_LOGS_BASE_INDEX_NAME", Value: "calico_waflogs_standard"}))
 		})
 
+		Describe("product variant", func() {
+			It("should set LINSEED_PRODUCT_VARIANT to oss", func() {
+				cfg.ManagementCluster = true
+				cfg.Tenant.Spec.ManagedClusterVariant = &operatorv1.Calico
+				resources, _ := Linseed(cfg).Objects()
+				d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+				Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_PRODUCT_VARIANT", Value: string(operatorv1.Calico)}))
+			})
+			It("should set LINSEED_PRODUCT_VARIANT to enterprise", func() {
+				cfg.ManagementCluster = true
+				cfg.Tenant.Spec.ManagedClusterVariant = &operatorv1.TigeraSecureEnterprise
+				resources, _ := Linseed(cfg).Objects()
+				d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+				Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_PRODUCT_VARIANT", Value: string(operatorv1.TigeraSecureEnterprise)}))
+			})
+			It("should not panic if ManagedClusterVariant is not set", func() {
+				cfg.ManagementCluster = true
+				cfg.Tenant.Spec.ManagedClusterVariant = nil
+				resources, _ := Linseed(cfg).Objects()
+				d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+				Expect(d).ToNot(BeNil())
+			})
+		})
+
 		It("should override replicas with the value from TenantSpec's controlPlaneReplicas when available", func() {
 			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.Int32ToPtr(3)
 			component := Linseed(cfg)
@@ -612,7 +636,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			resources, _ := component.Objects()
 			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Affinity).NotTo(BeNil())
-			Expect(d.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity(DeploymentName, tenant.Namespace)))
+			Expect(d.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity(DeploymentName, []string{tenant.Namespace})))
 		})
 
 		It("should override resource request with the value from TenantSpec's linseedDeployment when available", func() {

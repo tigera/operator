@@ -24,13 +24,11 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/apiserver/pkg/authentication/serviceaccount"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
@@ -55,13 +53,12 @@ const (
 	KubeControllerMetrics           = "calico-kube-controllers-metrics"
 	KubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "kube-controller-access"
 
-	EsKubeController                                = "es-calico-kube-controllers"
-	EsKubeControllerRole                            = "es-calico-kube-controllers"
-	EsKubeControllerRoleBinding                     = "es-calico-kube-controllers"
-	EsKubeControllerMetrics                         = "es-calico-kube-controllers-metrics"
-	EsKubeControllerNetworkPolicyName               = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
-	MultiTenantManagedClustersAccessRoleBindingName = "es-calico-kube-controllers-managed-cluster-access"
-	ManagedClustersWatchRoleBindingName             = "es-calico-kube-controllers-managed-cluster-watch"
+	EsKubeController                    = "es-calico-kube-controllers"
+	EsKubeControllerRole                = "es-calico-kube-controllers"
+	EsKubeControllerRoleBinding         = "es-calico-kube-controllers"
+	EsKubeControllerMetrics             = "es-calico-kube-controllers-metrics"
+	EsKubeControllerNetworkPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
+	ManagedClustersWatchRoleBindingName = "es-calico-kube-controllers-managed-cluster-watch"
 
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
 	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
@@ -156,26 +153,6 @@ func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration) render.Co
 func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
 	var kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
 	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, EsKubeController)
-	if cfg.Tenant.MultiTenant() {
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, []rbacv1.PolicyRule{
-			{
-				APIGroups:     []string{""},
-				Resources:     []string{"serviceaccounts"},
-				Verbs:         []string{"impersonate"},
-				ResourceNames: []string{KubeControllerServiceAccount},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"groups"},
-				Verbs:     []string{"impersonate"},
-				ResourceNames: []string{
-					serviceaccount.AllServiceAccountsGroup,
-					"system:authenticated",
-					fmt.Sprintf("%s%s", serviceaccount.ServiceAccountGroupPrefix, common.CalicoNamespace),
-				},
-			},
-		}...)
-	}
 
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
@@ -184,12 +161,6 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
 				Resources: []string{"elasticsearches"},
 				Verbs:     []string{"watch", "get", "list"},
-			},
-			// Grant update permissions to allow updating the version information in ManagedCluster resources.
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"update"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"rbac.authorization.k8s.io"},
@@ -203,29 +174,25 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 
 	var enabledControllers []string
 	if !cfg.Tenant.MultiTenant() {
+		// Zero and single tenant cluster needs elasticsearch configuration
 		enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
-		if cfg.ManagementCluster != nil {
-			// The clusterinfo controller updates the managed cluster's version information
-			// in the ManagedCluster resource in an MCM setup.
-			enabledControllers = append(enabledControllers, "managedcluster", "clusterinfo")
+		if cfg.ManagementCluster != nil && cfg.Tenant == nil {
+			// Enterprise will require the managedcluster controller to push licenses
+			enabledControllers = append(enabledControllers, "managedcluster")
 		}
-	} else if !cfg.Tenant.ManagedClusterIsCalico() {
-		// Calico OSS Managed clusters do not need the license controller.
-		enabledControllers = append(enabledControllers, "managedclusterlicensing", "clusterinfo")
 	}
 
 	return &kubeControllersComponent{
-		cfg:                                 cfg,
-		kubeControllerServiceAccountName:    KubeControllerServiceAccount,
-		kubeControllerRoleName:              EsKubeControllerRole,
-		kubeControllerRoleBindingName:       EsKubeControllerRoleBinding,
-		kubeControllerName:                  EsKubeController,
-		kubeControllerConfigName:            "elasticsearch",
-		kubeControllerMetricsName:           EsKubeControllerMetrics,
-		kubeControllersRules:                kubeControllerRolePolicyRules,
-		additionalManagedClusterClusterRole: cfg.Tenant.MultiTenant(),
-		kubeControllerAllowTigeraPolicy:     kubeControllerAllowTigeraPolicy,
-		enabledControllers:                  enabledControllers,
+		cfg:                              cfg,
+		kubeControllerServiceAccountName: KubeControllerServiceAccount,
+		kubeControllerRoleName:           EsKubeControllerRole,
+		kubeControllerRoleBindingName:    EsKubeControllerRoleBinding,
+		kubeControllerName:               EsKubeController,
+		kubeControllerConfigName:         "elasticsearch",
+		kubeControllerMetricsName:        EsKubeControllerMetrics,
+		kubeControllersRules:             kubeControllerRolePolicyRules,
+		kubeControllerAllowTigeraPolicy:  kubeControllerAllowTigeraPolicy,
+		enabledControllers:               enabledControllers,
 	}
 }
 
@@ -243,9 +210,8 @@ type kubeControllersComponent struct {
 	kubeControllerConfigName         string
 	kubeControllerMetricsName        string
 
-	kubeControllersRules                []rbacv1.PolicyRule
-	additionalManagedClusterClusterRole bool
-	kubeControllerAllowTigeraPolicy     *v3.NetworkPolicy
+	kubeControllersRules            []rbacv1.PolicyRule
+	kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
 
 	enabledControllers []string
 }
@@ -277,12 +243,6 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 
 	if c.kubeControllerAllowTigeraPolicy != nil {
 		objectsToCreate = append(objectsToCreate, c.kubeControllerAllowTigeraPolicy)
-	}
-
-	// We only want to create this additional ClusterRole and ClusterRoleBinding
-	// in a multi-tenant setup only for ES-Kube-Controllers
-	if c.additionalManagedClusterClusterRole {
-		objectsToCreate = append(objectsToCreate, c.multiTenantManagedClustersAccess()...)
 	}
 
 	objectsToCreate = append(objectsToCreate,
@@ -320,35 +280,6 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	}
 
 	return objectsToCreate, objectsToDelete
-}
-
-func (c *kubeControllersComponent) multiTenantManagedClustersAccess() []client.Object {
-	var objects []client.Object
-
-	// In a multi-tenant setup ES-Kube-Controllers from the tenant's namespace impersonates service
-	// calico-kube-controllers from calico-system namespace. (This is done via an additional ClusterRole and a
-	// ClusterRoleBinding)
-	objects = append(objects, &rbacv1.RoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: MultiTenantManagedClustersAccessRoleBindingName, Namespace: c.cfg.Namespace},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     render.MultiTenantManagedClustersAccessClusterRoleName,
-		},
-		Subjects: []rbacv1.Subject{
-			// requests for ES-Kube-Controllers to get managed clusters in Voltron are done using service account
-			// calico-kube-controllers from calico-system namespace regardless of tenancy mode (zero-tenant, single-tenant
-			// or multi-tenant)
-			{
-				Kind:      "ServiceAccount",
-				Name:      KubeControllerServiceAccount,
-				Namespace: common.CalicoNamespace,
-			},
-		},
-	})
-
-	return objects
 }
 
 func (c *kubeControllersComponent) Ready() bool {
@@ -418,6 +349,12 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Resources: []string{"tiers"},
 			Verbs:     []string{"create"},
 		},
+		{
+			// Namespaces are watched for LoadBalancer IP allocation with namespace selector support
+			APIGroups: []string{""},
+			Resources: []string{"namespaces"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}
 
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {
@@ -481,12 +418,6 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
-			// Grant permissions to access ClusterInformation resources in managed clusters.
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"clusterinformations"},
-				Verbs:     []string{"get", "list", "watch"},
 			},
 		)
 	}
@@ -555,10 +486,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.cfg.Tenant != nil {
 			env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
-			if c.cfg.Tenant.MultiTenant() {
-				env = append(env, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
-				env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(c.cfg.Tenant)})
-			}
 		}
 
 		if c.kubeControllerName == EsKubeController {
@@ -648,7 +575,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	var initContainers []corev1.Container
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace, sc))
 	}
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
@@ -688,15 +615,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		},
 	}
 
-	if !c.cfg.Tenant.MultiTenant() {
-		render.SetClusterCriticalPod(&d.Spec.Template)
-	}
+	render.SetClusterCriticalPod(&d.Spec.Template)
 
-	if c.cfg.Tenant.MultiTenant() {
-		if overrides := c.cfg.Tenant.Spec.ESKubeControllerDeployment; overrides != nil {
-			rcomp.ApplyDeploymentOverrides(&d, overrides)
-		}
-	} else if overrides := c.cfg.Installation.CalicoKubeControllersDeployment; overrides != nil {
+	if overrides := c.cfg.Installation.CalicoKubeControllersDeployment; overrides != nil {
 		rcomp.ApplyDeploymentOverrides(&d, overrides)
 	}
 	return &d
@@ -728,14 +649,8 @@ func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.Clust
 
 func (c *kubeControllersComponent) managedClusterRoleBindings() []client.Object {
 	if c.cfg.ManagementCluster != nil {
-		if c.cfg.Tenant.MultiTenant() {
-			return []client.Object{
-				rcomp.RoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, c.cfg.Namespace),
-			}
-		} else {
-			return []client.Object{
-				rcomp.ClusterRoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, []string{c.cfg.Namespace}),
-			}
+		return []client.Object{
+			rcomp.ClusterRoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, []string{c.cfg.Namespace}),
 		}
 	}
 	return []client.Object{}
@@ -897,15 +812,13 @@ func esKubeControllersAllowTigeraPolicy(cfg *KubeControllersConfiguration) *v3.N
 		},
 	}...)
 
-	if !cfg.Tenant.MultiTenant() {
-		egressRules = append(egressRules, []v3.Rule{
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
-			},
-		}...)
-	}
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
+		},
+	}...)
 
 	networkpolicyHelper := networkpolicy.Helper(cfg.Tenant.MultiTenant(), cfg.Namespace)
 	egressRules = append(egressRules, []v3.Rule{

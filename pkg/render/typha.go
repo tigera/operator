@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -387,11 +388,13 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 	//   so we shouldn't get a "thundering herd".
 	maxSurge := intstr.FromString("100%")
 
+	typhaContainer := c.typhaContainer()
+
 	annotations := c.cfg.TLS.TrustedBundle.HashAnnotations()
 	annotations[c.cfg.TLS.TyphaSecret.HashAnnotationKey()] = c.cfg.TLS.TyphaSecret.HashAnnotationValue()
 	var initContainers []corev1.Container
 	if c.cfg.TLS.TyphaSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLS.TyphaSecret.InitContainer(common.CalicoNamespace))
+		initContainers = append(initContainers, c.cfg.TLS.TyphaSecret.InitContainer(common.CalicoNamespace, typhaContainer.SecurityContext))
 	}
 
 	// Include annotation for prometheus scraping configuration.
@@ -436,7 +439,7 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
 					InitContainers:                initContainers,
-					Containers:                    []corev1.Container{c.typhaContainer()},
+					Containers:                    []corev1.Container{typhaContainer},
 					Volumes:                       c.volumes(),
 				},
 			},

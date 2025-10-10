@@ -179,9 +179,10 @@ func (d *dpiComponent) SupportedOSType() meta.OSType {
 
 func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = 0
+	container := d.dpiContainer()
 	var initContainers []corev1.Container
 	if d.cfg.TyphaNodeTLS.NodeSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace))
+		initContainers = append(initContainers, d.cfg.TyphaNodeTLS.NodeSecret.InitContainer(DeepPacketInspectionNamespace, container.SecurityContext))
 	}
 	if d.dpiInitContainers() {
 		for _, initContainer := range d.cfg.IntrusionDetection.Spec.DeepPacketInspectionDaemonset.Spec.Template.Spec.InitContainers {
@@ -216,7 +217,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 			// Adjust DNS policy so we can access in-cluster services.
 			DNSPolicy:      corev1.DNSClusterFirstWithHostNet,
 			InitContainers: initContainers,
-			Containers:     []corev1.Container{d.dpiContainer()},
+			Containers:     []corev1.Container{container},
 			Volumes:        d.dpiVolumes(),
 		},
 	}

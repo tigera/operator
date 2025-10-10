@@ -82,7 +82,7 @@ type InstallationSpec struct {
 	// If the specified value is not empty, the Operator will still attempt auto-detection, but
 	// will additionally compare the auto-detected value to the specified value to confirm they match.
 	// +optional
-	// +kubebuilder:validation:Enum="";EKS;GKE;AKS;OpenShift;DockerEnterprise;RKE2;TKG;
+	// +kubebuilder:validation:Enum="";EKS;GKE;AKS;OpenShift;DockerEnterprise;RKE2;TKG;Kind;
 	KubernetesProvider Provider `json:"kubernetesProvider,omitempty"`
 
 	// CNI specifies the CNI that will be used by this installation.
@@ -162,17 +162,21 @@ type InstallationSpec struct {
 
 	// CalicoNodeDaemonSet configures the calico-node DaemonSet. If used in
 	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
+	// +optional
 	CalicoNodeDaemonSet *CalicoNodeDaemonSet `json:"calicoNodeDaemonSet,omitempty"`
 
 	// CSINodeDriverDaemonSet configures the csi-node-driver DaemonSet.
+	// +optional
 	CSINodeDriverDaemonSet *CSINodeDriverDaemonSet `json:"csiNodeDriverDaemonSet,omitempty"`
 
 	// CalicoKubeControllersDeployment configures the calico-kube-controllers Deployment. If used in
 	// conjunction with the deprecated ComponentResources, then these overrides take precedence.
+	// +optional
 	CalicoKubeControllersDeployment *CalicoKubeControllersDeployment `json:"calicoKubeControllersDeployment,omitempty"`
 
 	// TyphaDeployment configures the typha Deployment. If used in conjunction with the deprecated
 	// ComponentResources or TyphaAffinity, then these overrides take precedence.
+	// +optional
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
 
 	// Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.
@@ -211,6 +215,22 @@ type InstallationSpec struct {
 	// +optional
 	Proxy *Proxy `json:"proxy,omitempty"`
 }
+
+// BPFNetworkBootstrapType defines how the initial networking configuration is executed.
+type BPFNetworkBootstrapType string
+
+const (
+	BPFNetworkBootstrapEnabled  BPFNetworkBootstrapType = "Enabled"
+	BPFNetworkBootstrapDisabled BPFNetworkBootstrapType = "Disabled"
+)
+
+// KubeProxyManagementType specifies whether kube-proxy management is enabled.
+type KubeProxyManagementType string
+
+const (
+	KubeProxyManagementEnabled  KubeProxyManagementType = "Enabled"
+	KubeProxyManagementDisabled KubeProxyManagementType = "Disabled"
+)
 
 // +kubebuilder:validation:Enum=TLS_AES_256_GCM_SHA384;TLS_CHACHA20_POLY1305_SHA256;TLS_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384;TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384;TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256;TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256;TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256;TLS_RSA_WITH_AES_256_GCM_SHA384;TLS_RSA_WITH_AES_128_GCM_SHA256;TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA;TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA;TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA
 type TLSCipher string
@@ -366,7 +386,7 @@ type ComponentResource struct {
 }
 
 // Provider represents a particular provider or flavor of Kubernetes. Valid options
-// are: EKS, GKE, AKS, RKE2, OpenShift, DockerEnterprise, TKG.
+// are: EKS, GKE, AKS, RKE2, OpenShift, DockerEnterprise, TKG, Kind.
 type Provider string
 
 var (
@@ -378,6 +398,7 @@ var (
 	ProviderOpenShift Provider = "OpenShift"
 	ProviderDockerEE  Provider = "DockerEnterprise"
 	ProviderTKG       Provider = "TKG"
+	ProviderKind      Provider = "Kind"
 )
 
 func (p Provider) IsNone() bool {
@@ -410,6 +431,10 @@ func (p Provider) IsRKE2() bool {
 
 func (p Provider) IsTKG() bool {
 	return p == ProviderTKG
+}
+
+func (p Provider) IsKind() bool {
+	return p == ProviderKind
 }
 
 // ProductVariant represents the variant of the product.
@@ -538,6 +563,30 @@ type CalicoNetworkSpec struct {
 	// Default: Disabled
 	// +optional
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
+
+	// BPFNetworkBootstrap manages the initial networking setup required to configure the BPF dataplane.
+	//
+	// When enabled, the operator tries to bootstraps access to the Kubernetes API Server
+	// by using the Kubernetes service and its associated endpoints.
+	//
+	// This field should be enabled only if linuxDataplane is set to "BPF".
+	// If another dataplane is selected, this field must be omitted or explicitly set to Disabled.
+	//
+	// When disabled and linuxDataplane is BPF, you must manually provide the Kubernetes API Server
+	// information via the "kubernetes-service-endpoint" ConfigMap. It is invalid to use both the ConfigMap
+	// and have this field set to true at the same time.
+	// Default: Disabled
+	// +optional
+	// +kubebuilder:validation:Enum=Disabled;Enabled
+	BPFNetworkBootstrap *BPFNetworkBootstrapType `json:"bpfNetworkBootstrap,omitempty"`
+
+	// KubeProxyManagement controls whether the operator manages the kube-proxy DaemonSet.
+	// When enabled, the operator will manage the DaemonSet by patching it:
+	// it disables kube-proxy if the dataplane is BPF, or enables it otherwise.
+	// Default: Disabled
+	// +optional
+	// +kubebuilder:validation:Enum=Disabled;Enabled
+	KubeProxyManagement *KubeProxyManagementType `json:"kubeProxyManagement,omitempty"`
 
 	// BGP configures whether or not to enable Calico's BGP capabilities.
 	// +optional
@@ -940,10 +989,42 @@ type Installation struct {
 
 // BPFEnabled is an extension method that returns true if the Installation resource
 // has Calico Network Linux Dataplane set and equal to value "BPF" otherwise false.
-func (installation *InstallationSpec) BPFEnabled() bool {
-	return installation.CalicoNetwork != nil &&
-		installation.CalicoNetwork.LinuxDataplane != nil &&
-		*installation.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF
+func (s *InstallationSpec) BPFEnabled() bool {
+	return s.CalicoNetwork != nil &&
+		s.CalicoNetwork.LinuxDataplane != nil &&
+		*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF
+}
+
+// IsNftables is an extension method that returns true if the Installation resource
+// has Calico Network Linux Dataplane set and equal to value "Nftables" or "BPF", otherwise false.
+//
+// BPF is included here as it uses nftables to program some rules, except when on DockerEE,
+// since docker-ee programs some rules in iptables. These rules does not interact well with the
+// nftable rules that calico programs, so we exclude BPF when on DockerEE.
+func (s *InstallationSpec) IsNftables() bool {
+	if s.CalicoNetwork != nil && s.CalicoNetwork.LinuxDataplane != nil {
+		if s.KubernetesProvider.IsDockerEE() &&
+			(*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF) {
+			return false
+		}
+		return (*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneNftables ||
+			*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF)
+	}
+	return false
+}
+
+func (installation *InstallationSpec) BPFNetworkBootstrapEnabled() bool {
+	return installation != nil &&
+		installation.CalicoNetwork != nil &&
+		installation.CalicoNetwork.BPFNetworkBootstrap != nil &&
+		*installation.CalicoNetwork.BPFNetworkBootstrap == BPFNetworkBootstrapEnabled
+}
+
+func (installation *InstallationSpec) KubeProxyManagementEnabled() bool {
+	return installation != nil &&
+		installation.CalicoNetwork != nil &&
+		installation.CalicoNetwork.KubeProxyManagement != nil &&
+		*installation.CalicoNetwork.KubeProxyManagement == KubeProxyManagementEnabled
 }
 
 // +kubebuilder:object:root=true

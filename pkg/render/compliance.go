@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -172,12 +173,6 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 	var complianceObjs []client.Object
 	if c.cfg.Tenant.MultiTenant() {
-		complianceObjs = append(complianceObjs,
-			// We always need a sa and crb, whether a deployment of compliance-server is present or not.
-			// These two are used for rbac checks for managed clusters.
-			c.complianceServerServiceAccount(),
-			c.complianceServerClusterRoleBinding(),
-		)
 		complianceObjs = append(complianceObjs, c.multiTenantManagedClustersAccess()...)
 		// We need to bind compliance components that run inside the managed cluster
 		// to have the correct RBAC for linseed API
@@ -228,11 +223,6 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceGlobalReportNetworkAccess(),
 			c.complianceGlobalReportPolicyAudit(),
 			c.complianceGlobalReportCISBenchmark(),
-
-			// We always need a sa and crb, whether a deployment of compliance-server is present or not.
-			// These two are used for rbac checks for managed clusters.
-			c.complianceServerServiceAccount(),
-			c.complianceServerClusterRoleBinding(),
 		)
 	}
 
@@ -248,12 +238,25 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceServerClusterRole(),
 			c.complianceServerService(),
 			c.complianceServerDeployment(),
+
+			// We need compliance server ServiceAccount and ClusterRoleBinding only for standalone and management clusters.
+			// In managed clusters, the Guardian ServiceAccount handles this RBAC.
+			c.complianceServerServiceAccount(),
+			c.complianceServerClusterRoleBinding(),
 		)
 	} else {
 		// Compliance server is only for Standalone or Management clusters
 		objsToDelete = append(objsToDelete, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerName, Namespace: c.cfg.Namespace}})
+
+		// This ClusterRole was previously needed for the compliance server to fetch compliance reports
+		// from the managed cluster. Guardian now handles this, so we can delete it.
+		objsToDelete = append(objsToDelete,
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount, Namespace: "tigera-compliance"}},
+		)
+
 		complianceObjs = append(complianceObjs,
-			c.complianceServerManagedClusterRole(),
 			c.externalLinseedRoleBinding(),
 		)
 	}
@@ -438,6 +441,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagementClusterConnection != nil, false),
+		},
 	}
 	if c.cfg.Tenant != nil {
 		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
@@ -446,10 +453,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 		}
 	}
-
+	sc := securitycontext.NewNonRootContext()
 	var initContainers []corev1.Container
 	if c.cfg.ControllerKeyPair != nil && c.cfg.ControllerKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.ControllerKeyPair.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.ControllerKeyPair.InitContainer(c.cfg.Namespace, sc))
 	}
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
@@ -482,7 +489,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 							},
 						},
 					},
-					SecurityContext: securitycontext.NewNonRootContext(),
+					SecurityContext: sc,
 					VolumeMounts:    volumeMounts,
 				},
 			},
@@ -584,6 +591,10 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagementClusterConnection != nil, false),
+		},
 	}
 	if c.cfg.Tenant != nil {
 		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
@@ -631,8 +642,9 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 			})
 	}
 	var initContainers []corev1.Container
+	sc := securitycontext.NewRootContext(c.cfg.OpenShift)
 	if c.cfg.ReporterKeyPair != nil && c.cfg.ReporterKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.ReporterKeyPair.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.ReporterKeyPair.InitContainer(c.cfg.Namespace, sc))
 	}
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
@@ -681,7 +693,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 						},
 
 						// On OpenShift reporter needs privileged access to write compliance reports to host path volume
-						SecurityContext: securitycontext.NewRootContext(c.cfg.OpenShift),
+						SecurityContext: sc,
 						VolumeMounts:    volumeMounts,
 					},
 				},
@@ -795,25 +807,6 @@ func (c *complianceComponent) complianceServerClusterRole() *rbacv1.ClusterRole 
 	return clusterRole
 }
 
-func (c *complianceComponent) complianceServerManagedClusterRole() *rbacv1.ClusterRole {
-	return &rbacv1.ClusterRole{
-		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerServiceAccount},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"globalreporttypes", "globalreports"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
-				APIGroups: []string{"authorization.k8s.io"},
-				Resources: []string{"subjectaccessreviews"},
-				Verbs:     []string{"create"},
-			},
-		},
-	}
-}
-
 func (c *complianceComponent) complianceServerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return rcomponents.ClusterRoleBinding(ComplianceServerServiceAccount, ComplianceServerServiceAccount, ComplianceServerServiceAccount, c.cfg.BindingNamespaces)
 }
@@ -867,9 +860,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 	if c.cfg.KeyValidatorConfig != nil {
 		envVars = append(envVars, c.cfg.KeyValidatorConfig.RequiredEnv("TIGERA_COMPLIANCE_")...)
 	}
+	sc := securitycontext.NewNonRootContext()
 	var initContainers []corev1.Container
 	if c.cfg.ServerKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.ServerKeyPair.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.ServerKeyPair.InitContainer(c.cfg.Namespace, sc))
 	}
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
@@ -921,7 +915,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 						fmt.Sprintf("-certpath=%s", c.cfg.ServerKeyPair.VolumeMountCertificateFilePath()),
 						fmt.Sprintf("-keypath=%s", c.cfg.ServerKeyPair.VolumeMountKeyFilePath()),
 					},
-					SecurityContext: securitycontext.NewNonRootContext(),
+					SecurityContext: sc,
 					VolumeMounts: append(
 						c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 						c.cfg.ServerKeyPair.VolumeMount(c.SupportedOSType()),
@@ -1044,6 +1038,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagementClusterConnection != nil, false),
+		},
 	}
 	if c.cfg.Tenant != nil {
 		// Configure the tenant id in order to read /write linseed data using the correct tenant ID
@@ -1077,8 +1075,9 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			})
 	}
 	var initContainers []corev1.Container
+	sc := securitycontext.NewNonRootContext()
 	if c.cfg.SnapshotterKeyPair != nil && c.cfg.SnapshotterKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.SnapshotterKeyPair.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.SnapshotterKeyPair.InitContainer(c.cfg.Namespace, sc))
 	}
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
@@ -1111,7 +1110,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 							},
 						},
 					},
-					SecurityContext: securitycontext.NewNonRootContext(),
+					SecurityContext: sc,
 					VolumeMounts:    volumeMounts,
 				},
 			},
@@ -1209,6 +1208,10 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(c.cfg.ManagementClusterConnection != nil)},
+		{
+			Name:  "LINSEED_URL",
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagementClusterConnection != nil, false),
+		},
 	}
 
 	if c.cfg.Tenant != nil {
@@ -1284,8 +1287,9 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 	}
 
 	var initContainers []corev1.Container
+	sc := securitycontext.NewRootContext(false)
 	if c.cfg.BenchmarkerKeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.BenchmarkerKeyPair.InitContainer(c.cfg.Namespace))
+		initContainers = append(initContainers, c.cfg.BenchmarkerKeyPair.InitContainer(c.cfg.Namespace, sc))
 	}
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
@@ -1304,7 +1308,7 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 					Image:           c.benchmarkerImage,
 					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
-					SecurityContext: securitycontext.NewRootContext(false),
+					SecurityContext: sc,
 					VolumeMounts:    volMounts,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{

@@ -3,29 +3,29 @@ title: master
 components:
   libcalico-go:
     version: master
-  cnx-manager:
-    image: tigera/cnx-manager
+  manager:
+    image: tigera/manager
     version: master
   voltron:
     image: tigera/voltron
     version: master
-  cnx-apiserver:
-    image: tigera/cnx-apiserver
+  apiserver:
+    image: tigera/apiserver
     version: master
-  cnx-queryserver:
-    image: tigera/cnx-queryserver
+  queryserver:
+    image: tigera/queryserver
     version: master
-  cnx-kube-controllers:
+  kube-controllers:
     image: tigera/kube-controllers
     version: master
   typha:
     image: tigera/typha
     version: master
-  cnx-node:
-    image: tigera/cnx-node
+  node:
+    image: tigera/node
     version: master
-  cnx-node-windows:
-    image: tigera/cnx-node-windows
+  node-windows:
+    image: tigera/node-windows
     version: master
   fluentd:
     image: tigera/fluentd
@@ -46,12 +46,12 @@ components:
     image: tigera/dex
     version: master
   eck-kibana:
-    version: 8.18.1
+    version: 8.18.4
   kibana:
     image: tigera/kibana
     version: master
   eck-elasticsearch:
-    version: 8.18.1
+    version: 8.18.4
   elasticsearch:
     image: tigera/elasticsearch
     version: master

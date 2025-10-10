@@ -18,9 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/go-logr/logr"
-	appsv1 "k8s.io/api/apps/v1"
-
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -289,6 +286,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	// Since apiserver and queryserver may have different UID:GID at run-time, we need to produce this secret in separate volumes and with different permissions.
+	var queryServerTLSSecretCertificateManagementOnly certificatemanagement.KeyPairInterface
+	if installationSpec.CertificateManagement != nil {
+		queryServerTLSSecretCertificateManagementOnly, err = certificateManager.GetOrCreateKeyPair(r.client, "query-server-tls", common.OperatorNamespace(), dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, r.clusterDomain))
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create tls key pair", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	certificateManager.AddToStatusManager(r.status, render.APIServerNamespace)
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installationSpec, r.client)
@@ -451,7 +458,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		MultiTenant:                 r.multiTenant,
 		KeyValidatorConfig:          keyValidatorConfig,
 		KubernetesVersion:           r.kubernetesVersion,
-		CanCleanupOlderResources:    r.canCleanupLegacyNamespace(ctx, installationSpec.Variant, reqLogger),
+		QueryServerTLSKeyPairCertificateManagementOnly: queryServerTLSSecretCertificateManagementOnly,
 	}
 
 	var components []render.Component
@@ -529,72 +536,4 @@ func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver cl
 	// These objects require graceful termination before the CNI plugin is torn down.
 	apiServerDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: render.APIServerNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, apiserver, render.APIServerFinalizer, &apiServerDeployment)
-}
-
-// canCleanupLegacyNamespace determines whether the legacy "tigera-system" namespace
-// (which previously hosted the API server) can be safely cleaned up.
-// It returns true only if:
-// - The new API server deployment in "calico-system" exists and is available.
-// - The old API server deployment in "tigera-system" is either removed or inactive.
-// - Both the APIServer custom resource and the TigeraStatus for 'apiserver' are in the Ready state
-func (r *ReconcileAPIServer) canCleanupLegacyNamespace(ctx context.Context, variant operatorv1.ProductVariant, logger logr.Logger) bool {
-	newNamespace := "calico-system"
-	oldNamespace := "tigera-system"
-	deploymentName := "calico-apiserver"
-
-	if variant == operatorv1.Calico {
-		oldNamespace = "calico-apiserver"
-	}
-
-	// Fetch the new API server deployment in calico-system
-	newDeploy := &appsv1.Deployment{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: newNamespace}, newDeploy); err != nil {
-		if errors.IsNotFound(err) {
-			logger.V(3).Info("New API server not found", "ns", newNamespace)
-		} else {
-			logger.Error(err, "Failed to get new API server", "ns", newNamespace)
-		}
-		return false
-	}
-	if newDeploy.Status.AvailableReplicas == 0 {
-		logger.V(3).Info("New API server has 0 replicas", "ns", newNamespace)
-		return false
-	}
-
-	// Fetch the old API server deployment in tigera-system
-	oldDeploy := &appsv1.Deployment{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: deploymentName, Namespace: oldNamespace}, oldDeploy); err != nil {
-		if !errors.IsNotFound(err) {
-			logger.Error(err, "Failed to get old API server", "ns", oldNamespace)
-			return false
-		}
-	}
-	if oldDeploy.Status.AvailableReplicas > 0 {
-		logger.V(3).Info("Old API server still running", "ns", oldNamespace)
-		return false
-	}
-
-	// Ensure the new API server is functionally ready
-	if !utils.IsAPIServerReady(r.client, logger) {
-		logger.V(3).Info("APIServer CR is not ready")
-		return false
-	}
-
-	// Ensure TigeraStatus indicates readiness
-	ts := &operatorv1.TigeraStatus{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: ResourceName}, ts); err != nil {
-		if errors.IsNotFound(err) {
-			logger.V(3).Info("TigeraStatus not found")
-		} else {
-			logger.Error(err, "Failed to get TigeraStatus resource.")
-		}
-		return false
-	}
-	if !ts.Available() {
-		logger.V(3).Info("TigeraStatus for apiserver is not in Available status.")
-		return false
-	}
-
-	logger.V(2).Info("Safe to clean up old namespace for apiserver.")
-	return true
 }

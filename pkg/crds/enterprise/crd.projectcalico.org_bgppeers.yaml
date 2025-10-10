@@ -45,6 +45,11 @@ spec:
                   type: array
                 keepOriginalNextHop:
                   type: boolean
+                keepaliveTime:
+                  type: string
+                localASNumber:
+                  format: int32
+                  type: integer
                 localWorkloadSelector:
                   type: string
                 maxRestartTime:
@@ -90,6 +95,11 @@ spec:
                 reachableBy:
                   type: string
                 restartMode:
+                  type: string
+                reversePeering:
+                  enum:
+                    - Auto
+                    - Manual
                   type: string
                 sourceAddress:
                   type: string

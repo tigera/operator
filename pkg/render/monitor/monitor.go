@@ -35,6 +35,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -471,12 +472,13 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 }
 
 func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
+	sc := securitycontext.NewNonRootContext()
 	var initContainers []corev1.Container
 	if mc.cfg.ServerTLSSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, mc.cfg.ServerTLSSecret.InitContainer(common.TigeraPrometheusNamespace))
+		initContainers = append(initContainers, mc.cfg.ServerTLSSecret.InitContainer(common.TigeraPrometheusNamespace, sc))
 	}
 	if mc.cfg.ClientTLSSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, mc.cfg.ClientTLSSecret.InitContainer(common.TigeraPrometheusNamespace))
+		initContainers = append(initContainers, mc.cfg.ClientTLSSecret.InitContainer(common.TigeraPrometheusNamespace, sc))
 	}
 	env := []corev1.EnvVar{
 		{
@@ -542,6 +544,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
+				ReloadStrategy: ptr.ToPtr(monitoringv1.ProcessSignalReloadStrategyType),
 				PodMetadata: &monitoringv1.EmbeddedObjectMetadata{
 					Labels: map[string]string{
 						"k8s-app": TigeraPrometheusObjectName,
@@ -577,7 +580,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 								},
 							},
 						},
-						SecurityContext: securitycontext.NewNonRootContext(),
+						SecurityContext: sc,
 					},
 				},
 				Image:            &mc.prometheusImage,

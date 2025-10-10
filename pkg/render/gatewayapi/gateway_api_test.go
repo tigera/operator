@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package gatewayapi
 
 import (
 	"fmt"
@@ -23,7 +23,9 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,11 +36,76 @@ import (
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 )
 
+type matchObject struct {
+	name string
+}
+
+func (m *matchObject) Match(actual any) (success bool, err error) {
+	return actual.(client.Object).GetName() == m.name, nil
+}
+func (m *matchObject) FailureMessage(actual any) (message string) {
+	return "" // not used within ContainElement
+}
+
+func (m *matchObject) NegatedFailureMessage(actual any) (message string) {
+	return "" // not used within ContainElement
+}
+
 var _ = Describe("Gateway API rendering tests", func() {
+
+	var AccessLogSettings = []envoyapi.ProxyAccessLogSetting{
+		{
+			Sinks: []envoyapi.ProxyAccessLogSink{
+				{
+					Type: envoyapi.ProxyAccessLogSinkTypeFile,
+					File: &envoyapi.FileEnvoyProxyAccessLog{
+						Path: "/access_logs/access.log",
+					},
+				},
+			},
+			Format: &envoyapi.ProxyAccessLogFormat{
+				Type: envoyapi.ProxyAccessLogFormatTypeJSON,
+				JSON: map[string]string{
+					"reporter":                         "gateway",
+					"start_time":                       "%START_TIME%",
+					"duration":                         "%DURATION%",
+					"response_code":                    "%RESPONSE_CODE%",
+					"bytes_sent":                       "%BYTES_SENT%",
+					"bytes_received":                   "%BYTES_RECEIVED%",
+					"user_agent":                       "%REQ(USER-AGENT)%",
+					"request_path":                     "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%",
+					"request_method":                   "%REQ(:METHOD)%",
+					"request_id":                       "%REQ(X-REQUEST-ID)%",
+					"type":                             "{{.}}",
+					"downstream_remote_address":        "%DOWNSTREAM_REMOTE_ADDRESS%",
+					"downstream_local_address":         "%DOWNSTREAM_LOCAL_ADDRESS%",
+					"downstream_direct_remote_address": "%DOWNSTREAM_DIRECT_REMOTE_ADDRESS%",
+					"domain":                           "%REQ(HOST?:AUTHORITY)%",
+					"upstream_host":                    "%UPSTREAM_HOST%",
+					"upstream_local_address":           "%UPSTREAM_LOCAL_ADDRESS%",
+					"upstream_service_time":            "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%",
+					"route_name":                       "%ROUTE_NAME%",
+				},
+			},
+			Type: &AccessLogType,
+		},
+	}
 
 	It("should read Gateway API resources from YAML", func() {
 		resources := GatewayAPIResources()
 		Expect(resources.namespace.Name).To(Equal("tigera-gateway"))
+	})
+
+	It("should report UDPRoute as required when platform is not OpenShift", func() {
+		essentialCRDs, optionalCRDs := GatewayAPICRDs(operatorv1.ProviderAKS)
+		Expect(essentialCRDs).To(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
+		Expect(optionalCRDs).NotTo(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
+	})
+
+	It("should report UDPRoute as optional when platform is OpenShift", func() {
+		essentialCRDs, optionalCRDs := GatewayAPICRDs(operatorv1.ProviderOpenShift)
+		Expect(essentialCRDs).NotTo(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
+		Expect(optionalCRDs).To(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 	})
 
 	It("should apply overrides from GatewayAPI CR", func() {
@@ -164,15 +231,22 @@ var _ = Describe("Gateway API rendering tests", func() {
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
+		By("resolving images")
 		objsToCreate, objsToDelete := gatewayComp.Objects()
 		Expect(objsToDelete).To(HaveLen(0))
+		Expect(objsToCreate).NotTo(BeEmpty())
+		Expect(objsToCreate).To(HaveLen(20 + len(gatewayAPI.Spec.GatewayClasses))) // 20 core objects plus one per GatewayClass
+
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-config", Namespace: "tigera-gateway"}},
+			&admissionregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-topology-injector.tigera-gateway"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-role"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:tigera-gateway"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-rolebinding"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:tigera-gateway"}},
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-infra-manager", Namespace: "tigera-gateway"}},
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-leader-election-role", Namespace: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-infra-manager", Namespace: "tigera-gateway"}},
@@ -269,8 +343,11 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-config", Namespace: "tigera-gateway"}},
+			&admissionregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-topology-injector.tigera-gateway"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-role"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:tigera-gateway"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-rolebinding"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:tigera-gateway"}},
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-infra-manager", Namespace: "tigera-gateway"}},
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-leader-election-role", Namespace: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-infra-manager", Namespace: "tigera-gateway"}},
@@ -359,8 +436,11 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-config", Namespace: "tigera-gateway"}},
+			&admissionregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-topology-injector.tigera-gateway"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-role"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:tigera-gateway"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-rolebinding"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:tigera-gateway"}},
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-infra-manager", Namespace: "tigera-gateway"}},
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-leader-election-role", Namespace: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-infra-manager", Namespace: "tigera-gateway"}},
@@ -371,6 +451,9 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter", Namespace: "tigera-gateway"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
 			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
@@ -718,5 +801,247 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(*ep4.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerClass).To(Equal(lbClass))
 		Expect(ep4.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerSourceRanges).To(ConsistOf("182.98.44.55/24"))
 		Expect(*ep4.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP).To(Equal(lbIP))
+	})
+
+	It("should not deploy waf-http-filter or l7-log-collector for open-source", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.Calico,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(envoyDeployment).ToNot(BeNil())
+		Expect(envoyDeployment.InitContainers).To(BeNil())
+		Expect(envoyDeployment.Container).ToNot(BeNil())
+		Expect(envoyDeployment.Container.VolumeMounts).To(BeNil())
+	})
+
+	It("should deploy waf-http-filter for Enterprise", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(envoyDeployment).ToNot(BeNil())
+
+		Expect(envoyDeployment.Pod).ToNot(BeNil())
+		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(4))
+		Expect(envoyDeployment.Pod.Volumes[0].Name).To(Equal("var-log-calico"))
+		Expect(envoyDeployment.Pod.Volumes[0].HostPath.Path).To(Equal("/var/log/calico"))
+		Expect(envoyDeployment.Pod.Volumes[1].Name).To(Equal("waf-http-filter"))
+		Expect(envoyDeployment.Pod.Volumes[1].EmptyDir).ToNot(BeNil())
+
+		Expect(envoyDeployment.InitContainers[0].Name).To(Equal("waf-http-filter"))
+		Expect(*envoyDeployment.InitContainers[0].RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
+		Expect(envoyDeployment.InitContainers[0].VolumeMounts).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers[0].VolumeMounts).To(ContainElements([]corev1.VolumeMount{
+			{
+				Name:      "waf-http-filter",
+				MountPath: "/var/run/waf-http-filter",
+			},
+			{
+				Name:      "var-log-calico",
+				MountPath: "/var/log/calico",
+			},
+		}))
+
+		Expect(envoyDeployment.InitContainers[1].Name).To(Equal("l7-log-collector"))
+		Expect(*envoyDeployment.InitContainers[1].RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
+		Expect(envoyDeployment.InitContainers[1].VolumeMounts).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers[1].VolumeMounts).To(ContainElements([]corev1.VolumeMount{
+			{
+				Name:      "access-logs",
+				MountPath: "/access_logs",
+			},
+			{
+				Name:      "felix-sync",
+				MountPath: "/var/run/felix",
+			},
+		}))
+
+		// logger gateway name and namespace are set from the k8s downward api pod metadata.
+		Expect(envoyDeployment.InitContainers[0].Env).To(ContainElements(GatewayNameEnvVar, GatewayNamespaceEnvVar))
+
+		Expect(envoyDeployment.Container).ToNot(BeNil())
+		Expect(envoyDeployment.Container.VolumeMounts).To(HaveLen(2))
+		Expect(envoyDeployment.Container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+			Name:      "waf-http-filter",
+			MountPath: "/var/run/waf-http-filter",
+		}))
+		Expect(envoyDeployment.Container.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+			Name:      "access-logs",
+			MountPath: "/access_logs",
+		}))
+
+		Expect(proxy.Spec.Telemetry.AccessLog.Settings).To(Equal(AccessLogSettings))
+	})
+
+	It("should deploy waf-http-filter for Enterprise when using a custom proxy", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "custom-class",
+					EnvoyProxyRef: &operatorv1.NamespacedName{
+						Namespace: "default",
+						Name:      "my-proxy",
+					},
+				}},
+			},
+		}
+		envoyProxy := &envoyapi.EnvoyProxy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "EnvoyProxy",
+				APIVersion: "gateway.envoyproxy.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-proxy",
+				Namespace: "default",
+			},
+			Spec: envoyapi.EnvoyProxySpec{
+				Provider: &envoyapi.EnvoyProxyProvider{
+					Type: envoyapi.ProviderTypeKubernetes,
+					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
+						EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
+							InitContainers: []corev1.Container{
+								{
+									Name:          "some-other-sidecar",
+									RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "some-other-volume",
+											MountPath: "/test",
+										},
+									},
+								},
+							},
+							Container: &envoyapi.KubernetesContainerSpec{
+								VolumeMounts: []corev1.VolumeMount{
+									{
+										Name:      "some-other-volume",
+										MountPath: "/test",
+									},
+								},
+							},
+							Pod: &envoyapi.KubernetesPodSpec{
+								Volumes: []corev1.Volume{
+									{
+										Name: "some-other-volume",
+										VolumeSource: corev1.VolumeSource{
+											EmptyDir: &corev1.EmptyDirVolumeSource{},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+			CustomEnvoyProxies: map[string]*envoyapi.EnvoyProxy{
+				"custom-class": envoyProxy,
+			},
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Get the four expected GatewayClasses.
+		gc, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "custom-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Get their four EnvoyProxies.
+		Expect(gc.Spec.ParametersRef).NotTo(BeNil())
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, gc.Spec.ParametersRef.Name, string(*gc.Spec.ParametersRef.Namespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(envoyDeployment).ToNot(BeNil())
+
+		Expect(envoyDeployment.InitContainers).To(HaveLen(3))
+		Expect(envoyDeployment.InitContainers[0].Name).To(Equal("some-other-sidecar"))
+		Expect(envoyDeployment.InitContainers[1].Name).To(Equal("waf-http-filter"))
+		Expect(*envoyDeployment.InitContainers[1].RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
+		Expect(envoyDeployment.InitContainers[1].VolumeMounts).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers[1].VolumeMounts).To(ContainElements([]corev1.VolumeMount{
+			{
+				Name:      "waf-http-filter",
+				MountPath: "/var/run/waf-http-filter",
+			},
+			{
+				Name:      "var-log-calico",
+				MountPath: "/var/log/calico",
+			},
+		}))
+
+		Expect(envoyDeployment.InitContainers[2].Name).To(Equal("l7-log-collector"))
+		Expect(*envoyDeployment.InitContainers[2].RestartPolicy).To(Equal(corev1.ContainerRestartPolicyAlways))
+		Expect(envoyDeployment.InitContainers[2].VolumeMounts).To(HaveLen(2))
+		Expect(envoyDeployment.InitContainers[2].VolumeMounts).To(ContainElements([]corev1.VolumeMount{
+			{
+				Name:      "access-logs",
+				MountPath: "/access_logs",
+			},
+			{
+				Name:      "felix-sync",
+				MountPath: "/var/run/felix",
+			},
+		}))
+
+		Expect(envoyDeployment.Container).ToNot(BeNil())
+		Expect(envoyDeployment.Container.VolumeMounts).To(ContainElements(
+			corev1.VolumeMount{
+				Name:      "some-other-volume",
+				MountPath: "/test",
+			}, corev1.VolumeMount{
+				Name:      "waf-http-filter",
+				MountPath: "/var/run/waf-http-filter",
+			}, corev1.VolumeMount{
+				Name:      "access-logs",
+				MountPath: "/access_logs",
+			},
+		))
+
+		Expect(envoyDeployment.Pod).ToNot(BeNil())
+		Expect(envoyDeployment.Pod.Volumes).To(HaveLen(5))
+		Expect(envoyDeployment.Pod.Volumes[0].Name).To(Equal("some-other-volume"))
+		Expect(envoyDeployment.Pod.Volumes[0].EmptyDir).ToNot(BeNil())
+		Expect(envoyDeployment.Pod.Volumes[1].Name).To(Equal("var-log-calico"))
+		Expect(envoyDeployment.Pod.Volumes[1].HostPath.Path).To(Equal("/var/log/calico"))
+		Expect(envoyDeployment.Pod.Volumes[2].Name).To(Equal("waf-http-filter"))
+		Expect(envoyDeployment.Pod.Volumes[2].EmptyDir).ToNot(BeNil())
+		Expect(envoyDeployment.Pod.Volumes[3].Name).To(Equal("access-logs"))
+		Expect(envoyDeployment.Pod.Volumes[3].EmptyDir).ToNot(BeNil())
+		Expect(envoyDeployment.Pod.Volumes[4].Name).To(Equal("felix-sync"))
+		Expect(envoyDeployment.Pod.Volumes[4].CSI.Driver).To(Equal("csi.tigera.io"))
+		Expect(proxy.Spec.Telemetry.AccessLog.Settings).To(Equal(AccessLogSettings))
 	})
 })

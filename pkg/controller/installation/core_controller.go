@@ -32,6 +32,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -79,6 +80,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/tierrbac"
@@ -126,6 +128,8 @@ const InstallationName string = "calico"
 var (
 	log                    = logf.Log.WithName("controller_installation")
 	openshiftNetworkConfig = "cluster"
+
+	warnOnce = utils.OnceFlag{}
 )
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -186,7 +190,6 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		namespaceMigration:   nm,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
-		nameservers:          opts.Nameservers,
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
@@ -347,6 +350,9 @@ func secondaryResources() []client.Object {
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
 		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: common.CalicoNamespace}},
+
+		// We care about the Goldmane Service for providing host aliases to calico/node.
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: goldmane.GoldmaneServiceName, Namespace: common.CalicoNamespace}},
 	}
 }
 
@@ -370,7 +376,6 @@ type ReconcileInstallation struct {
 	enterpriseCRDsExist           bool
 	migrationChecked              bool
 	clusterDomain                 string
-	nameservers                   []string
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
@@ -1237,15 +1242,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
-	components := []render.Component{}
+	// Create a component handler to create or update the rendered components.
+	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
 
+	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
 	namespaceCfg := &render.NamespaceConfiguration{
 		Installation: &instance.Spec,
 		PullSecrets:  pullSecrets,
 	}
-	// Render namespaces for Calico and Enterprise components.
-	components = append(components, render.Namespaces(namespaceCfg))
+	if err := handler.CreateOrUpdateOrDelete(ctx, render.Namespaces(namespaceCfg), nil); err != nil {
+		r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating namespaces", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
+	// Build the list of components to render, in rendering order.
+	components := []render.Component{}
 	if newActiveCM != nil && !installationMarkedForDeletion {
 		log.Info("adding active configmap")
 		components = append(components, render.NewPassthrough(newActiveCM))
@@ -1414,6 +1425,46 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		goldmaneRunning = goldmaneCR != nil
 	}
 
+	// Calico node DNS configuration and policy should be inherited from the tigera/operator Deployment by default since:
+	//
+	// - they are both host networked and run prior to CNI being installed (and thus beofre kube-dns is available)
+	// - they both need access to in-cluster serivces via kube-dns, as well as external services such as the API server.
+	//
+	// So, they will require the same DNS configuration.
+	//
+	// Users can override this with explicit configuration in the Installation resource, but using the operator as
+	// a baseline is a reasonable default.
+	operatorDeployment := &appsv1.Deployment{}
+	defaultDNSPolicy := corev1.DNSDefault
+	var defaultDNSConfig *corev1.PodDNSConfig
+	if err := r.client.Get(ctx, common.OperatorKey(), operatorDeployment); err != nil {
+		if !apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operator.ResourceReadError, "Unable to read operator Deployment", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		reqLogger.Info("Operator Deployment not found, using default DNS configuration")
+	} else {
+		defaultDNSPolicy = operatorDeployment.Spec.Template.Spec.DNSPolicy
+		defaultDNSConfig = operatorDeployment.Spec.Template.Spec.DNSConfig
+	}
+
+	// Get the Goldmane Service in order to find its cluster IP.
+	goldmaneIP := ""
+	if goldmaneRunning {
+		goldmaneIP, err = utils.ResolveClusterIP(ctx, r.client, goldmane.GoldmaneServiceName, common.CalicoNamespace)
+		if apierrors.IsNotFound(err) {
+			// Service not found - Goldmane is probably still starting. Wait for it to appear. This helps prevent us from rolling out calico/node twice
+			// during initial installation - once when we first Reconcile and again when we detect the Goldmane Service, which triggers
+			// us adding host aliases to the calico/node DaemonSet.
+			r.status.SetDegraded(operator.ResourceNotFound, "Goldmane enabled, waiting for Service to receive an IP", nil, reqLogger)
+			return reconcile.Result{}, nil
+		} else if err != nil {
+			// Some other error - degrade.
+			r.status.SetDegraded(operator.ResourceReadError, "Unable to read Goldmane Service", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
 		GoldmaneRunning:               goldmaneRunning,
@@ -1424,7 +1475,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BirdTemplates:                 birdTemplates,
 		TLS:                           typhaNodeTLS,
 		ClusterDomain:                 r.clusterDomain,
-		Nameservers:                   r.nameservers,
+		DefaultDNSPolicy:              defaultDNSPolicy,
+		DefaultDNSConfig:              defaultDNSConfig,
+		GoldmaneIP:                    goldmaneIP,
 		NodeReporterMetricsPort:       nodeReporterMetricsPort,
 		BGPLayouts:                    bgpLayout,
 		NodeAppArmorProfile:           nodeAppArmorProfile,
@@ -1432,13 +1485,40 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		CanRemoveCNIFinalizer:         canRemoveCNI,
 		PrometheusServerTLS:           nodePrometheusTLS,
 		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
+		NodeCgroupV2Path:              felixConfiguration.Spec.CgroupV2Path,
+		BindMode:                      bgpConfiguration.Spec.BindMode,
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
 	}
 
-	if bgpConfiguration != nil && bgpConfiguration.Spec.BindMode != nil {
-		nodeCfg.BindMode = string(*bgpConfiguration.Spec.BindMode)
+	// Check if BPFNetworkBootstrap is Enabled and its requirements are met.
+	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(ctx, r.client, &instance.Spec)
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceValidationError, "bpfNetworkBootstrap is Enabled but the requirements are not met", err, reqLogger)
+		return reconcile.Result{}, err
 	}
+
+	// If BPFNetworkBootstrap is Enabled and its requirements are met configure the node with API Server info.
+	if bpfBootstrapReq != nil && instance.Spec.BPFEnabled() {
+		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
+		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.K8sService)
+		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfBootstrapReq.K8sServiceEndpoints)
+
+		if !instance.Spec.KubernetesProvider.IsNone() {
+			// Warn once about potential issues with API server connectivity.
+			// This lock is necessary to prevent multiple warnings, since this Reconcile is called by multiple workers.
+			if warnOnce.TrySet() {
+				reqLogger.Info(fmt.Sprintf("[WARNING] Auto bootstrapping BPF network may result in unexpected behavior in %s. ", instance.Spec.KubernetesProvider) +
+					"If you experience API server communication issues, disable 'bpfBootstrapNetworking' in the Installation CR " +
+					"and follow the eBPF installation guide at https://docs.tigera.io.")
+			}
+		}
+	}
+
+	if !instance.Spec.BPFNetworkBootstrapEnabled() {
+		warnOnce.Reset()
+	}
+
 	components = append(components, render.Node(&nodeCfg))
 
 	csiCfg := render.CSIConfiguration{
@@ -1515,8 +1595,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Create a component handler to create or update the rendered components.
-	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
 	for _, component := range components {
 		if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 			r.status.SetDegraded(operator.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
@@ -1741,7 +1819,7 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 	// we don't need to handle upgrades from versions that were previously FelixConfiguration only - nftables mode has always
 	// been controlled by the operator.
 	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
-		if *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables {
+		if install.Spec.IsNftables() {
 			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
 			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != v3.NFTablesModeEnabled
 			var nftablesMode v3.NFTablesMode = v3.NFTablesModeEnabled
@@ -1804,16 +1882,28 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		updated = true
 	}
 	vxlanVNI := 4096
+	vxlanPort := 4789
 	// MKE uses a vxlanVNI:4096 and vxlanPort:4789 for its docker swarm vxlan.
 	// This results in a conflict with calico's VXLAN and the vxlan.calico interface
 	// gets deleted. To fix this we change the vxlanVNI to 10000 as recommended by
 	// MKE docs (https://docs.mirantis.com/mke/3.7/cli-ref/mke-cli-install.html).
 	if install.Spec.KubernetesProvider == operator.ProviderDockerEE {
 		vxlanVNI = 10000
+		// We are using a flow based VXLAN device for
+		// ebpf dataplane. This requires changing the default VXLAN port to
+		// 8472 to avoid conflict with the host's VXLAN interface.
+		if install.Spec.BPFEnabled() {
+			vxlanPort = 8472
+		}
 	}
 
 	if fc.Spec.VXLANVNI == nil {
 		fc.Spec.VXLANVNI = &vxlanVNI
+		updated = true
+	}
+
+	if fc.Spec.VXLANPort == nil {
+		fc.Spec.VXLANPort = &vxlanPort
 		updated = true
 	}
 
@@ -1923,7 +2013,7 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Co
 		if fc.Spec.BPFEnabled == nil || *fc.Spec.BPFEnabled {
 			err := setBPFEnabledOnFelixConfiguration(fc, bpfEnabledOnInstall)
 			if err != nil {
-				reqLogger.Error(err, "Unable to enable eBPF data plane")
+				reqLogger.Error(err, "Unable to disable eBPF data plane")
 				return false, err
 			} else {
 				updated = true
@@ -1932,6 +2022,54 @@ func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Co
 	}
 
 	return updated, nil
+}
+
+// serviceIPsAndPorts extracts the service IPs and ports from the Service and returns them as a slice of k8sapi.ServiceEndpoint.
+func serviceIPsAndPorts(svc *corev1.Service) []k8sapi.ServiceEndpoint {
+	if svc == nil {
+		return nil
+	}
+	var endpoints []k8sapi.ServiceEndpoint
+	ips := svc.Spec.ClusterIPs
+	if len(ips) == 0 && svc.Spec.ClusterIP != "" {
+		ips = []string{svc.Spec.ClusterIP}
+	}
+
+	for _, ip := range ips {
+		for _, port := range svc.Spec.Ports {
+			endpoints = append(endpoints, k8sapi.ServiceEndpoint{
+				Host: ip,
+				Port: fmt.Sprintf("%d", port.Port),
+			})
+		}
+	}
+
+	return endpoints
+}
+
+// serviceEndpointSlice extracts the service endpoints from the EndpointSlice and returns them as a slice of k8sapi.ServiceEndpoint.
+func serviceEndpointSlice(endpointSliceList *discoveryv1.EndpointSliceList) []k8sapi.ServiceEndpoint {
+	if endpointSliceList == nil {
+		return nil
+	}
+	var endpoints []k8sapi.ServiceEndpoint
+	for _, endpointSlice := range endpointSliceList.Items {
+		for _, endpoint := range endpointSlice.Endpoints {
+			for _, ip := range endpoint.Addresses {
+				for _, port := range endpointSlice.Ports {
+					if port.Port == nil {
+						continue
+					}
+
+					endpoints = append(endpoints, k8sapi.ServiceEndpoint{
+						Host: ip,
+						Port: fmt.Sprintf("%d", *port.Port),
+					})
+				}
+			}
+		}
+	}
+	return endpoints
 }
 
 var osExitOverride = os.Exit

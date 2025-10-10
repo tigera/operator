@@ -373,13 +373,19 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	replicas := l.cfg.Installation.ControlPlaneReplicas
 	if l.cfg.Tenant != nil {
-		// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
-		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		if l.cfg.ExternalElastic {
+			// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		}
 
 		if l.cfg.Tenant.MultiTenant() {
 			// For clusters shared between multiple tenants, we need to configure Linseed with the correct namespace information for its tenant.
 			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(l.cfg.Tenant)})
 			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
+
+			if l.cfg.Tenant.Spec.ManagedClusterVariant != nil {
+				envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_PRODUCT_VARIANT", Value: string(*l.cfg.Tenant.Spec.ManagedClusterVariant)})
+			}
 
 			// We also use shared indices for multi-tenant clusters.
 			envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
@@ -392,10 +398,10 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			}
 		}
 	}
-
+	sc := securitycontext.NewNonRootContext()
 	var initContainers []corev1.Container
 	if l.cfg.KeyPair.UseCertificateManagement() {
-		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace))
+		initContainers = append(initContainers, l.cfg.KeyPair.InitContainer(l.namespace, sc))
 	}
 
 	annotations := l.cfg.TrustedBundle.HashAnnotations()
@@ -418,7 +424,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 		volumes = append(volumes, l.cfg.TokenKeyPair.Volume())
 		volumeMounts = append(volumeMounts, l.cfg.TokenKeyPair.VolumeMount(l.SupportedOSType()))
 		if l.cfg.TokenKeyPair.UseCertificateManagement() {
-			initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace))
+			initContainers = append(initContainers, l.cfg.TokenKeyPair.InitContainer(l.namespace, sc))
 		}
 		annotations[l.cfg.TokenKeyPair.HashAnnotationKey()] = l.cfg.TokenKeyPair.HashAnnotationValue()
 	}
@@ -446,7 +452,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
-					SecurityContext: securitycontext.NewNonRootContext(),
+					SecurityContext: sc,
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							Exec: &corev1.ExecAction{
@@ -469,7 +475,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 	}
 
 	if replicas != nil && *replicas > 1 {
-		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, l.namespace)
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(DeploymentName, []string{l.namespace})
 	}
 
 	d := appsv1.Deployment{

@@ -19,7 +19,7 @@ package components
 
 var (
 	EnterpriseRelease string = "{{ .Title }}"
-{{ with index .Components "cnx-apiserver" }}
+{{ with index .Components "apiserver" }}
 	ComponentAPIServer = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
@@ -164,7 +164,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "waf-http-filter" }}
-	ComponentWafHTTPFilter = Component{
+	ComponentWAFHTTPFilter = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -184,7 +184,7 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "cnx-manager" }}
+{{ with index .Components "manager" }}
 	ComponentManager = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
@@ -287,28 +287,28 @@ var (
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "cnx-queryserver" }}
+{{ with index .Components "queryserver" }}
 	ComponentQueryServer = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "cnx-kube-controllers" }}
+{{ with index .Components "kube-controllers" }}
 	ComponentTigeraKubeControllers = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "cnx-node" }}
+{{ with index .Components "node" }}
 	ComponentTigeraNode = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
 	}
 {{- end }}
-{{ with index .Components "cnx-node-windows" }}
+{{ with index .Components "node-windows" }}
 	ComponentTigeraNodeWindows = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
@@ -404,6 +404,7 @@ var (
 		ComponentFluentdWindows,
 		ComponentGuardian,
 		ComponentIntrusionDetectionController,
+		ComponentWAFHTTPFilter,
 		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,

@@ -33,6 +33,35 @@ type ManagementClusterConnectionSpec struct {
 
 	// GuardianDeployment configures the guardian Deployment.
 	GuardianDeployment *GuardianDeployment `json:"guardianDeployment,omitempty"`
+
+	// Impersonation configures the RBAC impersonation permissions for the guardian deployment. This field is not
+	// applicable to installation variant Calico as no impersonation is ever used. Otherwise, if this field is left nil,
+	// a default set of permissions will be applied.
+	//
+	// WARNING: If this field is specified, it completely replaces the default permissions.
+	// For example, providing an empty `impersonation: {}` block will result in guardian
+	// having NO impersonation permissions. Similarly, if you specify `users` but omit `groups`,
+	// guardian will lose its default permissions to impersonate groups.
+	// +optional
+	Impersonation *Impersonation `json:"impersonation,omitempty"`
+}
+
+// Impersonation defines the rules for allowing impersonation.
+type Impersonation struct {
+	// Users is a list of users that can be impersonated. An empty list infers all users can be impersonated, a null
+	// value means none.
+	// +optional
+	Users []string `json:"users"`
+
+	// Groups is a list of group names that can be impersonated. An empty list infers all groups can be impersonated,
+	// a null values means none.
+	// +optional
+	Groups []string `json:"groups"`
+
+	// ServiceAccounts is a list of service account names that can be impersonated. An empty list infers all service accounts can
+	// be impersonated, a null values means none.
+	// +optional
+	ServiceAccounts []string `json:"serviceAccounts"`
 }
 
 type ManagementClusterTLS struct {
@@ -92,13 +121,4 @@ type ManagementClusterConnectionStatus struct {
 
 func init() {
 	SchemeBuilder.Register(&ManagementClusterConnection{}, &ManagementClusterConnectionList{})
-}
-
-func (cr *ManagementClusterConnection) FillDefaults() {
-	if cr.Spec.TLS == nil {
-		cr.Spec.TLS = &ManagementClusterTLS{}
-	}
-	if cr.Spec.TLS.CA == "" {
-		cr.Spec.TLS.CA = CATypeTigera
-	}
 }

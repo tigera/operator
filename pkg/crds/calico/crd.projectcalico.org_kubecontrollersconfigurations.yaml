@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.17.3
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: kubecontrollersconfigurations.crd.projectcalico.org
 spec:
   group: crd.projectcalico.org
@@ -56,6 +56,8 @@ spec:
                                     items:
                                       type: string
                                     type: array
+                                  interfacePattern:
+                                    type: string
                                   labels:
                                     additionalProperties:
                                       type: string
@@ -140,6 +142,8 @@ spec:
                                         items:
                                           type: string
                                         type: array
+                                      interfacePattern:
+                                        type: string
                                       labels:
                                         additionalProperties:
                                           type: string

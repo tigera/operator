@@ -36,7 +36,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
@@ -50,6 +49,8 @@ const (
 	BirdTemplatesConfigMapName = "bird-templates"
 	birdTemplateHashAnnotation = "hash.operator.tigera.io/bird-templates"
 	BPFOperatorAnnotation      = "operator.tigera.io/bpfEnabled"
+
+	DisableKubeProxyKey = "operator.tigera.io/disable-kube-proxy"
 
 	nodeCniConfigAnnotation   = "hash.operator.tigera.io/cni-config"
 	bgpLayoutHashAnnotation   = "hash.operator.tigera.io/bgp-layout"
@@ -68,6 +69,8 @@ const (
 	CalicoNodeObjectName          = "calico-node"
 	CalicoCNIPluginObjectName     = "calico-cni-plugin"
 	BPFVolumeName                 = "bpffs"
+
+	goldmaneDomainName = "goldmane.calico-system.svc"
 )
 
 var (
@@ -94,13 +97,21 @@ type TyphaNodeTLS struct {
 // NodeConfiguration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/node on a cluster.
 type NodeConfiguration struct {
-	GoldmaneRunning bool
-	K8sServiceEp    k8sapi.ServiceEndpoint
-	Installation    *operatorv1.InstallationSpec
-	IPPools         []operatorv1.IPPool
-	TLS             *TyphaNodeTLS
-	ClusterDomain   string
-	Nameservers     []string
+	GoldmaneRunning  bool
+	K8sServiceEp     k8sapi.ServiceEndpoint
+	K8sServiceAddrs  []k8sapi.ServiceEndpoint
+	K8sEndpointSlice []k8sapi.ServiceEndpoint
+	Installation     *operatorv1.InstallationSpec
+	IPPools          []operatorv1.IPPool
+	TLS              *TyphaNodeTLS
+	ClusterDomain    string
+
+	// Defaults for DNS.
+	DefaultDNSPolicy corev1.DNSPolicy
+	DefaultDNSConfig *corev1.PodDNSConfig
+
+	// Goldmane IP, to avoid DNS resolution using kube-dns.
+	GoldmaneIP string
 
 	// Optional fields.
 	LogCollector            *operatorv1.LogCollector
@@ -127,6 +138,9 @@ type NodeConfiguration struct {
 	// and sets this.
 	FelixHealthPort int
 
+	// Node's CgroupV2Path override. The controller reads FelixConfiguration and sets this.
+	NodeCgroupV2Path string
+
 	// The bindMode read from the default BGPConfiguration. Used to trigger rolling updates
 	// should this value change.
 	BindMode string
@@ -138,6 +152,10 @@ type NodeConfiguration struct {
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
 func Node(cfg *NodeConfiguration) Component {
+	// Configure default values for any fields that might not be set.
+	if cfg.DefaultDNSPolicy == "" {
+		cfg.DefaultDNSPolicy = corev1.DNSClusterFirstWithHostNet
+	}
 	return &nodeComponent{cfg: cfg}
 }
 
@@ -880,7 +898,7 @@ func (c *nodeComponent) clusterAdminClusterRoleBinding() *rbacv1.ClusterRoleBind
 func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.DaemonSet {
 	var terminationGracePeriod int64 = nodeTerminationGracePeriodSeconds
 	var initContainers []corev1.Container
-
+	nodeContainer := c.nodeContainer()
 	annotations := c.cfg.TLS.TrustedBundle.HashAnnotations()
 	if len(c.cfg.BirdTemplates) != 0 {
 		annotations[birdTemplateHashAnnotation] = rmeta.AnnotationHash(c.cfg.BirdTemplates)
@@ -890,11 +908,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	}
 
 	if c.cfg.TLS.NodeSecret.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace))
+		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace, nodeContainer.SecurityContext))
 	}
 
 	if c.cfg.PrometheusServerTLS != nil && c.cfg.PrometheusServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.PrometheusServerTLS.InitContainer(common.CalicoNamespace))
+		initContainers = append(initContainers, c.cfg.PrometheusServerTLS.InitContainer(common.CalicoNamespace, nodeContainer.SecurityContext))
 	}
 
 	if cniCfgMap != nil {
@@ -920,10 +938,10 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		initContainers = append(initContainers, c.flexVolumeContainer())
 	}
 
-	// Mount the bpf fs for enterprise as we use BPF for some EE features.
-	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		initContainers = append(initContainers, c.bpffsInitContainer())
-	}
+	// Mount the bpf fs for the node container.
+	// This is required for the BPF dataplane, but also for the other dataplanes
+	// as we need to cleanup the BPF state when switching dataplanes.
+	initContainers = append(initContainers, c.bpfBootstrapInitContainer())
 
 	if c.runAsNonPrivileged() {
 		initContainers = append(initContainers, c.hostPathInitContainer())
@@ -965,6 +983,16 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		annotations[bgpBindModeHashAnnotation] = rmeta.AnnotationHash(c.cfg.BindMode)
 	}
 
+	var hostAliases []corev1.HostAlias
+	if c.cfg.GoldmaneIP != "" {
+		hostAliases = []corev1.HostAlias{
+			{
+				Hostnames: []string{goldmaneDomainName},
+				IP:        c.cfg.GoldmaneIP,
+			},
+		}
+	}
+
 	// Determine the name to use for the calico/node daemonset. For mixed-mode, we run the enterprise DaemonSet
 	// with its own name so as to not conflict.
 	ds := appsv1.DaemonSet{
@@ -982,25 +1010,19 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 					Tolerations:                   rmeta.TolerateAll,
 					Affinity:                      affinity,
 					ImagePullSecrets:              c.cfg.Installation.ImagePullSecrets,
+					HostAliases:                   hostAliases,
 					ServiceAccountName:            CalicoNodeObjectName,
 					TerminationGracePeriodSeconds: &terminationGracePeriod,
 					HostNetwork:                   true,
-					DNSPolicy:                     corev1.DNSClusterFirstWithHostNet,
 					InitContainers:                initContainers,
-					Containers:                    []corev1.Container{c.nodeContainer()},
+					Containers:                    []corev1.Container{nodeContainer},
 					Volumes:                       c.nodeVolumes(),
+					DNSPolicy:                     c.cfg.DefaultDNSPolicy,
+					DNSConfig:                     c.cfg.DefaultDNSConfig,
 				},
 			},
 			UpdateStrategy: c.cfg.Installation.NodeUpdateStrategy,
 		},
-	}
-
-	if len(c.cfg.Nameservers) > 0 && dns.IsDomainName(c.cfg.K8sServiceEp.Host) {
-		// If the configured k8s service endpoint is a domain name rather than an IP address, calico/node
-		// will need explicit nameservers to resolve it.
-		ds.Spec.Template.Spec.DNSConfig = &corev1.PodDNSConfig{
-			Nameservers: c.cfg.Nameservers,
-		}
 	}
 
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
@@ -1017,6 +1039,12 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	}
 
 	if overrides := c.cfg.Installation.CalicoNodeDaemonSet; overrides != nil {
+		// If the overrides specify the legacy mount-bpffs init container, then we rename it to the new value: ebpf-bootstrap.
+		for index := range rcomp.GetInitContainers(overrides) {
+			if overrides.Spec.Template.Spec.InitContainers[index].Name == "mount-bpffs" {
+				overrides.Spec.Template.Spec.InitContainers[index].Name = "ebpf-bootstrap"
+			}
+		}
 		rcomp.ApplyDaemonSetOverrides(&ds, overrides)
 	}
 	return &ds
@@ -1049,16 +1077,14 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		)
 	}
 
-	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		volumes = append(volumes,
-			// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
-			corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
-			// Volume for the bpffs itself, used by the main node container.
-			corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
-			// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
-			corev1.Volume{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
-		)
-	}
+	volumes = append(volumes,
+		// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
+		corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
+		// Volume for the bpffs itself, used by the main node container.
+		corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+		// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
+		corev1.Volume{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
+	)
 
 	if c.vppDataplaneEnabled() {
 		volumes = append(volumes,
@@ -1185,11 +1211,11 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 	}
 }
 
-// bpffsInitContainer creates an init container that attempts to mount the BPF filesystem.  doing this from an
+// bpfBootstrapInitContainer creates an init container that attempts to mount the BPF filesystem.  doing this from an
 // init container reduces the privileges needed by the main container.  It's important that the BPF filesystem is
 // mounted on the host itself, otherwise, a restart of the node container would tear down the mount and destroy
 // the BPF dataplane's BPF maps.
-func (c *nodeComponent) bpffsInitContainer() corev1.Container {
+func (c *nodeComponent) bpfBootstrapInitContainer() corev1.Container {
 	bidirectional := corev1.MountPropagationBidirectional
 	mounts := []corev1.VolumeMount{
 		{
@@ -1214,17 +1240,54 @@ func (c *nodeComponent) bpffsInitContainer() corev1.Container {
 	}
 
 	command := []string{CalicoNodeObjectName, "-init"}
+	// If BPF is not enabled, then we run the init container in best-effort mode.
+	// This means that it will not fail if the BPF filesystem is not mounted, but
+	// it will still attempt to mount it if it is available. This is useful when we
+	// are running calico in test environments like KinD or K3s.
 	if !c.cfg.Installation.BPFEnabled() {
-		command = append(command, "-skip-cgroup")
+		command = append(command, "-best-effort")
 	}
 	return corev1.Container{
-		Name:            "mount-bpffs",
+		Name:            "ebpf-bootstrap",
 		Image:           c.nodeImage,
 		ImagePullPolicy: ImagePullPolicy(),
+		Env:             c.bpffsEnvvars(),
 		Command:         command,
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    mounts,
 	}
+}
+
+// bpffsEnvvars creates the environment variables for the BPF filesystem init container.
+func (c *nodeComponent) bpffsEnvvars() []corev1.EnvVar {
+	envVars := []corev1.EnvVar{}
+	env := JoinServiceEndpoints(c.cfg.K8sServiceAddrs)
+	if env != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: env})
+	}
+	env = JoinServiceEndpoints(c.cfg.K8sEndpointSlice)
+	if env != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: env})
+	}
+
+	if c.cfg.NodeCgroupV2Path != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: "CALICO_CGROUP_PATH", Value: c.cfg.NodeCgroupV2Path})
+	}
+
+	return envVars
+}
+
+// JoinServiceEndpoints joins a list of ServiceEndpoint into a comma-separated string of ip:port.
+func JoinServiceEndpoints(endpoints []k8sapi.ServiceEndpoint) string {
+	var parts []string
+	for _, ep := range endpoints {
+
+		if ep.Host == "" || ep.Port == "" {
+			continue
+		}
+		parts = append(parts, net.JoinHostPort(ep.Host, ep.Port))
+	}
+	return strings.Join(parts, ",")
 }
 
 // cniEnvvars creates the CNI container's envvars.
@@ -1321,9 +1384,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 			corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
 		)
 	}
-	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName})
-	}
+	nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName})
 	if c.vppDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})
 	}
@@ -1432,12 +1493,13 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		{Name: "NO_DEFAULT_POOLS", Value: "true"},
 	}
 
-	// Only append goldmane variables if goldmane is running.
-	if c.cfg.GoldmaneRunning {
+	// Only append goldmane variables if goldmane is running and we have a valid IP address,
+	// as we rely on an explicitly configured host alias to resolve the goldmane service.
+	if c.cfg.GoldmaneRunning && c.cfg.GoldmaneIP != "" {
 		nodeEnv = append(nodeEnv,
 			corev1.EnvVar{
 				Name:  "FELIX_FLOWLOGSGOLDMANESERVER",
-				Value: "goldmane.calico-system.svc:7443",
+				Value: fmt.Sprintf("%s:7443", goldmaneDomainName),
 			},
 			corev1.EnvVar{
 				Name:  "FELIX_FLOWLOGSFLUSHINTERVAL",

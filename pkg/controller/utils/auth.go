@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,12 +22,14 @@ import (
 
 	"github.com/go-ldap/ldap"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"k8s.io/apimachinery/pkg/api/errors"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	rauth "github.com/tigera/operator/pkg/render/common/authentication"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
+	csisecret "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -39,7 +41,7 @@ import (
 func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticationCR *operatorv1.Authentication, clusterDomain string) (rauth.KeyValidatorConfig, error) {
 	var keyValidatorConfig rauth.KeyValidatorConfig
 	if authenticationCR != nil {
-		idpSecret, err := GetIDPSecret(ctx, cli, authenticationCR)
+		_, idpSecret, err := GetSecretOrProviderClass(ctx, cli, authenticationCR)
 		if err != nil {
 			return nil, err
 		}
@@ -69,16 +71,41 @@ func GetKeyValidatorConfig(ctx context.Context, cli client.Client, authenticatio
 				return nil, err
 			}
 		} else {
-			keyValidatorConfig = render.NewDexKeyValidatorConfig(authenticationCR, idpSecret, clusterDomain)
+			keyValidatorConfig = render.NewDexKeyValidatorConfig(authenticationCR, clusterDomain)
 		}
 	}
 
 	return keyValidatorConfig, nil
 }
 
-// GetIDPSecret retrieves the Secret containing sensitive information for the configuration IdP specified in the given
-// operatorv1.Authentication CR.
-func GetIDPSecret(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*corev1.Secret, error) {
+func GetSecretOrProviderClass(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*csisecret.SecretProviderClass, *corev1.Secret, error) {
+	secretProviderClass, getSpcErr := GetSecretProviderClass(ctx, client, authentication)
+	idpSecret, getIdpSecretErr := GetIDPSecret(ctx, client, authentication)
+	if secretProviderClass != nil {
+		if idpSecret != nil {
+			log.Error(
+				fmt.Errorf("both secret and provider class found for authentication, using provider class"),
+				"a misconfiguration was detected for authentication")
+		}
+		return secretProviderClass, nil, getSpcErr
+	}
+	return nil, idpSecret, getIdpSecretErr
+}
+
+func GetSecretProviderClass(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*csisecret.SecretProviderClass, error) {
+	var secretName, _ = GetSecretNameAndRequiredFields(authentication)
+	secretProviderClass := &csisecret.SecretProviderClass{}
+	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: common.OperatorNamespace()}, secretProviderClass); err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("secret provider class not found, skipping")
+			return nil, nil
+		}
+		return nil, err
+	}
+	return secretProviderClass, nil
+}
+
+func GetSecretNameAndRequiredFields(authentication *operatorv1.Authentication) (string, []string) {
 	var secretName string
 	var requiredFields []string
 	if authentication.Spec.OIDC != nil {
@@ -91,6 +118,13 @@ func GetIDPSecret(ctx context.Context, client client.Client, authentication *ope
 		secretName = render.LDAPSecretName
 		requiredFields = append(requiredFields, render.BindDNSecretField, render.BindPWSecretField, render.RootCASecretField)
 	}
+	return secretName, requiredFields
+}
+
+// GetIDPSecret retrieves the Secret containing sensitive information for the configuration IdP specified in the given
+// operatorv1.Authentication CR.
+func GetIDPSecret(ctx context.Context, client client.Client, authentication *operatorv1.Authentication) (*corev1.Secret, error) {
+	var secretName, requiredFields = GetSecretNameAndRequiredFields(authentication)
 
 	secret := &corev1.Secret{}
 	if err := client.Get(ctx, types.NamespacedName{Name: secretName, Namespace: common.OperatorNamespace()}, secret); err != nil {

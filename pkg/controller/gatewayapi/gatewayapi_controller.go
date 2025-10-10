@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,6 +45,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/gatewayapi"
+)
+
+const (
+	DefaultPolicySyncPrefix = "/var/run/nodeagent"
 )
 
 var log = logf.Log.WithName("controller_gatewayapi")
@@ -57,7 +63,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	r := &ReconcileGatewayAPI{
 		client:              mgr.GetClient(),
 		scheme:              mgr.GetScheme(),
-		provider:            opts.DetectedProvider,
 		enterpriseCRDsExist: opts.EnterpriseCRDExists,
 		status:              status.New(mgr.GetClient(), "gatewayapi", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
@@ -75,12 +80,18 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	err = c.WatchObject(&operatorv1.GatewayAPI{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		log.V(5).Info("Failed to create GatewayAPI watch", "err", err)
-		return fmt.Errorf("gatewayapi-controller failed to watch primary resource: %v", err)
+		return fmt.Errorf("gatewayapi-controller failed to watch primary resource: %w", err)
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
 		log.V(5).Info("Failed to create network watch", "err", err)
-		return fmt.Errorf("gatewayapi-controller failed to watch Tigera network resource: %v", err)
+		return fmt.Errorf("gatewayapi-controller failed to watch Tigera network resource: %w", err)
+	}
+
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
+	// and also makes sure we spot when things change that might not trigger a reconciliation.
+	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("gatewayapi-controller failed to create periodic reconcile watch: %w", err)
 	}
 
 	watchedEnvoyProxies := make(map[operatorv1.NamespacedName]struct{})
@@ -94,7 +105,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 				},
 			}, &handler.EnqueueRequestForObject{}); err != nil {
 				log.V(5).Info("Failed to create EnvoyProxy watch", "err", err)
-				return fmt.Errorf("gatewayapi-controller failed to watch EnvoyProxy resource: %v", err)
+				return fmt.Errorf("gatewayapi-controller failed to watch EnvoyProxy resource: %w", err)
 			}
 			watchedEnvoyProxies[namespacedName] = struct{}{}
 		}
@@ -112,7 +123,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 				},
 			}, &handler.EnqueueRequestForObject{}); err != nil {
 				log.V(5).Info("Failed to create EnvoyGateway watch", "err", err)
-				return fmt.Errorf("gatewayapi-controller failed to watch EnvoyGateway resource: %v", err)
+				return fmt.Errorf("gatewayapi-controller failed to watch EnvoyGateway resource: %w", err)
 			}
 			watchedEnvoyGateways[namespacedName] = struct{}{}
 		}
@@ -129,7 +140,6 @@ var _ reconcile.Reconciler = &ReconcileGatewayAPI{}
 type ReconcileGatewayAPI struct {
 	client              client.Client
 	scheme              *runtime.Scheme
-	provider            operatorv1.Provider
 	enterpriseCRDsExist bool
 	status              status.StatusManager
 	clusterDomain       string
@@ -186,12 +196,22 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// so that the CRDs are left in place even if the GatewayAPI CR is removed again.  This is
 	// in case the customer uses a second (or more) implementation of the Gateway API in
 	// addition to the one that we are providing here.
-	crdComponent := render.NewPassthrough(render.GatewayAPICRDs(log)...)
+	//
+	// OpenShift 4.19+ pre-installs some of the Gateway CRDs, but not all of them, and has a
+	// webhook that prevents us from installing the ones that OpenShift is missing.  To work
+	// with this we distinguish between "essential" and "optional" CRDs.  The "essential" set
+	// must be a subset of those that OpenShift installs and/or allows to be installed, and must
+	// also suffice for all of the Gateway-related feature that we consider important as part of
+	// Calico; and this controller will report an error and degraded status if any of those do
+	// not already exist and cannot be installed.  The "optional" set is everything else that we
+	// would ideally install, to provide more options to our users; but this controller will
+	// only warn if any of those cannot be installed (and do not already exist).
+	essentialCRDs, optionalCRDs := gatewayapi.GatewayAPICRDs(installation.KubernetesProvider)
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
 	}
-	err = handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil)
+	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(essentialCRDs...), nil)
 	if gatewayAPI.Spec.CRDManagement == nil && (err == nil || errors.IsAlreadyExists(err)) {
 		// The GatewayAPI CR does not yet have a specified value for its CRDManagement
 		// field, and we can now infer a reasonable value.
@@ -227,8 +247,12 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 	if err != nil && !errors.IsAlreadyExists(err) {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI CRDs", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering essential GatewayAPI CRDs", err, log)
 		return reconcile.Result{}, err
+	}
+	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(optionalCRDs...), nil)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		reqLogger.Info("Could not render all optional GatewayAPI CRDs", "err", err)
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
@@ -237,7 +261,13 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	gatewayConfig := &render.GatewayAPIImplementationConfig{
+	// patch felix config for l7-collector socket path.
+	if err = r.patchFelixConfiguration(ctx); err != nil {
+		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	gatewayConfig := &gatewayapi.GatewayAPIImplementationConfig{
 		Installation:          installation,
 		PullSecrets:           pullSecrets,
 		GatewayAPI:            gatewayAPI,
@@ -260,13 +290,13 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 			configMap,
 		)
 		if err == nil {
-			if _, ok := configMap.Data[render.EnvoyGatewayConfigKey]; !ok {
-				err = fmt.Errorf("missing '%s' key", render.EnvoyGatewayConfigKey)
+			if _, ok := configMap.Data[gatewayapi.EnvoyGatewayConfigKey]; !ok {
+				err = fmt.Errorf("missing '%s' key", gatewayapi.EnvoyGatewayConfigKey)
 			}
 		}
 		if err == nil {
 			gatewayConfig.CustomEnvoyGateway = &envoyapi.EnvoyGateway{}
-			err = yaml.Unmarshal([]byte(configMap.Data[render.EnvoyGatewayConfigKey]), gatewayConfig.CustomEnvoyGateway)
+			err = yaml.Unmarshal([]byte(configMap.Data[gatewayapi.EnvoyGatewayConfigKey]), gatewayConfig.CustomEnvoyGateway)
 		}
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyGatewayConfigRef", err, log)
@@ -367,7 +397,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// Render non-CRD resources for Gateway API support, i.e. for our specific bundled
 	// implementation of the Gateway API.  For these we specify the GatewayAPI CR as the owner,
 	// so that they all get automatically cleaned up if the GatewayAPI CR is removed again.
-	nonCRDComponent := render.GatewayAPIImplementationComponent(gatewayConfig)
+	nonCRDComponent := gatewayapi.GatewayAPIImplementationComponent(gatewayConfig)
 	err = imageset.ApplyImageSet(ctx, r.client, variant, nonCRDComponent)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error with images from ImageSet", err, log)
@@ -411,4 +441,37 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 		}
 	}
 	return resource, "", nil
+}
+
+// patchFelixConfiguration patches the FelixConfiguration resource with the desired policy sync path prefix.
+func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error {
+	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec)
+		policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
+
+		if policySyncPrefixSetDesired {
+			return false, nil
+		}
+
+		fc.Spec.PolicySyncPathPrefix = DefaultPolicySyncPrefix
+
+		log.Info(
+			"Patching FelixConfiguration: ",
+			"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
+		)
+		return true, nil
+	})
+
+	return err
+}
+
+func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigurationSpec) string {
+	// Respect existing policySyncPathPrefix if it's already set (e.g. EGW)
+	// This will cause policySyncPathPrefix value to remain when ApplicationLayer is disabled.
+	existing := fcSpec.PolicySyncPathPrefix
+	if existing != "" {
+		return existing
+	}
+
+	return DefaultPolicySyncPrefix
 }

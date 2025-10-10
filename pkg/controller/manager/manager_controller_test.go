@@ -362,20 +362,21 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			secret := &corev1.Secret{}
+			dnsNames := append([]string{"localhost"}, dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)...)
 			// Verify that the operator managed cert secrets exist. These cert
 			// secrets should have the manager service DNS names plus localhost only.
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, []string{"localhost"}...)
+			test.VerifyCert(secret, dnsNames...)
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, []string{"localhost"}...)
+			test.VerifyCert(secret, dnsNames...)
 
 			// Check that the internal secret was copied over to the manager namespace
 			internalSecret := &corev1.Secret{}
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerInternalTLSSecretName, Namespace: render.ManagerNamespace}, internalSecret)).ShouldNot(HaveOccurred())
 
 			// Create a custom manager cert secret.
-			dnsNames := []string{"manager.example.com", "192.168.10.22"}
+			dnsNames = []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
 			customSecret, err := rsecret.CreateTLSSecret(
 				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, tigeratls.DefaultCertificateDuration, nil, dnsNames...)
@@ -620,13 +621,19 @@ var _ = Describe("Manager controller tests", func() {
 						},
 					}
 					Expect(test.GetResource(c, &d)).To(BeNil())
-					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
+					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
 					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s:%s",
 							components.ComponentManager.Image,
 							components.ComponentManager.Version)))
+					dashboard := test.GetContainer(d.Spec.Template.Spec.Containers, render.DashboardAPIName)
+					Expect(dashboard).ToNot(BeNil())
+					Expect(dashboard.Image).To(Equal(
+						fmt.Sprintf("some.registry.org/%s:%s",
+							components.ComponentUIAPIs.Image,
+							components.ComponentUIAPIs.Version)))
 					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
@@ -646,7 +653,7 @@ var _ = Describe("Manager controller tests", func() {
 						ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 						Spec: operatorv1.ImageSetSpec{
 							Images: []operatorv1.Image{
-								{Image: "tigera/cnx-manager", Digest: "sha256:cnxmanagerhash"},
+								{Image: "tigera/manager", Digest: "sha256:managerhash"},
 								{Image: "tigera/ui-apis", Digest: "sha256:uiapihash"},
 								{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
 								{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
@@ -664,14 +671,20 @@ var _ = Describe("Manager controller tests", func() {
 						},
 					}
 					Expect(test.GetResource(c, &d)).To(BeNil())
-					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
-					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
+					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
+					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, render.ManagerName)
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
 							components.ComponentManager.Image,
-							"sha256:cnxmanagerhash")))
-					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
+							"sha256:managerhash")))
+					dashboard := test.GetContainer(d.Spec.Template.Spec.Containers, render.DashboardAPIName)
+					Expect(dashboard).ToNot(BeNil())
+					Expect(dashboard.Image).To(Equal(
+						fmt.Sprintf("some.registry.org/%s@%s",
+							components.ComponentUIAPIs.Image,
+							"sha256:uiapihash")))
+					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s@%s",
@@ -1128,8 +1141,8 @@ var _ = Describe("Manager controller tests", func() {
 						},
 					}
 					Expect(test.GetResource(c, &d)).To(BeNil())
-					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
-					voltron := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-voltron")
+					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
+					voltron := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(voltron).NotTo(BeNil())
 					Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST", Value: "true"}))
 				})

@@ -12,22 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package gatewayapi
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
-	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
+	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,6 +40,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/set"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 )
@@ -43,6 +48,10 @@ import (
 var (
 	//go:embed gateway_api_resources.yaml
 	gatewayAPIResourcesYAML string
+
+	AccessLogType envoyapi.ProxyAccessLogType = "Route"
+
+	log = logf.Log.WithName("gateway_api")
 )
 
 type yamlKind struct {
@@ -53,24 +62,25 @@ type yamlKind struct {
 // This struct defines all of the resources that we expect to read from the rendered Envoy Gateway
 // helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
-	namespace                 *corev1.Namespace
-	k8sCRDs                   []*apiextenv1.CustomResourceDefinition
-	envoyCRDs                 []*apiextenv1.CustomResourceDefinition
-	controllerServiceAccount  *corev1.ServiceAccount
-	envoyGatewayConfigMap     *corev1.ConfigMap
-	envoyGatewayConfig        *envoyapi.EnvoyGateway
-	clusterRole               *rbacv1.ClusterRole
-	clusterRoleBinding        *rbacv1.ClusterRoleBinding
-	role                      *rbacv1.Role
-	roleBinding               *rbacv1.RoleBinding
-	leaderElectionRole        *rbacv1.Role
-	leaderElectionRoleBinding *rbacv1.RoleBinding
-	controllerService         *corev1.Service
-	controllerDeployment      *appsv1.Deployment
-	certgenServiceAccount     *corev1.ServiceAccount
-	certgenRole               *rbacv1.Role
-	certgenRoleBinding        *rbacv1.RoleBinding
-	certgenJob                *batchv1.Job
+	namespace                     *corev1.Namespace
+	k8sCRDs                       []*apiextenv1.CustomResourceDefinition
+	envoyCRDs                     []*apiextenv1.CustomResourceDefinition
+	controllerServiceAccount      *corev1.ServiceAccount
+	envoyGatewayConfigMap         *corev1.ConfigMap
+	envoyGatewayConfig            *envoyapi.EnvoyGateway
+	clusterRoles                  []*rbacv1.ClusterRole
+	clusterRoleBindings           []*rbacv1.ClusterRoleBinding
+	role                          *rbacv1.Role
+	roleBinding                   *rbacv1.RoleBinding
+	leaderElectionRole            *rbacv1.Role
+	leaderElectionRoleBinding     *rbacv1.RoleBinding
+	controllerService             *corev1.Service
+	controllerDeployment          *appsv1.Deployment
+	certgenServiceAccount         *corev1.ServiceAccount
+	certgenRole                   *rbacv1.Role
+	certgenRoleBinding            *rbacv1.RoleBinding
+	certgenJob                    *batchv1.Job
+	mutatingWebhookConfigurations []*admissionregv1.MutatingWebhookConfiguration
 }
 
 const (
@@ -80,6 +90,27 @@ const (
 	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
+	wafFilterName                       = "waf-http-filter"
+)
+
+var (
+	// logger gateway name and namespace are set from the k8s downward api pod metadata.
+	GatewayNameEnvVar = corev1.EnvVar{
+		Name: "LOGGER_GATEWAY_NAME",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.name",
+			},
+		},
+	}
+	GatewayNamespaceEnvVar = corev1.EnvVar{
+		Name: "LOGGER_GATEWAY_NAMESPACE",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.namespace",
+			},
+		},
+	}
 )
 
 func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
@@ -111,7 +142,7 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
-					if strings.HasSuffix(obj.Name, ".gateway.networking.k8s.io") {
+					if strings.HasSuffix(obj.Name, ".gateway.networking.k8s.io") || strings.HasSuffix(obj.Name, ".gateway.networking.x-k8s.io") {
 						resources.k8sCRDs = append(resources.k8sCRDs, obj)
 					} else if strings.HasSuffix(obj.Name, ".gateway.envoyproxy.io") {
 						resources.envoyCRDs = append(resources.envoyCRDs, obj)
@@ -151,21 +182,17 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 						panic("can't unmarshal EnvoyGateway from envoy-gateway-config ConfigMap from gateway API YAML")
 					}
 				case "rbac.authorization.k8s.io/v1/ClusterRole":
-					if resources.clusterRole != nil {
-						panic("already read a ClusterRole from gateway API YAML")
-					}
-					resources.clusterRole = &rbacv1.ClusterRole{}
-					if err := yaml.Unmarshal([]byte(yml), resources.clusterRole); err != nil {
+					obj := &rbacv1.ClusterRole{}
+					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
+					resources.clusterRoles = append(resources.clusterRoles, obj)
 				case "rbac.authorization.k8s.io/v1/ClusterRoleBinding":
-					if resources.clusterRoleBinding != nil {
-						panic("already read a ClusterRoleBinding from gateway API YAML")
-					}
-					resources.clusterRoleBinding = &rbacv1.ClusterRoleBinding{}
-					if err := yaml.Unmarshal([]byte(yml), resources.clusterRoleBinding); err != nil {
+					obj := &rbacv1.ClusterRoleBinding{}
+					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
+					resources.clusterRoleBindings = append(resources.clusterRoleBindings, obj)
 				case "rbac.authorization.k8s.io/v1/Role":
 					obj := &rbacv1.Role{}
 					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
@@ -232,6 +259,12 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 					if err := yaml.Unmarshal([]byte(yml), resources.certgenJob); err != nil {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
+				case "admissionregistration.k8s.io/v1/MutatingWebhookConfiguration":
+					obj := &admissionregv1.MutatingWebhookConfiguration{}
+					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
+						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
+					}
+					resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, obj)
 				case "/":
 					// No-op.  We see this when there is only a comment between
 					// two "---" delimiters.
@@ -244,8 +277,8 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 			if resources.namespace == nil {
 				panic("missing Namespace from gateway API YAML")
 			}
-			if len(resources.k8sCRDs) != 10 {
-				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 10)", len(resources.k8sCRDs)))
+			if len(resources.k8sCRDs) != 11 {
+				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 11)", len(resources.k8sCRDs)))
 			}
 			if len(resources.envoyCRDs) != 8 {
 				panic(fmt.Sprintf("missing/extra envoy CRDs from gateway API YAML (%v != 8)", len(resources.envoyCRDs)))
@@ -256,10 +289,10 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 			if resources.envoyGatewayConfig == nil {
 				panic("missing envoy-gateway-config from gateway API YAML")
 			}
-			if resources.clusterRole == nil {
+			if len(resources.clusterRoles) == 0 {
 				panic("missing ClusterRole from gateway API YAML")
 			}
-			if resources.clusterRoleBinding == nil {
+			if len(resources.clusterRoleBindings) == 0 {
 				panic("missing ClusterRoleBinding from gateway API YAML")
 			}
 			if resources.role == nil {
@@ -314,17 +347,31 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 
 var GatewayAPIResources = GatewayAPIResourcesGetter()
 
-func GatewayAPICRDs(log logr.Logger) []client.Object {
+func GatewayAPICRDs(provider operatorv1.Provider) ([]client.Object, []client.Object) {
 	resources := GatewayAPIResources()
-	gatewayAPICRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
+	essentialCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
+	optionalCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
 	for _, crd := range resources.k8sCRDs {
-		gatewayAPICRDs = append(gatewayAPICRDs, crd.DeepCopyObject().(client.Object))
+		if provider.IsOpenShift() {
+			// OpenShift 4.19+ restricts the Gateway CRDs that we can install, so report
+			// that only some of them are essential.
+			switch strings.TrimSuffix(crd.Name, ".gateway.networking.k8s.io") {
+			case "gatewayclasses", "gateways", "httproutes", "referencegrants":
+				essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
+			default:
+				optionalCRDs = append(optionalCRDs, crd.DeepCopyObject().(client.Object))
+			}
+		} else {
+			// Other platforms do not restrict Gateway CRDs, so report them all as
+			// essential.
+			essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
+		}
 	}
 	for _, crd := range resources.envoyCRDs {
-		gatewayAPICRDs = append(gatewayAPICRDs, crd.DeepCopyObject().(client.Object))
+		essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
 	}
 
-	return gatewayAPICRDs
+	return essentialCRDs, optionalCRDs
 }
 
 type GatewayAPIImplementationConfig struct {
@@ -341,9 +388,11 @@ type gatewayAPIImplementationComponent struct {
 	envoyGatewayImage   string
 	envoyProxyImage     string
 	envoyRatelimitImage string
+	wafHTTPFilterImage  string
+	L7LogCollectorImage string
 }
 
-func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) Component {
+func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) render.Component {
 	return &gatewayAPIImplementationComponent{
 		cfg: cfg,
 	}
@@ -365,6 +414,14 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 			return err
 		}
 		pr.envoyRatelimitImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyRatelimit, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		pr.wafHTTPFilterImage, err = components.GetReference(components.ComponentWAFHTTPFilter, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		pr.L7LogCollectorImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, is)
 		if err != nil {
 			return err
 		}
@@ -399,16 +456,16 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// First create the namespace.  We take the name from the read resources, but otherwise
 	// follow our own pattern for namespace creation.
 	objs := []client.Object{
-		CreateNamespace(
+		render.CreateNamespace(
 			resources.namespace.Name,
 			pr.cfg.Installation.KubernetesProvider,
-			PSSBaseline,
+			render.PSSPrivileged, // Needed for HostPath volume to write logs to
 			pr.cfg.Installation.Azure,
 		),
 	}
 
 	// Create role binding to allow creating secrets in our namespace.
-	objs = append(objs, CreateOperatorSecretsRoleBinding(resources.namespace.Name))
+	objs = append(objs, render.CreateOperatorSecretsRoleBinding(resources.namespace.Name))
 
 	// Add pull secrets (inferred from the Installation resource).
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)
@@ -416,8 +473,21 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
 	for _, resource := range []client.Object{
 		resources.controllerServiceAccount,
-		resources.clusterRole,
-		resources.clusterRoleBinding,
+	} {
+		// But deep-copy each one so as not to inadvertently modify the cache inside
+		// `GatewayAPIResourcesGetter`.
+		objs = append(objs, resource.DeepCopyObject().(client.Object))
+	}
+	for _, cr := range resources.clusterRoles {
+		objs = append(objs, cr.DeepCopyObject().(client.Object))
+	}
+	for _, crb := range resources.clusterRoleBindings {
+		objs = append(objs, crb.DeepCopyObject().(client.Object))
+	}
+	for _, mwc := range resources.mutatingWebhookConfigurations {
+		objs = append(objs, mwc.DeepCopyObject().(client.Object))
+	}
+	for _, resource := range []client.Object{
 		resources.role,
 		resources.roleBinding,
 		resources.leaderElectionRole,
@@ -430,6 +500,15 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		// But deep-copy each one so as not to inadvertently modify the cache inside
 		// `GatewayAPIResourcesGetter`.
 		objs = append(objs, resource.DeepCopyObject().(client.Object))
+	}
+
+	// Add WAF HTTP Filter RBAC resources for Enterprise variant
+	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		objs = append(objs,
+			pr.wafHttpFilterServiceAccount(),
+			pr.wafHttpFilterClusterRole(),
+			pr.wafHttpFilterClusterRoleBinding(),
+		)
 	}
 
 	// Prepare EnvoyGateway config, either from upstream or from a custom EnvoyGatewayConfigRef
@@ -481,8 +560,9 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// "ShutdownManager" and "RateLimit" images.)
 	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
 
-	// Enable backend APIs.
+	// Enable extension APIs.
 	envoyGatewayConfig.ExtensionAPIs.EnableBackend = true
+	envoyGatewayConfig.ExtensionAPIs.EnableEnvoyPatchPolicy = true
 
 	// Rebuild the ConfigMap with those changes.
 	envoyGatewayConfigMap := resources.envoyGatewayConfigMap.DeepCopyObject().(*corev1.ConfigMap)
@@ -654,6 +734,286 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 	}
 	applyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
 
+	// Setup WAF HTTP Filter and l7 Log collector on Enterprise.
+	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// The WAF HTTP filter is not supported when the envoy proxy is deployed as a DaemonSet
+		// as there is no support for init containers in a DaemonSet.
+		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {
+			// Add or update the Init Container to the deployment
+			wafHTTPFilter := corev1.Container{
+				Name:  wafFilterName,
+				Image: pr.wafHTTPFilterImage,
+				Args: []string{
+					"-logFileDirectory",
+					"/var/log/calico/waf",
+					"-logFileName",
+					"waf.log",
+					"-socketPath",
+					"/var/run/waf-http-filter/extproc.sock",
+				},
+				RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      wafFilterName,
+						MountPath: "/var/run/waf-http-filter",
+					},
+					{
+						Name:      "var-log-calico",
+						MountPath: "/var/log/calico",
+					},
+				},
+				Env: []corev1.EnvVar{
+					GatewayNameEnvVar,
+					GatewayNamespaceEnvVar,
+				},
+				SecurityContext: securitycontext.NewRootContext(true),
+			}
+			// need to make changes to the envoy container to mount the socket
+			l7LogCollector := corev1.Container{
+				Name:  "l7-log-collector",
+				Image: pr.L7LogCollectorImage,
+				Env: []corev1.EnvVar{
+					{
+						Name:  "LOG_LEVEL",
+						Value: "info",
+					},
+					{
+						Name:  "FELIX_DIAL_TARGET",
+						Value: "/var/run/felix/nodeagent/socket",
+					},
+					{
+						Name:  "ENVOY_ACCESS_LOG_PATH",
+						Value: "/access_logs/access.log",
+					},
+				},
+				RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+				VolumeMounts: []corev1.VolumeMount{
+					{
+						Name:      "access-logs",
+						MountPath: "/access_logs",
+					},
+					{
+						Name:      "felix-sync",
+						MountPath: "/var/run/felix",
+					},
+				},
+				SecurityContext: securitycontext.NewRootContext(true),
+			}
+
+			hasWAFHTTPFilter := false
+			hasL7LogCollector := false
+			for i, initContainer := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers {
+				if initContainer.Name == wafHTTPFilter.Name {
+					hasWAFHTTPFilter = true
+					// Handle update
+					if initContainer.Image != wafHTTPFilter.Image {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i] = wafHTTPFilter
+					}
+				}
+				if initContainer.Name == l7LogCollector.Name {
+					hasL7LogCollector = true
+					// Handle update
+					if initContainer.Image != l7LogCollector.Image {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].Image = l7LogCollector.Image
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].Env = l7LogCollector.Env
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].VolumeMounts = l7LogCollector.VolumeMounts
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].RestartPolicy = l7LogCollector.RestartPolicy
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i].SecurityContext = l7LogCollector.SecurityContext
+					}
+				}
+			}
+			if !hasWAFHTTPFilter {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, wafHTTPFilter)
+			}
+
+			if !hasL7LogCollector {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, l7LogCollector)
+			}
+
+			accessLogsName := "access-logs"
+			// Add or update Container volume mount
+			wafSocketVolumeMount := corev1.VolumeMount{
+
+				Name:      wafFilterName,
+				MountPath: "/var/run/waf-http-filter",
+			}
+
+			l7SocketVolumeMount := corev1.VolumeMount{
+				Name:      accessLogsName,
+				MountPath: "/access_logs",
+			}
+
+			hasWAFFilterSocketVolumeMount := false
+			hasAccessLogsVolumeMount := false
+
+			for i, volumeMount := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts {
+
+				if volumeMount.Name == wafSocketVolumeMount.Name {
+					hasWAFFilterSocketVolumeMount = true
+					if volumeMount.MountPath != wafSocketVolumeMount.MountPath {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = wafSocketVolumeMount
+					}
+				} else if volumeMount.Name == l7SocketVolumeMount.Name {
+					hasAccessLogsVolumeMount = true
+					if volumeMount.MountPath != l7SocketVolumeMount.MountPath {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = l7SocketVolumeMount
+					}
+
+				}
+			}
+			if !hasWAFFilterSocketVolumeMount {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, wafSocketVolumeMount)
+			}
+
+			if !hasAccessLogsVolumeMount {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, l7SocketVolumeMount)
+			}
+
+			// Add or update Pod volumes
+			logsVolume := corev1.Volume{
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
+						Path: "/var/log/calico",
+						Type: ptr.ToPtr(corev1.HostPathDirectoryOrCreate),
+					},
+				},
+				Name: "var-log-calico",
+			}
+			WAFHttpFilterSocketVolume := corev1.Volume{
+				VolumeSource: corev1.VolumeSource{
+					EmptyDir: &corev1.EmptyDirVolumeSource{},
+				},
+				Name: wafFilterName,
+			}
+			AccessLogsVolume := []corev1.Volume{
+				{
+					VolumeSource: corev1.VolumeSource{
+						EmptyDir: &corev1.EmptyDirVolumeSource{},
+					},
+					Name: accessLogsName,
+				},
+				{
+					VolumeSource: corev1.VolumeSource{
+						CSI: &corev1.CSIVolumeSource{
+							Driver: "csi.tigera.io",
+						},
+					},
+					Name: "felix-sync",
+				},
+			}
+			hasLogsVolume := false
+			hasSocketVolume := false
+			hasAccessLogsVolume := false
+			for i, volume := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes {
+				if volume.Name == logsVolume.Name {
+					hasLogsVolume = true
+					// Handle update
+					if volume.VolumeSource.HostPath.Path != logsVolume.VolumeSource.HostPath.Path || volume.VolumeSource.HostPath.Type != logsVolume.VolumeSource.HostPath.Type {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = logsVolume
+					}
+				}
+				if volume.Name == WAFHttpFilterSocketVolume.Name {
+					hasSocketVolume = true
+					if volume.VolumeSource.EmptyDir != WAFHttpFilterSocketVolume.VolumeSource.EmptyDir {
+						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = WAFHttpFilterSocketVolume
+					}
+				}
+				for _, acVolume := range AccessLogsVolume {
+					if volume.Name == acVolume.Name {
+						hasAccessLogsVolume = true
+						if acVolume.VolumeSource != volume.VolumeSource {
+							envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = acVolume
+						}
+					}
+				}
+
+			}
+			if !hasLogsVolume {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, logsVolume)
+			}
+			if !hasSocketVolume {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, WAFHttpFilterSocketVolume)
+			}
+			if !hasAccessLogsVolume {
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, AccessLogsVolume...)
+			}
+
+			// Configure service account for WAF HTTP Filter license client
+			// Use EnvoyProxy patch mechanism to set serviceAccountName and automountServiceAccountToken
+			serviceAccountPatch := map[string]interface{}{
+				"spec": map[string]interface{}{
+					"template": map[string]interface{}{
+						"spec": map[string]interface{}{
+							"serviceAccountName":           wafFilterName,
+							"automountServiceAccountToken": true,
+						},
+					},
+				},
+			}
+
+			// Convert patch to JSON
+			patchBytes, err := json.Marshal(serviceAccountPatch)
+			if err == nil {
+				if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch == nil {
+					envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch = &envoyapi.KubernetesPatchSpec{}
+				}
+				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Value = apiextenv1.JSON{Raw: patchBytes}
+			}
+
+			if envoyProxy.Spec.Telemetry != nil {
+				if envoyProxy.Spec.Telemetry.AccessLog == nil {
+					envoyProxy.Spec.Telemetry.AccessLog = &envoyapi.ProxyAccessLog{
+						Settings: []envoyapi.ProxyAccessLogSetting{},
+					}
+				}
+			} else {
+				envoyProxy.Spec.Telemetry = &envoyapi.ProxyTelemetry{
+					AccessLog: &envoyapi.ProxyAccessLog{
+						Settings: []envoyapi.ProxyAccessLogSetting{},
+					},
+				}
+			}
+
+			envoyProxy.Spec.Telemetry.AccessLog.Settings = []envoyapi.ProxyAccessLogSetting{
+				{
+					Sinks: []envoyapi.ProxyAccessLogSink{
+						{
+							Type: envoyapi.ProxyAccessLogSinkTypeFile,
+							File: &envoyapi.FileEnvoyProxyAccessLog{
+								Path: "/access_logs/access.log",
+							},
+						},
+					},
+					Format: &envoyapi.ProxyAccessLogFormat{
+						Type: "JSON",
+						JSON: map[string]string{
+							"reporter":                         "gateway",
+							"start_time":                       "%START_TIME%",
+							"duration":                         "%DURATION%",
+							"response_code":                    "%RESPONSE_CODE%",
+							"bytes_sent":                       "%BYTES_SENT%",
+							"bytes_received":                   "%BYTES_RECEIVED%",
+							"user_agent":                       "%REQ(USER-AGENT)%",
+							"request_path":                     "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%",
+							"request_method":                   "%REQ(:METHOD)%",
+							"request_id":                       "%REQ(X-REQUEST-ID)%",
+							"type":                             "{{.}}",
+							"downstream_remote_address":        "%DOWNSTREAM_REMOTE_ADDRESS%",
+							"downstream_local_address":         "%DOWNSTREAM_LOCAL_ADDRESS%",
+							"downstream_direct_remote_address": "%DOWNSTREAM_DIRECT_REMOTE_ADDRESS%",
+							"domain":                           "%REQ(HOST?:AUTHORITY)%",
+							"upstream_host":                    "%UPSTREAM_HOST%",
+							"upstream_local_address":           "%UPSTREAM_LOCAL_ADDRESS%",
+							"upstream_service_time":            "%RESP(X-ENVOY-UPSTREAM-SERVICE-TIME)%",
+							"route_name":                       "%ROUTE_NAME%",
+						},
+					},
+					Type: &AccessLogType,
+				},
+			}
+		}
+	}
+
 	return envoyProxy
 }
 
@@ -717,5 +1077,60 @@ func applyEnvoyProxyServiceOverrides(ep *envoyapi.EnvoyProxy, overrides *operato
 				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP = overrides.Spec.LoadBalancerIP
 			}
 		}
+	}
+}
+
+// wafHttpFilterServiceAccount creates the ServiceAccount for WAF HTTP Filter
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      wafFilterName,
+			Namespace: "tigera-gateway",
+		},
+	}
+}
+
+// wafHttpFilterClusterRole creates the ClusterRole for WAF HTTP Filter
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: wafFilterName,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"licensekeys"},
+				Verbs:     []string{"get", "watch"},
+			},
+			{
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
+			},
+		},
+	}
+}
+
+// wafHttpFilterClusterRoleBinding creates the ClusterRoleBinding for WAF HTTP Filter
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: wafFilterName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     wafFilterName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      wafFilterName,
+				Namespace: "tigera-gateway",
+			},
+		},
 	}
 }

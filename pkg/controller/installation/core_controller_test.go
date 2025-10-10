@@ -29,12 +29,14 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	kfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -53,6 +55,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -112,7 +115,7 @@ var _ = Describe("Testing core-controller installation", func() {
 	ready := &utils.ReadyFlag{}
 	ready.MarkAsReady()
 
-	Context("image reconciliation tests", func() {
+	Context("mainline tests", func() {
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
 			scheme = runtime.NewScheme()
@@ -234,270 +237,320 @@ var _ = Describe("Testing core-controller installation", func() {
 			cancel()
 		})
 
-		It("should use builtin images", func() {
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
+		Context("with Goldmane installed", func() {
+			BeforeEach(func() {
+				// Create a Goldmane CR.
+				By("Creating Goldmane CR")
+				goldmane := &operator.Goldmane{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+				Expect(c.Create(ctx, goldmane)).NotTo(HaveOccurred())
 
-			d := appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "calico-kube-controllers",
-					Namespace: common.CalicoNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
-			Expect(controller).ToNot(BeNil())
-			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraKubeControllers.Image,
-					components.ComponentTigeraKubeControllers.Version)))
+				// Edit the Installation, as Goldmane requires Calico.
+				cr = &operator.Installation{}
+				Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, cr)).NotTo(HaveOccurred())
+				cr.Spec.Variant = operator.Calico
+				Expect(c.Update(ctx, cr)).NotTo(HaveOccurred())
 
-			d = appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      common.TyphaDeploymentName,
-					Namespace: common.CalicoNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			typha := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-typha")
-			Expect(typha).ToNot(BeNil())
-			Expect(typha.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraTypha.Image,
-					components.ComponentTigeraTypha.Version)))
-			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
-			Expect(csrinit).ToNot(BeNil())
-			Expect(csrinit.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraCSRInitContainer.Image,
-					components.ComponentTigeraCSRInitContainer.Version)))
+				// SetDegraded will be called.
+				mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+			})
 
-			ds := appsv1.DaemonSet{
-				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      common.NodeDaemonSetName,
-					Namespace: common.CalicoNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &ds)).To(BeNil())
-			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-			node := test.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
-			Expect(node).ToNot(BeNil())
-			Expect(node.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraNode.Image,
-					components.ComponentTigeraNode.Version)))
-			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
-			fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
-			Expect(fv).ToNot(BeNil())
-			Expect(fv.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraFlexVolume.Image,
-					components.ComponentTigeraFlexVolume.Version)))
-			cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
-			Expect(cni).ToNot(BeNil())
-			Expect(cni.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraCNI.Image,
-					components.ComponentTigeraCNI.Version)))
-			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
-			Expect(csrinit).ToNot(BeNil())
-			Expect(csrinit.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraCSRInitContainer.Image,
-					components.ComponentTigeraCSRInitContainer.Version)))
-			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
-			Expect(csrinit2).ToNot(BeNil())
-			Expect(csrinit2.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraCSRInitContainer.Image,
-					components.ComponentTigeraCSRInitContainer.Version)))
-			bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
-			Expect(bpfInit).ToNot(BeNil())
-			Expect(bpfInit.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraNode.Image,
-					components.ComponentTigeraNode.Version)))
-		})
+			It("should wait for the Goldmane Service to have an IP", func() {
+				// First reconcile should succeed, but not create any resources.
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
 
-		It("should use images from imageset", func() {
-			imageSet := &operator.ImageSet{
-				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
-				Spec: operator.ImageSetSpec{
-					Images: []operator.Image{
-						{Image: "tigera/kube-controllers", Digest: "sha256:tigerakubecontrollerhash"},
-						{Image: "tigera/typha", Digest: "sha256:tigeratyphahash"},
-						{Image: "tigera/cnx-node", Digest: "sha256:tigeracnxnodehash"},
-						{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
-						{Image: "tigera/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
-						{Image: "tigera/csi", Digest: "sha256:calicocsihash"},
-						{Image: "tigera/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
+				ds := appsv1.DaemonSet{}
+				err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, &ds)
+				Expect(err).To(HaveOccurred())
+
+				// Create the Goldmane Service.
+				By("Creating Goldmane Service")
+				svc := &corev1.Service{
+					ObjectMeta: metav1.ObjectMeta{Name: "goldmane", Namespace: common.CalicoNamespace},
+					Spec: corev1.ServiceSpec{
+						ClusterIP: "1.2.3.4",
 					},
-				},
-			}
-			Expect(c.Create(ctx, imageSet)).ToNot(HaveOccurred())
+				}
+				Expect(c.Create(ctx, svc)).NotTo(HaveOccurred())
 
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
+				// Next reconcile should create all resources.
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, &ds)
+				Expect(err).ToNot(HaveOccurred())
 
-			d := appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "calico-kube-controllers",
-					Namespace: common.CalicoNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
-			Expect(controller).ToNot(BeNil())
-			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentTigeraKubeControllers.Image,
-					"sha256:tigerakubecontrollerhash")))
-
-			d = appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      common.TyphaDeploymentName,
-					Namespace: common.CalicoNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			typha := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-typha")
-			Expect(typha).ToNot(BeNil())
-			Expect(typha.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentTigeraTypha.Image,
-					"sha256:tigeratyphahash")))
-			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
-			Expect(csrinit).ToNot(BeNil())
-			Expect(csrinit.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentTigeraCSRInitContainer.Image,
-					"sha256:calicocsrinithash")))
-
-			ds := appsv1.DaemonSet{
-				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      common.NodeDaemonSetName,
-					Namespace: common.CalicoNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &ds)).To(BeNil())
-			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-			node := test.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
-			Expect(node).ToNot(BeNil())
-			Expect(node.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentTigeraNode.Image,
-					"sha256:tigeracnxnodehash")))
-			Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
-			fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
-			Expect(fv).ToNot(BeNil())
-			Expect(fv.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentTigeraFlexVolume.Image,
-					"sha256:calicoflexvolhash")))
-			cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
-			Expect(cni).ToNot(BeNil())
-			Expect(cni.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentTigeraCNI.Image,
-					"sha256:tigeracnihash")))
-			csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
-			Expect(csrinit).ToNot(BeNil())
-			Expect(csrinit.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentTigeraCSRInitContainer.Image,
-					"sha256:calicocsrinithash")))
-			csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
-			Expect(csrinit2).ToNot(BeNil())
-			Expect(csrinit2.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentTigeraCSRInitContainer.Image,
-					"sha256:calicocsrinithash")))
-
-			bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "mount-bpffs")
-			Expect(bpfInit).ToNot(BeNil())
-			Expect(bpfInit.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
-					components.ComponentTigeraNode.Image,
-					"sha256:tigeracnxnodehash")))
-			inst := operator.Installation{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-				},
-			}
-			Expect(test.GetResource(c, &inst)).To(BeNil())
-			Expect(inst.Status.ImageSet).To(Equal("enterprise-" + components.EnterpriseRelease))
+				// Host alisas should be set on the DaemonSet Pod.
+				Expect(ds.Spec.Template.Spec.HostAliases).To(HaveLen(1))
+				Expect(ds.Spec.Template.Spec.HostAliases[0].IP).To(Equal("1.2.3.4"))
+			})
 		})
 
-		It("should error if correct variant imageset with wrong version", func() {
-			mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
-			imageSet := &operator.ImageSet{
-				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-wrong"},
-			}
-			Expect(c.Create(ctx, imageSet)).ToNot(HaveOccurred())
+		Context("image tests", func() {
+			It("should use builtin images", func() {
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
 
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).Should(HaveOccurred())
-		})
-		It("should succeed if other variant imageset exists", func() {
-			imageSet := &operator.ImageSet{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-versiondoesntmatter"},
-			}
-			Expect(c.Create(ctx, imageSet)).ToNot(HaveOccurred())
+				d := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "calico-kube-controllers",
+						Namespace: common.CalicoNamespace,
+					},
+				}
+				Expect(test.GetResource(c, &d)).To(BeNil())
+				Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+				controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
+				Expect(controller).ToNot(BeNil())
+				Expect(controller.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentTigeraKubeControllers.Image,
+						components.ComponentTigeraKubeControllers.Version)))
 
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			d := appsv1.Deployment{
-				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "calico-kube-controllers",
-					Namespace: common.CalicoNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
-			Expect(controller).ToNot(BeNil())
-			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
-					components.ComponentTigeraKubeControllers.Image,
-					components.ComponentTigeraKubeControllers.Version)))
-		})
+				d = appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      common.TyphaDeploymentName,
+						Namespace: common.CalicoNamespace,
+					},
+				}
+				Expect(test.GetResource(c, &d)).To(BeNil())
+				Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+				typha := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-typha")
+				Expect(typha).ToNot(BeNil())
+				Expect(typha.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentTigeraTypha.Image,
+						components.ComponentTigeraTypha.Version)))
+				Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+				csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
+				Expect(csrinit).ToNot(BeNil())
+				Expect(csrinit.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentTigeraCSRInitContainer.Image,
+						components.ComponentTigeraCSRInitContainer.Version)))
 
-		It("should update version", func() {
-			instance := &operator.Installation{}
-			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+				ds := appsv1.DaemonSet{
+					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      common.NodeDaemonSetName,
+						Namespace: common.CalicoNamespace,
+					},
+				}
+				Expect(test.GetResource(c, &ds)).To(BeNil())
+				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+				node := test.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
+				Expect(node).ToNot(BeNil())
+				Expect(node.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentTigeraNode.Image,
+						components.ComponentTigeraNode.Version)))
+				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
+				fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
+				Expect(fv).ToNot(BeNil())
+				Expect(fv.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentTigeraFlexVolume.Image,
+						components.ComponentTigeraFlexVolume.Version)))
+				cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+				Expect(cni).ToNot(BeNil())
+				Expect(cni.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentTigeraCNI.Image,
+						components.ComponentTigeraCNI.Version)))
+				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
+				Expect(csrinit).ToNot(BeNil())
+				Expect(csrinit.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentTigeraCSRInitContainer.Image,
+						components.ComponentTigeraCSRInitContainer.Version)))
+				csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
+				Expect(csrinit2).ToNot(BeNil())
+				Expect(csrinit2.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentTigeraCSRInitContainer.Image,
+						components.ComponentTigeraCSRInitContainer.Version)))
+				bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
+				Expect(bpfInit).ToNot(BeNil())
+				Expect(bpfInit.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentTigeraNode.Image,
+						components.ComponentTigeraNode.Version)))
+			})
 
-			instance.Status.CalicoVersion = "v3.14"
-			Expect(c.Update(ctx, instance)).NotTo(HaveOccurred())
+			It("should use images from imageset", func() {
+				imageSet := &operator.ImageSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
+					Spec: operator.ImageSetSpec{
+						Images: []operator.Image{
+							{Image: "tigera/kube-controllers", Digest: "sha256:tigerakubecontrollerhash"},
+							{Image: "tigera/typha", Digest: "sha256:tigeratyphahash"},
+							{Image: "tigera/node", Digest: "sha256:tigeranodehash"},
+							{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
+							{Image: "tigera/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
+							{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
+							{Image: "tigera/csi", Digest: "sha256:calicocsihash"},
+							{Image: "tigera/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
+						},
+					},
+				}
+				Expect(c.Create(ctx, imageSet)).ToNot(HaveOccurred())
 
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
 
-			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
-			Expect(instance.Status.CalicoVersion).To(Equal(components.EnterpriseRelease))
-			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+				d := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "calico-kube-controllers",
+						Namespace: common.CalicoNamespace,
+					},
+				}
+				Expect(test.GetResource(c, &d)).To(BeNil())
+				Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+				controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
+				Expect(controller).ToNot(BeNil())
+				Expect(controller.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentTigeraKubeControllers.Image,
+						"sha256:tigerakubecontrollerhash")))
 
-			instance.Status.CalicoVersion = "v3.23"
-			instance.Spec.Variant = operator.Calico
-			Expect(c.Update(ctx, instance)).NotTo(HaveOccurred())
+				d = appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      common.TyphaDeploymentName,
+						Namespace: common.CalicoNamespace,
+					},
+				}
+				Expect(test.GetResource(c, &d)).To(BeNil())
+				Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+				typha := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-typha")
+				Expect(typha).ToNot(BeNil())
+				Expect(typha.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentTigeraTypha.Image,
+						"sha256:tigeratyphahash")))
+				Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
+				csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
+				Expect(csrinit).ToNot(BeNil())
+				Expect(csrinit.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentTigeraCSRInitContainer.Image,
+						"sha256:calicocsrinithash")))
 
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
-			Expect(instance.Status.CalicoVersion).To(Equal(components.CalicoRelease))
+				ds := appsv1.DaemonSet{
+					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      common.NodeDaemonSetName,
+						Namespace: common.CalicoNamespace,
+					},
+				}
+				Expect(test.GetResource(c, &ds)).To(BeNil())
+				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
+				node := test.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
+				Expect(node).ToNot(BeNil())
+				Expect(node.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentTigeraNode.Image,
+						"sha256:tigeranodehash")))
+				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
+				fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
+				Expect(fv).ToNot(BeNil())
+				Expect(fv.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentTigeraFlexVolume.Image,
+						"sha256:calicoflexvolhash")))
+				cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+				Expect(cni).ToNot(BeNil())
+				Expect(cni.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentTigeraCNI.Image,
+						"sha256:tigeracnihash")))
+				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
+				Expect(csrinit).ToNot(BeNil())
+				Expect(csrinit.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentTigeraCSRInitContainer.Image,
+						"sha256:calicocsrinithash")))
+				csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
+				Expect(csrinit2).ToNot(BeNil())
+				Expect(csrinit2.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentTigeraCSRInitContainer.Image,
+						"sha256:calicocsrinithash")))
+
+				bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
+				Expect(bpfInit).ToNot(BeNil())
+				Expect(bpfInit.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s@%s",
+						components.ComponentTigeraNode.Image,
+						"sha256:tigeranodehash")))
+				inst := operator.Installation{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "default",
+					},
+				}
+				Expect(test.GetResource(c, &inst)).To(BeNil())
+				Expect(inst.Status.ImageSet).To(Equal("enterprise-" + components.EnterpriseRelease))
+			})
+
+			It("should error if correct variant imageset with wrong version", func() {
+				mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+				imageSet := &operator.ImageSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "enterprise-wrong"},
+				}
+				Expect(c.Create(ctx, imageSet)).ToNot(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).Should(HaveOccurred())
+			})
+			It("should succeed if other variant imageset exists", func() {
+				imageSet := &operator.ImageSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-versiondoesntmatter"},
+				}
+				Expect(c.Create(ctx, imageSet)).ToNot(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				d := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "calico-kube-controllers",
+						Namespace: common.CalicoNamespace,
+					},
+				}
+				Expect(test.GetResource(c, &d)).To(BeNil())
+				Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+				controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
+				Expect(controller).ToNot(BeNil())
+				Expect(controller.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s:%s",
+						components.ComponentTigeraKubeControllers.Image,
+						components.ComponentTigeraKubeControllers.Version)))
+			})
+
+			It("should update version", func() {
+				instance := &operator.Installation{}
+				Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+
+				instance.Status.CalicoVersion = "v3.14"
+				Expect(c.Update(ctx, instance)).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+				Expect(instance.Status.CalicoVersion).To(Equal(components.EnterpriseRelease))
+				Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+
+				instance.Status.CalicoVersion = "v3.23"
+				instance.Spec.Variant = operator.Calico
+				Expect(c.Update(ctx, instance)).NotTo(HaveOccurred())
+
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
+				Expect(instance.Status.CalicoVersion).To(Equal(components.CalicoRelease))
+			})
 		})
 	})
 
@@ -783,6 +836,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 			Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(discoveryv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 			// Create a client that will have a crud interface of k8s objects.
 			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -948,6 +1002,237 @@ var _ = Describe("Testing core-controller installation", func() {
 			})
 		})
 
+		Context("with LinuxDataplane=BPF and BPFNetworkBootstrap=Enabled", func() {
+			createResource := func(obj client.Object) {
+				Expect(c.Create(ctx, obj)).NotTo(HaveOccurred())
+			}
+			createK8sSvcEpConfigMap := func() {
+				createResource(
+					&corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{Name: render.K8sSvcEndpointConfigMapName, Namespace: common.OperatorNamespace()},
+						Data: map[string]string{
+							"KUBERNETES_SERVICE_HOST": "10.96.0.1",
+							"KUBERNETES_SERVICE_PORT": "443",
+						},
+					})
+			}
+			createK8sService := func() {
+				createResource(
+					&corev1.Service{
+						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
+						Spec: corev1.ServiceSpec{
+							IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol},
+							ClusterIP:  "1.2.3.4",
+							Ports: []corev1.ServicePort{
+								{Name: "https", Port: 443, TargetPort: intstr.FromInt(443)},
+							},
+						},
+					})
+			}
+			createEndpointSlice := func() {
+				createResource(
+					&discoveryv1.EndpointSlice{
+						ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-epv4", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+						AddressType: discoveryv1.AddressTypeIPv4,
+						Endpoints: []discoveryv1.Endpoint{
+							{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
+						},
+						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+					})
+			}
+
+			When("the LinuxDataplane is not BPF", func() {
+				It("should fail if BPFNetworkBootstrap is enabled", func() {
+					By("Setting the dataplane to Iptables and enabling network bootstrap")
+					mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+					ipt := operator.LinuxDataplaneIptables
+					enabled := operator.BPFNetworkBootstrapEnabled
+					cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+						LinuxDataplane:      &ipt,
+						BPFNetworkBootstrap: &enabled,
+					}
+					Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+					By("Creating the other required resources")
+					createK8sService()
+					createEndpointSlice()
+
+					By("r.Reconcile()")
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).Should(HaveOccurred())
+					Expect(err.Error()).To(ContainSubstring("bpfNetworkBootstrap is enabled but linuxDataplane is not set to BPF"))
+				})
+			})
+			When("the LinuxDataplane is BPF", func() {
+				BeforeEach(func() {
+					By("Setting the dataplane to BPF and Enabling network bootstrap")
+					mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+					bpf := operator.LinuxDataplaneBPF
+					enabled := operator.BPFNetworkBootstrapEnabled
+					cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+						LinuxDataplane:      &bpf,
+						BPFNetworkBootstrap: &enabled,
+					}
+					Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+				})
+				table.DescribeTable("should fail if requirements are not met",
+					func(funcs []func(), expectedErrorSubstring string) {
+						for _, f := range funcs {
+							f()
+						}
+						By("r.Reconcile()")
+						_, err := r.Reconcile(ctx, reconcile.Request{})
+						Expect(err).Should(HaveOccurred())
+						Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
+					},
+					table.Entry("kubernetes service endpoint is already defined",
+						[]func(){createK8sSvcEpConfigMap, createK8sService, createEndpointSlice},
+						"kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap",
+					),
+					table.Entry("kubernetes service not found",
+						[]func(){createEndpointSlice}, "failed to get kubernetes service",
+					),
+					table.Entry("kubernetes endpoint slices not found",
+						[]func(){createK8sService}, "failed to get kubernetes endpoint slices",
+					),
+				)
+
+				It("should set NFTablesMode to Enabled on FelixConfiguration", func() {
+					createK8sService()
+					createEndpointSlice()
+
+					By("r.Reconcile()")
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+
+					By("Checking that the FelixConfiguration has NFTablesMode Enabled")
+					fc := &crdv1.FelixConfiguration{}
+					err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(fc.Spec.NFTablesMode).ToNot(BeNil())
+					Expect(*fc.Spec.NFTablesMode).To(Equal(crdv1.NFTablesModeEnabled))
+				})
+
+				It("should push env vars to ebpf-bootstrap", func() {
+					createK8sService()
+					createEndpointSlice()
+
+					By("r.Reconcile()")
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+
+					By("Checking that the Installation has the right config")
+					install := &operator.Installation{}
+					err = c.Get(ctx, types.NamespacedName{Name: "default"}, install)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(install.Spec.CalicoNetwork).ToNot(BeNil())
+					Expect(install.Spec.CalicoNetwork.BPFNetworkBootstrap).ToNot(BeNil())
+					Expect(*install.Spec.CalicoNetwork.BPFNetworkBootstrap).To(Equal(operator.BPFNetworkBootstrapEnabled))
+					Expect(install.Spec.BPFNetworkBootstrapEnabled()).To(BeTrue())
+
+					By("Checking that the FelixConfiguration has BPF Enabled")
+					fc := &crdv1.FelixConfiguration{}
+					err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+					Expect(err).ShouldNot(HaveOccurred())
+					Expect(fc.Spec.BPFEnabled).ToNot(BeNil())
+					Expect(*fc.Spec.BPFEnabled).To(BeTrue())
+
+					By("Checking ebpf-bootstrap init container has correct env vars")
+					calicoNode := &appsv1.DaemonSet{}
+					err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
+					Expect(err).ShouldNot(HaveOccurred())
+					initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
+					Expect(initContainer).NotTo(BeNil())
+					Expect(initContainer.Name).To(Equal("ebpf-bootstrap"))
+					Expect(initContainer.Env).To(ContainElements(
+						corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443"},
+						corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443"},
+					))
+				})
+				It("should support dual-stack clusters - IPv4 and IPv6", func() {
+					Expect(c.Create(
+						ctx,
+						&corev1.Service{
+							ObjectMeta: metav1.ObjectMeta{Name: "kubernetes", Namespace: "default"},
+							Spec: corev1.ServiceSpec{
+								IPFamilies: []corev1.IPFamily{corev1.IPv4Protocol, corev1.IPv6Protocol},
+								ClusterIPs: []string{"1.2.3.4", "fd00::1"},
+								Ports: []corev1.ServicePort{
+									{Name: "https", Port: 443, TargetPort: intstr.FromInt(443)},
+								},
+							},
+						})).NotTo(HaveOccurred())
+					Expect(c.Create(
+						ctx,
+						&discoveryv1.EndpointSlice{
+							ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-ep1", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+							AddressType: discoveryv1.AddressTypeIPv4,
+							Endpoints: []discoveryv1.Endpoint{
+								{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
+							},
+							Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+						})).NotTo(HaveOccurred())
+					Expect(c.Create(
+						ctx,
+						&discoveryv1.EndpointSlice{
+							ObjectMeta:  metav1.ObjectMeta{Name: "kubernetes-ep2", Namespace: "default", Labels: map[string]string{"kubernetes.io/service-name": "kubernetes"}},
+							AddressType: discoveryv1.AddressTypeIPv6,
+							Endpoints: []discoveryv1.Endpoint{
+								{Addresses: []string{"fd00::1", "fd00::2", "fd00::3"}},
+							},
+							Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+						})).NotTo(HaveOccurred())
+
+					By("r.Reconcile()")
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).ShouldNot(HaveOccurred())
+
+					By("Checking ebpf-bootstrap init container has correct env vars")
+					calicoNode := &appsv1.DaemonSet{}
+					err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
+					Expect(err).ShouldNot(HaveOccurred())
+					initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
+					Expect(initContainer).NotTo(BeNil())
+					Expect(initContainer.Name).To(Equal("ebpf-bootstrap"))
+					Expect(initContainer.Env).To(ContainElements(
+						corev1.EnvVar{Name: "KUBERNETES_SERVICE_IPS_PORTS", Value: "1.2.3.4:443,[fd00::1]:443"},
+						corev1.EnvVar{Name: "KUBERNETES_APISERVER_ENDPOINTS", Value: "5.6.7.8:6443,5.6.7.9:6443,5.6.7.10:6443,[fd00::1]:6443,[fd00::2]:6443,[fd00::3]:6443"},
+					))
+				})
+			})
+		})
+
+		It("should push 'CALICO_CGROUP_PATH' env var to ebpf-bootstrap if specified in FelixConfiguration", func() {
+			customPath := "/foo/bar/path"
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Spec: crdv1.FelixConfigurationSpec{
+					CgroupV2Path: customPath,
+				},
+			}
+			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+			By("r.Reconcile()")
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("Checking ebpf-bootstrap init container has correct env var")
+			calicoNode := &appsv1.DaemonSet{}
+			err = c.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, calicoNode)
+			Expect(err).ShouldNot(HaveOccurred())
+			initContainer := test.GetContainer(calicoNode.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
+			Expect(initContainer).NotTo(BeNil())
+			Expect(initContainer.Name).To(Equal("ebpf-bootstrap"))
+			Expect(initContainer.Env).To(ContainElements(
+				corev1.EnvVar{Name: "CALICO_CGROUP_PATH", Value: customPath},
+			))
+		})
+
 		It("should Reconcile with default config", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -970,7 +1255,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
 		})
 
-		It("should set vxlanPort to 4798 when provider is DockerEE", func() {
+		It("should set vxlanVNI to 10000 when provider is DockerEE", func() {
 			cr.Spec.KubernetesProvider = operator.ProviderDockerEE
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -982,6 +1267,22 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			Expect(fc.Spec.VXLANVNI).NotTo(BeNil())
 			Expect(*fc.Spec.VXLANVNI).To(Equal(10000))
+		})
+
+		It("should set vxlanPort to 8472 and nftables to disabled when provider is DockerEE and BPF is enabled", func() {
+			cr.Spec.KubernetesProvider = operator.ProviderDockerEE
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			fc := &crdv1.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.VXLANPort).NotTo(BeNil())
+			Expect(*fc.Spec.VXLANPort).To(Equal(8472))
+			Expect(fc.Spec.NFTablesMode).NotTo(BeNil())
+			Expect(*fc.Spec.NFTablesMode).To(Equal(crdv1.NFTablesModeDisabled))
 		})
 
 		It("should set bpfHostConntrackByPass to false when provider is DockerEE and BPF enabled", func() {

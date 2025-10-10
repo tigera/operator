@@ -32,6 +32,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -131,7 +132,10 @@ type APIServerConfiguration struct {
 	MultiTenant                 bool
 	KeyValidatorConfig          authentication.KeyValidatorConfig
 	KubernetesVersion           *common.VersionInfo
-	CanCleanupOlderResources    bool
+
+	// When certificate management is enabled, we need a separate init container to create a cert, running
+	// with the same permissions as query server.
+	QueryServerTLSKeyPairCertificateManagementOnly certificatemanagement.KeyPairInterface
 }
 
 type apiServerComponent struct {
@@ -156,7 +160,6 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			errMsgs = append(errMsgs, err.Error())
 		}
 		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
-
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -255,11 +258,11 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		globalEnterpriseObjects = append(globalEnterpriseObjects,
 			c.tigeraUserClusterRole(),
 			c.tigeraNetworkAdminClusterRole(),
-			c.managedClusterWatchClusterRole(),
 		)
 	}
 
 	if c.cfg.ManagementCluster != nil {
+		globalEnterpriseObjects = append(globalEnterpriseObjects, c.managedClusterWatchClusterRole())
 		if c.cfg.MultiTenant {
 			// Multi-tenant management cluster API servers need access to per-tenant CA secrets in order to sign
 			// per-tenant guardian certificates when creating ManagedClusters.
@@ -276,6 +279,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		objsToDelete = append(objsToDelete, c.multiTenantSecretsRBAC()...)
 		objsToDelete = append(objsToDelete, c.secretsRBAC()...)
 		objsToDelete = append(objsToDelete, c.multiTenantManagedClusterAccessClusterRoles()...)
+		objsToDelete = append(objsToDelete, c.managedClusterWatchClusterRole())
 	}
 
 	// Namespaced enterprise-only objects.
@@ -985,16 +989,20 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		deploymentStrategyType = appsv1.RecreateDeploymentStrategyType
 	}
 
-	var initContainers []corev1.Container
-	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		// Use the same CSR init container name for both OSS and Enterprise.
-		initContainer := c.cfg.TLSKeyPair.InitContainer(APIServerNamespace)
-		initContainer.Name = fmt.Sprintf("%s-%s", CalicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
-		initContainers = append(initContainers, initContainer)
-	}
-
 	annotations := map[string]string{
 		c.cfg.TLSKeyPair.HashAnnotationKey(): c.cfg.TLSKeyPair.HashAnnotationValue(),
+	}
+
+	var initContainers []corev1.Container
+	if c.cfg.TLSKeyPair.UseCertificateManagement() {
+		initContainerApiServer := c.cfg.TLSKeyPair.InitContainer(APIServerNamespace, c.apiServerContainer().SecurityContext)
+		initContainerApiServer.Name = fmt.Sprintf("%s-%s", CalicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
+
+		initContainerQueryServer := c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.InitContainer(APIServerNamespace, c.queryServerContainer().SecurityContext)
+
+		annotations[c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.HashAnnotationKey()] = c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.HashAnnotationValue()
+
+		initContainers = append(initContainers, initContainerApiServer, initContainerQueryServer)
 	}
 
 	containers := []corev1.Container{
@@ -1045,7 +1053,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
-		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(APIServerName, APIServerNamespace)
+		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(APIServerName, []string{APIServerNamespace, "tigera-system", "calico-apiserver"})
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -1245,11 +1253,17 @@ func (c *apiServerComponent) startUpArgs() []string {
 func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	queryServerTargetPort := getContainerPort(c.cfg, TigeraAPIServerQueryServerContainerName).ContainerPort
 
+	var tlsSecret certificatemanagement.KeyPairInterface
+	if c.cfg.QueryServerTLSKeyPairCertificateManagementOnly != nil {
+		tlsSecret = c.cfg.QueryServerTLSKeyPairCertificateManagementOnly
+	} else {
+		tlsSecret = c.cfg.TLSKeyPair
+	}
 	env := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "LISTEN_ADDR", Value: fmt.Sprintf(":%d", queryServerTargetPort)},
-		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", CalicoAPIServerTLSSecretName)},
-		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", CalicoAPIServerTLSSecretName)},
+		{Name: "TLS_CERT", Value: fmt.Sprintf("/%s/tls.crt", tlsSecret.GetName())},
+		{Name: "TLS_KEY", Value: fmt.Sprintf("/%s/tls.key", tlsSecret.GetName())},
 	}
 	if c.cfg.TrustedBundle != nil {
 		env = append(env, corev1.EnvVar{Name: "TRUSTED_BUNDLE_PATH", Value: c.cfg.TrustedBundle.MountPath()})
@@ -1276,7 +1290,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	}
 
 	volumeMounts := []corev1.VolumeMount{
-		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
+		tlsSecret.VolumeMount(c.SupportedOSType()),
 	}
 	if c.cfg.TrustedBundle != nil {
 		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
@@ -1307,6 +1321,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 	volumes := []corev1.Volume{
 		c.cfg.TLSKeyPair.Volume(),
+	}
+	if c.cfg.QueryServerTLSKeyPairCertificateManagementOnly != nil {
+		volumes = append(volumes, c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.Volume())
 	}
 	hostPathType := corev1.HostPathDirectoryOrCreate
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -1994,7 +2011,6 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 // calicoPolicyPassthruClusterRole creates a clusterrole that is used to control the RBAC
 // mechanism for Calico tiered policy.
 func (c *apiServerComponent) calicoPolicyPassthruClusterRole() *rbacv1.ClusterRole {
-
 	resources := []string{"networkpolicies", "globalnetworkpolicies"}
 
 	// Append additional resources for enterprise Variant.
@@ -2205,24 +2221,19 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 		})
 	}
 
-	// Delete the older namespace for OSS and EE.
-	// This supports upgrades from older OSS versions to newer EE versions, and vice versa.
-	// CanCleanupOlderResources ensure the newdeployment is up and running in calico-system in both variant.
-	if c.cfg.CanCleanupOlderResources {
-		renamedRscList = append(renamedRscList, &corev1.Namespace{
-			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "calico-apiserver",
-			},
-		})
+	renamedRscList = append(renamedRscList, &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "calico-apiserver",
+		},
+	})
 
-		renamedRscList = append(renamedRscList, &corev1.Namespace{
-			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "tigera-system",
-			},
-		})
-	}
+	renamedRscList = append(renamedRscList, &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "tigera-system",
+		},
+	})
 
 	return renamedRscList
 }
@@ -2239,6 +2250,11 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 	}
 
 	l7AdmissionControllerTargetPort := getContainerPort(c.cfg, L7AdmissionControllerContainerName).ContainerPort
+
+	dataplane := "iptables"
+	if c.cfg.Installation.IsNftables() {
+		dataplane = "nftables"
+	}
 
 	l7AdmssCtrl := corev1.Container{
 		Name:            string(L7AdmissionControllerContainerName),
@@ -2264,6 +2280,10 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 			{
 				Name:  "L7ADMCTRL_LISTENADDR",
 				Value: fmt.Sprintf(":%d", l7AdmissionControllerTargetPort),
+			},
+			{
+				Name:  "DATAPLANE",
+				Value: dataplane,
 			},
 		},
 		VolumeMounts: volumeMounts,
@@ -2307,7 +2327,7 @@ func (c *apiServerComponent) deprecatedResources() []client.Object {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"},
 		},
 
-		//authClusterRoleBinding
+		// authClusterRoleBinding
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-extension-apiserver-auth-access"},
@@ -2326,7 +2346,7 @@ func (c *apiServerComponent) deprecatedResources() []client.Object {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-webhook-reader"},
 		},
 
-		//webhookReaderClusterRoleBinding
+		// webhookReaderClusterRoleBinding
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-apiserver-webhook-reader"},
@@ -2372,7 +2392,7 @@ func (c *apiServerComponent) deprecatedResources() []client.Object {
 		// Clean up legacy secrets in the tigera-operator namespace
 		&corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-api-cert", Namespace: "tigera-operator"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-api-cert", Namespace: common.OperatorNamespace()},
 		},
 	}
 }

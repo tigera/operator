@@ -20,8 +20,6 @@ import (
 	"fmt"
 	"reflect"
 
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -139,7 +137,7 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 		return fmt.Errorf("monitor-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 
-	if err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&v3.FelixConfiguration{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("monitor-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 

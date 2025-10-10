@@ -171,11 +171,18 @@ var _ = Describe("Typha rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
+	})
 
-		// Validate the non-cluster host typha deployment
-		dResource = rtest.GetResource(resources, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment")
+	It("should render a separate Typha deployment for non-cluster hosts", func() {
+		cfg.TLS.NodeNonClusterHostCommonName = "typha-client-noncluster-host"
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		dResource := rtest.GetResource(resources, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment")
 		Expect(dResource).ToNot(BeNil())
-		d = dResource.(*appsv1.Deployment)
+		d, ok := dResource.(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(d).NotTo(BeNil())
 
 		Expect(d.Spec.Template.Spec.Affinity).To(BeNil())
 		Expect(d.Spec.Template.Spec.HostNetwork).To(BeFalse())
@@ -188,6 +195,40 @@ var _ = Describe("Typha rendering tests", func() {
 		))
 		Expect(d.Spec.Template.Spec.Containers[0].LivenessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
 		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
+	})
+
+	It("should use custom client common name when specified for non-cluster host Typha deployment", func() {
+		cfg.TLS.NodeNonClusterHostCommonName = "custom-nch-cn"
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		dResource := rtest.GetResource(resources, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d, ok := dResource.(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(d).NotTo(BeNil())
+
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: "custom-nch-cn"},
+		))
+	})
+
+	It("should use custom client uri-san when specified for non-cluster host Typha deployment", func() {
+		cfg.TLS.NodeNonClusterHostURISAN = "spiffe://custom-nch-uri-san"
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		dResource := rtest.GetResource(resources, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment")
+		Expect(dResource).ToNot(BeNil())
+		d, ok := dResource.(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		Expect(d).NotTo(BeNil())
+
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "TYPHA_CLIENTURISAN", Value: "spiffe://custom-nch-uri-san"},
+		))
 	})
 
 	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
@@ -439,6 +480,7 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(deploy.Spec.Template.Spec.InitContainers[0].Name).To(Equal(fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName)))
 		rtest.ExpectEnv(deploy.Spec.Template.Spec.InitContainers[0].Env, "SIGNER", "a.b/c")
 	})
+
 	It("should not enable prometheus metrics if TyphaMetricsPort is nil", func() {
 		installation.Variant = operatorv1.TigeraSecureEnterprise
 		installation.TyphaMetricsPort = nil

@@ -122,8 +122,12 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 		{
 			// For enforcing admin network policies.
 			APIGroups: []string{"policy.networking.k8s.io"},
-			Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
-			Verbs:     []string{"get", "watch", "list"},
+			Resources: []string{
+				"clusternetworkpolicies",
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
+			},
+			Verbs: []string{"get", "watch", "list"},
 		},
 		{
 			// Metadata from these are used in conjunction with network policy.

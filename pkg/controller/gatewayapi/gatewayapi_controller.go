@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/gatewayapi"
 )
 
 const (
@@ -170,6 +171,21 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	}
 	r.status.OnCRFound()
 
+	// Check if the GatewayAPI CR is marked for deletion.
+	if gatewayAPI.DeletionTimestamp != nil {
+		reqLogger.Info("GatewayAPI object is terminating")
+		return r.handleDeletion(ctx, gatewayAPI, reqLogger)
+	}
+
+	// Ensure the finalizer is present.
+	if !controllerutil.ContainsFinalizer(gatewayAPI, render.GatewayAPIFinalizer) {
+		controllerutil.AddFinalizer(gatewayAPI, render.GatewayAPIFinalizer)
+		if err := r.client.Update(ctx, gatewayAPI); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to add finalizer", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// SetMetaData in the TigeraStatus such as observedGenerations.
 	defer r.status.SetMetaData(&gatewayAPI.ObjectMeta)
 
@@ -205,7 +221,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// not already exist and cannot be installed.  The "optional" set is everything else that we
 	// would ideally install, to provide more options to our users; but this controller will
 	// only warn if any of those cannot be installed (and do not already exist).
-	essentialCRDs, optionalCRDs := render.GatewayAPICRDs(installation.KubernetesProvider)
+	essentialCRDs, optionalCRDs := gatewayapi.GatewayAPICRDs(installation.KubernetesProvider)
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
@@ -266,7 +282,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	gatewayConfig := &render.GatewayAPIImplementationConfig{
+	gatewayConfig := &gatewayapi.GatewayAPIImplementationConfig{
 		Installation:          installation,
 		PullSecrets:           pullSecrets,
 		GatewayAPI:            gatewayAPI,
@@ -289,13 +305,13 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 			configMap,
 		)
 		if err == nil {
-			if _, ok := configMap.Data[render.EnvoyGatewayConfigKey]; !ok {
-				err = fmt.Errorf("missing '%s' key", render.EnvoyGatewayConfigKey)
+			if _, ok := configMap.Data[gatewayapi.EnvoyGatewayConfigKey]; !ok {
+				err = fmt.Errorf("missing '%s' key", gatewayapi.EnvoyGatewayConfigKey)
 			}
 		}
 		if err == nil {
 			gatewayConfig.CustomEnvoyGateway = &envoyapi.EnvoyGateway{}
-			err = yaml.Unmarshal([]byte(configMap.Data[render.EnvoyGatewayConfigKey]), gatewayConfig.CustomEnvoyGateway)
+			err = yaml.Unmarshal([]byte(configMap.Data[gatewayapi.EnvoyGatewayConfigKey]), gatewayConfig.CustomEnvoyGateway)
 		}
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyGatewayConfigRef", err, log)
@@ -396,7 +412,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// Render non-CRD resources for Gateway API support, i.e. for our specific bundled
 	// implementation of the Gateway API.  For these we specify the GatewayAPI CR as the owner,
 	// so that they all get automatically cleaned up if the GatewayAPI CR is removed again.
-	nonCRDComponent := render.GatewayAPIImplementationComponent(gatewayConfig)
+	nonCRDComponent := gatewayapi.GatewayAPIImplementationComponent(gatewayConfig)
 	err = imageset.ApplyImageSet(ctx, r.client, variant, nonCRDComponent)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error with images from ImageSet", err, log)
@@ -473,4 +489,25 @@ func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigu
 	}
 
 	return DefaultPolicySyncPrefix
+}
+
+func (r *ReconcileGatewayAPI) handleDeletion(ctx context.Context, gatewayAPI *operatorv1.GatewayAPI, reqLogger logr.Logger) (reconcile.Result, error) {
+	// Delete the tigera-gateway namespace.
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"},
+	}
+	if err := r.client.Delete(ctx, ns); err != nil && !errors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to delete tigera-gateway namespace", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Remove the finalizer.
+	controllerutil.RemoveFinalizer(gatewayAPI, render.GatewayAPIFinalizer)
+	if err := r.client.Update(ctx, gatewayAPI); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to remove finalizer", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	reqLogger.Info("GatewayAPI deletion complete")
+	return reconcile.Result{}, nil
 }

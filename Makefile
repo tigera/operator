@@ -249,10 +249,10 @@ endif
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.3.2
+ENVOY_GATEWAY_VERSION ?= v1.5.0
 ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
 ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
-ENVOY_GATEWAY_RESOURCES = pkg/render/gateway_api_resources.yaml
+ENVOY_GATEWAY_RESOURCES = pkg/render/gatewayapi/gateway_api_resources.yaml
 
 $(ENVOY_GATEWAY_RESOURCES): $(HACK_BIN)/helm-$(BUILDARCH)
 	echo "---" > $@

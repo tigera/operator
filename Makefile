@@ -369,6 +369,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	./deploy/scripts/ipv6_kind_cluster_update.sh
 	# Deploy resources needed in test env.
 	$(MAKE) deploy-crds
+	$(MAKE) deploy-workloads
 
 	# Wait for controller manager to be running and healthy.
 	while ! KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
@@ -475,6 +476,10 @@ deploy-crds: kubectl
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
 		$(BINDIR)/kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
 		$(BINDIR)/kubectl create -f deploy/crds/prometheus
+
+deploy-workloads: kubectl
+	@export KUBECONFIG=$(KIND_KUBECONFIG) && \
+		$(BINDIR)/kubectl apply -f deploy/workloads/
 
 create-tigera-operator-namespace: kubectl
 	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator

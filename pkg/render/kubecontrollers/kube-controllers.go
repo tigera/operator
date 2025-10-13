@@ -286,7 +286,7 @@ func (c *kubeControllersComponent) Ready() bool {
 	return true
 }
 
-func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeControllerName string) []rbacv1.PolicyRule {
+func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{
 			// Nodes are watched to monitor for deletions.
@@ -317,11 +317,22 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
 		},
 		{
-			// Pools are watched to maintain a mapping of blocks to IP pools.
-			// NetworkPolicies are watched for defaulting.
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"ippools", "networkpolicies", "globalnetworkpolicies"},
-			Verbs:     []string{"list", "watch", "update"},
+			Resources: []string{
+				// Pools are watched to maintain a mapping of blocks to IP pools, and for finalization.
+				"ippools",
+				// NetworkPolicies are watched for defaulting.
+				"networkpolicies",
+				"tier.networkpolicies",
+				"globalnetworkpolicies",
+				"tier.globalnetworkpolicies",
+				"stagedglobalnetworkpolicies",
+				"tier.stagedglobalnetworkpolicies",
+				"stagednetworkpolicies",
+				"tier.stagednetworkpolicies",
+				"stagedkubernetesnetworkpolicies",
+			},
+			Verbs: []string{"list", "watch", "update"},
 		},
 		{
 			// Needs access to update clusterinformations.
@@ -344,10 +355,11 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Verbs:     []string{"get", "create", "list", "update", "watch"},
 		},
 		{
-			// calico-kube-controllers requires tiers create
+			// calico-kube-controllers requires tiers create to create the default tiers,
+			// and get permissions to access network policies in those tiers.
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"tiers"},
-			Verbs:     []string{"create"},
+			Verbs:     []string{"create", "update", "get", "list", "watch"},
 		},
 		{
 			// Namespaces are watched for LoadBalancer IP allocation with namespace selector support

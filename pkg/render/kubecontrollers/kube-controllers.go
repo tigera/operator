@@ -104,7 +104,7 @@ type KubeControllersConfiguration struct {
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
-	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, KubeController)
+	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg)
 	enabledControllers := []string{"node", "loadbalancer"}
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
@@ -152,7 +152,7 @@ func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration) render.Co
 
 func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
 	var kubeControllerAllowTigeraPolicy *v3.NetworkPolicy
-	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg, EsKubeController)
+	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg)
 
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)

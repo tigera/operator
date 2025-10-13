@@ -1078,7 +1078,7 @@ func MaintainInstallationFinalizer(
 			}
 
 			// If the secondary resource itself is gone, ensure there are no Pods left over from this resource.
-			terminated, err := allPodsTerminated(ctx, c, secondaryResource)
+			terminated, err := AllPodsTerminated(ctx, c, secondaryResource)
 			if err != nil {
 				return err
 			}
@@ -1095,7 +1095,7 @@ func MaintainInstallationFinalizer(
 	return c.Patch(ctx, installation, patchFrom)
 }
 
-func allPodsTerminated(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
+func AllPodsTerminated(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
 	// Find the selector to use for listing Pods owned by obj.
 	matchLabels := getMatchLabels(obj)
 	if matchLabels == nil {
@@ -1120,9 +1120,17 @@ func getMatchLabels(obj client.Object) map[string]string {
 		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
 			return o.Spec.Selector.MatchLabels
 		}
+		// If the Selector or MatchLabels is nil then assume it isn't populated and return the operator default
+		if o.Spec.Selector == nil || o.Spec.Selector.MatchLabels == nil {
+			return map[string]string{"k8s-app": o.Name}
+		}
 	case *appsv1.DaemonSet:
 		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
 			return o.Spec.Selector.MatchLabels
+		}
+		// If the Selector or MatchLabels is nil then assume it isn't populated and return the operator default
+		if o.Spec.Selector == nil || o.Spec.Selector.MatchLabels == nil {
+			return map[string]string{"k8s-app": o.Name}
 		}
 	case *appsv1.StatefulSet:
 		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {

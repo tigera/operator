@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -404,8 +405,8 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	if err := r.maintainFinalizer(ctx, gatewayAPI, nonCRDComponent); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation")
+	if err := r.maintainFinalizer(ctx, gatewayAPI); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, log)
 		return reconcile.Result{}, err
 	}
 
@@ -486,8 +487,8 @@ func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigu
 // We add a finalizer to the Installation when the API server has been installed, and only remove that finalizer when
 // the API server has been deleted and its pods have stopped running. This allows for a graceful cleanup of API server resources
 // prior to the CNI plugin being removed.
-func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI client.Object, rc render.Component) error {
+func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI client.Object) error {
 	// These objects require graceful termination before the CNI plugin is torn down.
-	objs, _ := rc.Objects()
-	return utils.MaintainInstallationFinalizer(ctx, r.client, gatewayAPI, render.GatewayAPIFinalizer, objs...)
+	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}}
+	return utils.MaintainInstallationFinalizer(ctx, r.client, gatewayAPI, render.GatewayAPIFinalizer, &gatewayAPIDeployment)
 }

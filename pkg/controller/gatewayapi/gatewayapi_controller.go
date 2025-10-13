@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,6 +45,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/gatewayapi"
+)
+
+const (
+	DefaultPolicySyncPrefix = "/var/run/nodeagent"
 )
 
 var log = logf.Log.WithName("controller_gatewayapi")
@@ -200,7 +206,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// not already exist and cannot be installed.  The "optional" set is everything else that we
 	// would ideally install, to provide more options to our users; but this controller will
 	// only warn if any of those cannot be installed (and do not already exist).
-	essentialCRDs, optionalCRDs := render.GatewayAPICRDs(installation.KubernetesProvider)
+	essentialCRDs, optionalCRDs := gatewayapi.GatewayAPICRDs(installation.KubernetesProvider)
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
@@ -255,7 +261,13 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	gatewayConfig := &render.GatewayAPIImplementationConfig{
+	// patch felix config for l7-collector socket path.
+	if err = r.patchFelixConfiguration(ctx); err != nil {
+		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	gatewayConfig := &gatewayapi.GatewayAPIImplementationConfig{
 		Installation:          installation,
 		PullSecrets:           pullSecrets,
 		GatewayAPI:            gatewayAPI,
@@ -278,13 +290,13 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 			configMap,
 		)
 		if err == nil {
-			if _, ok := configMap.Data[render.EnvoyGatewayConfigKey]; !ok {
-				err = fmt.Errorf("missing '%s' key", render.EnvoyGatewayConfigKey)
+			if _, ok := configMap.Data[gatewayapi.EnvoyGatewayConfigKey]; !ok {
+				err = fmt.Errorf("missing '%s' key", gatewayapi.EnvoyGatewayConfigKey)
 			}
 		}
 		if err == nil {
 			gatewayConfig.CustomEnvoyGateway = &envoyapi.EnvoyGateway{}
-			err = yaml.Unmarshal([]byte(configMap.Data[render.EnvoyGatewayConfigKey]), gatewayConfig.CustomEnvoyGateway)
+			err = yaml.Unmarshal([]byte(configMap.Data[gatewayapi.EnvoyGatewayConfigKey]), gatewayConfig.CustomEnvoyGateway)
 		}
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyGatewayConfigRef", err, log)
@@ -385,7 +397,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// Render non-CRD resources for Gateway API support, i.e. for our specific bundled
 	// implementation of the Gateway API.  For these we specify the GatewayAPI CR as the owner,
 	// so that they all get automatically cleaned up if the GatewayAPI CR is removed again.
-	nonCRDComponent := render.GatewayAPIImplementationComponent(gatewayConfig)
+	nonCRDComponent := gatewayapi.GatewayAPIImplementationComponent(gatewayConfig)
 	err = imageset.ApplyImageSet(ctx, r.client, variant, nonCRDComponent)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error with images from ImageSet", err, log)
@@ -429,4 +441,37 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 		}
 	}
 	return resource, "", nil
+}
+
+// patchFelixConfiguration patches the FelixConfiguration resource with the desired policy sync path prefix.
+func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error {
+	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec)
+		policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
+
+		if policySyncPrefixSetDesired {
+			return false, nil
+		}
+
+		fc.Spec.PolicySyncPathPrefix = DefaultPolicySyncPrefix
+
+		log.Info(
+			"Patching FelixConfiguration: ",
+			"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
+		)
+		return true, nil
+	})
+
+	return err
+}
+
+func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigurationSpec) string {
+	// Respect existing policySyncPathPrefix if it's already set (e.g. EGW)
+	// This will cause policySyncPathPrefix value to remain when ApplicationLayer is disabled.
+	existing := fcSpec.PolicySyncPathPrefix
+	if existing != "" {
+		return existing
+	}
+
+	return DefaultPolicySyncPrefix
 }

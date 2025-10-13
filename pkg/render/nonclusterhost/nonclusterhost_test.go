@@ -107,7 +107,7 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 				Verbs:     []string{"get"},
 			},
 			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"bfdconfigurations",
 					"bgpconfigurations",

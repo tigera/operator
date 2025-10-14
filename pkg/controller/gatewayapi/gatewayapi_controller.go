@@ -462,7 +462,7 @@ func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error
 		policySyncPrefix := fc.Spec.PolicySyncPathPrefix
 		policySyncPrefixSetDesired := DefaultPolicySyncPrefix == policySyncPrefix
 
-		if policySyncPrefixSetDesired && policySyncPrefix != "" {
+		if !policySyncPrefixSetDesired && policySyncPrefix != "" {
 			return false, nil
 		}
 

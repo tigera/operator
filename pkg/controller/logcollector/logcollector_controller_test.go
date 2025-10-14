@@ -177,8 +177,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			node := ds.Spec.Template.Spec.Containers[0]
 			Expect(node).ToNot(BeNil())
 			Expect(node.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s%s:%s",
-					components.TigeraImagePath,
+				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentFluentd.Image,
 					components.ComponentFluentd.Version)))
 		})
@@ -218,8 +217,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			node := ds.Spec.Template.Spec.Containers[0]
 			Expect(node).ToNot(BeNil())
 			Expect(node.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s%s@%s",
-					components.TigeraImagePath,
+				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentFluentd.Image,
 					"sha256:fluentdhash")))
 
@@ -229,8 +227,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			node = ds.Spec.Template.Spec.Containers[0]
 			Expect(node).ToNot(BeNil())
 			Expect(node.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s%s@%s",
-					components.TigeraImagePath,
+				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentFluentdWindows.Image,
 					"sha256:fluentdwindowshash")))
 		})

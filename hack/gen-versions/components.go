@@ -17,60 +17,58 @@ package main
 import (
 	"fmt"
 	"os"
-	"strings"
 	"text/template"
 
 	"gopkg.in/yaml.v2"
 )
 
-var (
-	// default images for components that do not specify an image in versions.yml
-	// For now, it includes "calico/<imageName>" as well as "<imageName>" to handle
-	// older versions.yml files that have not been updated to remove the imagePath.
-	defaultImages = map[string]string{
-		"cni":                         "cni",
-		"cni-windows":                 "cni-windows",
-		"dikastes":                    "dikastes",
-		"kube-controllers":            "kube-controllers",
-		"node":                        "node",
-		"node-windows":                "node-windows",
-		"goldmane":                    "goldmane",
-		"guardian":                    "guardian",
-		"whisker":                     "whisker",
-		"whisker-backend":             "whisker-backend",
-		"calicoctl":                   "ctl",
-		"flexvol":                     "pod2daemon-flexvol",
-		"csi":                         "csi",
-		"csi-node-driver-registrar":   "node-driver-registrar",
-		"typha":                       "typha",
-		"key-cert-provisioner":        "key-cert-provisioner",
-		"apiserver":                   "apiserver",
-		"envoy-gateway":               "envoy-gateway",
-		"envoy-proxy":                 "envoy-proxy",
-		"envoy-ratelimit":             "envoy-ratelimit",
-		"eck-elasticsearch":           "unused-image",
-		"eck-elasticsearch-operator":  "unused-image",
-		"eck-kibana":                  "unused-image",
-		"coreos-prometheus":           "unused-image",
-		"coreos-alertmanager":         "unused-image",
-		"tigera-cni":                  "cni",
-		"tigera-cni-windows":          "cni-windows",
-		"linseed":                     "linseed",
-		"gateway-api-envoy-gateway":   "envoy-gateway",
-		"gateway-api-envoy-proxy":     "envoy-proxy",
-		"gateway-api-envoy-ratelimit": "envoy-ratelimit",
-	}
+var defaultImages = map[string]string{
+	"calico/cni":                 "calico/cni",
+	"calico/cni-windows":         "calico/cni-windows",
+	"calico/dikastes":            "calico/dikastes",
+	"calico/kube-controllers":    "calico/kube-controllers",
+	"calico/node":                "calico/node",
+	"calico/node-windows":        "calico/node-windows",
+	"calico/goldmane":            "calico/goldmane",
+	"calico/guardian":            "calico/guardian",
+	"calico/whisker":             "calico/whisker",
+	"calico/whisker-backend":     "calico/whisker-backend",
+	"calicoctl":                  "calico/ctl",
+	"flannel":                    "coreos/flannel",
+	"flexvol":                    "calico/pod2daemon-flexvol",
+	"calico/csi":                 "calico/csi",
+	"csi-node-driver-registrar":  "calico/node-driver-registrar",
+	"typha":                      "calico/typha",
+	"key-cert-provisioner":       "calico/key-cert-provisioner",
+	"eck-elasticsearch":          "unused/image",
+	"eck-elasticsearch-operator": "unused/image",
+	"eck-kibana":                 "unused/image",
+	"coreos-prometheus":          "unused/image",
+	"coreos-alertmanager":        "unused/image",
+	"guardian":                   "tigera/guardian",
+	"node":                       "tigera/node",
+	"node-windows":               "tigera/node-windows",
+	"tigera-cni":                 "tigera/cni",
+	"tigera-cni-windows":         "tigera/cni-windows",
+	"calico/apiserver":           "calico/apiserver",
+	"tigera/linseed":             "tigera/linseed",
+	"calico/envoy-gateway":       "calico/envoy-gateway",
+	"calico/envoy-proxy":         "calico/envoy-proxy",
+	"calico/envoy-ratelimit":     "calico/envoy-ratelimit",
+	"tigera/envoy-gateway":       "tigera/envoy-gateway",
+	"tigera/envoy-proxy":         "tigera/envoy-proxy",
+	"tigera/envoy-ratelimit":     "tigera/envoy-ratelimit",
+}
 
-	ignoredImages = map[string]struct{}{
-		"calico":            {},
-		"networking-calico": {},
-		"calico-private":    {},
-		"manager-proxy":     {},
-		"busybox":           {},
-		"api":               {},
-		"libcalico-go":      {},
-	}
-)
+var ignoredImages = map[string]struct{}{
+	"calico":            {},
+	"networking-calico": {},
+	"calico-private":    {},
+	"manager-proxy":     {},
+	"busybox":           {},
+	"calico/api":        {},
+	"libcalico-go":      {},
+}
 
 type Release struct {
 	// Title is the Release version and should match the major.minor.patch of the
@@ -84,9 +82,7 @@ type Components map[string]*Component
 type Component struct {
 	Version  string `json:"version"`
 	Registry string `json:"registry"`
-
-	// Image is the image name without any image path (e.g. cni, api-server)
-	Image string `json:"image"`
+	Image    string `json:"image"`
 }
 
 // GetComponents parses a versions.yml file, scrubs the data of known issues,
@@ -101,16 +97,8 @@ func GetComponents(versionsPath string) (Release, error) {
 	cv.Components = make(Components)
 	cv.Title = v.Title
 
-	// parse through the components listed in versions.yml to:
-	// - add known default images to any components that are missing them.
-	// - ignore any components that are not actually images.
-	// - trim imagePath from image names.
+	// add known default images to any components that are missing them.
 	for key, component := range v.Components {
-		// Trim off the "calico/" prefix from the key if it exists.
-		// This is to handle older versions.yml files
-		// that have not been updated to remove the imagePath.
-		// TODO: Remove this logic eventually.
-		key = strings.TrimPrefix(key, "calico/")
 		if _, ignore := ignoredImages[key]; ignore {
 			continue
 		}
@@ -122,15 +110,6 @@ func GetComponents(versionsPath string) (Release, error) {
 					"Either fill in the 'image' field or update this code with a defaultImage.", key)
 			}
 			component.Image = image
-		}
-
-		// Trim off the imagePath from the image name if a '/' exists.
-		// If there is no '/', the image name is left unchanged.
-		// TODO: Remove this logic once all versions.yml files have been updated to
-		// only contain imageName without imagePath.
-		imageParts := strings.SplitAfterN(component.Image, "/", 2)
-		if len(imageParts) == 2 {
-			component.Image = imageParts[1]
 		}
 
 		cv.Components[key] = component

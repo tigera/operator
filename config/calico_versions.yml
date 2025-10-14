@@ -5,37 +5,38 @@ components:
     version: master
   typha:
     version: master
-  node:
+  calico/node:
     version: master
-  cni:
+  calico/cni:
     version: master
-  node-windows:
+  calico/node-windows:
     version: master
-  cni-windows:
+  calico/cni-windows:
     version: master
-  kube-controllers:
+  calico/kube-controllers:
     version: master
-  goldmane:
+  calico/goldmane:
     version: master
   flexvol:
     version: master
-  apiserver:
+  calico/apiserver:
     version: master
-  csi:
+  calico/csi:
     version: master
   csi-node-driver-registrar:
     version: master
   key-cert-provisioner:
     version: master
-  whisker:
+  calico/whisker:
     version: master
-  whisker-backend:
+  calico/whisker-backend:
     version: master
-  envoy-gateway:
+  calico/envoy-gateway:
     version: master
-  envoy-proxy:
+  calico/envoy-proxy:
     version: master
-  envoy-ratelimit:
+  calico/envoy-ratelimit:
     version: master
-  guardian:
+  calico/guardian:
     version: master
+

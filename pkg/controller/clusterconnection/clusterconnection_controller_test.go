@@ -235,10 +235,10 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianContainerName)
 			Expect(dexC).ToNot(BeNil())
 			Expect(dexC.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s%s:%s",
-					components.TigeraImagePath,
+				fmt.Sprintf("some.registry.org/%s:%s",
 					components.ComponentGuardian.Image,
 					components.ComponentGuardian.Version)))
+
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -267,8 +267,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianContainerName)
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s%s@%s",
-					components.TigeraImagePath,
+				fmt.Sprintf("some.registry.org/%s@%s",
 					components.ComponentGuardian.Image,
 					"sha256:guardianhash")))
 		})
@@ -789,6 +788,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 					}
 				}
 			}
+
 		}
 		Expect(users).To(Equal(expectedUser))
 		Expect(groups).To(Equal(expectedGroup))
@@ -802,6 +802,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Entry("service accounts set", &operatorv1.Impersonation{ServiceAccounts: val}, nil, nil, val),
 		Entry("empty impersonation", &operatorv1.Impersonation{}, nil, nil, nil),
 	)
+
 })
 
 func createPodWithProxy(ctx context.Context, c client.Client, config *test.ProxyConfig, lowercase bool, replicaNum int) {

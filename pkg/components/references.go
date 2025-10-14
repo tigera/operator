@@ -21,62 +21,58 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 )
 
-// variant is used to differentiate between components across product variants.
-// Components that are shared across variants (e.g. operator) do not specify a variant.
-type variant string
-
-const (
-	calicoVariant     variant = "calico"
-	enterpriseVariant variant = "tigera"
-)
-
 type Component struct {
-	// Image is the image name for this component (e.g., node, cni)
-	Image string
-
-	// Version is the image version for this component (e.g., v3.8.1)
+	// Image is the full image path and name for this component (e.g., tigera/node, calico/cni)
+	Image   string
 	Version string
 
 	// Registry is only used for developer workflows. For production builds, the registry
 	// is always determined from user configuration. This field can be overridden
 	// as part of a developer workflow to deploy custom dev images on an individual basis.
 	Registry string
-
-	// variant is specify which product variant this component belongs to.
-	// It is used when determining default registry and image path.
-	variant variant
 }
 
 const UseDefault = "UseDefault"
 
-// getDefaults returns the default registry and imagePath for a given component.
-// This is used when no registry is explicitly defined by the component
-// and user does not explicitly specify a registry or imagePath.
-func getDefaults(c Component) (registry string, imagePath string) {
-	switch c.variant {
-	// If the component is a Calico component (variant: calico), use the Calico defaults.
-	case calicoVariant:
-		registry = CalicoRegistry
-		imagePath = CalicoImagePath
-	// If the component is an Enterprise component (variant: enterprise), use the Enterprise defaults.
-	case enterpriseVariant:
-		registry = TigeraRegistry
-		imagePath = TigeraImagePath
-	// Otherwise it is assumed to be an operator component which does not specify a variant.
-	default:
-		registry = OperatorRegistry
-		imagePath = OperatorImagePath
-	}
-	return
-}
-
 // GetReference returns the fully qualified image to use, including registry and version.
 func GetReference(c Component, registry, imagePath, imagePrefix string, is *operator.ImageSet) (string, error) {
-	defaultRegistry, defaultImagePath := getDefaults(c)
-
 	// If a user did not supply a registry, use the default registry
+	// based on component
 	if registry == "" || registry == UseDefault {
-		registry = defaultRegistry
+		switch c {
+		case ComponentCalicoNode,
+			ComponentCalicoNodeFIPS,
+			ComponentCalicoNodeWindows,
+			ComponentCalicoCNI,
+			ComponentCalicoCNIFIPS,
+			ComponentCalicoCNIWindows,
+			ComponentCalicoTypha,
+			ComponentCalicoTyphaFIPS,
+			ComponentCalicoKubeControllers,
+			ComponentCalicoKubeControllersFIPS,
+			ComponentCalicoFlexVolume,
+			ComponentCalicoAPIServer,
+			ComponentCalicoAPIServerFIPS,
+			ComponentCalicoCSRInitContainer,
+			ComponentCalicoCSI,
+			ComponentCalicoCSIFIPS,
+			ComponentCalicoCSIRegistrar,
+			ComponentCalicoCSIRegistrarFIPS,
+			ComponentCalicoEnvoyGateway,
+			ComponentCalicoEnvoyProxy,
+			ComponentCalicoEnvoyRatelimit,
+			ComponentCalicoGoldmane,
+			ComponentCalicoWhisker,
+			ComponentCalicoWhiskerBackend,
+			ComponentCalicoGuardian:
+
+			registry = CalicoRegistry
+		case ComponentOperatorInit:
+			registry = InitRegistry
+		default:
+			registry = TigeraRegistry
+		}
+
 		// If the component asks for an explicit registry, and the user
 		// did not provide a custom registry, use the one specified by
 		// the component.
@@ -89,30 +85,41 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 		registry = fmt.Sprintf("%s/", registry)
 	}
 
-	// If a user supplies an imaagePrefix, prepend it to the image name.
-	imageName := c.Image
+	image := c.Image
 	if imagePrefix != "" && imagePrefix != UseDefault {
-		imageName = fmt.Sprintf("%s%s", imagePrefix, imageName)
+		image = insertPrefix(image, imagePrefix)
 	}
-
-	// If a user did not supply an imagePath, use the default imagePath
-	if imagePath == "" || imagePath == UseDefault {
-		imagePath = defaultImagePath
-	} else if !strings.HasSuffix(imagePath, "/") {
-		// If the imagePath is explicitly set, make sure it ends with a slash so that the
-		// image can be appended correctly below.
-		imagePath = fmt.Sprintf("%s/", imagePath)
+	if imagePath != "" && imagePath != UseDefault {
+		image = ReplaceImagePath(image, imagePath)
 	}
 
 	if is == nil {
-		return fmt.Sprintf("%s%s%s:%s", registry, imagePath, imageName, c.Version), nil
+		return fmt.Sprintf("%s%s:%s", registry, image, c.Version), nil
 	}
 
 	for _, img := range is.Spec.Images {
-		if img.Image == fmt.Sprintf("%s%s", defaultImagePath, c.Image) {
-			return fmt.Sprintf("%s%s%s@%s", registry, imagePath, imageName, img.Digest), nil
+		if img.Image == c.Image {
+			return fmt.Sprintf("%s%s@%s", registry, image, img.Digest), nil
 		}
 	}
 
-	return "", fmt.Errorf("ImageSet did not contain image %s", fmt.Sprintf("%s%s", defaultImagePath, c.Image))
+	return "", fmt.Errorf("ImageSet did not contain image %s", c.Image)
+}
+
+func ReplaceImagePath(image, imagePath string) string {
+	subs := strings.SplitAfterN(image, "/", 2)
+	if len(subs) == 2 {
+		return fmt.Sprintf("%s/%s", imagePath, subs[1])
+	}
+	return fmt.Sprintf("%s/%s", imagePath, subs[0])
+}
+
+func insertPrefix(image, prefix string) string {
+	subs := strings.Split(image, "/")
+	if len(subs) == 1 {
+		// The given image is just a single image with no prefix.
+		return fmt.Sprintf("%s%s", prefix, image)
+	}
+	subs = append(subs[:len(subs)-1], fmt.Sprintf("%s%s", prefix, subs[len(subs)-1]))
+	return strings.Join(subs, "/")
 }

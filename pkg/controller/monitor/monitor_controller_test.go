@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -68,6 +68,7 @@ var _ = Describe("Monitor controller tests", func() {
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(monitoringv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		// Create a client that will have a crud interface of k8s objects.
 		ctx = context.Background()
@@ -85,6 +86,7 @@ var _ = Describe("Monitor controller tests", func() {
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("RemoveDeployments", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", common.TigeraPrometheusNamespace)
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
 		// Create an object we can use throughout the test to do the monitor reconcile loops.
@@ -113,6 +115,47 @@ var _ = Describe("Monitor controller tests", func() {
 			},
 		}
 		Expect(cli.Create(ctx, installation)).To(BeNil())
+
+		// Add the Prometheus and Alertmanager instances
+		prom := &monitoringv1.Prometheus{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      monitor.CalicoNodePrometheus,
+				Namespace: common.TigeraPrometheusNamespace,
+			},
+			Status: monitoringv1.PrometheusStatus{
+				Conditions: []monitoringv1.Condition{
+					{
+						Type:   monitoringv1.Available,
+						Status: monitoringv1.ConditionTrue,
+					},
+					{
+						Type:   monitoringv1.Reconciled,
+						Status: monitoringv1.ConditionTrue,
+					},
+				},
+			},
+		}
+		Expect(cli.Create(ctx, prom)).To(BeNil())
+
+		alertManager := &monitoringv1.Alertmanager{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      monitor.CalicoNodeAlertmanager,
+				Namespace: common.TigeraPrometheusNamespace,
+			},
+			Status: monitoringv1.AlertmanagerStatus{
+				Conditions: []monitoringv1.Condition{
+					{
+						Type:   monitoringv1.Available,
+						Status: monitoringv1.ConditionTrue,
+					},
+					{
+						Type:   monitoringv1.Reconciled,
+						Status: monitoringv1.ConditionTrue,
+					},
+				},
+			},
+		}
+		Expect(cli.Create(ctx, alertManager)).To(BeNil())
 
 		// Apply the Monitor CR to the fake cluster.
 		monitorCR = &operatorv1.Monitor{
@@ -145,8 +188,6 @@ var _ = Describe("Monitor controller tests", func() {
 
 		BeforeEach(func() {
 			// Prometheus related objects should not exist.
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
@@ -158,8 +199,6 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Prometheus related objects should be rendered after reconciliation.
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
@@ -227,6 +266,62 @@ var _ = Describe("Monitor controller tests", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should degrade if the prometheus statefulset isn't ready", func() {
+			prom := &monitoringv1.Prometheus{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, prom)).NotTo(HaveOccurred())
+
+			patch := client.MergeFrom(prom.DeepCopy())
+			prom.Status.Conditions = []monitoringv1.Condition{
+				{
+					Type:   monitoringv1.Available,
+					Status: monitoringv1.ConditionFalse,
+				},
+				{
+					Type:   monitoringv1.Reconciled,
+					Status: monitoringv1.ConditionTrue,
+				},
+			}
+			Expect(cli.Patch(ctx, prom, patch)).To(Succeed())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded",
+				operatorv1.ResourceNotReady,
+				"Prometheus component is not available",
+				mock.Anything,
+				mock.Anything,
+			)
+		})
+
+		It("should degrade if the alertmanager statefulset isn't ready", func() {
+			alertManager := &monitoringv1.Alertmanager{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, alertManager)).NotTo(HaveOccurred())
+
+			patch := client.MergeFrom(alertManager.DeepCopy())
+			alertManager.Status.Conditions = []monitoringv1.Condition{
+				{
+					Type:   monitoringv1.Available,
+					Status: monitoringv1.ConditionFalse,
+				},
+				{
+					Type:   monitoringv1.Reconciled,
+					Status: monitoringv1.ConditionTrue,
+				},
+			}
+			Expect(cli.Patch(ctx, alertManager, patch)).To(Succeed())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded",
+				operatorv1.ResourceNotReady,
+				"Alertmanager component is not available",
+				mock.Anything,
+				mock.Anything,
+			)
 		})
 
 		Context("controller reconciliation with external monitoring configuration", func() {

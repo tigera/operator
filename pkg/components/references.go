@@ -37,6 +37,11 @@ type Component struct {
 	// Version is the image version for this component (e.g., v3.8.1)
 	Version string
 
+	// imagePath is only used for developer workflows. For production builds, the imagePath
+	// is always determined from user configuration. This field can be overridden
+	// as part of a developer workflow to deploy custom dev images on an individual basis.
+	imagePath string
+
 	// Registry is only used for developer workflows. For production builds, the registry
 	// is always determined from user configuration. This field can be overridden
 	// as part of a developer workflow to deploy custom dev images on an individual basis.
@@ -98,6 +103,12 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 	// If a user did not supply an imagePath, use the default imagePath
 	if imagePath == "" || imagePath == UseDefault {
 		imagePath = defaultImagePath
+		// If the component asks for an explicit imagePath, and the user
+		// did not provide a custom imagePath, use the one specified by
+		// the component.
+		if c.imagePath != "" {
+			imagePath = c.imagePath
+		}
 	} else if !strings.HasSuffix(imagePath, "/") {
 		// If the imagePath is explicitly set, make sure it ends with a slash so that the
 		// image can be appended correctly below.

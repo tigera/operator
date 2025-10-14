@@ -75,18 +75,17 @@ var (
 type Release struct {
 	// Title is the Release version and should match the major.minor.patch of the
 	// Calico or Enterprise version included in the operator.
-	Title      string     `json:"title"`
-	Components Components `json:"components"`
+	Title      string     `yaml:"title"`
+	Components Components `yaml:"components"`
 }
 
 type Components map[string]*Component
 
 type Component struct {
-	Version  string `json:"version"`
-	Registry string `json:"registry"`
-
-	// Image is the image name without any image path (e.g. cni, api-server)
-	Image string `json:"image"`
+	Version   string `yaml:"version"`
+	Registry  string `yaml:"registry"`
+	ImagePath string `yaml:"imagePath"`
+	Image     string `yaml:"image"`
 }
 
 // GetComponents parses a versions.yml file, scrubs the data of known issues,
@@ -130,7 +129,24 @@ func GetComponents(versionsPath string) (Release, error) {
 		// only contain imageName without imagePath.
 		imageParts := strings.SplitAfterN(component.Image, "/", 2)
 		if len(imageParts) == 2 {
+			if component.ImagePath != "" {
+				return cv, fmt.Errorf("component '%s' has both imagePath and image with a path. "+
+					"Please remove the imagePath field or update the image field to not include a path", key)
+			}
+			component.ImagePath = imageParts[0]
 			component.Image = imageParts[1]
+		}
+
+		// ensure that imagePath and registry end with a '/' if they are set
+		// this is to avoid errors when constructing full image paths
+		// by concatenating registry + imagePath + image
+		if component.ImagePath != "" && !strings.HasSuffix(component.ImagePath, "/") {
+			return cv, fmt.Errorf("component '%s' has an imagePath that does not end with a '/'. "+
+				"Please update the imagePath field to end with a '/'", key)
+		}
+		if component.Registry != "" && !strings.HasSuffix(component.Registry, "/") {
+			return cv, fmt.Errorf("component '%s' has a registry that does not end with a '/'. "+
+				"Please update the registry field to end with a '/'", key)
 		}
 
 		cv.Components[key] = component

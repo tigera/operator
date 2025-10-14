@@ -200,11 +200,13 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 		return fmt.Errorf("object is not ObjectMetaAccessor")
 	}
 
+	if eo, ok := obj.(render.ErrorObject); ok {
+		return eo
+	}
+
 	multipleOwners := checkIfMultipleOwnersLabel(om.GetObjectMeta())
 	// Add owner ref for controller owned resources,
 	switch obj.(type) {
-	case render.ErrorObject:
-		return obj.(render.ErrorObject)
 	case *v3.UISettings:
 		// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
 	default:

@@ -56,8 +56,8 @@ type IstiodDeployment struct {
 	Spec *IstiodDeploymentSpec `json:"spec,omitempty"`
 }
 
-// IstiodCNIDaemonsetPodSpec defines the pod spec for customizing the Istio CNI Daemonset.
-type IstiodCNIDaemonsetPodSpec struct {
+// IstioCNIDaemonsetPodSpec defines the pod spec for customizing the Istio CNI Daemonset.
+type IstioCNIDaemonsetPodSpec struct {
 	// Affinity specifies the affinity for the deployment.
 	// +optional
 	Affinity *corev1.Affinity `json:"affinity,omitempty"`
@@ -76,7 +76,7 @@ type IstiodCNIDaemonsetPodSpec struct {
 type IstioCNIDaemonsetSpecTemplate struct {
 	// Spec allows users to specify custom fields for the Istio CNI Daemonset.
 	// +optional
-	Spec *IstiodCNIDaemonsetPodSpec `json:"spec,omitempty"`
+	Spec *IstioCNIDaemonsetPodSpec `json:"spec,omitempty"`
 }
 
 // IstioCNIDaemonsetSpec defines the spec for customizing the Istio CNI Daemonset.
@@ -134,13 +134,13 @@ type ZTunnelDaemonset struct {
 type IstioSpec struct {
 	// Istiod defines the resource requirements and node selector for the Istio deployment.
 	// +optional
-	Istiod *IstiodDeployment `json:"istioDeployment,omitempty"`
+	Istiod *IstiodDeployment `json:"istiod,omitempty"`
 	// IstioCNI defines the resource requirements for the Istio CNI plugin.
 	// +optional
 	IstioCNI *IstioCNIDaemonset `json:"istioCNI,omitempty"`
 	// ZTunnel defines the resource requirements for the ZTunnel component.
 	// +optional
-	ZTunnel *ZTunnelDaemonset `json:"zTunnel,omitempty"`
+	ZTunnel *ZTunnelDaemonset `json:"ztunnel,omitempty"`
 }
 
 // IstioStatus defines the observed state of Istio

@@ -161,7 +161,6 @@ var _ = Describe("packet capture controller tests", func() {
 	})
 
 	Context("verify reconciliation", func() {
-
 		It("should use builtin images", func() {
 			installation.Spec.CertificateManagement = certificateManagement
 			Expect(cli.Create(ctx, installation)).To(BeNil())
@@ -181,7 +180,8 @@ var _ = Describe("packet capture controller tests", func() {
 			pcContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.Containers, render.PacketCaptureContainerName)
 			Expect(pcContainer).ToNot(BeNil())
 			Expect(pcContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
 					components.ComponentPacketCapture.Image,
 					components.ComponentPacketCapture.Version)))
 			Expect(pcContainer.VolumeMounts).To(ConsistOf([]corev1.VolumeMount{
@@ -199,7 +199,8 @@ var _ = Describe("packet capture controller tests", func() {
 			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, "tigera-packetcapture-server-tls-key-cert-provisioner")
 			Expect(csrinitContainer).ToNot(BeNil())
 			Expect(csrinitContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
 					components.ComponentTigeraCSRInitContainer.Image,
 					components.ComponentTigeraCSRInitContainer.Version)))
 			pcSecret := corev1.Secret{
@@ -241,13 +242,15 @@ var _ = Describe("packet capture controller tests", func() {
 			pcContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.Containers, render.PacketCaptureContainerName)
 			Expect(pcContainer).ToNot(BeNil())
 			Expect(pcContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
 					components.ComponentPacketCapture.Image,
 					"sha256:packetcapturehash")))
 			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, "tigera-packetcapture-server-tls-key-cert-provisioner")
 			Expect(csrinitContainer).ToNot(BeNil())
 			Expect(csrinitContainer.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
 					components.ComponentTigeraCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
 			pcSecret := corev1.Secret{
@@ -542,7 +545,6 @@ var _ = Describe("packet capture controller tests", func() {
 			})
 
 			It("Should reconcile and not create packet capture resources for a management cluster in multi tenant mode", func() {
-
 				r := ReconcilePacketCapture{
 					client:              cli,
 					scheme:              scheme,
@@ -568,7 +570,6 @@ var _ = Describe("packet capture controller tests", func() {
 				// Ensure a deployment is not created for the packetcapture API
 				err = test.GetResource(cli, &deployment)
 				Expect(errors.IsNotFound(err)).Should(BeTrue())
-
 			})
 			It("Should reconcile and create packet capture resources for a management cluster in single tenant mode", func() {
 				r := ReconcilePacketCapture{
@@ -596,7 +597,6 @@ var _ = Describe("packet capture controller tests", func() {
 				// Ensure a deployment was created for the packetcapture API
 				err = test.GetResource(cli, &deployment)
 				Expect(errors.IsNotFound(err)).Should(BeFalse())
-
 			})
 		})
 	})

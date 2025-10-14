@@ -22,6 +22,7 @@ import (
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -354,6 +355,44 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	} else {
 		includeV3NetworkPolicy = true
+	}
+
+	p, err := utils.GetPrometheus(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve the Prometheus status", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if p != nil {
+		for _, cond := range p.Status.Conditions {
+			if cond.Type == monitoringv1.Available && cond.Status != monitoringv1.ConditionTrue {
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus component is not available", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			if cond.Type == monitoringv1.Reconciled && cond.Status != monitoringv1.ConditionTrue {
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus component is not reconciled", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	am, err := utils.GetAlertmanager(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve the Alertmanager status", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if am != nil {
+		for _, cond := range am.Status.Conditions {
+			if cond.Type == monitoringv1.Available && cond.Status != monitoringv1.ConditionTrue {
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Alertmanager component is not available", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			if cond.Type == monitoringv1.Reconciled && cond.Status != monitoringv1.ConditionTrue {
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Alertmanager component is not reconciled", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
 	}
 
 	// Create a component handler to manage the rendered component.

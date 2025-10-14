@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -164,7 +165,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		if errors.IsNotFound(err) {
 			reqLogger.V(2).Info("GatewayAPI object not found")
 			r.status.OnCRNotFound()
-			return reconcile.Result{}, nil
+			return reconcile.Result{}, r.maintainFinalizer(ctx, nil)
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for GatewayAPI CR: "+msg, err, reqLogger)
 		return reconcile.Result{}, err
@@ -403,6 +404,12 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error with images from ImageSet", err, log)
 		return reconcile.Result{}, err
 	}
+
+	if err := r.maintainFinalizer(ctx, gatewayAPI); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, log)
+		return reconcile.Result{}, err
+	}
+
 	err = r.newComponentHandler(log, r.client, r.scheme, gatewayAPI).CreateOrUpdateOrDelete(ctx, nonCRDComponent, r.status)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI resources", err, log)
@@ -474,4 +481,14 @@ func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigu
 	}
 
 	return DefaultPolicySyncPrefix
+}
+
+// maintainFinalizer manages this controller's finalizer on the Installation resource.
+// We add a finalizer to the Installation when the API server has been installed, and only remove that finalizer when
+// the API server has been deleted and its pods have stopped running. This allows for a graceful cleanup of API server resources
+// prior to the CNI plugin being removed.
+func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI client.Object) error {
+	// These objects require graceful termination before the CNI plugin is torn down.
+	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}}
+	return utils.MaintainInstallationFinalizer(ctx, r.client, gatewayAPI, render.GatewayAPIFinalizer, &gatewayAPIDeployment)
 }

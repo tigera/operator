@@ -156,7 +156,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	} else if goldmaneCR == nil {
 		r.status.OnCRNotFound()
-		return reconcile.Result{}, r.maintainFinalizer(ctx, nil)
+		f, err := r.maintainFinalizer(ctx, nil)
+		// If the finalizer is still set, then requeue so we aren't dependent on the periodic reconcile to check and remove the finalizer
+		if f {
+			return reconcile.Result{RequeueAfter: utils.FinalizerRemovalRetry}, nil
+		} else {
+			return reconcile.Result{}, err
+		}
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -218,7 +224,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TrustedBundle: trustedBundle,
 	})
 
-	if err := r.maintainFinalizer(ctx, goldmaneCR); err != nil {
+	if _, err := r.maintainFinalizer(ctx, goldmaneCR); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -254,7 +260,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-func (r *Reconciler) maintainFinalizer(ctx context.Context, goldmaneCr client.Object) error {
+func (r *Reconciler) maintainFinalizer(ctx context.Context, goldmaneCr client.Object) (bool, error) {
 	// These objects require graceful termination before the CNI plugin is torn down.
 	goldmaneDeployment := &v1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: goldmane.GoldmaneDeploymentName}}
 	return utils.MaintainInstallationFinalizer(ctx, r.cli, goldmaneCr, render.GoldmaneFinalizer, goldmaneDeployment)

@@ -49,11 +49,11 @@ import (
 )
 
 const (
-	managerPort           = 9443
+	ManagerPort           = 9443
 	managerTargetPort     = 9443
 	ManagerServiceName    = "tigera-manager"
 	ManagerDeploymentName = "tigera-manager"
-	ManagerNamespace      = "tigera-manager"
+	ManagerNamespace      = common.CalicoNamespace
 	ManagerServiceAccount = "tigera-manager"
 
 	// Default manager RBAC resources.
@@ -231,57 +231,60 @@ func (c *managerComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
-	objs := []client.Object{}
+	objsToCreate := []client.Object{}
+	var objsToDelete []client.Object
 
 	if !c.cfg.Tenant.MultiTenant() {
 		// For multi-tenant environments, the management cluster itself isn't shown in the UI so we only need to create these
 		// when there is no tenant.
-		objs = append(objs,
+		objsToCreate = append(objsToCreate,
 			managerClusterWideSettingsGroup(),
 			managerUserSpecificSettingsGroup(),
 			managerClusterWideTigeraLayer(),
 			managerClusterWideDefaultView(),
 		)
+
+		objsToDelete = c.deprecatedResources()
 	}
 
-	objs = append(objs,
+	objsToCreate = append(objsToCreate,
 		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
 		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
 		c.managedClustersWatchRoleBinding(),
 	)
-	objs = append(objs, c.managedClustersUpdateRBAC()...)
+	objsToCreate = append(objsToCreate, c.managedClustersUpdateRBAC()...)
 	if c.cfg.Tenant.MultiTenant() {
-		objs = append(objs, c.multiTenantManagedClustersAccess()...)
+		objsToCreate = append(objsToCreate, c.multiTenantManagedClustersAccess()...)
 	}
 
-	objs = append(objs,
+	objsToCreate = append(objsToCreate,
 		c.managerAllowTigeraNetworkPolicy(),
 		networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
 		managerServiceAccount(c.cfg.Namespace),
 	)
-	objs = append(objs, c.getTLSObjects()...)
-	objs = append(objs, c.managerService())
+	objsToCreate = append(objsToCreate, c.getTLSObjects()...)
+	objsToCreate = append(objsToCreate, c.managerService())
 
 	if c.cfg.VoltronRouteConfig != nil {
-		objs = append(objs, c.cfg.VoltronRouteConfig.RoutesConfigMap(c.cfg.Namespace))
+		objsToCreate = append(objsToCreate, c.cfg.VoltronRouteConfig.RoutesConfigMap(c.cfg.Namespace))
 	}
 
-	objs = append(objs, c.managerDeployment())
+	objsToCreate = append(objsToCreate, c.managerDeployment())
 	if c.cfg.KeyValidatorConfig != nil {
-		objs = append(objs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(c.cfg.Namespace)...)...)
+		objsToCreate = append(objsToCreate, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(c.cfg.Namespace)...)...)
 	}
 
 	// The following secret is read by kube controllers and sent to managed clusters so that linseed clients in the managed cluster
 	// can authenticate the certificate presented by Voltron.
 	if c.cfg.VoltronLinseedKeyPair != nil {
 		if c.cfg.VoltronLinseedKeyPair.UseCertificateManagement() {
-			objs = append(objs, CreateCertificateSecret(c.cfg.Installation.CertificateManagement.CACert, VoltronLinseedPublicCert, c.cfg.TruthNamespace))
+			objsToCreate = append(objsToCreate, CreateCertificateSecret(c.cfg.Installation.CertificateManagement.CACert, VoltronLinseedPublicCert, c.cfg.TruthNamespace))
 		} else {
-			objs = append(objs, CreateCertificateSecret(c.cfg.VoltronLinseedKeyPair.GetCertificatePEM(), VoltronLinseedPublicCert, c.cfg.TruthNamespace))
+			objsToCreate = append(objsToCreate, CreateCertificateSecret(c.cfg.VoltronLinseedKeyPair.GetCertificatePEM(), VoltronLinseedPublicCert, c.cfg.TruthNamespace))
 		}
 	}
 
-	return objs, nil
+	return objsToCreate, objsToDelete
 }
 
 func (c *managerComponent) Ready() bool {
@@ -396,7 +399,7 @@ func (c *managerComponent) managerProbe() *corev1.Probe {
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/",
-				Port:   intstr.FromInt(managerPort),
+				Port:   intstr.FromInt(ManagerPort),
 				Scheme: corev1.URISchemeHTTPS,
 			},
 		},
@@ -410,7 +413,7 @@ func (c *managerComponent) managerUIAPIsProbe() *corev1.Probe {
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/tigera-elasticsearch/version",
-				Port:   intstr.FromInt(managerPort),
+				Port:   intstr.FromInt(ManagerPort),
 				Scheme: corev1.URISchemeHTTPS,
 			},
 		},
@@ -424,7 +427,7 @@ func (c *managerComponent) managerProxyProbe() *corev1.Probe {
 		ProbeHandler: corev1.ProbeHandler{
 			HTTPGet: &corev1.HTTPGetAction{
 				Path:   "/voltron/api/health",
-				Port:   intstr.FromInt(managerPort),
+				Port:   intstr.FromInt(ManagerPort),
 				Scheme: corev1.URISchemeHTTPS,
 			},
 		},
@@ -749,7 +752,7 @@ func (c *managerComponent) managerService() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
-					Port:       managerPort,
+					Port:       ManagerPort,
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(managerTargetPort),
 				},
@@ -1318,6 +1321,20 @@ func managerClusterWideDefaultView() *v3.UISettings {
 						Name: "cluster-settings.layer.tigera-infrastructure",
 					},
 				}},
+			},
+		},
+	}
+}
+
+func (*managerComponent) deprecatedResources() []client.Object {
+	return []client.Object{
+		&corev1.Namespace{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Namespace",
+				APIVersion: "v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "tigera-manager",
 			},
 		},
 	}

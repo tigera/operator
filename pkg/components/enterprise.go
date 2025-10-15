@@ -233,7 +233,7 @@ var (
 
 	ComponentGatewayL7Collector = Component{
 		Version:  "master",
-		Image:    "tigera/gateway-l7-collector",
+		Image:    "gateway-l7-collector",
 		Registry: "",
 	}
 

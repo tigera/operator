@@ -266,6 +266,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "envoy" }}

@@ -24,6 +24,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "compliance-benchmarker" }}
@@ -31,6 +32,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "compliance-controller" }}
@@ -38,6 +40,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "compliance-reporter" }}
@@ -45,6 +48,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "compliance-server" }}
@@ -52,6 +56,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "compliance-snapshotter" }}
@@ -59,6 +64,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "key-cert-provisioner" }}
@@ -66,6 +72,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "deep-packet-inspection" }}
@@ -73,18 +80,19 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "eck-elasticsearch" }}
 	ComponentEckElasticsearch = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
+		variant: enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "eck-kibana" }}
 	ComponentEckKibana = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
+		variant: enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "elastic-tsee-installer" }}
@@ -92,6 +100,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with .Components.elasticsearch }}
@@ -99,12 +108,13 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "eck-elasticsearch-operator" }}
 	ComponentECKElasticsearchOperator = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
+		variant: enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "elasticsearch-operator" }}
@@ -112,6 +122,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "ui-apis" }}
@@ -119,6 +130,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "es-gateway" }}
@@ -126,6 +138,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "linseed" }}
@@ -133,6 +146,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with .Components.fluentd }}
@@ -140,6 +154,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "fluentd-windows" }}
@@ -147,6 +162,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with .Components.guardian }}
@@ -154,6 +170,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "intrusion-detection-controller" }}
@@ -161,6 +178,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "waf-http-filter" }}
@@ -168,6 +186,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "webhooks-processor" }}
@@ -175,6 +194,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with .Components.kibana }}
@@ -182,6 +202,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "manager" }}
@@ -189,6 +210,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "dex" }}
@@ -196,6 +218,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with .Components.voltron }}
@@ -203,6 +226,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "packetcapture" }}
@@ -210,6 +234,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "policy-recommendation" }}
@@ -217,6 +242,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "egress-gateway" }}
@@ -224,6 +250,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "l7-collector" }}
@@ -231,6 +258,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "gateway-l7-collector" }}
@@ -245,6 +273,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "dikastes" }}
@@ -252,6 +281,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "l7-admission-controller" }}
@@ -259,12 +289,13 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
+		variant: enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "prometheus" }}
@@ -272,6 +303,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "tigera-prometheus-service" }}
@@ -279,12 +311,13 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "coreos-alertmanager" }}
 	ComponentCoreOSAlertmanager = Component{
-		Version:  "{{ .Version }}",
-		Registry: "{{ .Registry }}",
+		Version: "{{ .Version }}",
+		variant: enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "alertmanager" }}
@@ -292,6 +325,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "queryserver" }}
@@ -299,6 +333,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "kube-controllers" }}
@@ -306,6 +341,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "node" }}
@@ -313,6 +349,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "node-windows" }}
@@ -320,6 +357,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with .Components.typha }}
@@ -327,6 +365,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "tigera-cni" }}
@@ -334,6 +373,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "tigera-cni-windows" }}
@@ -341,6 +381,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "elasticsearch-metrics" }}
@@ -348,6 +389,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "flexvol" }}
@@ -355,6 +397,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "csi" }}
@@ -362,6 +405,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "csi-node-driver-registrar" }}
@@ -369,6 +413,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "gateway-api-envoy-gateway" }}
@@ -376,6 +421,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "gateway-api-envoy-proxy" }}
@@ -383,6 +429,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "gateway-api-envoy-ratelimit" }}
@@ -390,6 +437,7 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
 	}
 {{- end }}
 	// Only components that correspond directly to images should be included in this list,

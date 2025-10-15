@@ -283,7 +283,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			Expect(test.GetResource(cli, &linseedDp)).To(BeNil())
 			linseed := test.GetContainer(linseedDp.Spec.Template.Spec.Containers, linseed.DeploymentName)
 			Expect(linseed).ToNot(BeNil())
-			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s@%s", components.ComponentLinseed.Image, "sha256:linseedhash")))
+			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentLinseed.Image, "sha256:linseedhash")))
 		})
 	})
 
@@ -504,7 +504,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			Expect(test.GetResource(cli, &linseedDp)).To(BeNil())
 			linseed := test.GetContainer(linseedDp.Spec.Template.Spec.Containers, linseed.DeploymentName)
 			Expect(linseed).ToNot(BeNil())
-			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s@%s", components.ComponentLinseed.Image, "sha256:linseedhash")))
+			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentLinseed.Image, "sha256:linseedhash")))
 		})
 
 		Context("External ES mode", func() {

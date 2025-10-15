@@ -4,168 +4,170 @@ components:
   libcalico-go:
     version: master
   manager:
-    image: tigera/manager
+    image: manager
     version: master
   voltron:
-    image: tigera/voltron
+    image: voltron
     version: master
   apiserver:
-    image: tigera/apiserver
+    image: apiserver
     version: master
   queryserver:
-    image: tigera/queryserver
+    image: queryserver
     version: master
   kube-controllers:
-    image: tigera/kube-controllers
+    image: kube-controllers
     version: master
   typha:
-    image: tigera/typha
+    image: typha
     version: master
   node:
-    image: tigera/node
+    image: node
     version: master
   node-windows:
-    image: tigera/node-windows
+    image: node-windows
     version: master
   fluentd:
-    image: tigera/fluentd
+    image: fluentd
     version: master
   fluentd-windows:
-    image: tigera/fluentd-windows
+    image: fluentd-windows
     version: master
   ui-apis:
-    image: tigera/ui-apis
+    image: ui-apis
     version: master
   linseed:
-    image: tigera/linseed
+    image: linseed
     version: master
   es-gateway:
-    image: tigera/es-gateway
+    image: es-gateway
     version: master
   dex:
-    image: tigera/dex
+    image: dex
     version: master
+  # eck-kibana holds the version of Kibana built for tigera/kibana
   eck-kibana:
     version: 8.18.4
   kibana:
-    image: tigera/kibana
+    image: kibana
     version: master
+  # eck-elasticsearch holds the version of Elasticsearch built for tigera/elasticsearch
   eck-elasticsearch:
     version: 8.18.4
   elasticsearch:
-    image: tigera/elasticsearch
+    image: elasticsearch
     version: master
   elastic-tsee-installer:
-    image: tigera/intrusion-detection-job-installer
+    image: intrusion-detection-job-installer
     version: master
   es-curator:
-    image: tigera/es-curator
+    image: es-curator
     version: master
   intrusion-detection-controller:
-    image: tigera/intrusion-detection-controller
+    image: intrusion-detection-controller
     version: master
   waf-http-filter:
-    image: tigera/waf-http-filter
+    image: waf-http-filter
     version: master
   webhooks-processor:
-    image: tigera/webhooks-processor
+    image: webhooks-processor
     version: master
   compliance-controller:
-    image: tigera/compliance-controller
+    image: compliance-controller
     version: master
   compliance-reporter:
-    image: tigera/compliance-reporter
+    image: compliance-reporter
     version: master
   compliance-snapshotter:
-    image: tigera/compliance-snapshotter
+    image: compliance-snapshotter
     version: master
   compliance-server:
-    image: tigera/compliance-server
+    image: compliance-server
     version: master
   compliance-benchmarker:
-    image: tigera/compliance-benchmarker
+    image: compliance-benchmarker
     version: master
   guardian:
-    image: tigera/guardian
+    image: guardian
     version: master
   tigera-cni:
-    image: tigera/cni
+    image: cni
     version: master
   tigera-cni-windows:
-    image: tigera/cni-windows
+    image: cni-windows
     version: master
   elasticsearch-metrics:
-    image: tigera/elasticsearch-metrics
+    image: elasticsearch-metrics
     version: master
   packetcapture:
-    image: tigera/packetcapture
+    image: packetcapture
     version: master
   policy-recommendation:
-    image: tigera/policy-recommendation
+    image: policy-recommendation
     version: master
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
     version: v3.4.1
   prometheus:
-    image: tigera/prometheus
+    image: prometheus
     version: master
-  # coreos-prometheus holds the version of alertmanager built for tigera/alertmanager,
+  # coreos-alertmanager holds the version of alertmanager built for tigera/alertmanager,
   # which prometheus operator uses to validate.
   coreos-alertmanager:
     version: v0.28.0
   alertmanager:
-    image: tigera/alertmanager
+    image: alertmanager
     version: master
   tigera-prometheus-service:
-    image: tigera/prometheus-service
+    image: prometheus-service
     version: master
   deep-packet-inspection:
-    image: tigera/deep-packet-inspection
+    image: deep-packet-inspection
     version: master
   flexvol:
-    image: tigera/pod2daemon-flexvol
+    image: pod2daemon-flexvol
     version: master
   csi:
-    image: tigera/csi
+    image: csi
     version: master
   csi-node-driver-registrar:
-    image: tigera/node-driver-registrar
+    image: node-driver-registrar
     version: master
-  # The components below are third-party images that have been retagged under
-  # quay.io/tigera so all enterprise images come from the same repository and org.
   elasticsearch-operator:
-    image: tigera/eck-operator
+    image: eck-operator
     version: master
+  # eck-elasticsearch-operator holds the version of the ECK operator used to manage
+  # Elasticsearch
   eck-elasticsearch-operator:
     version: 2.16.0
   l7-collector:
-    image: tigera/l7-collector
+    image: l7-collector
     version: master
   gateway-l7-collector:
     image: tigera/gateway-l7-collector
     version: master
   envoy:
-    image: tigera/envoy
+    image: envoy
     version: master
   dikastes:
-    image: tigera/dikastes
+    image: dikastes
     version: master
   l7-admission-controller:
-    image: tigera/l7-admission-controller
+    image: l7-admission-controller
     version: master
   egress-gateway:
-    image: tigera/egress-gateway
+    image: egress-gateway
     version: master
   key-cert-provisioner:
-    image: tigera/key-cert-provisioner
+    image: key-cert-provisioner
     version: master
   gateway-api-envoy-gateway:
-    image: tigera/envoy-gateway
+    image: envoy-gateway
     version: master
   gateway-api-envoy-proxy:
-    image: tigera/envoy-proxy
+    image: envoy-proxy
     version: master
   gateway-api-envoy-ratelimit:
-    image: tigera/envoy-ratelimit
+    image: envoy-ratelimit
     version: master

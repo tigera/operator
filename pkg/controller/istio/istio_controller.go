@@ -184,7 +184,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	if err = r.Get(ctx, client.ObjectKey{Namespace: render.IstioNamespace,
 		Name: render.IstioIstiodDeploymentName}, istiodDep); err != nil {
 
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Istiod deployment not found", err, log)
+		r.status.SetDegraded(operatorv1.ResourceNotFound, "Istiod deployment not found", err, log)
 		return reconcile.Result{}, err
 	}
 	if istiodDep.Spec.Replicas == nil || istiodDep.Status.ReadyReplicas != *istiodDep.Spec.Replicas {
@@ -196,7 +196,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	if err = r.Get(ctx, client.ObjectKey{Namespace: render.IstioNamespace,
 		Name: render.IstioCNIDaemonSetName}, istioCniDs); err != nil {
 
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Istio CNI daemonset not found", err, log)
+		r.status.SetDegraded(operatorv1.ResourceNotFound, "Istio CNI daemonset not found", err, log)
 		return reconcile.Result{}, err
 	}
 	if istioCniDs.Status.NumberReady != istioCniDs.Status.DesiredNumberScheduled {
@@ -208,7 +208,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	if err = r.Get(ctx, client.ObjectKey{Namespace: render.IstioNamespace,
 		Name: render.IstioZTunnelDaemonSetName}, ztunnelDs); err != nil {
 
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "ZTunnel daemonset not found", err, log)
+		r.status.SetDegraded(operatorv1.ResourceNotFound, "ZTunnel daemonset not found", err, log)
 		return reconcile.Result{}, err
 	}
 	if ztunnelDs.Status.NumberReady != ztunnelDs.Status.DesiredNumberScheduled {

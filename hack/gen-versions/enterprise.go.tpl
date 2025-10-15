@@ -261,6 +261,13 @@ var (
 		variant:  enterpriseVariant,
 	}
 {{- end }}
+{{ with index .Components "gateway-l7-collector" }}
+	ComponentGatewayL7Collector = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+	}
+{{- end }}
 {{ with index .Components "envoy" }}
 	ComponentEnvoyProxy = Component{
 		Version:  "{{ .Version }}",
@@ -462,6 +469,7 @@ var (
 		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
 		ComponentL7Collector,
+		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,

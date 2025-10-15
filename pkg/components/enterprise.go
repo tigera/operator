@@ -231,6 +231,12 @@ var (
 		variant:  enterpriseVariant,
 	}
 
+	ComponentGatewayL7Collector = Component{
+		Version:  "master",
+		Image:    "gateway-l7-collector",
+		Registry: "",
+	}
+
 	ComponentEnvoyProxy = Component{
 		Version:  "master",
 		Image:    "envoy",
@@ -409,6 +415,7 @@ var (
 		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
 		ComponentL7Collector,
+		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,

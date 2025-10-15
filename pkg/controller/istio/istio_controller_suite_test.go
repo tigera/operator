@@ -20,14 +20,10 @@ import (
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/reporters"
 	. "github.com/onsi/gomega"
-	uzap "go.uber.org/zap"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func TestStatus(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
+func TestIstio(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/ut/istio_controller_suite.xml")
+	junitReporter := reporters.NewJUnitReporter("../../../report/ut/istio_suite.xml")
 	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/istio Suite", []Reporter{junitReporter})
 }

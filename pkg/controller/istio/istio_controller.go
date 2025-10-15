@@ -187,7 +187,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Istiod deployment not found", err, log)
 		return reconcile.Result{}, err
 	}
-	if istiodDep.Status.ReadyReplicas != *istiodDep.Spec.Replicas {
+	if istiodDep.Spec.Replicas == nil || istiodDep.Status.ReadyReplicas != *istiodDep.Spec.Replicas {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Istiod deployment not ready", nil, log)
 		return reconcile.Result{RequeueAfter: time.Second * 5}, nil
 	}

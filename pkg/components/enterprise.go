@@ -235,6 +235,7 @@ var (
 		Version:  "master",
 		Image:    "gateway-l7-collector",
 		Registry: "",
+		variant:  enterpriseVariant,
 	}
 
 	ComponentEnvoyProxy = Component{

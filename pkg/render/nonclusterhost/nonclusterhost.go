@@ -99,7 +99,7 @@ func (c *nonClusterHostComponent) tokenSecret() *corev1.Secret {
 }
 
 func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
-	// calico node rules
+	// Calico node rules
 	rules := []rbacv1.PolicyRule{
 		{
 			// Calico uses endpoint slices for service-based network policy rules.
@@ -172,7 +172,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	// calico fluent-bit rules
+	// Calico fluent-bit rules
 	rules = append(rules, []rbacv1.PolicyRule{
 		{
 			// Used for creating service account tokens to be used by the linseed out plugin.
@@ -209,12 +209,23 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 		},
 	}...)
 
-	// For non-cluster host init process to update labels.
+	// For non-cluster host init process
 	rules = append(rules, []rbacv1.PolicyRule{
 		{
+			// Used to update labels on the HostEndpoint resource.
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"hostendpoints"},
 			Verbs:     []string{"list", "update"},
+		},
+		{
+			// Used to get BYO certificate secrets.
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get"},
+			ResourceNames: []string{
+				render.NodeTLSSecretNameNonClusterHost,
+				render.TyphaTLSSecretNameNonClusterHost,
+			},
 		},
 	}...)
 

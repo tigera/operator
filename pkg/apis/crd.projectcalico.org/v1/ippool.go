@@ -119,7 +119,7 @@ func NewIPPool() *IPPool {
 	return &IPPool{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       KindIPPool,
-			APIVersion: "crd.projectcalico.org/v1",
+			APIVersion: "projectcalico.org/v3",
 		},
 	}
 }
@@ -130,7 +130,7 @@ func NewIPPoolList() *IPPoolList {
 	return &IPPoolList{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       KindIPPoolList,
-			APIVersion: "crd.projectcalico.org/v1",
+			APIVersion: "projectcalico.org/v3",
 		},
 	}
 }

@@ -138,7 +138,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "list", "watch"},
 			},

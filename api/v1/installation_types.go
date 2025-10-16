@@ -648,7 +648,7 @@ type CalicoNetworkSpec struct {
 	//
 	// * A value of 0 disables pod startup delays.
 	//
-	// Default: 0
+	// Default: 90
 	// +optional
 	LinuxPolicySetupTimeoutSeconds *int32 `json:"linuxPolicySetupTimeoutSeconds,omitempty"`
 }

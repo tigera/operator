@@ -18,7 +18,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	v1 "k8s.io/api/apps/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -154,13 +156,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Goldmane CR", err, reqLogger)
 		return reconcile.Result{}, err
-	} else if goldmaneCR == nil {
-		r.status.OnCRNotFound()
-		return reconcile.Result{}, r.maintainFinalizer(ctx, nil)
 	}
-	r.status.OnCRFound()
-	// SetMetaData in the TigeraStatus such as observedGenerations.
-	defer r.status.SetMetaData(&goldmaneCR.ObjectMeta)
 
 	variant, installation, err := utils.GetInstallation(ctx, r.cli)
 	if err != nil {
@@ -168,6 +164,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	} else if installation == nil {
 		return reconcile.Result{}, nil
 	}
+
+	if goldmaneCR == nil {
+		r.status.OnCRNotFound()
+		// Handle deletion: delete deployment before removing finalizer
+		return r.handleDeletion(ctx, variant, installation, reqLogger)
+	}
+	r.status.OnCRFound()
+	// SetMetaData in the TigeraStatus such as observedGenerations.
+	defer r.status.SetMetaData(&goldmaneCR.ObjectMeta)
 
 	mgmtClusterConnectionCR, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
 	if err != nil {
@@ -250,6 +255,31 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
+
+	return reconcile.Result{}, nil
+}
+
+func (r *Reconciler) handleDeletion(ctx context.Context, variant operatorv1.ProductVariant, installation *operatorv1.InstallationSpec, reqLogger logr.Logger) (reconcile.Result, error) {
+	// When the Goldmane CR is deleted, we need to clean up the deployment before removing the finalizer.
+	// Delete the goldmane deployment directly
+	goldmaneDeployment := &v1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      goldmane.GoldmaneDeploymentName,
+			Namespace: goldmane.GoldmaneNamespace,
+		},
+	}
+
+	err := r.cli.Delete(ctx, goldmaneDeployment)
+	if err != nil && !errors.IsNotFound(err) {
+		reqLogger.Error(err, "Error deleting goldmane deployment during cleanup")
+		return reconcile.Result{}, err
+	}
+
+	// Now try to maintain the finalizer - it will only be removed if all resources and pods are cleaned up
+	if err := r.maintainFinalizer(ctx, nil); err != nil {
+		reqLogger.Error(err, "Error maintaining finalizer during deletion")
+		return reconcile.Result{}, err
+	}
 
 	return reconcile.Result{}, nil
 }

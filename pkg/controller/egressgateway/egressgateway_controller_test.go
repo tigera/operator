@@ -29,7 +29,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -224,12 +223,12 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			for _, elem := range expectedEgwEnvVar {
 				Expect(egwContainer.Env).To(ContainElement(elem))
 			}
-			expectedAffinity := v1.Affinity{}
-			expectedAffinity.PodAntiAffinity = &v1.PodAntiAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
+			expectedAffinity := corev1.Affinity{}
+			expectedAffinity.PodAntiAffinity = &corev1.PodAntiAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
 					{
 						Weight: 1,
-						PodAffinityTerm: v1.PodAffinityTerm{
+						PodAffinityTerm: corev1.PodAffinityTerm{
 							LabelSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{"projectcalico.org/egw": "calico-red"},
 							},
@@ -580,7 +579,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 		})
 
 		It("Should throw an error when failure detection is specified without ICMP and HTTP probes", func() {
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "Either ICMP or HTTP probe must be configured", mock.Anything, mock.Anything).Return()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "either ICMP or HTTP probe must be configured", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			labels := map[string]string{"egress-code": "red"}
@@ -761,7 +760,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			installation.Status.CalicoVersion = "3.15"
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
-			var requeueInterval time.Duration = 30 * time.Second
+			requeueInterval := 30 * time.Second
 
 			labels := map[string]string{"egress-code": "red"}
 			egw := &operatorv1.EgressGateway{

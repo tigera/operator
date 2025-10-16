@@ -545,8 +545,8 @@ func (m *CoreNamespaceMigration) ensureKubeSysNodeDaemonSetHasNodeSelectorAndIsR
 		if err != nil {
 			return false, err
 		}
-		if ds.Status.ObservedGeneration != ds.ObjectMeta.Generation {
-			log.Info(fmt.Sprintf("waiting for observed generation (%d) to match object generation (%d)", ds.Status.ObservedGeneration, ds.ObjectMeta.Generation))
+		if ds.Status.ObservedGeneration != ds.Generation {
+			log.Info(fmt.Sprintf("waiting for observed generation (%d) to match object generation (%d)", ds.Status.ObservedGeneration, ds.Generation))
 			return false, nil
 		}
 		if ds.Status.DesiredNumberScheduled != ds.Status.NumberReady {
@@ -565,7 +565,7 @@ func (m *CoreNamespaceMigration) addNodeSelectorToDaemonSet(ctx context.Context,
 	if _, ok := ds.Spec.Template.Spec.NodeSelector[key]; !ok {
 		var patchBytes []byte
 		if len(ds.Spec.Template.Spec.NodeSelector) > 0 {
-			k := strings.Replace(key, "/", "~1", -1)
+			k := strings.ReplaceAll(key, "/", "~1")
 
 			// This patch does not work when NodeSelectors don't already exist, only use it when some already exist.
 			p := []StringPatch{
@@ -665,7 +665,7 @@ func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated(ctx context.Context,
 			return false, err
 		}
 
-		var maxUnavailable int32 = defaultMaxUnavailable
+		maxUnavailable := defaultMaxUnavailable
 
 		if csMaxUnavailable != nil {
 			numNodesMaxUnavailable, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(ksD+csD), false)
@@ -730,7 +730,7 @@ func (m *CoreNamespaceMigration) addNodeLabel(ctx context.Context, nodeName, key
 			needUpdate = false
 		}
 
-		k := strings.Replace(key, "/", "~1", -1)
+		k := strings.ReplaceAll(key, "/", "~1")
 
 		lp := []StringPatch{{
 			Op:    "add",
@@ -783,7 +783,7 @@ func (m *CoreNamespaceMigration) removeNodeLabel(ctx context.Context, nodeName, 
 		}
 
 		// With JSONPatch '/' must be escaped as '~1' http://jsonpatch.com/
-		k := strings.Replace(key, "/", "~1", -1)
+		k := strings.ReplaceAll(key, "/", "~1")
 		lp := []StringPatch{{
 			Op:   "remove",
 			Path: fmt.Sprintf("/metadata/labels/%s", k),

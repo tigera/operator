@@ -37,7 +37,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/render/common/meta"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -681,7 +680,7 @@ func (a *readOnlyTrustedBundle) MountPath() string {
 	return a.bundle.MountPath()
 }
 
-func (a *readOnlyTrustedBundle) VolumeMounts(osType meta.OSType) []corev1.VolumeMount {
+func (a *readOnlyTrustedBundle) VolumeMounts(osType rmeta.OSType) []corev1.VolumeMount {
 	return a.bundle.VolumeMounts(osType)
 }
 

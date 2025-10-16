@@ -204,8 +204,8 @@ var (
 	}
 
 	ComponentGatewayL7Collector = Component{
-		Version:  "master",
-		Image:    "gateway-l7-collector",
+		Version:  "release-calient-v3.22",
+		Image:    "tigera/gateway-l7-collector",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}

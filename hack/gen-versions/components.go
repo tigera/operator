@@ -104,33 +104,38 @@ func GetComponents(versionsPath string) (Release, error) {
 	// parse through the components listed in versions.yml to:
 	// - add known default images to any components that are missing them.
 	// - ignore any components that are not actually images.
-	// - trim imagePath from image names.
+	// - validate components are well formed.
 	for key, component := range v.Components {
-		// Trim off the "calico/" prefix from the key if it exists.
-		// This is to handle older versions.yml files
-		// that have not been updated to remove the imagePath.
-		// TODO: Remove this logic eventually.
-		key = strings.TrimPrefix(key, "calico/")
+		// Ignore components that are not actually images.
 		if _, ignore := ignoredImages[key]; ignore {
 			continue
 		}
 
+		// Add default image if not specified.
 		if component.Image == "" {
 			image := defaultImages[key]
 			if image == "" {
-				return cv, fmt.Errorf("no image nor default image available for component '%s'. "+
-					"Either fill in the 'image' field or update this code with a defaultImage.", key)
+				return cv, fmt.Errorf("image not specified and no default image available for component %q. "+
+					"Either fill in the 'image' field or update this code with a defaultImage. "+
+					"If key contains %q, remove it and try again.", key, "calico/")
 			}
 			component.Image = image
 		}
 
-		// Trim off the imagePath from the image name if a '/' exists.
-		// If there is no '/', the image name is left unchanged.
-		// TODO: Remove this logic once all versions.yml files have been updated to
-		// only contain imageName without imagePath.
+		// Ensure that the component is well formed:
+		// Version must be specified.
+		if component.Version == "" {
+			return cv, fmt.Errorf("no version specified for component %q", key)
+		}
+		// Registry must end with a '/' if specified.
+		if component.Registry != "" && !strings.HasSuffix(component.Registry, "/") {
+			return cv, fmt.Errorf("registry %q specified for component %q must end with a '/'", component.Registry, key)
+		}
+		// Image must not contain any '/' characters - indicating an image path.
 		imageParts := strings.SplitAfterN(component.Image, "/", 2)
-		if len(imageParts) == 2 {
-			component.Image = imageParts[1]
+		if len(imageParts) > 1 {
+			return cv, fmt.Errorf("component %q has %q image which contains a '/' "+
+				"indicating an image path, it should only contain the image name", key, component.Image)
 		}
 
 		cv.Components[key] = component

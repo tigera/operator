@@ -785,15 +785,16 @@ var _ = Describe("monitor rendering tests", func() {
 		}
 
 		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-			if name.Name == "allow-tigera.calico-node-alertmanager" {
+			switch name.Name {
+			case "allow-tigera.calico-node-alertmanager":
 				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerPolicy, expectedAlertmanagerPolicyForOpenshift)
-			} else if name.Name == "allow-tigera.calico-node-alertmanager-mesh" {
+			case "allow-tigera.calico-node-alertmanager-mesh":
 				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerMeshPolicy, expectedAlertmanagerMeshPolicyForOpenshift)
-			} else if name.Name == "allow-tigera.prometheus" {
+			case "allow-tigera.prometheus":
 				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusPolicy, expectedPrometheusPolicyForOpenshift)
-			} else if name.Name == "allow-tigera.tigera-prometheus-api" {
+			case "allow-tigera.tigera-prometheus-api":
 				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusApiPolicy, expectedPrometheusApiPolicyForOpenshift)
-			} else if name.Name == "allow-tigera.prometheus-operator" {
+			case "allow-tigera.prometheus-operator":
 				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusOperatorPolicy, expectedPrometheusOperatorPolicyOpenshift)
 			}
 

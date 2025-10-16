@@ -87,6 +87,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.config.Installation.ImagePrefix
 
 	if c.config.OSType != c.SupportedOSType() {
+		//nolint:staticcheck // Ignore ST1005 error strings should not be capitalized
 		return fmt.Errorf("Egress Gateway is supported only on %s", c.SupportedOSType())
 	}
 
@@ -124,11 +125,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 
 func (c *component) egwOperatorSecretsRoleBinding() *rbacv1.RoleBinding {
 	operatorSecretRB := render.CreateOperatorSecretsRoleBinding(c.config.EgressGW.Namespace)
-	operatorSecretRB.ObjectMeta.Labels = common.MapExistsOrInitialize(operatorSecretRB.ObjectMeta.Labels)
+	operatorSecretRB.Labels = common.MapExistsOrInitialize(operatorSecretRB.Labels)
 	// The tigera-operator-secrets RoleBinding is shared across all EGW CRs in this namespace.
 	// As such, we mark it as having multiple owners so that we maintain multiple owner references
 	// when creating the rolebinding so that it will only be GC'd when all of its owners have been deleted.
-	operatorSecretRB.ObjectMeta.Labels[common.MultipleOwnersLabel] = "true"
+	operatorSecretRB.Labels[common.MultipleOwnersLabel] = "true"
 	return operatorSecretRB
 }
 
@@ -322,11 +323,11 @@ func (c *component) egwPullSecrets() []*corev1.Secret {
 	for _, secret := range c.config.PullSecrets {
 		x := secret.DeepCopy()
 		x.ObjectMeta = metav1.ObjectMeta{Name: secret.Name, Namespace: c.config.EgressGW.Namespace}
-		x.ObjectMeta.Labels = common.MapExistsOrInitialize(x.ObjectMeta.Labels)
+		x.Labels = common.MapExistsOrInitialize(x.Labels)
 		// Each pull secret is shared across all of the EGW deployments in this namespace.
 		// As such, we mark it as having multiple owners so that we maintain multiple owner references
 		// when creating the secret so that it will only be GC'd when all of its owners have been deleted.
-		x.ObjectMeta.Labels[common.MultipleOwnersLabel] = "true"
+		x.Labels[common.MultipleOwnersLabel] = "true"
 		secrets = append(secrets, x)
 	}
 	return secrets

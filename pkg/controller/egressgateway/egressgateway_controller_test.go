@@ -201,10 +201,12 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(dep.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 			initContainer := dep.Spec.Template.Spec.InitContainers[0]
-			Expect(initContainer.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
+			Expect(initContainer.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s:%s",
+				components.TigeraImagePath,
 				components.ComponentEgressGateway.Image, components.ComponentEgressGateway.Version)))
 			egwContainer := dep.Spec.Template.Spec.Containers[0]
-			Expect(egwContainer.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
+			Expect(egwContainer.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s:%s",
+				components.TigeraImagePath,
 				components.ComponentEgressGateway.Image, components.ComponentEgressGateway.Version)))
 			Expect(dep.Spec.Template.ObjectMeta.Labels["projectcalico.org/egw"]).To(Equal(dep.Name))
 			expectedInitEnvVar := []corev1.EnvVar{

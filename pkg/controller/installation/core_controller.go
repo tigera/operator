@@ -847,10 +847,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operator.ResourceReadError, "Unable to read calico-kube-controllers deployment", err, reqLogger)
 			return reconcile.Result{}, err
 		} else if apierrors.IsNotFound(err) {
-			reqLogger.Info("calico-kube-controllers has been deleted, removing finalizer", "finalizer", render.InstallationControllerFinalizer)
-			utils.RemoveInstallationFinalizer(instance, render.InstallationControllerFinalizer)
+			terminated, err := utils.AllPodsTerminated(ctx, r.client, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}})
+			if err != nil {
+				r.status.SetDegraded(operator.ResourceReadError, "Unable to read calico-kube-controllers pods", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			if !terminated {
+				reqLogger.Info("calico-kube-controller pod is still present, waiting for termination")
+			} else {
+				reqLogger.Info("calico-kube-controllers has been deleted, removing finalizer", "finalizer", render.InstallationControllerFinalizer)
+				utils.RemoveInstallationFinalizer(instance, render.InstallationControllerFinalizer)
+			}
 		} else {
-			reqLogger.Info("calico-kube-controller is still present, waiting for termination")
+			reqLogger.Info("calico-kube-controller deployment is still present, waiting for termination")
 		}
 
 		// Keep an overarching finalizer on the Installation object until ALL necessary dependencies have been cleaned up.

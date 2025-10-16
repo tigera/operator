@@ -142,6 +142,9 @@ components:
   l7-collector:
     image: tigera/l7-collector
     version: release-calient-v3.22
+  gateway-l7-collector:
+    image: tigera/gateway-l7-collector
+    version: release-calient-v3.22
   envoy:
     image: tigera/envoy
     version: release-calient-v3.22

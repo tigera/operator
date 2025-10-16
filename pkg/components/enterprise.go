@@ -203,6 +203,13 @@ var (
 		Registry: "",
 	}
 
+	ComponentGatewayL7Collector = Component{
+		Version:  "release-calient-v3.22",
+		Image:    "tigera/gateway-l7-collector",
+		Registry: "",
+		variant:  enterpriseVariant,
+	}
+
 	ComponentEnvoyProxy = Component{
 		Version:  "release-calient-v3.22",
 		Image:    "tigera/envoy",
@@ -361,6 +368,7 @@ var (
 		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
 		ComponentL7Collector,
+		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,

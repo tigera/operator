@@ -705,9 +705,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		for _, container := range deployment.Spec.Template.Spec.Containers {
 			if container.Name == kubecontrollers.EsKubeController {
 				for _, env := range container.Env {
-					if env.Name == "OIDC_AUTH_USERNAME_PREFIX" {
+					switch env.Name {
+					case "OIDC_AUTH_USERNAME_PREFIX":
 						usernamePrefix = env.Value
-					} else if env.Name == "OIDC_AUTH_GROUP_PREFIX" {
+					case "OIDC_AUTH_GROUP_PREFIX":
 						groupPrefix = env.Value
 					}
 				}

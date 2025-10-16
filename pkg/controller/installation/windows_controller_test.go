@@ -372,13 +372,13 @@ var _ = Describe("windows-controller installation tests", func() {
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).Should(HaveOccurred())
-				Expect(err.Error()).To(Equal("Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
+				Expect(err.Error()).To(Equal("services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
 
 				// The calico-node-windows daemonset should be rendered, but in a degraded state
 				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
 				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
 				Expect(degradedMsg).To(ConsistOf([]string{"Invalid Installation provided"}))
-				Expect(degradedErr).To(ConsistOf([]string{"Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"}))
+				Expect(degradedErr).To(ConsistOf([]string{"services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"}))
 			})
 
 			It("should not render the Windows daemonset when the encapsulation is VXLANCrossSubnet (not supported)", func() {
@@ -508,7 +508,7 @@ var _ = Describe("windows-controller installation tests", func() {
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).Should(HaveOccurred())
-				Expect(err.Error()).To(Equal("Installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows"))
+				Expect(err.Error()).To(Equal("installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows"))
 
 				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
 				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))

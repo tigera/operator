@@ -207,7 +207,6 @@ var (
 		Version:  "release-calient-v3.22",
 		Image:    "tigera/gateway-l7-collector",
 		Registry: "",
-		variant:  enterpriseVariant,
 	}
 
 	ComponentEnvoyProxy = Component{

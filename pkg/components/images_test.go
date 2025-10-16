@@ -113,6 +113,7 @@ var _ = Describe("test GetReference", func() {
 			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraRegistry),
 		)
 	})
+
 	Context("registry and imagepath override", func() {
 		DescribeTable("should render",
 			func(c Component) {
@@ -126,6 +127,7 @@ var _ = Describe("test GetReference", func() {
 			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer),
 		)
 	})
+
 	Context("with an ImageSet", func() {
 		DescribeTable("should render",
 			func(c Component, hash string) {
@@ -147,6 +149,34 @@ var _ = Describe("test GetReference", func() {
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, "@sha256:eckeckoperatorhash"),
 			Entry("an operator init image correctly", ComponentOperatorInit, "@sha256:tigeraoperatorhash"),
 			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, "@sha256:tigerakeycertprovisionerhash"),
+		)
+	})
+
+	Context("component with development imagePath", func() {
+		customTigeraComponent := ComponentTigeraNode
+		customTigeraComponent.imagePath = "customtigera/"
+		customCalicoComponent := ComponentCalicoNode
+		customCalicoComponent.imagePath = "customcalico/"
+		DescribeTable("should render",
+			func(c Component, registry, imagePath string) {
+				Expect(GetReference(c, "", "", "", nil)).To(Equal(fmt.Sprintf("%s%s%s:%s", registry, imagePath, c.Image, c.Version)))
+			},
+			Entry("a calico image correctly", customCalicoComponent, CalicoRegistry, "customcalico/"),
+			Entry("a tigera image correctly", customTigeraComponent, TigeraRegistry, "customtigera/"),
+		)
+	})
+
+	Context("component with development registry", func() {
+		customTigeraComponent := ComponentTigeraNode
+		customTigeraComponent.Registry = "tigera.registry.io/"
+		customCalicoComponent := ComponentCalicoNode
+		customCalicoComponent.Registry = "calico.registry.io/"
+		DescribeTable("should render",
+			func(c Component, registry, imagePath string) {
+				Expect(GetReference(c, "", "", "", nil)).To(Equal(fmt.Sprintf("%s%s%s:%s", registry, imagePath, c.Image, c.Version)))
+			},
+			Entry("a calico image correctly", customCalicoComponent, "calico.registry.io/", CalicoImagePath),
+			Entry("a tigera image correctly", customTigeraComponent, "tigera.registry.io/", TigeraImagePath),
 		)
 	})
 })

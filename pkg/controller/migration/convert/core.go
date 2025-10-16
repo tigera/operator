@@ -330,6 +330,7 @@ func removeExpectedAnnotations(existing, ignoreWithValue map[string]string, toBe
 // ControlPlaneNodeSelector field.
 func handleNodeSelectors(c *components, install *operatorv1.Installation) error {
 	// check calico-node nodeSelectors
+	//nolint:staticcheck // Ignore QF1001 could apply De Morgan's law
 	if c.node.Spec.Template.Spec.Affinity != nil {
 		if !(install.Spec.KubernetesProvider.IsAKS() && reflect.DeepEqual(c.node.Spec.Template.Spec.Affinity, &corev1.Affinity{
 			NodeAffinity: &corev1.NodeAffinity{

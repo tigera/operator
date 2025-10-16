@@ -20,6 +20,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/utils/ptr"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -74,8 +75,7 @@ var _ = Describe("Installation validation tests", func() {
 	})
 
 	It("should allow dual stack (both IPv4 and IPv6) if BPF is enabled", func() {
-		var enabled operator.BGPOption = operator.BGPEnabled
-		instance.Spec.CalicoNetwork.BGP = &enabled
+		instance.Spec.CalicoNetwork.BGP = ptr.To(operator.BGPEnabled)
 		bpf := operator.LinuxDataplaneBPF
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
@@ -1019,8 +1019,7 @@ var _ = Describe("Installation validation tests", func() {
 					NodeSelector:  "all()",
 				},
 			}
-			var disabled operator.BGPOption = operator.BGPDisabled
-			instance.Spec.CalicoNetwork.BGP = &disabled
+			instance.Spec.CalicoNetwork.BGP = ptr.To(operator.BGPDisabled)
 			k8sapi.Endpoint = k8sapi.ServiceEndpoint{
 				Host: "1.2.3.4",
 				Port: "6443",
@@ -1061,8 +1060,7 @@ var _ = Describe("Installation validation tests", func() {
 
 			It("should return an error if IP pool encapsulation is IPIP", func() {
 				instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationIPIP
-				var enabled operator.BGPOption = operator.BGPEnabled
-				instance.Spec.CalicoNetwork.BGP = &enabled
+				instance.Spec.CalicoNetwork.BGP = ptr.To(operator.BGPEnabled)
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(Equal("IPv4 IPPool encapsulation IPIP is not supported by Calico for Windows"))

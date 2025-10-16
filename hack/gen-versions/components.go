@@ -119,7 +119,7 @@ func GetComponents(versionsPath string) (Release, error) {
 			image := defaultImages[key]
 			if image == "" {
 				return cv, fmt.Errorf("no image nor default image available for component '%s'. "+
-					"Either fill in the 'image' field or update this code with a defaultImage.", key)
+					"Either fill in the 'image' field or update this code with a defaultImage", key)
 			}
 			component.Image = image
 		}

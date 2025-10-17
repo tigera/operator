@@ -33,8 +33,8 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo"
+	"github.com/onsi/gomega"
 
 	"github.com/openshift/library-go/pkg/crypto"
 
@@ -43,7 +43,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -54,15 +53,15 @@ import (
 // and populates the provided client.Object with the current state of the object
 // in the cluster.
 func ExpectResourceCreated(c client.Client, obj client.Object) {
-	EventuallyWithOffset(1, func() error {
+	gomega.EventuallyWithOffset(1, func() error {
 		return GetResource(c, obj)
-	}, 10*time.Second).Should(BeNil())
+	}, 10*time.Second).Should(gomega.BeNil())
 }
 
 // ExpectResourceDestroyed asserts that the given object no longer exists.
 func ExpectResourceDestroyed(c client.Client, obj client.Object, timeout time.Duration) {
 	var err error
-	EventuallyWithOffset(1, func() error {
+	gomega.EventuallyWithOffset(1, func() error {
 		err = GetResource(c, obj)
 		if errors.IsNotFound(err) || errors.IsGone(err) {
 			return nil
@@ -71,11 +70,11 @@ func ExpectResourceDestroyed(c client.Client, obj client.Object, timeout time.Du
 		} else {
 			return fmt.Errorf("%T '%s' should no longer exist", obj, obj.GetName())
 		}
-	}, timeout).ShouldNot(HaveOccurred())
+	}, timeout).ShouldNot(gomega.HaveOccurred())
 
 	serr, ok := err.(*errors.StatusError)
-	ExpectWithOffset(1, ok).To(BeTrue(), fmt.Sprintf("error was not StatusError: %v", err))
-	ExpectWithOffset(1, serr.ErrStatus.Code).To(Equal(int32(404)))
+	gomega.ExpectWithOffset(1, ok).To(gomega.BeTrue(), fmt.Sprintf("error was not StatusError: %v", err))
+	gomega.ExpectWithOffset(1, serr.ErrStatus.Code).To(gomega.Equal(int32(404)))
 }
 
 // GetResource gets the requested object, populating obj with its contents.
@@ -87,7 +86,7 @@ func GetResource(c client.Client, obj client.Object) error {
 	return c.Get(context.Background(), k, obj)
 }
 
-func GetContainer(containers []v1.Container, name string) *v1.Container {
+func GetContainer(containers []corev1.Container, name string) *corev1.Container {
 	for _, container := range containers {
 		if container.Name == name {
 			return &container
@@ -103,7 +102,7 @@ func GetContainer(containers []v1.Container, name string) *v1.Container {
 func RunOperator(mgr manager.Manager, ctx context.Context) (doneChan chan struct{}) {
 	doneChan = make(chan struct{})
 	go func() {
-		defer GinkgoRecover()
+		defer ginkgo.GinkgoRecover()
 		_ = mgr.Start(ctx)
 		close(doneChan)
 		// This should not error but it does. Something is not stopping or closing down but
@@ -116,18 +115,18 @@ func RunOperator(mgr manager.Manager, ctx context.Context) (doneChan chan struct
 		//})
 	}()
 	synced := mgr.GetCache().WaitForCacheSync(ctx)
-	Expect(synced).To(BeTrue(), "manager cache failed to sync")
+	gomega.Expect(synced).To(gomega.BeTrue(), "manager cache failed to sync")
 	return doneChan
 }
 
-func VerifyPublicCert(secret *v1.Secret, pubKey string, expectedSANs ...string) {
-	Expect(secret.Data).To(HaveKey(pubKey))
+func VerifyPublicCert(secret *corev1.Secret, pubKey string, expectedSANs ...string) {
+	gomega.Expect(secret.Data).To(gomega.HaveKey(pubKey))
 	VerifyCertSANs(secret.Data[pubKey], expectedSANs...)
 }
 
-func VerifyCert(secret *v1.Secret, expectedSANs ...string) {
-	Expect(secret.Data).To(HaveKey(corev1.TLSPrivateKeyKey))
-	Expect(secret.Data).To(HaveKey(corev1.TLSCertKey))
+func VerifyCert(secret *corev1.Secret, expectedSANs ...string) {
+	gomega.Expect(secret.Data).To(gomega.HaveKey(corev1.TLSPrivateKeyKey))
+	gomega.Expect(secret.Data).To(gomega.HaveKey(corev1.TLSCertKey))
 
 	VerifyCertSANs(secret.Data[corev1.TLSCertKey], expectedSANs...)
 }
@@ -135,8 +134,8 @@ func VerifyCert(secret *v1.Secret, expectedSANs ...string) {
 func VerifyCertSANs(certBytes []byte, expectedSANs ...string) {
 	pemBlock, _ := pem.Decode(certBytes)
 	cert, err := x509.ParseCertificate(pemBlock.Bytes)
-	Expect(err).To(BeNil(), "Error parsing bytes from secret into certificate")
-	Expect(cert.DNSNames).To(ConsistOf(expectedSANs), "Expect cert SAN's to match expected service DNS names")
+	gomega.Expect(err).To(gomega.BeNil(), "Error parsing bytes from secret into certificate")
+	gomega.Expect(cert.DNSNames).To(gomega.ConsistOf(expectedSANs), "Expect cert SAN's to match expected service DNS names")
 }
 
 func MakeTestCA(signer string) *crypto.CA {
@@ -144,7 +143,7 @@ func MakeTestCA(signer string) *crypto.CA {
 		signer,
 		100*365*24*time.Hour, // 100years*365days*24hours
 	)
-	Expect(err).To(BeNil(), "Error creating CA config")
+	gomega.Expect(err).To(gomega.BeNil(), "Error creating CA config")
 	return &crypto.CA{
 		SerialGenerator: &crypto.RandomSerialGenerator{},
 		Config:          caConfig,
@@ -189,36 +188,36 @@ func (t typhaListWatch) Watch(options metav1.ListOptions) (watch.Interface, erro
 	return t.cs.AppsV1().Deployments("calico-system").Watch(context.Background(), options)
 }
 
-func CreateNode(c kubernetes.Interface, name string, labels map[string]string, annotations map[string]string) *v1.Node {
-	node := &v1.Node{
+func CreateNode(c kubernetes.Interface, name string, labels map[string]string, annotations map[string]string) *corev1.Node {
+	node := &corev1.Node{
 		TypeMeta: metav1.TypeMeta{Kind: "Node", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 	}
 	if labels != nil {
-		node.ObjectMeta.Labels = labels
+		node.Labels = labels
 	}
 	if annotations != nil {
-		node.ObjectMeta.Annotations = annotations
+		node.Annotations = annotations
 	}
 
 	var err error
 	node, err = c.CoreV1().Nodes().Create(context.Background(), node, metav1.CreateOptions{})
-	Expect(err).To(BeNil())
+	gomega.Expect(err).To(gomega.BeNil())
 	return node
 }
 
-func CreateWindowsNode(cs kubernetes.Interface, name string, variant operator.ProductVariant, version string) *v1.Node {
+func CreateWindowsNode(cs kubernetes.Interface, name string, variant operator.ProductVariant, version string) *corev1.Node {
 	return CreateNode(cs, name,
 		map[string]string{"kubernetes.io/os": "windows"},
 		map[string]string{})
 }
 
-func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*v1.Node) error {
+func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*corev1.Node) error {
 	for _, node := range nodes {
 		newNode, err := c.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
-		Expect(err).To(BeNil())
+		gomega.Expect(err).To(gomega.BeNil())
 		if !reflect.DeepEqual(node, newNode) {
 			return fmt.Errorf("expected node %q to be unchanged", node.Name)
 		}
@@ -231,11 +230,11 @@ func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*v1.Node) error {
 // progression expectations set, and that the Reconciler utilizes the mockStatus object. Assumes the tier resource has been created.
 func DeleteAllowTigeraTierAndExpectWait(ctx context.Context, c client.Client, r reconcile.Reconciler, mockStatus *status.MockStatus) {
 	err := c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})
-	Expect(err).ShouldNot(HaveOccurred())
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 	mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for allow-tigera tier to be created, see the 'tiers' TigeraStatus for more information", "tiers.projectcalico.org \"allow-tigera\" not found", mock.Anything).Return()
 	_, err = r.Reconcile(ctx, reconcile.Request{})
-	Expect(err).ShouldNot(HaveOccurred())
-	mockStatus.AssertExpectations(GinkgoT())
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+	mockStatus.AssertExpectations(ginkgo.GinkgoT())
 }
 
 // ExpectWaitForTierWatch expects the Reconciler issues a degraded status, waiting for a Tier watch to be established.
@@ -251,8 +250,8 @@ func ExpectWaitForTierWatch(ctx context.Context, r reconcile.Reconciler, mockSta
 func ExpectWaitForWatch(ctx context.Context, r reconcile.Reconciler, mockStatus *status.MockStatus, message string) {
 	mockStatus.On("SetDegraded", operator.ResourceNotReady, message, mock.Anything, mock.Anything).Return()
 	_, err := r.Reconcile(ctx, reconcile.Request{})
-	Expect(err).ShouldNot(HaveOccurred())
-	mockStatus.AssertExpectations(GinkgoT())
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+	mockStatus.AssertExpectations(ginkgo.GinkgoT())
 }
 
 type ObjectTrackerCall string

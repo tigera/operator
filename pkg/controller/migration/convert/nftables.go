@@ -19,7 +19,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-	v1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -36,7 +35,7 @@ func handleNftables(c *components, install *operatorv1.Installation) error {
 		return fmt.Errorf("error reading FELIX_NFTABLESMODE env var %w", err)
 	}
 
-	inFelixConfig := fc.Spec.NFTablesMode != nil && *fc.Spec.NFTablesMode == v1.NFTablesModeEnabled
+	inFelixConfig := fc.Spec.NFTablesMode != nil && *fc.Spec.NFTablesMode == crdv1.NFTablesModeEnabled
 	enabledEnvVar := envMode != nil && strings.ToLower(*envMode) == "enabled"
 
 	// A disabled env var will override any other configuration. It's possible to have a feature enabled in the FelixConfiguration

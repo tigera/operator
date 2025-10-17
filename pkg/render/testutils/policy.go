@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 package testutils
 
 import (
-	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega"
 
 	"encoding/json"
 	"io"
@@ -64,30 +64,30 @@ func GetAllowTigeraGlobalPolicyFromResources(name string, resources []client.Obj
 
 func GetExpectedPolicyFromFile(name string) *v3.NetworkPolicy {
 	jsonFile, err := os.Open(name)
-	Expect(err).ShouldNot(HaveOccurred())
-	defer jsonFile.Close()
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+	defer func() { _ = jsonFile.Close() }()
 
 	byteValue, err := io.ReadAll(jsonFile)
-	Expect(err).ShouldNot(HaveOccurred())
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 	var policy v3.NetworkPolicy
 	err = json.Unmarshal(byteValue, &policy)
-	Expect(err).ShouldNot(HaveOccurred())
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 	return &policy
 }
 
 func GetExpectedGlobalPolicyFromFile(name string) *v3.GlobalNetworkPolicy {
 	jsonFile, err := os.Open(name)
-	Expect(err).ShouldNot(HaveOccurred())
-	defer jsonFile.Close()
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+	defer func() { _ = jsonFile.Close() }()
 
 	byteValue, err := io.ReadAll(jsonFile)
-	Expect(err).ShouldNot(HaveOccurred())
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 	var policy v3.GlobalNetworkPolicy
 	err = json.Unmarshal(byteValue, &policy)
-	Expect(err).ShouldNot(HaveOccurred())
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 	return &policy
 }

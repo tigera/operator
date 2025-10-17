@@ -338,13 +338,13 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 // updateApplicationLayerWithDefaults populates the applicationlayer with defaults.
 func updateApplicationLayerWithDefaults(al *operatorv1.ApplicationLayer) {
 	var (
-		defaultLogIntervalSeconds               int64                                       = 5
-		defaultLogRequestsPerInterval           int64                                       = -1
-		defaultLogCollectionStatusType          operatorv1.LogCollectionStatusType          = operatorv1.L7LogCollectionDisabled
-		defaultWebApplicationFirewallStatusType operatorv1.WAFStatusType                    = operatorv1.WAFDisabled
-		defaultApplicationLayerPolicyStatusType operatorv1.ApplicationLayerPolicyStatusType = operatorv1.ApplicationLayerPolicyDisabled
-		defaultSidecarStatusType                operatorv1.SidecarStatusType                = operatorv1.SidecarDisabled
-		defaultSidecarWebhookStateType          operatorv1.SidecarWebhookStateType          = operatorv1.SidecarWebhookStateDisabled
+		defaultLogIntervalSeconds               int64 = 5
+		defaultLogRequestsPerInterval           int64 = -1
+		defaultLogCollectionStatusType                = operatorv1.L7LogCollectionDisabled
+		defaultWebApplicationFirewallStatusType       = operatorv1.WAFDisabled
+		defaultApplicationLayerPolicyStatusType       = operatorv1.ApplicationLayerPolicyDisabled
+		defaultSidecarStatusType                      = operatorv1.SidecarDisabled
+		defaultSidecarWebhookStateType                = operatorv1.SidecarWebhookStateDisabled
 	)
 
 	if al.Spec.LogCollection == nil {

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -64,7 +64,7 @@ func SetupAWSSecurityGroups(ctx context.Context, client client.Client, hosted bo
 
 	meta := ec2metadata.New(metaSess)
 	if !meta.Available() {
-		return fmt.Errorf("Instance metadata is not available, unable to configure Security Groups")
+		return fmt.Errorf("instance metadata is not available, unable to configure Security Groups")
 	}
 
 	doc, err := meta.GetInstanceIdentityDocument()
@@ -317,7 +317,7 @@ func allowIngressToSG(cli *ec2.EC2, toSG *ec2.SecurityGroup, sources []ingressSr
 		}})
 		_, err := cli.AuthorizeSecurityGroupIngress(in)
 		if err != nil {
-			return fmt.Errorf("Failed to add to SG '%s' the ingress rule '%s': %v: %v", sgId, s.String(), toSG, err)
+			return fmt.Errorf("failed to add to SG '%s' the ingress rule '%s': %v: %v", sgId, s.String(), toSG, err)
 		}
 		log.V(DEBUG).Info("Added Ingress rule", "toSG.GroupId", sgId, "ingressSrc", s.String())
 	}

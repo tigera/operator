@@ -47,7 +47,6 @@ import (
 
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -220,14 +219,14 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// In most clusters, the IP pool controller is responsible for creating IP pools. The Installation controller waits for this,
 			// so we need to create those pools here.
-			pool := crdv1.IPPool{
+			pool := v3.IPPool{
 				ObjectMeta: metav1.ObjectMeta{Name: "default-pool-v4"},
-				Spec: crdv1.IPPoolSpec{
+				Spec: v3.IPPoolSpec{
 					CIDR:         "192.168.0.0/16",
 					NATOutgoing:  true,
 					BlockSize:    26,
 					NodeSelector: "all()",
-					VXLANMode:    crdv1.VXLANModeAlways,
+					VXLANMode:    v3.VXLANModeAlways,
 				},
 			}
 			Expect(c.Create(ctx, &pool)).NotTo(HaveOccurred())
@@ -580,15 +579,15 @@ var _ = Describe("Testing core-controller installation", func() {
 					KubernetesProvider: operator.ProviderDockerEE,
 				},
 			}
-			currentPools := crdv1.IPPoolList{}
-			currentPools.Items = append(currentPools.Items, crdv1.IPPool{
+			currentPools := v3.IPPoolList{}
+			currentPools.Items = append(currentPools.Items, v3.IPPool{
 				ObjectMeta: metav1.ObjectMeta{Name: "default-pool-v4"},
-				Spec: crdv1.IPPoolSpec{
+				Spec: v3.IPPoolSpec{
 					CIDR:         "192.168.0.0/16",
 					NATOutgoing:  true,
 					BlockSize:    26,
 					NodeSelector: "all()",
-					VXLANMode:    crdv1.VXLANModeAlways,
+					VXLANMode:    v3.VXLANModeAlways,
 				},
 			})
 			Expect(MergeAndFillDefaults(installation, nil, &currentPools)).To(BeNil())
@@ -735,14 +734,14 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// In most clusters, the IP pool controller is responsible for creating IP pools. The Installation controller waits for this,
 			// so we need to create those pools here.
-			pool := crdv1.IPPool{
+			pool := v3.IPPool{
 				ObjectMeta: metav1.ObjectMeta{Name: "default-pool-v4"},
-				Spec: crdv1.IPPoolSpec{
+				Spec: v3.IPPoolSpec{
 					CIDR:         "192.168.0.0/16",
 					NATOutgoing:  true,
 					BlockSize:    26,
 					NodeSelector: "all()",
-					VXLANMode:    crdv1.VXLANModeAlways,
+					VXLANMode:    v3.VXLANModeAlways,
 				},
 			}
 			Expect(c.Create(ctx, &pool)).NotTo(HaveOccurred())
@@ -939,14 +938,14 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// In most clusters, the IP pool controller is responsible for creating IP pools. The Installation controller waits for this,
 			// so we need to create those pools here.
-			pool := crdv1.IPPool{
+			pool := v3.IPPool{
 				ObjectMeta: metav1.ObjectMeta{Name: "default-pool-v4"},
-				Spec: crdv1.IPPoolSpec{
+				Spec: v3.IPPoolSpec{
 					CIDR:         "192.168.0.0/16",
 					NATOutgoing:  true,
 					BlockSize:    26,
 					NodeSelector: "all()",
-					VXLANMode:    crdv1.VXLANModeAlways,
+					VXLANMode:    v3.VXLANModeAlways,
 				},
 			}
 			Expect(c.Create(ctx, &pool)).NotTo(HaveOccurred())
@@ -989,11 +988,11 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 
 				By("Checking that the FelixConfiguration has NFTablesMode Enabled")
-				fc := &crdv1.FelixConfiguration{}
+				fc := &v3.FelixConfiguration{}
 				err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(fc.Spec.NFTablesMode).ToNot(BeNil())
-				Expect(*fc.Spec.NFTablesMode).To(Equal(crdv1.NFTablesModeEnabled))
+				Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesModeEnabled))
 			})
 
 			It("should set NFTablesMode to Disabled if nftables mode is changed", func() {
@@ -1013,11 +1012,11 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 
 				By("checking that the FelixConfiguration has NFTablesMode Disabled")
-				fc := &crdv1.FelixConfiguration{}
+				fc := &v3.FelixConfiguration{}
 				err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(fc.Spec.NFTablesMode).NotTo(BeNil())
-				Expect(*fc.Spec.NFTablesMode).To(Equal(crdv1.NFTablesModeDisabled))
+				Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesModeDisabled))
 			})
 		})
 
@@ -1127,11 +1126,11 @@ var _ = Describe("Testing core-controller installation", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 
 					By("Checking that the FelixConfiguration has NFTablesMode Enabled")
-					fc := &crdv1.FelixConfiguration{}
+					fc := &v3.FelixConfiguration{}
 					err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(fc.Spec.NFTablesMode).ToNot(BeNil())
-					Expect(*fc.Spec.NFTablesMode).To(Equal(crdv1.NFTablesModeEnabled))
+					Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesModeEnabled))
 				})
 
 				It("should push env vars to ebpf-bootstrap", func() {
@@ -1152,7 +1151,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Expect(install.Spec.BPFNetworkBootstrapEnabled()).To(BeTrue())
 
 					By("Checking that the FelixConfiguration has BPF Enabled")
-					fc := &crdv1.FelixConfiguration{}
+					fc := &v3.FelixConfiguration{}
 					err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(fc.Spec.BPFEnabled).ToNot(BeNil())
@@ -1225,11 +1224,11 @@ var _ = Describe("Testing core-controller installation", func() {
 
 		It("should push 'CALICO_CGROUP_PATH' env var to ebpf-bootstrap if specified in FelixConfiguration", func() {
 			customPath := "/foo/bar/path"
-			fc := &crdv1.FelixConfiguration{
+			fc := &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
-				Spec: crdv1.FelixConfigurationSpec{
+				Spec: v3.FelixConfigurationSpec{
 					CgroupV2Path: customPath,
 				},
 			}
@@ -1258,7 +1257,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// We should get a felix configuration with the health port defaulted (but nothing else).
-			fc := &crdv1.FelixConfiguration{}
+			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.HealthPort).NotTo(BeNil())
@@ -1280,7 +1279,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			fc := &crdv1.FelixConfiguration{}
+			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -1295,13 +1294,13 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			fc := &crdv1.FelixConfiguration{}
+			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.VXLANPort).NotTo(BeNil())
 			Expect(*fc.Spec.VXLANPort).To(Equal(8472))
 			Expect(fc.Spec.NFTablesMode).NotTo(BeNil())
-			Expect(*fc.Spec.NFTablesMode).To(Equal(crdv1.NFTablesModeDisabled))
+			Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesModeDisabled))
 		})
 
 		It("should set bpfHostConntrackByPass to false when provider is DockerEE and BPF enabled", func() {
@@ -1312,7 +1311,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			fc := &crdv1.FelixConfiguration{}
+			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -1329,7 +1328,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			fc := &crdv1.FelixConfiguration{}
+			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -1347,7 +1346,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			fc := &crdv1.FelixConfiguration{}
+			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -1368,7 +1367,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			fc := &crdv1.FelixConfiguration{}
+			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -1387,7 +1386,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			fc = &crdv1.FelixConfiguration{}
+			fc = &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -1417,7 +1416,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			fc := &crdv1.FelixConfiguration{}
+			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -1435,7 +1434,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// We should get a felix configuration with Rancher's DNS service.
-			fc := &crdv1.FelixConfiguration{}
+			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.DNSTrustedServers).NotTo(BeNil())
@@ -1449,11 +1448,11 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Check that FelixConfiguration is created with RouteTableRange
-			fc := &crdv1.FelixConfiguration{}
+			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.RouteTableRange).NotTo(BeNil())
-			Expect(*fc.Spec.RouteTableRange).To(Equal(crdv1.RouteTableRange{Min: 65, Max: 99}))
+			Expect(*fc.Spec.RouteTableRange).To(Equal(v3.RouteTableRange{Min: 65, Max: 99}))
 		})
 
 		It("should Reconcile with GKE CNI config", func() {
@@ -1463,20 +1462,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Check that FelixConfiguration is created with RouteTableRange
-			fc := &crdv1.FelixConfiguration{}
+			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.RouteTableRange).NotTo(BeNil())
-			Expect(*fc.Spec.RouteTableRange).To(Equal(crdv1.RouteTableRange{Min: 10, Max: 250}))
+			Expect(*fc.Spec.RouteTableRange).To(Equal(v3.RouteTableRange{Min: 10, Max: 250}))
 		})
 
 		It("should Reconcile with AWS CNI and not change existing FelixConfig", func() {
-			fc := &crdv1.FelixConfiguration{
+			fc := &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
-				Spec: crdv1.FelixConfigurationSpec{
-					RouteTableRange:   &crdv1.RouteTableRange{Min: 15, Max: 55},
+				Spec: v3.FelixConfigurationSpec{
+					RouteTableRange:   &v3.RouteTableRange{Min: 15, Max: 55},
 					LogSeverityScreen: "Error",
 				},
 			}
@@ -1488,20 +1487,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Check that FelixConfiguration has not changed
-			fc = &crdv1.FelixConfiguration{}
+			fc = &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.RouteTableRange).NotTo(BeNil())
-			Expect(*fc.Spec.RouteTableRange).To(Equal(crdv1.RouteTableRange{Min: 15, Max: 55}))
+			Expect(*fc.Spec.RouteTableRange).To(Equal(v3.RouteTableRange{Min: 15, Max: 55}))
 			Expect(fc.Spec.LogSeverityScreen).To(Equal("Error"))
 		})
 
 		It("should Reconcile with AWS CNI and update existing FelixConfig", func() {
-			fc := &crdv1.FelixConfiguration{
+			fc := &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
-				Spec: crdv1.FelixConfigurationSpec{
+				Spec: v3.FelixConfigurationSpec{
 					LogSeverityScreen: "Error",
 				},
 			}
@@ -1513,20 +1512,20 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Check that FelixConfiguration is created with RouteTableRange
-			fc = &crdv1.FelixConfiguration{}
+			fc = &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.RouteTableRange).NotTo(BeNil())
-			Expect(*fc.Spec.RouteTableRange).To(Equal(crdv1.RouteTableRange{Min: 65, Max: 99}))
+			Expect(*fc.Spec.RouteTableRange).To(Equal(v3.RouteTableRange{Min: 65, Max: 99}))
 			Expect(fc.Spec.LogSeverityScreen).To(Equal("Error"))
 		})
 
 		It("should Reconcile with FelixConfig natPortRange set", func() {
-			fc := &crdv1.FelixConfiguration{
+			fc := &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
-				Spec: crdv1.FelixConfigurationSpec{
+				Spec: v3.FelixConfigurationSpec{
 					NATPortRange: &numorstring.Port{MinPort: 15, MaxPort: 55},
 				},
 			}
@@ -1538,7 +1537,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Check that FelixConfiguration has not changed
-			fc = &crdv1.FelixConfiguration{}
+			fc = &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(fc.Spec.NATPortRange).NotTo(BeNil())
@@ -2190,14 +2189,14 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// In most clusters, the IP pool controller is responsible for creating IP pools. The Installation controller waits for this,
 			// so we need to create those pools here.
-			pool := crdv1.IPPool{
+			pool := v3.IPPool{
 				ObjectMeta: metav1.ObjectMeta{Name: "default-pool-v4"},
-				Spec: crdv1.IPPoolSpec{
+				Spec: v3.IPPoolSpec{
 					CIDR:         "192.168.0.0/16",
 					NATOutgoing:  true,
 					BlockSize:    26,
 					NodeSelector: "all()",
-					VXLANMode:    crdv1.VXLANModeAlways,
+					VXLANMode:    v3.VXLANModeAlways,
 				},
 			}
 			Expect(c.Create(ctx, &pool)).NotTo(HaveOccurred())

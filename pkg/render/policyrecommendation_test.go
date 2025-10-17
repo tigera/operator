@@ -138,7 +138,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
@@ -180,7 +180,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				Namespace: render.PolicyRecommendationNamespace,
 			},
 		}))
-
 	})
 
 	It("should render toleration on GKE", func() {
@@ -679,6 +678,5 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			Expect(resources).To(BeEmpty(), "Expected no resources to be rendered in a managed cluster")
 			rtest.ExpectResources(deleteResources, expectedDeleteResources)
 		})
-
 	})
 })

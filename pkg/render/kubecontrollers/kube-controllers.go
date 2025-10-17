@@ -110,7 +110,7 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
 			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"remoteclusterconfigurations"},
 				Verbs:     []string{"watch", "list", "get"},
 			},
@@ -307,17 +307,17 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 		},
 		{
 			// IPAM resources are manipulated in response to node and block updates, as well as periodic triggers.
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"ipreservations"},
 			Verbs:     []string{"list"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets", "ipamconfigurations"},
 			Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
 				// Pools are watched to maintain a mapping of blocks to IP pools, and for finalization.
 				"ippools",
@@ -336,13 +336,13 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 		},
 		{
 			// Needs access to update clusterinformations.
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"clusterinformations"},
 			Verbs:     []string{"get", "create", "update", "list", "watch"},
 		},
 		{
 			// Needs to manage hostendpoints.
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"hostendpoints"},
 			Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
 		},
@@ -350,14 +350,14 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 			// Needs to manipulate kubecontrollersconfiguration, which contains
 			// its config.  It creates a default if none exists, and updates status
 			// as well.
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"kubecontrollersconfigurations"},
 			Verbs:     []string{"get", "create", "list", "update", "watch"},
 		},
 		{
 			// calico-kube-controllers requires tiers create to create the default tiers,
 			// and get permissions to access network policies in those tiers.
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"tiers"},
 			Verbs:     []string{"create", "update", "get", "list", "watch"},
 		},
@@ -397,28 +397,28 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 		},
 		{
 			// Needed to validate the license
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch", "list"},
 		},
 		{
 			// Needed to validate the license
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org", "projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"deeppacketinspections"},
 			Verbs:     []string{"get", "watch", "list"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"deeppacketinspections/status"},
 			Verbs:     []string{"update"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "update"},
 		},
@@ -427,7 +427,7 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 	if cfg.ManagementClusterConnection != nil {
 		rules = append(rules,
 			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "create", "update", "list", "watch"},
 			},
@@ -490,7 +490,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
 		{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant() && c.kubeControllerConfigName == "elasticsearch")},
-		{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"},
+		{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"}, // CASEY: TODO: Make this dynamic.
 	}
 
 	env = append(env, c.cfg.K8sServiceEp.EnvVars(false, c.cfg.Installation.KubernetesProvider)...)

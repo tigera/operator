@@ -1567,7 +1567,7 @@ var (
 			Verbs:     []string{"get", "list"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list"},
 		},
@@ -1726,7 +1726,7 @@ var (
 			Verbs:     []string{"get", "list"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "update", "patch", "create", "delete"},
 		},

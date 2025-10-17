@@ -35,7 +35,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 )
 
 // This test suite covers the installation of IP pools. The vast majority should be covered in the pkg/controller/ippool UTs
@@ -127,7 +126,7 @@ var _ = Describe("IPPool FV tests", func() {
 		verifyCalicoHasDeployed(c)
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
@@ -177,7 +176,7 @@ var _ = Describe("IPPool FV tests", func() {
 		verifyCalicoHasDeployed(c)
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
@@ -198,19 +197,19 @@ var _ = Describe("IPPool FV tests", func() {
 	It("should assume ownership of legacy default IP pools", func() {
 		// Create an IP pool directly - this simulates a pre-existing IP pool created by Calico prior to
 		// the operator supporting direct IP pool management.
-		ipPool := crdv1.IPPool{
+		ipPool := v3.IPPool{
 			ObjectMeta: metav1.ObjectMeta{Name: "default-ipv4-ippool"},
-			Spec: crdv1.IPPoolSpec{
+			Spec: v3.IPPoolSpec{
 				CIDR:             "192.168.0.0/24",
-				IPIPMode:         crdv1.IPIPModeAlways,
-				VXLANMode:        crdv1.VXLANModeNever,
+				IPIPMode:         v3.IPIPModeAlways,
+				VXLANMode:        v3.VXLANModeNever,
 				BlockSize:        26,
 				NATOutgoing:      true,
 				NodeSelector:     "all()",
 				DisableBGPExport: false,
-				AllowedUses: []crdv1.IPPoolAllowedUse{
-					crdv1.IPPoolAllowedUseWorkload,
-					crdv1.IPPoolAllowedUseTunnel,
+				AllowedUses: []v3.IPPoolAllowedUse{
+					v3.IPPoolAllowedUseWorkload,
+					v3.IPPoolAllowedUseTunnel,
 				},
 				AssignmentMode: operator.AssignmentModeAutomatic,
 			},
@@ -245,7 +244,7 @@ var _ = Describe("IPPool FV tests", func() {
 		// been controlled by the operator at this point.
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
@@ -296,18 +295,18 @@ var _ = Describe("IPPool FV tests", func() {
 	It("should NOT assume ownership of modified IP pools on upgrade", func() {
 		// Create an IP pool directly - this simulates a pre-existing IP pool created by Calico prior to
 		// the operator supporting direct IP pool management.
-		ipPool := crdv1.IPPool{
+		ipPool := v3.IPPool{
 			ObjectMeta: metav1.ObjectMeta{Name: "default-ipv4-ippool"},
-			Spec: crdv1.IPPoolSpec{
+			Spec: v3.IPPoolSpec{
 				CIDR:             "192.168.0.0/24",
-				IPIPMode:         crdv1.IPIPModeAlways,
-				VXLANMode:        crdv1.VXLANModeNever,
+				IPIPMode:         v3.IPIPModeAlways,
+				VXLANMode:        v3.VXLANModeNever,
 				BlockSize:        26,
 				NATOutgoing:      true,
 				DisableBGPExport: false,
-				AllowedUses: []crdv1.IPPoolAllowedUse{
-					crdv1.IPPoolAllowedUseWorkload,
-					crdv1.IPPoolAllowedUseTunnel,
+				AllowedUses: []v3.IPPoolAllowedUse{
+					v3.IPPoolAllowedUseWorkload,
+					v3.IPPoolAllowedUseTunnel,
 				},
 				// Use a non-default selector. This mimics a user modifying the IP pool after it was created,
 				// since we will use the default selector in the Installation spec.
@@ -345,7 +344,7 @@ var _ = Describe("IPPool FV tests", func() {
 		// been controlled by the operator at this point.
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())

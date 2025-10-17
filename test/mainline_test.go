@@ -40,10 +40,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/crds"
@@ -622,7 +622,7 @@ func waitForProductTeardown(c client.Client) {
 func cleanupIPPools(c client.Client) {
 	By("Cleaning up IP pools")
 	Eventually(func() error {
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		err := c.List(context.Background(), ipPools)
 		if err != nil {
 			return err

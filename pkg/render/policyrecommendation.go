@@ -109,7 +109,6 @@ func (pr *policyRecommendationComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Object) {
-
 	var objs []client.Object
 
 	// Guardian has RBAC permissions to handle policy recommendation requests in managed clusters,
@@ -178,7 +177,7 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			{
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
@@ -443,7 +442,6 @@ func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendatio
 }
 
 func (pr *policyRecommendationComponent) deprecatedObjects(isManagedCluster bool) []client.Object {
-
 	var deprecatedObjs []client.Object
 	if isManagedCluster {
 		deprecatedObjs = append(deprecatedObjs, []client.Object{
@@ -470,5 +468,4 @@ func (pr *policyRecommendationComponent) deprecatedObjects(isManagedCluster bool
 	}
 
 	return deprecatedObjs
-
 }

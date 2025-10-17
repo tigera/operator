@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -167,13 +168,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// This controller relies on the core Installation controller to perform initial defaulting before it can continue.
 	// The core installation controller adds a specific finalizer as part of performing defaulting,
 	// so wait for that before we continue.
-	readyToGo := false
-	for _, finalizer := range installation.GetFinalizers() {
-		if finalizer == render.OperatorCompleteFinalizer {
-			readyToGo = true
-			break
-		}
-	}
+	readyToGo := slices.Contains(installation.GetFinalizers(), render.OperatorCompleteFinalizer)
 	if !readyToGo {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
@@ -249,7 +244,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			// when it attempts to create overlappin IP pools.
 			for _, cnp := range installation.Spec.CalicoNetwork.IPPools {
 				v1p := operatorv1.IPPool{}
-				FromProjectCalicoV1(&v1p, p)
+				FromProjectCalico(&v1p, p)
 				reqLogger.V(1).Info("Comparing IP pool", "clusterPool", p, "installationPool", cnp)
 				if !reflect.DeepEqual(cnp, v1p) {
 					// The IP pool in the cluster doesn't match the IP pool in the Installation - ignore it.
@@ -279,7 +274,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	for _, p := range installation.Spec.CalicoNetwork.IPPools {
 		// We need to check if updates are required, but the installation uses the operator API format and the queried
 		// pools are in projectcalico.org/v3 format. Compare the pools using the projectcalico.org/v3 format.
-		v1res, err := ToProjectCalicoV1(p)
+		v1res, err := ToProjectCalico(p)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "error handling IP pool", err, reqLogger)
 			return reconcile.Result{}, err
@@ -393,8 +388,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-// ToProjectCalicoV1 converts an IPPool to a projectcalico.org/v3 IPPool resource.
-func ToProjectCalicoV1(p operatorv1.IPPool) (*v3.IPPool, error) {
+// ToProjectCalico converts an operator IPPool to a projectcalico.org/v3 IPPool resource.
+func ToProjectCalico(p operatorv1.IPPool) (*v3.IPPool, error) {
 	pool := v3.IPPool{
 		TypeMeta: metav1.TypeMeta{Kind: "IPPool", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -453,10 +448,10 @@ func ToProjectCalicoV1(p operatorv1.IPPool) (*v3.IPPool, error) {
 	return &pool, nil
 }
 
-// FromProjectCalicoV1 populates the IP pool with the data from the given
+// FromProjectCalico populates the IP pool with the data from the given
 // projectcalico.org/v3 IP pool. It is the direct inverse of ToProjectCalicoV1,
 // and should be updated with every new field added to the IP pool structure.
-func FromProjectCalicoV1(p *operatorv1.IPPool, crd v3.IPPool) {
+func FromProjectCalico(p *operatorv1.IPPool, crd v3.IPPool) {
 	p.Name = crd.Name
 	p.CIDR = crd.Spec.CIDR
 
@@ -516,7 +511,7 @@ func CRDPoolsToOperator(crds []v3.IPPool) []operatorv1.IPPool {
 	pools := []operatorv1.IPPool{}
 	for _, p := range crds {
 		op := operatorv1.IPPool{}
-		FromProjectCalicoV1(&op, p)
+		FromProjectCalico(&op, p)
 		pools = append(pools, op)
 	}
 	return pools

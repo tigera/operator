@@ -80,15 +80,17 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(operatortigeraiov1.AddToScheme(scheme))
-	utilruntime.Must(apis.AddToScheme(scheme))
+	utilruntime.Must(apis.AddToScheme(scheme, useV3CRDS()))
+}
+
+func useV3CRDS() bool {
+	return os.Getenv("CALICO_API_GROUP") == "projectcalico.org/v3"
 }
 
 func printVersion() {
 	log.Info(fmt.Sprintf("Version: %v", version.VERSION))
 	log.Info(fmt.Sprintf("Go Version: %s", goruntime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", goruntime.GOOS, goruntime.GOARCH))
-	// TODO: Add this back if we can
-	// log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
 }
 
 func main() {
@@ -441,6 +443,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		K8sClientset:        clientset,
 		MultiTenant:         multiTenant,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
+		UseV3CRDs:           useV3CRDS(),
 	}
 
 	// Before we start any controllers, make sure our options are valid.

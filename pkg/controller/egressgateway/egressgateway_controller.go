@@ -38,7 +38,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -584,7 +583,7 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 
 // validateExternalNetwork validates if the specified external network exists.
 func validateExternalNetwork(ctx context.Context, cli client.Client, externalNetwork string) error {
-	instance := &crdv1.ExternalNetwork{}
+	instance := &v3.ExternalNetwork{}
 	key := types.NamespacedName{Name: externalNetwork}
 	err := cli.Get(ctx, key, instance)
 	if err != nil {
@@ -597,7 +596,7 @@ func validateExternalNetwork(ctx context.Context, cli client.Client, externalNet
 // to see if they match.
 func validateIPPool(ctx context.Context, cli client.Client, ipPool operatorv1.EgressGatewayIPPool, awsNativeIP operatorv1.NativeIP) error {
 	if ipPool.Name != "" {
-		instance := &crdv1.IPPool{}
+		instance := &v3.IPPool{}
 		key := types.NamespacedName{Name: ipPool.Name}
 		err := cli.Get(ctx, key, instance)
 		if err != nil {
@@ -614,7 +613,7 @@ func validateIPPool(ctx context.Context, cli client.Client, ipPool operatorv1.Eg
 		return nil
 	}
 	if ipPool.CIDR != "" {
-		instance := &crdv1.IPPoolList{}
+		instance := &v3.IPPoolList{}
 		err := cli.List(ctx, instance)
 		if err != nil {
 			return err

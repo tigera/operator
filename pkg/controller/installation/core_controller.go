@@ -2219,7 +2219,7 @@ func crdPoolsToOperator(crds []v3.IPPool) []operator.IPPool {
 	pools := []v1.IPPool{}
 	for _, p := range crds {
 		op := v1.IPPool{}
-		ippool.FromProjectCalicoV1(&op, p)
+		ippool.FromProjectCalico(&op, p)
 		pools = append(pools, op)
 	}
 	return pools

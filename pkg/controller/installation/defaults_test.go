@@ -23,8 +23,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/components"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -36,10 +36,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		// IP pools are defaulted by the IP pool controller, and passed in as input to the defaulting
 		// performed in the Installation controller. For the purposes of this test,
 		// define them here.
-		currentPools := crdv1.IPPoolList{
-			Items: []crdv1.IPPool{
+		currentPools := v3.IPPoolList{
+			Items: []v3.IPPool{
 				{
-					Spec: crdv1.IPPoolSpec{CIDR: "192.168.0.0/16"},
+					Spec: v3.IPPoolSpec{CIDR: "192.168.0.0/16"},
 				},
 			},
 		}
@@ -76,10 +76,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		// IP pools are defaulted by the IP pool controller, and passed in as input to the defaulting
 		// performed in the Installation controller. For the purposes of this test,
 		// define them here.
-		currentPools := crdv1.IPPoolList{
-			Items: []crdv1.IPPool{
+		currentPools := v3.IPPoolList{
+			Items: []v3.IPPool{
 				{
-					Spec: crdv1.IPPoolSpec{CIDR: "192.168.0.0/16"},
+					Spec: v3.IPPoolSpec{CIDR: "192.168.0.0/16"},
 				},
 			},
 		}
@@ -380,10 +380,10 @@ var _ = Describe("Defaulting logic tests", func() {
 				CalicoNetwork: &operator.CalicoNetworkSpec{},
 			},
 		}
-		currentPools := crdv1.IPPoolList{
-			Items: []crdv1.IPPool{
+		currentPools := v3.IPPoolList{
+			Items: []v3.IPPool{
 				{
-					Spec: crdv1.IPPoolSpec{CIDR: "fd00::0/64"},
+					Spec: v3.IPPoolSpec{CIDR: "fd00::0/64"},
 				},
 			},
 		}
@@ -647,9 +647,9 @@ var _ = Describe("Defaulting logic tests", func() {
 	// in the cluster. The input - currentPools - represents the IP pools that we have discovered from the cluster's API server,
 	// and may have been provisioned either by the user directly, or via the IP pool controller in this operator.
 	table.DescribeTable("should handle various pool configurations",
-		func(currentPools []crdv1.IPPool) {
+		func(currentPools []v3.IPPool) {
 			instance := &operator.Installation{}
-			Expect(fillDefaults(instance, &crdv1.IPPoolList{Items: currentPools})).NotTo(HaveOccurred())
+			Expect(fillDefaults(instance, &v3.IPPoolList{Items: currentPools})).NotTo(HaveOccurred())
 
 			// The resulting instance should be valid.
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
@@ -678,21 +678,21 @@ var _ = Describe("Defaulting logic tests", func() {
 			}
 		},
 
-		table.Entry("one IPv4 pool", []crdv1.IPPool{{Spec: crdv1.IPPoolSpec{CIDR: "192.168.0.0/16"}}}),
-		table.Entry("one IPv6 pool", []crdv1.IPPool{{Spec: crdv1.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}}}),
-		table.Entry("two IPv6 pools", []crdv1.IPPool{
-			{Spec: crdv1.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}},
-			{Spec: crdv1.IPPoolSpec{CIDR: "feed:beef:72e5:a94b::/64"}},
+		table.Entry("one IPv4 pool", []v3.IPPool{{Spec: v3.IPPoolSpec{CIDR: "192.168.0.0/16"}}}),
+		table.Entry("one IPv6 pool", []v3.IPPool{{Spec: v3.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}}}),
+		table.Entry("two IPv6 pools", []v3.IPPool{
+			{Spec: v3.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}},
+			{Spec: v3.IPPoolSpec{CIDR: "feed:beef:72e5:a94b::/64"}},
 		}),
-		table.Entry("two IPv4 pools", []crdv1.IPPool{
-			{Spec: crdv1.IPPoolSpec{CIDR: "192.168.0.0/16"}},
-			{Spec: crdv1.IPPoolSpec{CIDR: "172.168.0.0/16"}},
+		table.Entry("two IPv4 pools", []v3.IPPool{
+			{Spec: v3.IPPoolSpec{CIDR: "192.168.0.0/16"}},
+			{Spec: v3.IPPoolSpec{CIDR: "172.168.0.0/16"}},
 		}),
-		table.Entry("dual-spec", []crdv1.IPPool{
-			{Spec: crdv1.IPPoolSpec{CIDR: "192.168.0.0/16"}},
-			{Spec: crdv1.IPPoolSpec{CIDR: "172.168.0.0/16"}},
-			{Spec: crdv1.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}},
-			{Spec: crdv1.IPPoolSpec{CIDR: "feed:beef:72e5:a94b::/64"}},
+		table.Entry("dual-spec", []v3.IPPool{
+			{Spec: v3.IPPoolSpec{CIDR: "192.168.0.0/16"}},
+			{Spec: v3.IPPoolSpec{CIDR: "172.168.0.0/16"}},
+			{Spec: v3.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}},
+			{Spec: v3.IPPoolSpec{CIDR: "feed:beef:72e5:a94b::/64"}},
 		}),
 	)
 })

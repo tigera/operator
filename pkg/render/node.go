@@ -454,7 +454,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// For monitoring Calico-specific configuration.
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"bgpconfigurations",
 					"bgpfilters",
@@ -480,7 +480,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// calico/node monitors for caliconodestatus objects and writes its status back into the object.
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"caliconodestatuses",
 				},
@@ -489,10 +489,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			{
 				// For migration code in calico/node startup only. Remove when the migration
 				// code is removed from node.
-				APIGroups: []string{
-					"crd.projectcalico.org",
-					"projectcalico.org",
-				},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"globalbgpconfigs",
 					"globalfelixconfigs",
@@ -501,7 +498,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Calico creates some configuration on startup.
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"clusterinformations",
 					"felixconfigurations",
@@ -511,7 +508,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Calico creates some tiers on startup.
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"tiers",
 				},
@@ -526,7 +523,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			{
 				// Most IPAM resources need full CRUD permissions so we can allocate and
 				// release IP addresses for pods.
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"blockaffinities",
 					"ipamblocks",
@@ -537,13 +534,13 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// But, we only need to be able to query for IPAM config.
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"ipamconfigurations"},
 				Verbs:     []string{"get"},
 			},
 			{
 				// confd (and in some cases, felix) watches block affinities for route aggregation.
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
 			},
@@ -553,7 +550,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Calico Enterprise needs to be able to read additional resources.
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"bfdconfigurations",
 					"egressgatewaypolicies",
@@ -566,7 +563,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Tigera Secure updates status for packet captures.
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"packetcaptures",
 				},
@@ -615,7 +612,7 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 			{
 				// Most IPAM resources need full CRUD permissions so we can allocate and
 				// release IP addresses for pods.
-				APIGroups: []string{"projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"blockaffinities",
 					"ipamblocks",
@@ -680,7 +677,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 		},
 		"policy_setup_timeout_seconds": linuxPolicySetupTimeoutSeconds,
 		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().VolumeSource.HostPath.Path, "endpoint-status"),
-		"calico_api_group":             "projectcalico.org/v3",
+		"calico_api_group":             "projectcalico.org/v3", // TODO: configurable
 	}
 
 	// Determine logging configuration
@@ -1297,7 +1294,7 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 	}
 
 	envVars := []corev1.EnvVar{
-		{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"},
+		{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"}, // TODO: configurable
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
 		{Name: "CNI_NET_DIR", Value: *c.cfg.Installation.CNI.ConfDir},
@@ -1466,7 +1463,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 	nodeEnv := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-		{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"},
+		{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"}, // TODO: configurable
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CLUSTER_TYPE", Value: clusterType},
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},

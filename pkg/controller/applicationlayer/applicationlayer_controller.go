@@ -21,7 +21,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -499,27 +498,27 @@ func (r *ReconcileApplicationLayer) getPolicySyncPathPrefix(fcSpec *v3.FelixConf
 	return ""
 }
 
-func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLayer) (bool, crdv1.TPROXYModeOption) {
+func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLayer) (bool, string) {
 	if al == nil {
-		return false, crdv1.TPROXYModeOptionDisabled
+		return false, "Disabled"
 	}
 
 	spec := &al.Spec
 	if r.isALPEnabled(spec) ||
 		r.isWAFEnabled(spec) ||
 		r.isLogsCollectionEnabled(spec) {
-		return true, crdv1.TPROXYModeOptionEnabled
+		return true, "Enabled"
 	}
 
 	// alp config is not nil, but neither of the features are enabled
-	return true, crdv1.TPROXYModeOptionDisabled
+	return true, "Disabled"
 }
 
 // patchFelixConfiguration takes all application layer specs as arguments and patches felix config.
 // If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
 func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context, al *operatorv1.ApplicationLayer) error {
 	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
-		var tproxyMode crdv1.TPROXYModeOption
+		var tproxyMode string
 		if ok, v := r.getTProxyMode(al); ok {
 			tproxyMode = v
 		} else {
@@ -537,7 +536,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 			// If the mode is already set, fall through to the normal logic, it's safe to force-set the field now.
 			// This also avoids churning the config if a previous version of the operator set it to Disabled already,
 			// we avoid setting it back to nil.
-			tproxyMode = crdv1.TPROXYModeOptionDisabled
+			tproxyMode = "Disabled"
 		}
 
 		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec, al)

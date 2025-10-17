@@ -199,14 +199,15 @@ func (builder *voltronRouteConfigBuilder) Build() (*VoltronRouteConfig, error) {
 			PathReplace: route.Spec.PathMatch.PathReplace,
 		}
 
-		if route.Spec.Target == operatorv1.TargetTypeUI {
+		switch route.Spec.Target {
+		case operatorv1.TargetTypeUI:
 			uiTLSTerminatedRoutes = append(uiTLSTerminatedRoutes, r)
 			if route.Spec.Unauthenticated != nil {
 				r.Unauthenticated = *route.Spec.Unauthenticated
 			}
-		} else if route.Spec.Target == operatorv1.TargetTypeUpstreamTunnel {
+		case operatorv1.TargetTypeUpstreamTunnel:
 			tunnelTLSTerminatedRoutes = append(tunnelTLSTerminatedRoutes, r)
-		} else {
+		default:
 			return nil, fmt.Errorf("unknown Target value %s", route.Spec.Target)
 		}
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -68,7 +68,7 @@ func versionFromBuildVersion(buildVersion string) (*gv.Version, error) {
 	// Make sure the build version is a valid version.
 	matches := versionRegexp.FindStringSubmatch(buildVersion)
 	if matches == nil {
-		return nil, fmt.Errorf("Invalid build version: %q", buildVersion)
+		return nil, fmt.Errorf("invalid build version: %q", buildVersion)
 	}
 
 	s := gitDescribeSuffixRegexp.ReplaceAllString(buildVersion, "")

@@ -1477,7 +1477,7 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 		// permissions to the service account. But if the user does not want to use our defaults, it can change the
 		// bearerTokenSecret to one of their choosing. In that case, it is up to the user to provide the required access.
 		// See also api/v1/monitor_types.go.
-		if ep.BearerTokenSecret.LocalObjectReference.Name == TigeraExternalPrometheus {
+		if ep.BearerTokenSecret.Name == TigeraExternalPrometheus {
 			needsRBAC = true
 		}
 	}

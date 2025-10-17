@@ -211,7 +211,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		for _, elem := range expectedEnvVars {
 			Expect(egwContainer.Env).To(ContainElement(elem))
 		}
-		ipPoolAnnotation := dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/ipv4pools"]
+		ipPoolAnnotation := dep.Spec.Template.Annotations["cni.projectcalico.org/ipv4pools"]
 		expectedIPPoolAnnotation := "[\"ippool-1\",\"ippool-2\"]"
 		Expect(ipPoolAnnotation).To(Equal(expectedIPPoolAnnotation))
 		Expect(dep.Spec.Template.ObjectMeta.Annotations["egress.projectcalico.org/externalNetworkNames"]).To(Equal("[\"one\",\"two\"]"))
@@ -279,7 +279,7 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 		Expect(resources).To(HaveLen(3))
 		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers[0].Resources).To(Equal(expectedResource))
-		elasticIPAnnotation := dep.Spec.Template.ObjectMeta.Annotations["cni.projectcalico.org/awsElasticIPs"]
+		elasticIPAnnotation := dep.Spec.Template.Annotations["cni.projectcalico.org/awsElasticIPs"]
 		Expect(elasticIPAnnotation).To(Equal("[\"1.2.3.4\",\"5.6.7.8\"]"))
 	})
 

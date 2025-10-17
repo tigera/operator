@@ -363,7 +363,7 @@ func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDs
 	Expect(err).NotTo(HaveOccurred())
 
 	// Setup Scheme for all resources
-	err = apis.AddToScheme(mgr.GetScheme())
+	err = apis.AddToScheme(mgr.GetScheme(), false)
 	Expect(err).NotTo(HaveOccurred())
 	err = apiextensionsv1.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())

@@ -52,7 +52,7 @@ var _ = Describe("Convert typha check tests", func() {
 	var pool *v3.IPPool
 	BeforeEach(func() {
 		scheme = kscheme.Scheme
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 		pool = v3.NewIPPool()
 		pool.Spec = v3.IPPoolSpec{

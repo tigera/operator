@@ -1,8 +1,7 @@
 package convert
 
 import (
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -160,8 +159,8 @@ func emptyComponents() components {
 	}
 }
 
-func emptyFelixConfig() *crdv1.FelixConfiguration {
-	return &crdv1.FelixConfiguration{
+func emptyFelixConfig() *v3.FelixConfiguration {
+	return &v3.FelixConfiguration{
 		ObjectMeta: v1.ObjectMeta{
 			Name: "default",
 		},

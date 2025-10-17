@@ -341,7 +341,6 @@ var _ = Describe("Dashboards rendering tests", func() {
 			Expect(job.Spec.Template.Spec.Containers[0].Name).To(Equal(Name))
 			Expect(job.Spec.Template.Spec.Containers[0].Resources).To(Equal(dashboardsJobResources))
 		})
-
 	})
 
 	Context("single-tenant with external elastic rendering", func() {
@@ -523,7 +522,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 
 func getBundle(installation *operatorv1.InstallationSpec) certificatemanagement.TrustedBundle {
 	scheme := runtime.NewScheme()
-	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -686,7 +685,8 @@ func expectedContainers() []corev1.Container {
 							Key: "password",
 						},
 					},
-				}},
+				},
+			},
 			VolumeMounts: []corev1.VolumeMount{
 				{
 					Name:      "tigera-ca-bundle",

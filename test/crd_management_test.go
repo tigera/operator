@@ -48,7 +48,7 @@ var _ = Describe("CRD management tests", func() {
 	var operatorDone chan struct{}
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 		cfg, err := config.GetConfig()
 		Expect(err).NotTo(HaveOccurred())

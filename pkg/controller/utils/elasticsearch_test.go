@@ -51,179 +51,181 @@ const (
 	indexName = "tigera_secure_ee_test_index"
 )
 
-var newPolicies bool
-var updateToReadonly bool
-var _ = Describe("Elasticsearch tests", func() {
-	Context("Create elasticsearch client", func() {
-		var (
-			c      client.Client
-			ctx    context.Context
-			scheme *runtime.Scheme
-		)
+var (
+	newPolicies      bool
+	updateToReadonly bool
+	_                = Describe("Elasticsearch tests", func() {
+		Context("Create elasticsearch client", func() {
+			var (
+				c      client.Client
+				ctx    context.Context
+				scheme *runtime.Scheme
+			)
 
-		BeforeEach(func() {
-			// Create a Kubernetes client.
-			scheme = runtime.NewScheme()
-			err := apis.AddToScheme(scheme)
-			Expect(err).NotTo(HaveOccurred())
+			BeforeEach(func() {
+				// Create a Kubernetes client.
+				scheme = runtime.NewScheme()
+				err := apis.AddToScheme(scheme, false)
+				Expect(err).NotTo(HaveOccurred())
 
-			Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+				Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+				Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+				Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
-			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
-			ctx = context.Background()
+				c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+				ctx = context.Background()
 
-			Expect(c.Create(ctx, &operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			})).ShouldNot(HaveOccurred())
+				Expect(c.Create(ctx, &operatorv1.Installation{
+					ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				})).ShouldNot(HaveOccurred())
+			})
+
+			It("creates an client for internal elastic", func() {
+				Expect(c.Create(ctx, &v1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Namespace: common.OperatorNamespace(), Name: render.ElasticsearchAdminUserSecret},
+					Data:       map[string][]byte{"elastic": []byte("anyPass")},
+				})).ShouldNot(HaveOccurred())
+
+				esInternalCert, err := secret.CreateTLSSecret(
+					nil,
+					render.TigeraElasticsearchInternalCertSecret,
+					common.OperatorNamespace(),
+					"tls.key",
+					"tls.crt",
+					tls.DefaultCertificateDuration,
+					nil,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(c.Create(ctx, esInternalCert)).ShouldNot(HaveOccurred())
+
+				mockServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+					writer.WriteHeader(http.StatusOK)
+				}))
+				defer mockServer.Close()
+
+				_, err = NewElasticClient(c, ctx, mockServer.URL, false)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("creates an client for external elastic", func() {
+				Expect(c.Create(ctx, &v1.Secret{
+					ObjectMeta: metav1.ObjectMeta{Namespace: common.OperatorNamespace(), Name: render.ElasticsearchAdminUserSecret},
+					Data:       map[string][]byte{"tigera-mgmt": []byte("anyPass")},
+				})).ShouldNot(HaveOccurred())
+
+				esExternalCert, err := secret.CreateTLSSecret(
+					nil,
+					logstorage.ExternalESPublicCertName,
+					common.OperatorNamespace(),
+					"tls.key",
+					"tls.crt",
+					tls.DefaultCertificateDuration,
+					nil,
+					"elastic.tigera.io",
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(c.Create(ctx, esExternalCert)).ShouldNot(HaveOccurred())
+
+				clientCert, err := secret.CreateTLSSecret(
+					nil,
+					logstorage.ExternalCertsSecret,
+					common.OperatorNamespace(),
+					"client.key",
+					"client.crt",
+					tls.DefaultCertificateDuration,
+					nil,
+				)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(c.Create(ctx, clientCert)).ShouldNot(HaveOccurred())
+
+				mockServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+					writer.WriteHeader(http.StatusOK)
+				}))
+				defer mockServer.Close()
+
+				_, err = NewElasticClient(c, ctx, mockServer.URL, true)
+				Expect(err).NotTo(HaveOccurred())
+			})
 		})
 
-		It("creates an client for internal elastic", func() {
-			Expect(c.Create(ctx, &v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Namespace: common.OperatorNamespace(), Name: render.ElasticsearchAdminUserSecret},
-				Data:       map[string][]byte{"elastic": []byte("anyPass")},
-			})).ShouldNot(HaveOccurred())
-
-			esInternalCert, err := secret.CreateTLSSecret(
-				nil,
-				render.TigeraElasticsearchInternalCertSecret,
-				common.OperatorNamespace(),
-				"tls.key",
-				"tls.crt",
-				tls.DefaultCertificateDuration,
-				nil,
+		Context("ILM", func() {
+			var (
+				eClient     *esClient
+				ctx         context.Context
+				rolloverMax = resource.MustParse(fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
+				trt         *testRoundTripper
 			)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(c.Create(ctx, esInternalCert)).ShouldNot(HaveOccurred())
+			BeforeEach(func() {
+				trt = &testRoundTripper{}
+				client := &http.Client{
+					Transport: http.RoundTripper(trt),
+				}
+				eClient = mockElasticClient(client, baseURI)
+				ctx = context.Background()
+			})
 
-			mockServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-				writer.WriteHeader(http.StatusOK)
-			}))
-			defer mockServer.Close()
+			It("max rollover size should be set if ES disk is large", func() {
+				Expect(nil).Should(BeNil())
+				defaultStorage := resource.MustParse(fmt.Sprintf("%dGi", 800))
+				expectedRolloverSize := rolloverMax.Value()
 
-			_, err = NewElasticClient(c, ctx, mockServer.URL, false)
-			Expect(err).NotTo(HaveOccurred())
-		})
+				totalEsStorage := defaultStorage.Value()
+				// using flow logs disk allocation value
+				diskPercentage := 0.7
+				diskForLogType := 0.9
 
-		It("creates an client for external elastic", func() {
-			Expect(c.Create(ctx, &v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{Namespace: common.OperatorNamespace(), Name: render.ElasticsearchAdminUserSecret},
-				Data:       map[string][]byte{"tigera-mgmt": []byte("anyPass")},
-			})).ShouldNot(HaveOccurred())
+				rolloverSize := calculateRolloverSize(totalEsStorage, diskPercentage, diskForLogType)
+				Expect(rolloverSize).To(Equal(fmt.Sprintf("%db", expectedRolloverSize)))
+			})
+			It("rollover age", func() {
+				By("for retention period lesser than retention factor")
+				Expect("1d").To(Equal(calculateRolloverAge(2)))
 
-			esExternalCert, err := secret.CreateTLSSecret(
-				nil,
-				logstorage.ExternalESPublicCertName,
-				common.OperatorNamespace(),
-				"tls.key",
-				"tls.crt",
-				tls.DefaultCertificateDuration,
-				nil,
-				"elastic.tigera.io",
-			)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(c.Create(ctx, esExternalCert)).ShouldNot(HaveOccurred())
+				By("for retention period 0")
+				Expect("1h").To(Equal(calculateRolloverAge(0)))
+			})
+			It("apply new lifecycle policy", func() {
+				newPolicies = true
+				totalDiskSize := resource.MustParse("100Gi")
+				pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 10, true)
 
-			clientCert, err := secret.CreateTLSSecret(
-				nil,
-				logstorage.ExternalCertsSecret,
-				common.OperatorNamespace(),
-				"client.key",
-				"client.crt",
-				tls.DefaultCertificateDuration,
-				nil,
-			)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(c.Create(ctx, clientCert)).ShouldNot(HaveOccurred())
+				err := eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+					indexName: pd,
+				})
+				Expect(err).To(BeNil())
+			})
+			It("update existing lifecycle policy", func() {
+				newPolicies = false
+				totalDiskSize := resource.MustParse("100Gi")
+				pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5, false)
+				err := eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+					indexName: pd,
+				})
+				Expect(err).To(BeNil())
+				Expect(trt.hasUpdatedPolicy).To(BeTrue())
 
-			mockServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-				writer.WriteHeader(http.StatusOK)
-			}))
-			defer mockServer.Close()
+				// Applying the same policy has no effect (since there is no change)
+				trt.hasUpdatedPolicy = false
+				trt.getPolicyOverride = "test_files/02_get_policy.json"
+				pd = buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5, false)
+				err = eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+					indexName: pd,
+				})
+				Expect(err).To(BeNil())
+				Expect(trt.hasUpdatedPolicy).To(BeFalse())
 
-			_, err = NewElasticClient(c, ctx, mockServer.URL, true)
-			Expect(err).NotTo(HaveOccurred())
+				// Applying an updated policy (warm index writable) triggers an update (since there is a change)
+				updateToReadonly = true
+				pd = buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5, true)
+				err = eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
+					indexName: pd,
+				})
+				Expect(err).To(BeNil())
+				Expect(trt.hasUpdatedPolicy).To(BeTrue())
+			})
 		})
 	})
-
-	Context("ILM", func() {
-		var (
-			eClient     *esClient
-			ctx         context.Context
-			rolloverMax = resource.MustParse(fmt.Sprintf("%dGi", DefaultMaxIndexSizeGi))
-			trt         *testRoundTripper
-		)
-		BeforeEach(func() {
-			trt = &testRoundTripper{}
-			client := &http.Client{
-				Transport: http.RoundTripper(trt),
-			}
-			eClient = mockElasticClient(client, baseURI)
-			ctx = context.Background()
-		})
-
-		It("max rollover size should be set if ES disk is large", func() {
-			Expect(nil).Should(BeNil())
-			defaultStorage := resource.MustParse(fmt.Sprintf("%dGi", 800))
-			expectedRolloverSize := rolloverMax.Value()
-
-			totalEsStorage := defaultStorage.Value()
-			// using flow logs disk allocation value
-			diskPercentage := 0.7
-			diskForLogType := 0.9
-
-			rolloverSize := calculateRolloverSize(totalEsStorage, diskPercentage, diskForLogType)
-			Expect(rolloverSize).To(Equal(fmt.Sprintf("%db", expectedRolloverSize)))
-		})
-		It("rollover age", func() {
-			By("for retention period lesser than retention factor")
-			Expect("1d").To(Equal(calculateRolloverAge(2)))
-
-			By("for retention period 0")
-			Expect("1h").To(Equal(calculateRolloverAge(0)))
-		})
-		It("apply new lifecycle policy", func() {
-			newPolicies = true
-			totalDiskSize := resource.MustParse("100Gi")
-			pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 10, true)
-
-			err := eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
-				indexName: pd,
-			})
-			Expect(err).To(BeNil())
-		})
-		It("update existing lifecycle policy", func() {
-			newPolicies = false
-			totalDiskSize := resource.MustParse("100Gi")
-			pd := buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5, false)
-			err := eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
-				indexName: pd,
-			})
-			Expect(err).To(BeNil())
-			Expect(trt.hasUpdatedPolicy).To(BeTrue())
-
-			// Applying the same policy has no effect (since there is no change)
-			trt.hasUpdatedPolicy = false
-			trt.getPolicyOverride = "test_files/02_get_policy.json"
-			pd = buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5, false)
-			err = eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
-				indexName: pd,
-			})
-			Expect(err).To(BeNil())
-			Expect(trt.hasUpdatedPolicy).To(BeFalse())
-
-			// Applying an updated policy (warm index writable) triggers an update (since there is a change)
-			updateToReadonly = true
-			pd = buildILMPolicy(totalDiskSize.Value(), 0.7, .9, 5, true)
-			err = eClient.createOrUpdatePolicies(ctx, map[string]policyDetail{
-				indexName: pd,
-			})
-			Expect(err).To(BeNil())
-			Expect(trt.hasUpdatedPolicy).To(BeTrue())
-		})
-	})
-})
+)
 
 type testRoundTripper struct {
 	e                 error

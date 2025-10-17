@@ -139,7 +139,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).ShouldNot(HaveOccurred())
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -264,7 +264,6 @@ var _ = Describe("LogStorage Secrets controller", func() {
 	})
 
 	It("should not trip up when a cert with missing key usages is configured for other components", func() {
-
 		// Create a LogStorage instance with a default configuration.
 		ls := &operatorv1.LogStorage{}
 		ls.Name = "tigera-secure"

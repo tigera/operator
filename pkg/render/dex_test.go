@@ -138,7 +138,7 @@ var _ = Describe("dex rendering tests", func() {
 
 		BeforeEach(func() {
 			scheme := runtime.NewScheme()
-			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 			cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -554,7 +554,6 @@ var _ = Describe("dex rendering tests", func() {
 			initContainer := test.GetContainer(deploy.Spec.Template.Spec.InitContainers, "tigera-dex-tls-key-cert-provisioner")
 			Expect(initContainer).NotTo(BeNil())
 			Expect(initContainer.Resources).To(Equal(dexInitContainerResources))
-
 		})
 		It("should render configuration with default Init container resource requests and limits", func() {
 			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
@@ -587,7 +586,6 @@ var _ = Describe("dex rendering tests", func() {
 					"memory": resource.MustParse("50Mi"),
 				},
 			}))
-
 		})
 
 		Context("allow-tigera rendering", func() {

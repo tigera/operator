@@ -63,7 +63,7 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -98,7 +98,6 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 		_, err := GetElasticLicenseType(ctx, c, log)
 		Expect(err).Should(HaveOccurred())
 	})
-
 })
 
 var _ = Describe("Tigera License polling test", func() {
@@ -144,7 +143,7 @@ var _ = Describe("Utils APIServer type tests", func() {
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -186,7 +185,6 @@ var _ = Describe("Utils APIServer type tests", func() {
 })
 
 var _ = Describe("ValidateResourceNameIsQualified", func() {
-
 	It("returns nil for a compliant kubernetes name.", func() {
 		qualifiedName := "proper-resource-name"
 
@@ -239,7 +237,7 @@ var _ = Describe("PopulateK8sServiceEndPoint", func() {
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(v1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -274,7 +272,6 @@ var _ = Describe("PopulateK8sServiceEndPoint", func() {
 
 		Expect(err).To(BeNil())
 	})
-
 })
 
 var _ = Describe("Utils ElasticSearch test", func() {
@@ -333,9 +330,7 @@ func (m *fakeDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*me
 }
 
 var _ = Describe("CreatePredicateForObject", func() {
-	var (
-		objMeta metav1.Object
-	)
+	var objMeta metav1.Object
 
 	Context("when the name and namespace were specified with empty strings", func() {
 		BeforeEach(func() {

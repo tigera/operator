@@ -35,7 +35,7 @@ import (
 
 var _ = Describe("imageset tests", func() {
 	BeforeEach(func() {
-		Expect(apis.AddToScheme(kscheme.Scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(kscheme.Scheme, false)).NotTo(HaveOccurred())
 	})
 
 	Context("no imageset is fine", func() {

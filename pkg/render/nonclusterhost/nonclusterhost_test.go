@@ -33,7 +33,7 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 
 		cfg = &nonclusterhost.Config{
 			NonClusterHost: operatorv1.NonClusterHostSpec{

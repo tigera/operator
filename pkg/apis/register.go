@@ -24,6 +24,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -55,6 +56,7 @@ func init() {
 	AddToSchemes = append(AddToSchemes, gateway.Install)
 	AddToSchemes = append(AddToSchemes, envoy.AddToScheme)
 	AddToSchemes = append(AddToSchemes, csisecret.AddToScheme)
+	AddToSchemes = append(AddToSchemes, operatorv1.AddToScheme)
 }
 
 func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {
@@ -70,6 +72,12 @@ func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {
 			&v3.GlobalNetworkPolicyList{},
 			&v3.LicenseKey{},
 			&v3.LicenseKeyList{},
+			&v3.Tier{},
+			&v3.TierList{},
+			&v3.UISettings{},
+			&v3.UISettingsList{},
+			&v3.UISettingsGroup{},
+			&v3.UISettingsGroupList{},
 		}
 
 		// Handle types that are always in the crd.projectcalico.org/v1 API group.

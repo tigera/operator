@@ -49,7 +49,7 @@ var _ = Describe("Convert network tests", func() {
 
 	BeforeEach(func() {
 		scheme = kscheme.Scheme
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		v4pool = v3.NewIPPool()

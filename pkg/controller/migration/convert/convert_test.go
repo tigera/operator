@@ -38,7 +38,7 @@ var _ = Describe("Parser", func() {
 	var scheme *runtime.Scheme
 	BeforeEach(func() {
 		scheme = kscheme.Scheme
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 		pool = v3.NewIPPool()
 		pool.Spec = v3.IPPoolSpec{

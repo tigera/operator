@@ -308,11 +308,11 @@ func assertAvailable(ts *operator.TigeraStatus) error {
 	available, degraded, progressing := readStatus(ts)
 
 	if progressing {
-		return fmt.Errorf("TigeraStatus is still progressing")
+		return fmt.Errorf("TigeraStatus is still progressing %v", ts)
 	} else if degraded {
-		return fmt.Errorf("TigeraStatus is degraded")
+		return fmt.Errorf("TigeraStatus is degraded %v", ts)
 	} else if !available {
-		return fmt.Errorf("TigeraStatus is not available")
+		return fmt.Errorf("TigeraStatus is not available %v", ts)
 	}
 	return nil
 }
@@ -321,11 +321,11 @@ func assertDegraded(ts *operator.TigeraStatus) error {
 	available, degraded, progressing := readStatus(ts)
 
 	if progressing {
-		return fmt.Errorf("TigeraStatus is still progressing")
+		return fmt.Errorf("TigeraStatus is still progressing %v", ts)
 	} else if !degraded {
-		return fmt.Errorf("TigeraStatus is not degraded")
+		return fmt.Errorf("TigeraStatus is not degraded %v", ts)
 	} else if available {
-		return fmt.Errorf("TigeraStatus is available")
+		return fmt.Errorf("TigeraStatus is available %v", ts)
 	}
 	return nil
 }
@@ -486,7 +486,33 @@ func removeInstallation(ctx context.Context, c client.Client, name string) {
 			return err
 		}
 		return fmt.Errorf("Installation still exists")
-	}, 120*time.Second).ShouldNot(HaveOccurred())
+	}, 120*time.Second).ShouldNot(HaveOccurred(), func() string {
+		// Collect debugging information for failure message
+		var debugInfo strings.Builder
+		debugInfo.WriteString("Installation instance still exists:\n")
+		debugInfo.WriteString(fmt.Sprintf("Instance: %+v\n", instance))
+
+		// Get calico-system namespace
+		ns := &corev1.Namespace{}
+		if err := c.Get(ctx, client.ObjectKey{Name: "calico-system"}, ns); err != nil {
+			debugInfo.WriteString(fmt.Sprintf("Failed to get calico-system namespace: %v\n", err))
+		} else {
+			debugInfo.WriteString(fmt.Sprintf("calico-system namespace: %+v\n", ns))
+		}
+
+		// Get all pods in calico-system namespace
+		pods := &corev1.PodList{}
+		if err := c.List(ctx, pods, client.InNamespace("calico-system")); err != nil {
+			debugInfo.WriteString(fmt.Sprintf("Failed to list pods in calico-system namespace: %v\n", err))
+		} else {
+			debugInfo.WriteString(fmt.Sprintf("Pods in calico-system namespace (%d pods):\n", len(pods.Items)))
+			for i, pod := range pods.Items {
+				debugInfo.WriteString(fmt.Sprintf("  Pod %d: Name=%s, Phase=%s, Ready=%v\n", i+1, pod.Name, pod.Status.Phase, pod.Status.ContainerStatuses))
+			}
+		}
+
+		return debugInfo.String()
+	})
 }
 
 func verifyAPIServerHasDeployed(c client.Client) {
@@ -529,14 +555,18 @@ func verifyCalicoHasDeployed(c client.Client) {
 		if err != nil {
 			return err
 		}
+		if ds.Generation != ds.Status.ObservedGeneration {
+			return fmt.Errorf("calico-node status has not observed the latest generation")
+		}
 		if ds.Status.NumberAvailable == 0 {
 			return fmt.Errorf("No node pods running")
 		}
-		if ds.Status.NumberAvailable == ds.Status.CurrentNumberScheduled {
+		if ds.Status.NumberAvailable == ds.Status.DesiredNumberScheduled {
 			return nil
 		}
 		return fmt.Errorf("Only %d available replicas", ds.Status.NumberAvailable)
 	}, 240*time.Second).Should(BeNil())
+	By(fmt.Sprintf("calico-node daemonset %v", ds.Status))
 
 	Eventually(func() error {
 		err := GetResource(c, kc)
@@ -556,7 +586,7 @@ func verifyCalicoHasDeployed(c client.Client) {
 			return err
 		}
 		return assertAvailable(ts)
-	}, 60*time.Second).Should(BeNil())
+	}, 240*time.Second).Should(BeNil(), "expect calico TigeraStatus to be available")
 }
 
 func verifyCRDsExist(c client.Client, variant operator.ProductVariant) {

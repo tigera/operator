@@ -1,6 +1,6 @@
 module github.com/tigera/operator
 
-go 1.24.13
+go 1.25.9
 
 require (
 	github.com/aws/aws-sdk-go v1.55.5
@@ -35,12 +35,12 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.18.6
-	k8s.io/api v0.33.8
-	k8s.io/apiextensions-apiserver v0.33.8
-	k8s.io/apimachinery v0.33.8
-	k8s.io/apiserver v0.33.8
-	k8s.io/client-go v0.33.8
-	k8s.io/kube-aggregator v0.33.8
+	k8s.io/api v0.33.10
+	k8s.io/apiextensions-apiserver v0.33.10
+	k8s.io/apimachinery v0.33.10
+	k8s.io/apiserver v0.33.10
+	k8s.io/client-go v0.33.10
+	k8s.io/kube-aggregator v0.33.10
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	sigs.k8s.io/controller-runtime v0.21.0
 	sigs.k8s.io/gateway-api v1.3.1-0.20250527223622-54df0a899c1c
@@ -177,11 +177,11 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	howett.net/plist v1.0.1 // indirect
-	k8s.io/cli-runtime v0.33.8 // indirect
-	k8s.io/component-base v0.33.8 // indirect
+	k8s.io/cli-runtime v0.33.10 // indirect
+	k8s.io/component-base v0.33.10 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
-	k8s.io/kubectl v0.33.8 // indirect
+	k8s.io/kubectl v0.33.10 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/kustomize/api v0.19.0 // indirect
@@ -194,6 +194,5 @@ replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.2+incompatible // Required by OLM
 	github.com/imdario/mergo => github.com/imdario/mergo v0.3.16 // Per advice at https://github.com/darccio/mergo?tab=readme-ov-file#100
 	github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v1.0.1
+	github.com/tigera/operator/api => ./api
 )
-
-replace github.com/tigera/operator/api => ./api

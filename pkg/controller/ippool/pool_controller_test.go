@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 )
 
 var twentySix int32 = 26
@@ -800,8 +801,7 @@ var _ = Describe("validate()", func() {
 	It("should not allow blocksize to exceed the pool size", func() {
 		// Try with an invalid block size.
 		var twentySix int32 = 26
-		var enabled operator.BGPOption = operator.BGPEnabled
-		instance.Spec.CalicoNetwork.BGP = &enabled
+		instance.Spec.CalicoNetwork.BGP = ptr.To(operator.BGPEnabled)
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
 				CIDR:          "192.168.0.0/27",
@@ -827,8 +827,7 @@ var _ = Describe("validate()", func() {
 		var blockSizeJustRight int32 = 32
 
 		// Start with a valid block size - /32 - just on the border.
-		var enabled operator.BGPOption = operator.BGPEnabled
-		instance.Spec.CalicoNetwork.BGP = &enabled
+		instance.Spec.CalicoNetwork.BGP = ptr.To(operator.BGPEnabled)
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
 				CIDR:          "192.0.0.0/8",

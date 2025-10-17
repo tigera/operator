@@ -117,7 +117,7 @@ func GetComponents(versionsPath string) (Release, error) {
 			if image == "" {
 				return cv, fmt.Errorf("image not specified and no default image available for component %q. "+
 					"Either fill in the 'image' field or update this code with a defaultImage. "+
-					"If key contains %q, remove it and try again.", key, "calico/")
+					"If key contains %q, remove it and try again", key, "calico/")
 			}
 			component.Image = image
 		}

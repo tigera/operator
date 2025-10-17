@@ -80,7 +80,7 @@ func ValidatePools(instance *operator.Installation) error {
 		if instance.Spec.CNI == nil {
 			// We expect this to be defaulted by the core Installation controller prior to the IP pool controller
 			// being invoked, but check just in case.
-			return fmt.Errorf("No CNI plugin specified in Installation resource")
+			return fmt.Errorf("no CNI plugin specified in Installation resource")
 		}
 		if instance.Spec.CNI.Type != operator.PluginCalico {
 			if pool.NodeSelector != "all()" {
@@ -112,7 +112,7 @@ func ValidatePools(instance *operator.Installation) error {
 				// Verify that the CIDR contains the blocksize.
 				ones, _ := cidr.Mask.Size()
 				if int32(ones) > *pool.BlockSize {
-					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
+					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size")
 				}
 			}
 		} else {
@@ -125,7 +125,7 @@ func ValidatePools(instance *operator.Installation) error {
 				// Verify that the CIDR contains the blocksize.
 				ones, _ := cidr.Mask.Size()
 				if int32(ones) > *pool.BlockSize {
-					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
+					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size")
 				}
 			}
 		}

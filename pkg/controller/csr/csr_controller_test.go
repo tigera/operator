@@ -202,7 +202,7 @@ var _ = Describe("CSR controller tests", func() {
 	)
 
 	table.DescribeTable("csr validation for non-cluster hosts", func(csr *certificatesv1.CertificateSigningRequest, hep *v3.HostEndpoint, expectError, expectRelevant, subjectAccessReviewAllowed bool) {
-		clientset.Fake.PrependReactor("create", "subjectaccessreviews", func(action testing.Action) (handled bool, ret runtime.Object, err error) {
+		clientset.PrependReactor("create", "subjectaccessreviews", func(action testing.Action) (handled bool, ret runtime.Object, err error) {
 			return true, &authv1.SubjectAccessReview{
 				Status: authv1.SubjectAccessReviewStatus{
 					Allowed: subjectAccessReviewAllowed,
@@ -264,7 +264,7 @@ var _ = Describe("CSR controller tests", func() {
 			Expect(cli.Create(ctx, hep)).NotTo(HaveOccurred())
 			// When we list HostEndpoints, we use a field selector to filter host endpoint by their spec.node.
 			// The default fake client's List method does not support filed selectors, so we need to add a reactor to handle this.
-			calicoClientset.Fake.PrependReactor("list", "hostendpoints", func(action testing.Action) (handled bool, ret runtime.Object, err error) {
+			calicoClientset.PrependReactor("list", "hostendpoints", func(action testing.Action) (handled bool, ret runtime.Object, err error) {
 				listAction, ok := action.(testing.ListAction)
 				Expect(ok).To(BeTrue())
 				fieldSelector := listAction.GetListRestrictions().Fields

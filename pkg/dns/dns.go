@@ -37,7 +37,7 @@ func GetClusterDomain(resolvConfPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	reg := regexp.MustCompile(`^search.*?\ssvc\.([^\s]*)`)
 

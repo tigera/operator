@@ -364,15 +364,17 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	if p != nil {
+		available := monitoringv1.ConditionFalse
+
 		for _, cond := range p.Status.Conditions {
-			if cond.Type == monitoringv1.Available && cond.Status != monitoringv1.ConditionTrue {
-				r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus component is not available", err, reqLogger)
-				return reconcile.Result{}, err
+			if cond.Type == monitoringv1.Available {
+				available = cond.Status
 			}
-			if cond.Type == monitoringv1.Reconciled && cond.Status != monitoringv1.ConditionTrue {
-				r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus component is not reconciled", err, reqLogger)
-				return reconcile.Result{}, err
-			}
+		}
+
+		if available != monitoringv1.ConditionTrue {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus component is not available", err, reqLogger)
+			return reconcile.Result{}, err
 		}
 	}
 
@@ -383,15 +385,17 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	if am != nil {
+		available := monitoringv1.ConditionFalse
+
 		for _, cond := range am.Status.Conditions {
-			if cond.Type == monitoringv1.Available && cond.Status != monitoringv1.ConditionTrue {
-				r.status.SetDegraded(operatorv1.ResourceNotReady, "Alertmanager component is not available", err, reqLogger)
-				return reconcile.Result{}, err
+			if cond.Type == monitoringv1.Available {
+				available = cond.Status
 			}
-			if cond.Type == monitoringv1.Reconciled && cond.Status != monitoringv1.ConditionTrue {
-				r.status.SetDegraded(operatorv1.ResourceNotReady, "Alertmanager component is not reconciled", err, reqLogger)
-				return reconcile.Result{}, err
-			}
+		}
+
+		if available != monitoringv1.ConditionTrue {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Alertmanager component is not available", err, reqLogger)
+			return reconcile.Result{}, err
 		}
 	}
 

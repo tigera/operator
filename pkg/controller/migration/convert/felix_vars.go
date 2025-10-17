@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
@@ -102,7 +103,7 @@ func handleFelixVars(c *components) error {
 
 	}
 
-	return c.client.Patch(ctx, &crdv1.FelixConfiguration{
+	return c.client.Patch(ctx, &v3.FelixConfiguration{
 		ObjectMeta: metav1.ObjectMeta{Name: "default"},
 	}, p)
 }
@@ -112,7 +113,7 @@ func patchFromVal(key, val string) (patch, error) {
 	// the given env var. to do this, loop through the felixconfigspec
 	// using reflection, finding the struct field where the downcased name
 	// matches the downcased env var name.
-	fc := reflect.ValueOf(crdv1.FelixConfigurationSpec{})
+	fc := reflect.ValueOf(v3.FelixConfigurationSpec{})
 	for ii := 0; ii < fc.Type().NumField(); ii++ {
 		field := fc.Type().Field(ii)
 		value := fc.Field(ii)

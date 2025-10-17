@@ -15,38 +15,39 @@
 package v1
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // GroupName is the group name use in this package
-const GroupName = "crd.projectcalico.org"
+const GroupName = "projectcalico.org"
 
 // SchemeGroupVersion is group version used to register these objects
 
 var (
-	SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v1"}
+	SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: "v3"}
 	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
 	localSchemeBuilder = &SchemeBuilder
 	AddToScheme        = localSchemeBuilder.AddToScheme
 )
 
 func addKnownTypes(scheme *runtime.Scheme) error {
-	scheme.AddKnownTypes(SchemeGroupVersion,
-		&IPPool{},
-		&IPPoolList{},
-		&FelixConfiguration{},
-		&FelixConfigurationList{},
-		&KubeControllersConfiguration{},
-		&KubeControllersConfigurationList{},
-		&BGPConfiguration{},
-		&BGPConfigurationList{},
-		&ExternalNetwork{},
-		&ExternalNetworkList{},
-		&ClusterInformation{},
-		&ClusterInformationList{},
-	)
-	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
+	// Already added!
+	//
+	// scheme.AddKnownTypes(SchemeGroupVersion,
+	// 	&IPPool{},
+	// 	&IPPoolList{},
+	// 	&FelixConfiguration{},
+	// 	&FelixConfigurationList{},
+	// 	&KubeControllersConfiguration{},
+	// 	&KubeControllersConfigurationList{},
+	// 	&BGPConfiguration{},
+	// 	&BGPConfigurationList{},
+	// 	&ExternalNetwork{},
+	// 	&ExternalNetworkList{},
+	// 	&ClusterInformation{},
+	// 	&ClusterInformationList{},
+	// )
+	// metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 	return nil
 }

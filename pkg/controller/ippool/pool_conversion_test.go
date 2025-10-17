@@ -25,9 +25,9 @@ var (
 	false_ = false
 )
 
-var _ = table.DescribeTable("IPPool operator.tigera.io <-> crd.projectcalico.org/v1 conversion tests",
+var _ = table.DescribeTable("IPPool operator.tigera.io <-> projectcalico.org/v3 conversion tests",
 	func(input operator.IPPool) {
-		// Convert to crd.projectcalico.org/v1
+		// Convert to projectcalico.org/v3
 		crdPool, err := ToProjectCalicoV1(input)
 		Expect(err).NotTo(HaveOccurred())
 

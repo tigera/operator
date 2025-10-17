@@ -25,7 +25,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -85,7 +84,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to IPPool.
-	err = c.WatchObject(&crdv1.IPPool{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.IPPool{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-ippool-controller failed to watch IPPool resource: %w", err)
 	}
@@ -128,7 +127,7 @@ const (
 )
 
 // hasOwnerLabel returns true if the given IP pool is owned by the tigera/operator, and false otheriwse.
-func hasOwnerLabel(pool *crdv1.IPPool) bool {
+func hasOwnerLabel(pool *v3.IPPool) bool {
 	if val, ok := pool.Labels[managedByLabel]; ok && val == managedByValue {
 		return true
 	}
@@ -185,7 +184,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	// Get all IP pools currently in the cluster.
-	currentPools := &crdv1.IPPoolList{}
+	currentPools := &v3.IPPoolList{}
 	err := r.client.List(ctx, currentPools)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "error querying IP pools", err, reqLogger)
@@ -225,12 +224,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 	apiAvailable := apiserver != nil && apiserver.Status.State == operatorv1.TigeraStatusReady
 
+	// CASEY: HACK - we don't need an apiserver!
+	apiAvailable = true
+
 	// Create a lookup map of pools owned by this controller for easy access.
 	// This controller will only modify IP pools if:
 	// - The pool was created by or last updated by this controller (as indicated by the managed-by label).
 	// - The IP pool is present in the cluster, present in the Installation, and both match exactly.
 	// The latter case exists for upgrade scenarios, allowing the operator to assume control of existing IP pools gracefully.
-	ourPools := map[string]crdv1.IPPool{}
+	ourPools := map[string]v3.IPPool{}
 	notOurs := map[string]bool{}
 	for _, p := range currentPools.Items {
 		if hasOwnerLabel(&p) {
@@ -276,7 +278,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	toCreateOrUpdate := []client.Object{}
 	for _, p := range installation.Spec.CalicoNetwork.IPPools {
 		// We need to check if updates are required, but the installation uses the operator API format and the queried
-		// pools are in crd.projectcalico.org/v1 format. Compare the pools using the crd.projectcalico.org/v1 format.
+		// pools are in projectcalico.org/v3 format. Compare the pools using the projectcalico.org/v3 format.
 		v1res, err := ToProjectCalicoV1(p)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "error handling IP pool", err, reqLogger)
@@ -317,7 +319,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 					return reconcile.Result{}, err
 				}
 				toCreateOrUpdate = append(toCreateOrUpdate, v3res)
-
 			} else {
 				// The v3 API is not available, and there are existing pools in the cluster. We cannot create new pools until the v3 API is available.
 				// The user may need to manually delete or update pools in order to allow the v3 API to launch successfully.
@@ -392,31 +393,31 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-// ToProjectCalicoV1 converts an IPPool to a crd.projectcalico.org/v1 IPPool resource.
-func ToProjectCalicoV1(p operatorv1.IPPool) (*crdv1.IPPool, error) {
-	pool := crdv1.IPPool{
-		TypeMeta: metav1.TypeMeta{Kind: "IPPool", APIVersion: "crd.projectcalico.org/v1"},
+// ToProjectCalicoV1 converts an IPPool to a projectcalico.org/v3 IPPool resource.
+func ToProjectCalicoV1(p operatorv1.IPPool) (*v3.IPPool, error) {
+	pool := v3.IPPool{
+		TypeMeta: metav1.TypeMeta{Kind: "IPPool", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   p.Name,
 			Labels: map[string]string{},
 		},
-		Spec: crdv1.IPPoolSpec{CIDR: p.CIDR},
+		Spec: v3.IPPoolSpec{CIDR: p.CIDR},
 	}
 
 	// Set encap.
 	switch p.Encapsulation {
 	case operatorv1.EncapsulationIPIP:
-		pool.Spec.IPIPMode = crdv1.IPIPModeAlways
-		pool.Spec.VXLANMode = crdv1.VXLANModeNever
+		pool.Spec.IPIPMode = v3.IPIPModeAlways
+		pool.Spec.VXLANMode = v3.VXLANModeNever
 	case operatorv1.EncapsulationIPIPCrossSubnet:
-		pool.Spec.IPIPMode = crdv1.IPIPModeCrossSubnet
-		pool.Spec.VXLANMode = crdv1.VXLANModeNever
+		pool.Spec.IPIPMode = v3.IPIPModeCrossSubnet
+		pool.Spec.VXLANMode = v3.VXLANModeNever
 	case operatorv1.EncapsulationVXLAN:
-		pool.Spec.VXLANMode = crdv1.VXLANModeAlways
-		pool.Spec.IPIPMode = crdv1.IPIPModeNever
+		pool.Spec.VXLANMode = v3.VXLANModeAlways
+		pool.Spec.IPIPMode = v3.IPIPModeNever
 	case operatorv1.EncapsulationVXLANCrossSubnet:
-		pool.Spec.VXLANMode = crdv1.VXLANModeCrossSubnet
-		pool.Spec.IPIPMode = crdv1.IPIPModeNever
+		pool.Spec.VXLANMode = v3.VXLANModeCrossSubnet
+		pool.Spec.IPIPMode = v3.IPIPModeNever
 	}
 
 	// Set NAT
@@ -443,32 +444,33 @@ func ToProjectCalicoV1(p operatorv1.IPPool) (*crdv1.IPPool, error) {
 	}
 
 	for _, use := range p.AllowedUses {
-		pool.Spec.AllowedUses = append(pool.Spec.AllowedUses, crdv1.IPPoolAllowedUse(use))
+		pool.Spec.AllowedUses = append(pool.Spec.AllowedUses, v3.IPPoolAllowedUse(use))
 	}
 
-	pool.Spec.AssignmentMode = p.AssignmentMode
+	m := v3.AssignmentMode(p.AssignmentMode)
+	pool.Spec.AssignmentMode = &m
 
 	return &pool, nil
 }
 
 // FromProjectCalicoV1 populates the IP pool with the data from the given
-// crd.projectcalico.org/v1 IP pool. It is the direct inverse of ToProjectCalicoV1,
+// projectcalico.org/v3 IP pool. It is the direct inverse of ToProjectCalicoV1,
 // and should be updated with every new field added to the IP pool structure.
-func FromProjectCalicoV1(p *operatorv1.IPPool, crd crdv1.IPPool) {
+func FromProjectCalicoV1(p *operatorv1.IPPool, crd v3.IPPool) {
 	p.Name = crd.Name
 	p.CIDR = crd.Spec.CIDR
 
 	// Set encap.
 	switch crd.Spec.IPIPMode {
-	case crdv1.IPIPModeAlways:
+	case v3.IPIPModeAlways:
 		p.Encapsulation = operatorv1.EncapsulationIPIP
-	case crdv1.IPIPModeCrossSubnet:
+	case v3.IPIPModeCrossSubnet:
 		p.Encapsulation = operatorv1.EncapsulationIPIPCrossSubnet
 	}
 	switch crd.Spec.VXLANMode {
-	case crdv1.VXLANModeAlways:
+	case v3.VXLANModeAlways:
 		p.Encapsulation = operatorv1.EncapsulationVXLAN
-	case crdv1.VXLANModeCrossSubnet:
+	case v3.VXLANModeCrossSubnet:
 		p.Encapsulation = operatorv1.EncapsulationVXLANCrossSubnet
 	}
 
@@ -504,10 +506,13 @@ func FromProjectCalicoV1(p *operatorv1.IPPool, crd crdv1.IPPool) {
 		p.AllowedUses = append(p.AllowedUses, operatorv1.IPPoolAllowedUse(use))
 	}
 
-	p.AssignmentMode = crd.Spec.AssignmentMode
+	if crd.Spec.AssignmentMode != nil {
+		m := operatorv1.AssignmentMode(*crd.Spec.AssignmentMode)
+		p.AssignmentMode = m
+	}
 }
 
-func CRDPoolsToOperator(crds []crdv1.IPPool) []operatorv1.IPPool {
+func CRDPoolsToOperator(crds []v3.IPPool) []operatorv1.IPPool {
 	pools := []operatorv1.IPPool{}
 	for _, p := range crds {
 		op := operatorv1.IPPool{}
@@ -517,7 +522,7 @@ func CRDPoolsToOperator(crds []crdv1.IPPool) []operatorv1.IPPool {
 	return pools
 }
 
-func v1ToV3(v1pool *crdv1.IPPool) (*v3.IPPool, error) {
+func v1ToV3(v1pool *v3.IPPool) (*v3.IPPool, error) {
 	bs, err := json.Marshal(v1pool)
 	if err != nil {
 		return nil, err
@@ -535,7 +540,7 @@ func v1ToV3(v1pool *crdv1.IPPool) (*v3.IPPool, error) {
 	return &v3pool, nil
 }
 
-func restoreV3Metadata(v1pool *crdv1.IPPool) error {
+func restoreV3Metadata(v1pool *v3.IPPool) error {
 	// v1 IP pools store v3 metadata in an annotation. Extract it and use it to restore the v3 metadata.
 	if v3metaJSON, ok := v1pool.Annotations["projectcalico.org/metadata"]; ok {
 		v3meta := metav1.ObjectMeta{}

@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -137,7 +138,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	}
 
 	// Watch for changes to FelixConfiguration.
-	err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("applicationlayer-controller failed to watch FelixConfiguration resource: %w", err)
 	}
@@ -476,7 +477,7 @@ func (r *ReconcileApplicationLayer) isSidecarInjectionEnabled(applicationLayerSp
 		*applicationLayerSpec.SidecarInjection == operatorv1.SidecarEnabled
 }
 
-func (r *ReconcileApplicationLayer) getPolicySyncPathPrefix(fcSpec *crdv1.FelixConfigurationSpec, al *operatorv1.ApplicationLayer) string {
+func (r *ReconcileApplicationLayer) getPolicySyncPathPrefix(fcSpec *v3.FelixConfigurationSpec, al *operatorv1.ApplicationLayer) string {
 	// Respect existing policySyncPathPrefix if it's already set (e.g. EGW)
 	// This will cause policySyncPathPrefix value to remain when ApplicationLayer is disabled.
 	existing := fcSpec.PolicySyncPathPrefix
@@ -517,12 +518,12 @@ func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLaye
 // patchFelixConfiguration takes all application layer specs as arguments and patches felix config.
 // If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
 func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context, al *operatorv1.ApplicationLayer) error {
-	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
 		var tproxyMode crdv1.TPROXYModeOption
 		if ok, v := r.getTProxyMode(al); ok {
 			tproxyMode = v
 		} else {
-			if fc.Spec.TPROXYMode == nil {
+			if fc.Spec.TPROXYMode == "" {
 				// Workaround: we'd like to always force the value to be the correct one, matching the operator's
 				// configuration.  However, during an upgrade from a version that predates the TPROXYMode option,
 				// Felix hits a bug and gets confused by the new config parameter, which in turn triggers a restart.
@@ -541,7 +542,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 
 		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec, al)
 		policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
-		tproxyModeSetDesired := fc.Spec.TPROXYMode != nil && *fc.Spec.TPROXYMode == tproxyMode
+		tproxyModeSetDesired := fc.Spec.TPROXYMode != "" && fc.Spec.TPROXYMode == string(tproxyMode)
 		wafEventLogsFileEnabled := al != nil && ((al.Spec.SidecarInjection != nil && *al.Spec.SidecarInjection == operatorv1.SidecarEnabled) ||
 			(al.Spec.WebApplicationFirewall != nil && *al.Spec.WebApplicationFirewall == operatorv1.WAFEnabled))
 		wafEventLogsFileEnabledDesired := fc.Spec.WAFEventLogsFileEnabled != nil && *fc.Spec.WAFEventLogsFileEnabled == wafEventLogsFileEnabled
@@ -551,7 +552,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 			return false, nil
 		}
 
-		fc.Spec.TPROXYMode = &tproxyMode
+		fc.Spec.TPROXYMode = string(tproxyMode)
 		fc.Spec.PolicySyncPathPrefix = policySyncPrefix
 		fc.Spec.WAFEventLogsFileEnabled = &wafEventLogsFileEnabled
 

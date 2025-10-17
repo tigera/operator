@@ -568,6 +568,15 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		desiredMeta.SetCreationTimestamp(currentMeta.GetCreationTimestamp())
 	}
 
+	// Maintain any finalizers on objects that are not owned by the tigera/operator.
+	finalizers := desiredMeta.GetFinalizers()
+	for _, f := range currentMeta.GetFinalizers() {
+		if !strings.Contains(f, "tigera.io") {
+			finalizers = append(finalizers, f)
+		}
+	}
+	desiredMeta.SetFinalizers(finalizers)
+
 	// Update the generation on the desired object to match the current object.
 	desiredMeta.SetGeneration(currentMeta.GetGeneration())
 

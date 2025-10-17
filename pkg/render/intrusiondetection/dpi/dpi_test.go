@@ -72,12 +72,12 @@ var (
 
 	expectedClusterRoleRules = []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"deeppacketinspections"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"deeppacketinspections/status"},
 			Verbs:     []string{"update"},
 		},

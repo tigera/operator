@@ -22,8 +22,8 @@ import (
 	"strings"
 
 	configv1 "github.com/openshift/api/config/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/ptr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -67,7 +67,7 @@ func cidrToName(cidr string) (string, error) {
 
 // fillDefaults fills in IP pool defaults on the Installation object. Defaulting of fields other than IP pools occurs
 // in pkg/controller/installation/
-func fillDefaults(ctx context.Context, client client.Client, instance *operator.Installation, currentPools *crdv1.IPPoolList) error {
+func fillDefaults(ctx context.Context, client client.Client, instance *operator.Installation, currentPools *v3.IPPoolList) error {
 	if instance.Spec.CNI == nil || instance.Spec.CNI.IPAM == nil {
 		// These fields are needed for IP pool defaulting but defaulted themselves by the core Installation controller, which this controller waits for before
 		// running. We should never hit this branch, but handle it just in case.

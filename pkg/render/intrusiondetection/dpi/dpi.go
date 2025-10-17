@@ -437,7 +437,7 @@ func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"deeppacketinspections",
 				},
@@ -445,7 +445,7 @@ func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Used to update the DPI resource status
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"deeppacketinspections/status",
 				},

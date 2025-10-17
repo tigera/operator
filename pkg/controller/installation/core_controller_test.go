@@ -992,7 +992,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(fc.Spec.NFTablesMode).ToNot(BeNil())
-				Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesModeEnabled))
+				Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesMode(v3.NFTablesModeEnabled)))
 			})
 
 			It("should set NFTablesMode to Disabled if nftables mode is changed", func() {
@@ -1016,7 +1016,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(fc.Spec.NFTablesMode).NotTo(BeNil())
-				Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesModeDisabled))
+				Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesMode(v3.NFTablesModeDisabled)))
 			})
 		})
 
@@ -1130,7 +1130,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(fc.Spec.NFTablesMode).ToNot(BeNil())
-					Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesModeEnabled))
+					Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesMode(v3.NFTablesModeEnabled)))
 				})
 
 				It("should push env vars to ebpf-bootstrap", func() {
@@ -1300,7 +1300,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(fc.Spec.VXLANPort).NotTo(BeNil())
 			Expect(*fc.Spec.VXLANPort).To(Equal(8472))
 			Expect(fc.Spec.NFTablesMode).NotTo(BeNil())
-			Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesModeDisabled))
+			Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesMode(v3.NFTablesModeDisabled)))
 		})
 
 		It("should set bpfHostConntrackByPass to false when provider is DockerEE and BPF enabled", func() {

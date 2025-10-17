@@ -23,8 +23,10 @@ import (
 	envoy "github.com/envoyproxy/gateway/api/v1alpha1"
 	configv1 "github.com/openshift/api/config/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -57,6 +59,8 @@ func init() {
 	AddToSchemes = append(AddToSchemes, envoy.AddToScheme)
 	AddToSchemes = append(AddToSchemes, csisecret.AddToScheme)
 	AddToSchemes = append(AddToSchemes, operatorv1.AddToScheme)
+	AddToSchemes = append(AddToSchemes, admissionregistrationv1.AddToScheme)
+	AddToSchemes = append(AddToSchemes, monitoringv1.AddToScheme)
 }
 
 func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {
@@ -66,18 +70,30 @@ func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {
 	return func(scheme *runtime.Scheme) error {
 		// Handle types that are always in the projectcalico.org/v3 API group.
 		v3Types := []runtime.Object{
-			&v3.NetworkPolicy{},
-			&v3.NetworkPolicyList{},
+			&v3.DeepPacketInspection{},
+			&v3.DeepPacketInspectionList{},
 			&v3.GlobalNetworkPolicy{},
 			&v3.GlobalNetworkPolicyList{},
+			&v3.GlobalReportType{},
+			&v3.GlobalReportTypeList{},
+			&v3.GlobalAlert{},
+			&v3.GlobalAlertList{},
+			&v3.GlobalAlertTemplate{},
+			&v3.GlobalAlertTemplateList{},
+			&v3.HostEndpoint{},
+			&v3.HostEndpointList{},
 			&v3.LicenseKey{},
 			&v3.LicenseKeyList{},
+			&v3.NetworkPolicy{},
+			&v3.NetworkPolicyList{},
+			&v3.PolicyRecommendationScope{},
+			&v3.PolicyRecommendationScopeList{},
 			&v3.Tier{},
 			&v3.TierList{},
 			&v3.UISettings{},
-			&v3.UISettingsList{},
 			&v3.UISettingsGroup{},
 			&v3.UISettingsGroupList{},
+			&v3.UISettingsList{},
 		}
 
 		// Handle types that are always in the crd.projectcalico.org/v1 API group.
@@ -85,20 +101,20 @@ func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {
 
 		// Handle types that vary based on backing API group.
 		variableTypes := []runtime.Object{
-			&v3.IPPool{},
-			&v3.IPPoolList{},
-			&v3.FelixConfiguration{},
-			&v3.FelixConfigurationList{},
-			&v3.KubeControllersConfiguration{},
-			&v3.KubeControllersConfigurationList{},
 			&v3.BGPConfiguration{},
 			&v3.BGPConfigurationList{},
-			&v3.ExternalNetwork{},
-			&v3.ExternalNetworkList{},
 			&v3.ClusterInformation{},
 			&v3.ClusterInformationList{},
+			&v3.ExternalNetwork{},
+			&v3.ExternalNetworkList{},
+			&v3.FelixConfiguration{},
+			&v3.FelixConfigurationList{},
 			&v3.IPAMConfiguration{},
 			&v3.IPAMConfigurationList{},
+			&v3.IPPool{},
+			&v3.IPPoolList{},
+			&v3.KubeControllersConfiguration{},
+			&v3.KubeControllersConfigurationList{},
 		}
 		if useV3 {
 			v3Types = append(v3Types, variableTypes...)
@@ -109,7 +125,6 @@ func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {
 		// Register types with the crd.projectcalico.org API group.
 		v1GV := schema.GroupVersion{Group: "crd.projectcalico.org", Version: "v1"}
 		scheme.AddKnownTypes(v1GV, v1Types...)
-		metav1.AddToGroupVersion(scheme, v1GV)
 
 		// Register types with the projectcalico.org API group.
 		v3GV := schema.GroupVersion{Group: "projectcalico.org", Version: "v3"}

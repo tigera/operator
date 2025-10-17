@@ -193,6 +193,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
+		v3CRDs:               opts.UseV3CRDs,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -378,6 +379,8 @@ type ReconcileInstallation struct {
 	clusterDomain                 string
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
+	v3CRDs                        bool
+
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
@@ -1476,27 +1479,28 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
-		GoldmaneRunning:         goldmaneRunning,
-		K8sServiceEp:            k8sapi.Endpoint,
-		Installation:            &instance.Spec,
-		IPPools:                 crdPoolsToOperator(currentPools.Items),
-		LogCollector:            logCollector,
-		BirdTemplates:           birdTemplates,
-		TLS:                     typhaNodeTLS,
-		ClusterDomain:           r.clusterDomain,
-		DefaultDNSPolicy:        defaultDNSPolicy,
-		DefaultDNSConfig:        defaultDNSConfig,
-		GoldmaneIP:              goldmaneIP,
-		NodeReporterMetricsPort: nodeReporterMetricsPort,
-		BGPLayouts:              bgpLayout,
-		NodeAppArmorProfile:     nodeAppArmorProfile,
-		MigrateNamespaces:       needNsMigration,
-		CanRemoveCNIFinalizer:   canRemoveCNI,
-		PrometheusServerTLS:     nodePrometheusTLS,
-		FelixHealthPort:         *felixConfiguration.Spec.HealthPort,
-		// NodeCgroupV2Path:              felixConfiguration.Spec.CgroupV2Path,
+		GoldmaneRunning:               goldmaneRunning,
+		K8sServiceEp:                  k8sapi.Endpoint,
+		Installation:                  &instance.Spec,
+		IPPools:                       crdPoolsToOperator(currentPools.Items),
+		LogCollector:                  logCollector,
+		BirdTemplates:                 birdTemplates,
+		TLS:                           typhaNodeTLS,
+		ClusterDomain:                 r.clusterDomain,
+		DefaultDNSPolicy:              defaultDNSPolicy,
+		DefaultDNSConfig:              defaultDNSConfig,
+		GoldmaneIP:                    goldmaneIP,
+		NodeReporterMetricsPort:       nodeReporterMetricsPort,
+		BGPLayouts:                    bgpLayout,
+		NodeAppArmorProfile:           nodeAppArmorProfile,
+		MigrateNamespaces:             needNsMigration,
+		CanRemoveCNIFinalizer:         canRemoveCNI,
+		PrometheusServerTLS:           nodePrometheusTLS,
+		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
+		NodeCgroupV2Path:              felixConfiguration.Spec.CgroupV2Path,
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
+		V3CRDs:                        r.v3CRDs,
 	}
 
 	if bgpConfiguration.Spec.BindMode != nil {

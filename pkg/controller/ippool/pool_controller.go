@@ -57,6 +57,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		scheme:               mgr.GetScheme(),
 		watches:              make(map[runtime.Object]struct{}),
 		autoDetectedProvider: opts.DetectedProvider,
+		opts:                 opts,
 		status:               status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -118,6 +119,7 @@ type Reconciler struct {
 	watches              map[runtime.Object]struct{}
 	autoDetectedProvider operatorv1.Provider
 	status               status.StatusManager
+	opts                 options.AddOptions
 }
 
 const (
@@ -217,10 +219,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying APIServer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	apiAvailable := apiserver != nil && apiserver.Status.State == operatorv1.TigeraStatusReady
 
-	// CASEY: HACK - we don't need an apiserver!
-	apiAvailable = true
+	// Determine if the v3 API is available. This is trie if either:
+	// - The APIServer resource exists and is ready.
+	// - We're using v3 CRDs directly (i.e., not via the Calico API server).
+	apiAvailable := apiserver != nil && apiserver.Status.State == operatorv1.TigeraStatusReady || r.opts.UseV3CRDs
 
 	// Create a lookup map of pools owned by this controller for easy access.
 	// This controller will only modify IP pools if:

@@ -1,6 +1,6 @@
 module github.com/tigera/operator
 
-go 1.24.6
+go 1.25.3
 
 require (
 	github.com/aws/aws-sdk-go v1.55.5
@@ -20,12 +20,11 @@ require (
 	github.com/openshift/api v0.0.0-20240924220842-3c700b6cb32b
 	github.com/openshift/library-go v0.0.0-20240930172803-190f286b06b1
 	github.com/pkg/errors v0.9.1
-	github.com/projectcalico/api v0.0.0-20240708202104-e3f70b269c2c
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1
 	github.com/r3labs/diff/v2 v2.15.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
-	github.com/tigera/api v0.0.0-20250916150902-b8353932c447
+	github.com/tigera/api v0.0.0-20251017180206-9d7c2da4f711
 	github.com/tigera/operator/api v0.0.0-20250718195010-e4328952af47
 	github.com/urfave/cli/v3 v3.0.0-beta1
 	go.uber.org/zap v1.27.0
@@ -34,11 +33,11 @@ require (
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.33.3
+	k8s.io/api v0.33.5
 	k8s.io/apiextensions-apiserver v0.33.3
-	k8s.io/apimachinery v0.33.3
-	k8s.io/apiserver v0.33.3
-	k8s.io/client-go v0.33.3
+	k8s.io/apimachinery v0.33.5
+	k8s.io/apiserver v0.33.5
+	k8s.io/client-go v0.33.5
 	k8s.io/kube-aggregator v0.33.3
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	sigs.k8s.io/controller-runtime v0.21.0

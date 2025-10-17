@@ -212,7 +212,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 	// For non-cluster host init process to update labels.
 	rules = append(rules, []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"hostendpoints"},
 			Verbs:     []string{"list", "update"},
 		},

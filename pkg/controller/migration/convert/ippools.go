@@ -273,9 +273,6 @@ func convertPool(src v3.IPPool) (operatorv1.IPPool, error) {
 		default:
 			return p, fmt.Errorf("unexpected assignment mode %s for pool %+v", *src.Spec.AssignmentMode, src)
 		}
-	} else {
-		// Default to automatic if not specified.
-		p.AssignmentMode = operatorv1.AssignmentModeAutomatic
 	}
 
 	return p, nil

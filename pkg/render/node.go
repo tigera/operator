@@ -148,6 +148,8 @@ type NodeConfiguration struct {
 	FelixPrometheusMetricsEnabled bool
 
 	FelixPrometheusMetricsPort int
+
+	V3CRDs bool
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -661,6 +663,11 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	if c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds != nil {
 		linuxPolicySetupTimeoutSeconds = *c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds
 	}
+	apiGroup := ""
+	if c.cfg.V3CRDs {
+		apiGroup = "projectcalico.org/v3"
+	}
+
 	// calico plugin
 	calicoPluginConfig := map[string]interface{}{
 		"type":                   "calico",
@@ -677,7 +684,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 		},
 		"policy_setup_timeout_seconds": linuxPolicySetupTimeoutSeconds,
 		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().VolumeSource.HostPath.Path, "endpoint-status"),
-		"calico_api_group":             "projectcalico.org/v3", // TODO: configurable
+		"calico_api_group":             apiGroup,
 	}
 
 	// Determine logging configuration
@@ -1294,7 +1301,6 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 	}
 
 	envVars := []corev1.EnvVar{
-		{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"}, // TODO: configurable
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "SLEEP", Value: "false"},
 		{Name: "CNI_NET_DIR", Value: *c.cfg.Installation.CNI.ConfDir},
@@ -1463,7 +1469,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 	nodeEnv := []corev1.EnvVar{
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-		{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"}, // TODO: configurable
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CLUSTER_TYPE", Value: clusterType},
 		{Name: "CALICO_DISABLE_FILE_LOGGING", Value: "false"},

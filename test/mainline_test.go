@@ -558,7 +558,7 @@ func verifyCalicoHasDeployed(c client.Client) {
 		if ds.Status.NumberAvailable == 0 {
 			return fmt.Errorf("No node pods running")
 		}
-		if ds.Status.NumberAvailable == ds.Status.CurrentNumberScheduled {
+		if ds.Status.NumberAvailable == ds.Status.DesiredNumberScheduled {
 			return nil
 		}
 		return fmt.Errorf("Only %d available replicas", ds.Status.NumberAvailable)

@@ -39,6 +39,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -626,6 +627,68 @@ var _ = Describe("Gateway API controller tests", func() {
 		By("checking default CRDManagement")
 		Expect(gwapi.Spec.CRDManagement).NotTo(BeNil())
 		Expect(*gwapi.Spec.CRDManagement).To(Equal(operatorv1.CRDManagementReconcile))
+	})
+
+	It("Check felix configuration patching is set if it's not alreadyconfigured", func() {
+		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+		felixConfig := &crdv1.FelixConfiguration{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec:       crdv1.FelixConfigurationSpec{
+				// PolicySyncPathPrefix is not set.
+			},
+		}
+
+		Expect(c.Create(ctx, felixConfig)).NotTo(HaveOccurred())
+
+		By("applying the GatewayAPI CR to the fake cluster")
+		gwapi := &operatorv1.GatewayAPI{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}
+		Expect(c.Create(ctx, gwapi)).NotTo(HaveOccurred())
+
+		By("triggering a reconcile")
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("checking felix configuration has been patched")
+		actualFelixConfig := &crdv1.FelixConfiguration{}
+		err = c.Get(ctx, client.ObjectKey{Name: "default"}, actualFelixConfig)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).To(Equal(DefaultPolicySyncPrefix))
+
+	})
+
+	It("Check felix configuration patching is set if it's not set", func() {
+		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+		felixConfig := &crdv1.FelixConfiguration{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: crdv1.FelixConfigurationSpec{
+				// PolicySyncPathPrefix is not set.
+				PolicySyncPathPrefix: "/dev/null",
+			},
+		}
+
+		Expect(c.Create(ctx, felixConfig)).NotTo(HaveOccurred())
+
+		By("applying the GatewayAPI CR to the fake cluster")
+		gwapi := &operatorv1.GatewayAPI{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}
+		Expect(c.Create(ctx, gwapi)).NotTo(HaveOccurred())
+
+		By("triggering a reconcile")
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("checking felix configuration has been patched")
+		actualFelixConfig := &crdv1.FelixConfiguration{}
+		err = c.Get(ctx, client.ObjectKey{Name: "default"}, actualFelixConfig)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).ToNot(Equal(DefaultPolicySyncPrefix))
+		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).To(Equal("/dev/null"))
+
 	})
 })
 

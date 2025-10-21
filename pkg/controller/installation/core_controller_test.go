@@ -17,6 +17,7 @@ package installation
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"fmt"
 	"time"
 
@@ -58,6 +59,13 @@ import (
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
+)
+
+var (
+	//go:embed testdata/custom-node-certs.crt
+	customNodeCert []byte
+	//go:embed testdata/custom-node-certs-urisan.crt
+	customNodeCertURISAN []byte
 )
 
 var errMismatchedError = fmt.Errorf("installation spec.kubernetesProvider 'DockerEnterprise' does not match auto-detected value 'OpenShift'")
@@ -113,6 +121,8 @@ var _ = Describe("Testing core-controller installation", func() {
 	ready.MarkAsReady()
 
 	Context("image reconciliation tests", func() {
+		var nodeIndexInformer cache.SharedIndexInformer
+
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
 			scheme = runtime.NewScheme()
@@ -162,7 +172,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create the indexer and informer used by the typhaAutoscaler
 			nlw := test.NewNodeListWatch(cs)
-			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
+			nodeIndexInformer = cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 			go nodeIndexInformer.Run(ctx.Done())
 			for nodeIndexInformer.HasSynced() {
@@ -451,6 +461,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 		})
+
 		It("should succeed if other variant imageset exists", func() {
 			imageSet := &operator.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-versiondoesntmatter"},
@@ -499,6 +510,98 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())
 			Expect(instance.Status.CalicoVersion).To(Equal(components.CalicoRelease))
 		})
+
+		Context("non-cluster host tests", func() {
+			nonClusterHostObjectMeta := metav1.ObjectMeta{Name: "tigera-secure"}
+
+			BeforeEach(func() {
+				By("Creating a NonClusterHost CR")
+				Expect(c.Create(ctx, &operator.NonClusterHost{
+					TypeMeta:   metav1.TypeMeta{Kind: "NonClusterHost", APIVersion: "operator.tigera.io/v1"},
+					ObjectMeta: nonClusterHostObjectMeta,
+				})).NotTo(HaveOccurred())
+
+				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus)
+				r.typhaAutoscalerNonClusterHost.start(ctx)
+			})
+
+			AfterEach(func() {
+				r.typhaAutoscalerNonClusterHost = nil
+				Expect(c.Delete(ctx, &operator.NonClusterHost{ObjectMeta: nonClusterHostObjectMeta})).NotTo(HaveOccurred())
+			})
+
+			It("should create a separate Typha deployment for non-cluster hosts", func() {
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+
+				deploy := appsv1.Deployment{}
+				err = c.Get(ctx, types.NamespacedName{Name: "calico-typha-noncluster-host", Namespace: common.CalicoNamespace}, &deploy)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+				Expect(deploy.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+					corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: "typha-client-noncluster-host"},
+				))
+			})
+
+			It("should use the common name from node-certs-noncluster-host certificate", func() {
+				secret := &corev1.Secret{
+					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "node-certs-noncluster-host", Namespace: common.OperatorNamespace()},
+					Data: map[string][]byte{
+						"tls.crt": customNodeCert,
+						"tls.key": []byte("tls.key"),
+					},
+				}
+				Expect(c.Create(ctx, secret)).NotTo(HaveOccurred())
+
+				defer func() {
+					Expect(c.Delete(ctx, secret)).NotTo(HaveOccurred())
+				}()
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+
+				deploy := appsv1.Deployment{}
+				err = c.Get(ctx, types.NamespacedName{Name: "calico-typha-noncluster-host", Namespace: common.CalicoNamespace}, &deploy)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+				Expect(deploy.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+					corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: "custom-node-certs"},
+				))
+			})
+
+			It("should use the URI SAN from node-certs-noncluster-host certificate", func() {
+				secret := &corev1.Secret{
+					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "node-certs-noncluster-host", Namespace: common.OperatorNamespace()},
+					Data: map[string][]byte{
+						"tls.crt": customNodeCertURISAN,
+						"tls.key": []byte("tls.key"),
+					},
+				}
+				err := c.Create(ctx, secret)
+				Expect(err).NotTo(HaveOccurred())
+
+				defer func() {
+					Expect(c.Delete(ctx, secret)).NotTo(HaveOccurred())
+				}()
+
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+
+				deploy := appsv1.Deployment{}
+				err = c.Get(ctx, types.NamespacedName{Name: "calico-typha-noncluster-host", Namespace: common.CalicoNamespace}, &deploy)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+				Expect(deploy.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+					corev1.EnvVar{Name: "TYPHA_CLIENTURISAN", Value: "spiffe://example.org/calico-node"},
+				))
+			})
+		})
+
 	})
 
 	Context("Docker Enterprise defaults", func() {

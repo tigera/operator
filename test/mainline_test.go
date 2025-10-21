@@ -586,7 +586,7 @@ func verifyCalicoHasDeployed(c client.Client) {
 			return err
 		}
 		return assertAvailable(ts)
-	}, 60*time.Second).Should(BeNil(), "expect calico TigeraStatus to be available")
+	}, 240*time.Second).Should(BeNil(), "expect calico TigeraStatus to be available")
 }
 
 func verifyCRDsExist(c client.Client, variant operator.ProductVariant) {

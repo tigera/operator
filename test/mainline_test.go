@@ -555,6 +555,9 @@ func verifyCalicoHasDeployed(c client.Client) {
 		if err != nil {
 			return err
 		}
+		if ds.Generation != ds.Status.ObservedGeneration {
+			return fmt.Errorf("calico-node status has not observed the latest generation")
+		}
 		if ds.Status.NumberAvailable == 0 {
 			return fmt.Errorf("No node pods running")
 		}
@@ -563,6 +566,7 @@ func verifyCalicoHasDeployed(c client.Client) {
 		}
 		return fmt.Errorf("Only %d available replicas", ds.Status.NumberAvailable)
 	}, 240*time.Second).Should(BeNil())
+	By(fmt.Sprintf("calico-node daemonset %v", ds.Status))
 
 	Eventually(func() error {
 		err := GetResource(c, kc)

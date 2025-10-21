@@ -51,7 +51,6 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -297,7 +296,7 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
-			userSecret, err := secret.CreateTLSSecret(
+			userSecret, err := rsecret.CreateTLSSecret(
 				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, tigeratls.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
@@ -335,7 +334,7 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
-			userSecret, err := secret.CreateTLSSecret(
+			userSecret, err := rsecret.CreateTLSSecret(
 				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, tigeratls.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Create(ctx, userSecret)).NotTo(HaveOccurred())
@@ -625,25 +624,29 @@ var _ = Describe("Manager controller tests", func() {
 					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
-						fmt.Sprintf("some.registry.org/%s:%s",
+						fmt.Sprintf("some.registry.org/%s%s:%s",
+							components.TigeraImagePath,
 							components.ComponentManager.Image,
 							components.ComponentManager.Version)))
 					dashboard := test.GetContainer(d.Spec.Template.Spec.Containers, render.DashboardAPIName)
 					Expect(dashboard).ToNot(BeNil())
 					Expect(dashboard.Image).To(Equal(
-						fmt.Sprintf("some.registry.org/%s:%s",
+						fmt.Sprintf("some.registry.org/%s%s:%s",
+							components.TigeraImagePath,
 							components.ComponentUIAPIs.Image,
 							components.ComponentUIAPIs.Version)))
 					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
-						fmt.Sprintf("some.registry.org/%s:%s",
+						fmt.Sprintf("some.registry.org/%s%s:%s",
+							components.TigeraImagePath,
 							components.ComponentUIAPIs.Image,
 							components.ComponentUIAPIs.Version)))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
-						fmt.Sprintf("some.registry.org/%s:%s",
+						fmt.Sprintf("some.registry.org/%s%s:%s",
+							components.TigeraImagePath,
 							components.ComponentManagerProxy.Image,
 							components.ComponentManagerProxy.Version)))
 				})
@@ -675,25 +678,29 @@ var _ = Describe("Manager controller tests", func() {
 					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, render.ManagerName)
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
-						fmt.Sprintf("some.registry.org/%s@%s",
+						fmt.Sprintf("some.registry.org/%s%s@%s",
+							components.TigeraImagePath,
 							components.ComponentManager.Image,
 							"sha256:managerhash")))
 					dashboard := test.GetContainer(d.Spec.Template.Spec.Containers, render.DashboardAPIName)
 					Expect(dashboard).ToNot(BeNil())
 					Expect(dashboard.Image).To(Equal(
-						fmt.Sprintf("some.registry.org/%s@%s",
+						fmt.Sprintf("some.registry.org/%s%s@%s",
+							components.TigeraImagePath,
 							components.ComponentUIAPIs.Image,
 							"sha256:uiapihash")))
 					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
-						fmt.Sprintf("some.registry.org/%s@%s",
+						fmt.Sprintf("some.registry.org/%s%s@%s",
+							components.TigeraImagePath,
 							components.ComponentUIAPIs.Image,
 							"sha256:uiapihash")))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
-						fmt.Sprintf("some.registry.org/%s@%s",
+						fmt.Sprintf("some.registry.org/%s%s@%s",
+							components.TigeraImagePath,
 							components.ComponentManagerProxy.Image,
 							"sha256:voltronhash")))
 				})

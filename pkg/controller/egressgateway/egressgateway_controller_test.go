@@ -29,7 +29,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -97,36 +96,39 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				licenseAPIReady: &utils.ReadyFlag{},
 			}
 
-			Expect(c.Create(ctx, &crdv1.IPPool{ObjectMeta: metav1.ObjectMeta{Name: "ippool-1"}, Spec: crdv1.IPPoolSpec{
-				CIDR:             "1.2.3.0/24",
-				VXLANMode:        crdv1.VXLANModeAlways,
-				IPIPMode:         crdv1.IPIPModeNever,
-				NATOutgoing:      true,
-				Disabled:         false,
-				DisableBGPExport: true,
-				AWSSubnetID:      "aws-subnet-1",
-			},
+			Expect(c.Create(ctx, &crdv1.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Name: "ippool-1"}, Spec: crdv1.IPPoolSpec{
+					CIDR:             "1.2.3.0/24",
+					VXLANMode:        crdv1.VXLANModeAlways,
+					IPIPMode:         crdv1.IPIPModeNever,
+					NATOutgoing:      true,
+					Disabled:         false,
+					DisableBGPExport: true,
+					AWSSubnetID:      "aws-subnet-1",
+				},
 			})).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, &crdv1.IPPool{ObjectMeta: metav1.ObjectMeta{Name: "ippool-2"}, Spec: crdv1.IPPoolSpec{
-				CIDR:             "1.2.4.0/24",
-				VXLANMode:        crdv1.VXLANModeAlways,
-				IPIPMode:         crdv1.IPIPModeNever,
-				NATOutgoing:      true,
-				Disabled:         false,
-				DisableBGPExport: true,
-				AWSSubnetID:      "aws-subnet-2",
-			},
+			Expect(c.Create(ctx, &crdv1.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Name: "ippool-2"}, Spec: crdv1.IPPoolSpec{
+					CIDR:             "1.2.4.0/24",
+					VXLANMode:        crdv1.VXLANModeAlways,
+					IPIPMode:         crdv1.IPIPModeNever,
+					NATOutgoing:      true,
+					Disabled:         false,
+					DisableBGPExport: true,
+					AWSSubnetID:      "aws-subnet-2",
+				},
 			})).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, &crdv1.IPPool{ObjectMeta: metav1.ObjectMeta{Name: "ippool-4"}, Spec: crdv1.IPPoolSpec{
-				CIDR:             "1.2.5.0/24",
-				VXLANMode:        crdv1.VXLANModeAlways,
-				IPIPMode:         crdv1.IPIPModeNever,
-				NATOutgoing:      true,
-				Disabled:         false,
-				DisableBGPExport: true,
-			},
+			Expect(c.Create(ctx, &crdv1.IPPool{
+				ObjectMeta: metav1.ObjectMeta{Name: "ippool-4"}, Spec: crdv1.IPPoolSpec{
+					CIDR:             "1.2.5.0/24",
+					VXLANMode:        crdv1.VXLANModeAlways,
+					IPIPMode:         crdv1.IPIPModeNever,
+					NATOutgoing:      true,
+					Disabled:         false,
+					DisableBGPExport: true,
+				},
 			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &crdv1.FelixConfiguration{
@@ -136,14 +138,16 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 			var routeTableIndex uint32 = 1
-			Expect(c.Create(ctx, &crdv1.ExternalNetwork{ObjectMeta: metav1.ObjectMeta{Name: "one"}, Spec: crdv1.ExternalNetworkSpec{
-				RouteTableIndex: &routeTableIndex,
-			},
+			Expect(c.Create(ctx, &crdv1.ExternalNetwork{
+				ObjectMeta: metav1.ObjectMeta{Name: "one"}, Spec: crdv1.ExternalNetworkSpec{
+					RouteTableIndex: &routeTableIndex,
+				},
 			})).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, &crdv1.ExternalNetwork{ObjectMeta: metav1.ObjectMeta{Name: "two"}, Spec: crdv1.ExternalNetworkSpec{
-				RouteTableIndex: &routeTableIndex,
-			},
+			Expect(c.Create(ctx, &crdv1.ExternalNetwork{
+				ObjectMeta: metav1.ObjectMeta{Name: "two"}, Spec: crdv1.ExternalNetworkSpec{
+					RouteTableIndex: &routeTableIndex,
+				},
 			})).NotTo(HaveOccurred())
 			// Mark that the watch for license key was successful.
 			r.licenseAPIReady.MarkAsReady()
@@ -196,10 +200,12 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(dep.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 			initContainer := dep.Spec.Template.Spec.InitContainers[0]
-			Expect(initContainer.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
+			Expect(initContainer.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s:%s",
+				components.TigeraImagePath,
 				components.ComponentEgressGateway.Image, components.ComponentEgressGateway.Version)))
 			egwContainer := dep.Spec.Template.Spec.Containers[0]
-			Expect(egwContainer.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
+			Expect(egwContainer.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s:%s",
+				components.TigeraImagePath,
 				components.ComponentEgressGateway.Image, components.ComponentEgressGateway.Version)))
 			Expect(dep.Spec.Template.ObjectMeta.Labels["projectcalico.org/egw"]).To(Equal(dep.Name))
 			expectedInitEnvVar := []corev1.EnvVar{
@@ -217,12 +223,12 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			for _, elem := range expectedEgwEnvVar {
 				Expect(egwContainer.Env).To(ContainElement(elem))
 			}
-			expectedAffinity := v1.Affinity{}
-			expectedAffinity.PodAntiAffinity = &v1.PodAntiAffinity{
-				PreferredDuringSchedulingIgnoredDuringExecution: []v1.WeightedPodAffinityTerm{
+			expectedAffinity := corev1.Affinity{}
+			expectedAffinity.PodAntiAffinity = &corev1.PodAntiAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.WeightedPodAffinityTerm{
 					{
 						Weight: 1,
-						PodAffinityTerm: v1.PodAffinityTerm{
+						PodAffinityTerm: corev1.PodAffinityTerm{
 							LabelSelector: &metav1.LabelSelector{
 								MatchLabels: map[string]string{"projectcalico.org/egw": "calico-red"},
 							},
@@ -395,7 +401,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				Expect(initContainer.Env).To(ContainElement(elem))
 				Expect(initContainer_blue.Env).To(ContainElement(elem))
 			}
-
 		})
 
 		It("should use a single scc when EGW is created in openshift", func() {
@@ -546,7 +551,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
-
 		})
 
 		It("Should throw an error when elastic IPs are specified and native IP disabled", func() {
@@ -572,11 +576,10 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
-
 		})
 
 		It("Should throw an error when failure detection is specified without ICMP and HTTP probes", func() {
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "Either ICMP or HTTP probe must be configured", mock.Anything, mock.Anything).Return()
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "either ICMP or HTTP probe must be configured", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 			var replicas int32 = 2
 			labels := map[string]string{"egress-code": "red"}
@@ -598,7 +601,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
-
 		})
 
 		It("Should throw an error when native IP is enabled and IPPool CIDR is not backed by aws subnet ID", func() {
@@ -718,7 +720,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
-
 		})
 
 		It("Should throw an error when externalNetworks are not present", func() {
@@ -745,7 +746,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 			mockStatus.AssertExpectations(GinkgoT())
-
 		})
 
 		It("should wait for correct calico version before reconciling EGW", func() {
@@ -760,7 +760,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			installation.Status.CalicoVersion = "3.15"
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
-			var requeueInterval time.Duration = 30 * time.Second
+			requeueInterval := 30 * time.Second
 
 			labels := map[string]string{"egress-code": "red"}
 			egw := &operatorv1.EgressGateway{

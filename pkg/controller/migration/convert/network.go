@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,7 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/migration/cni"
 	"github.com/tigera/operator/pkg/controller/utils"
 )
@@ -135,7 +134,8 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 	// IP6 can be 'autodetect', 'none', or not defined.
 	if ip6 != nil {
-		if *ip6 == "none" {
+		switch *ip6 {
+		case "none":
 			// If IP6=none then if FELIX_IPV6SUPPORT is set it must be false.
 			if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "false"); err != nil {
 				return err
@@ -145,7 +145,7 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 			if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "IP6_AUTODETECTION_METHOD", "none"); err != nil {
 				return err
 			}
-		} else if *ip6 == "autodetect" {
+		case "autodetect":
 			if err := handleIPv6AutoDetectionMethod(c, install); err != nil {
 				return err
 			}
@@ -153,7 +153,7 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 			if err := c.node.assertEnv(ctx, c.client, containerCalicoNode, "FELIX_IPV6SUPPORT", "true"); err != nil {
 				return err
 			}
-		} else {
+		default:
 			return ErrIncompatibleCluster{
 				err:       fmt.Sprintf("IP6=%s is not supported", *ip),
 				component: ComponentCalicoNode,
@@ -193,10 +193,10 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 
 	// CNI portmap plugin
 	if _, ok := c.cni.Plugins["portmap"]; ok {
-		hp := v1.HostPortsEnabled
+		hp := operatorv1.HostPortsEnabled
 		install.Spec.CalicoNetwork.HostPorts = &hp
 	} else {
-		hp := v1.HostPortsDisabled
+		hp := operatorv1.HostPortsDisabled
 		install.Spec.CalicoNetwork.HostPorts = &hp
 	}
 
@@ -265,7 +265,7 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 	}
 
 	if c.cni.CalicoConfig.ContainerSettings.AllowIPForwarding {
-		containerIPForward := v1.ContainerIPForwardingEnabled
+		containerIPForward := operatorv1.ContainerIPForwardingEnabled
 		install.Spec.CalicoNetwork.ContainerIPForwarding = &containerIPForward
 	}
 

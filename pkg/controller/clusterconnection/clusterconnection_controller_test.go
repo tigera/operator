@@ -235,10 +235,10 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			dexC := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianContainerName)
 			Expect(dexC).ToNot(BeNil())
 			Expect(dexC.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
 					components.ComponentGuardian.Image,
 					components.ComponentGuardian.Version)))
-
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -267,7 +267,8 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, render.GuardianContainerName)
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
 					components.ComponentGuardian.Image,
 					"sha256:guardianhash")))
 		})
@@ -751,7 +752,6 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	})
 
 	val := []string{"some-value"}
-	star := []string{"*"}
 	DescribeTable("should render impersonation permissions correctly", func(impersonation *operatorv1.Impersonation, expectedUser, expectedGroup, expectedSA []string) {
 		By("ensuring a tigerastatus exists")
 		ts := &operatorv1.TigeraStatus{
@@ -789,20 +789,19 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 					}
 				}
 			}
-
 		}
 		Expect(users).To(Equal(expectedUser))
 		Expect(groups).To(Equal(expectedGroup))
 		Expect(sas).To(Equal(expectedSA))
 	},
-		Entry("no impersonation configured", nil, star, star, star),
+		Entry("no impersonation configured", nil, nil, nil, nil),
 		Entry("all set", &operatorv1.Impersonation{Users: val, Groups: val, ServiceAccounts: val}, val, val, val),
+		Entry("all set to empty", &operatorv1.Impersonation{Users: []string{}, Groups: []string{}, ServiceAccounts: []string{}}, nil, nil, nil),
 		Entry("user set", &operatorv1.Impersonation{Users: val}, val, nil, nil),
 		Entry("groups set", &operatorv1.Impersonation{Groups: val}, nil, val, nil),
 		Entry("service accounts set", &operatorv1.Impersonation{ServiceAccounts: val}, nil, nil, val),
 		Entry("empty impersonation", &operatorv1.Impersonation{}, nil, nil, nil),
 	)
-
 })
 
 func createPodWithProxy(ctx context.Context, c client.Client, config *test.ProxyConfig, lowercase bool, replicaNum int) {

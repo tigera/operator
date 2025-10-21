@@ -201,7 +201,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
-			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentAPIServer.Image, components.ComponentAPIServer.Version),
+			fmt.Sprintf("testregistry.com/%s%s:%s", components.TigeraImagePath, components.ComponentAPIServer.Image, components.ComponentAPIServer.Version),
 		))
 
 		expectedArgs := []string{
@@ -247,7 +247,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
 		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal(
-			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentQueryServer.Image, components.ComponentQueryServer.Version),
+			fmt.Sprintf("testregistry.com/%s%s:%s", components.TigeraImagePath, components.ComponentQueryServer.Image, components.ComponentQueryServer.Version),
 		))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
 
@@ -339,11 +339,12 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(svc.Spec.Ports).To(HaveLen(2))
 		serviceFound := 0
 		for _, p := range svc.Spec.Ports {
-			if p.Name == render.APIServerPortName {
+			switch p.Name {
+			case render.APIServerPortName:
 				Expect(p.Port).To(Equal(int32(443)))
 				Expect(p.TargetPort.IntValue()).To(Equal(5443))
 				serviceFound++
-			} else if p.Name == render.QueryServerPortName {
+			case render.QueryServerPortName:
 				Expect(p.Port).To(Equal(int32(8080)))
 				Expect(p.TargetPort.IntValue()).To(Equal(8080))
 				serviceFound++
@@ -1213,14 +1214,15 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(3))
 			containersFound := 0
 			for _, c := range d.Spec.Template.Spec.Containers {
-				if c.Name == "calico-apiserver" {
+				switch c.Name {
+				case "calico-apiserver":
 					Expect(c.Resources).To(Equal(rr1))
 					Expect(c.Ports[0].Name).To(Equal(apiServerPort.Name))
 					Expect(c.Ports[0].ContainerPort).To(Equal(apiServerPort.ContainerPort))
 
 					Expect(c.Args[0]).To(ContainSubstring(fmt.Sprintf("--secure-port=%d", apiServerPort.ContainerPort)))
 					containersFound++
-				} else if c.Name == "tigera-queryserver" {
+				case "tigera-queryserver":
 					Expect(c.Resources).To(Equal(rr2))
 					Expect(c.Ports[0].Name).To(Equal(queryServerPort.Name))
 					Expect(c.Ports[0].ContainerPort).To(Equal(queryServerPort.ContainerPort))
@@ -1228,7 +1230,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 					Expect(c.Env[1].Name).To(Equal("LISTEN_ADDR"))
 					Expect(c.Env[1].Value).To(Equal(fmt.Sprintf(":%d", queryServerPort.ContainerPort)))
 					containersFound++
-				} else if c.Name == "calico-l7-admission-controller" {
+				case "calico-l7-admission-controller":
 					Expect(c.Resources).To(Equal(rr2))
 					Expect(c.Ports[0].Name).To(Equal(l7AdmCtrlPort.Name))
 					Expect(c.Ports[0].ContainerPort).To(Equal(l7AdmCtrlPort.ContainerPort))
@@ -1258,15 +1260,16 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(svc.Spec.Ports).To(HaveLen(3))
 			servicesFound := 0
 			for _, p := range svc.Spec.Ports {
-				if p.Name == render.APIServerPortName {
+				switch p.Name {
+				case render.APIServerPortName:
 					Expect(p.Port).To(Equal(int32(443)))
 					Expect(p.TargetPort.IntVal).To(Equal(apiServerPort.ContainerPort))
 					servicesFound++
-				} else if p.Name == render.QueryServerPortName {
+				case render.QueryServerPortName:
 					Expect(p.Port).To(Equal(int32(8080)))
 					Expect(p.TargetPort.IntVal).To(Equal(queryServerPort.ContainerPort))
 					servicesFound++
-				} else if p.Name == render.L7AdmissionControllerPortName {
+				case render.L7AdmissionControllerPortName:
 					Expect(p.Port).To(Equal(int32(6443)))
 					Expect(p.TargetPort.IntVal).To(Equal(l7AdmCtrlPort.ContainerPort))
 					servicesFound++
@@ -1840,7 +1843,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(1))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
-			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentCalicoAPIServer.Image, components.ComponentCalicoAPIServer.Version),
+			fmt.Sprintf("testregistry.com/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoAPIServer.Image, components.ComponentCalicoAPIServer.Version),
 		))
 
 		expectedArgs := []string{

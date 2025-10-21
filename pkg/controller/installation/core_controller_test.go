@@ -17,6 +17,7 @@ package installation
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"fmt"
 	"time"
 
@@ -61,6 +62,13 @@ import (
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
+)
+
+var (
+	//go:embed testdata/custom-node-certs.crt
+	customNodeCert []byte
+	//go:embed testdata/custom-node-certs-urisan.crt
+	customNodeCertURISAN []byte
 )
 
 var errMismatchedError = fmt.Errorf("installation spec.kubernetesProvider 'DockerEnterprise' does not match auto-detected value 'OpenShift'")
@@ -116,6 +124,8 @@ var _ = Describe("Testing core-controller installation", func() {
 	ready.MarkAsReady()
 
 	Context("mainline tests", func() {
+		var nodeIndexInformer cache.SharedIndexInformer
+
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
 			scheme = runtime.NewScheme()
@@ -165,7 +175,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Create the indexer and informer used by the typhaAutoscaler
 			nlw := test.NewNodeListWatch(cs)
-			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
+			nodeIndexInformer = cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 			go nodeIndexInformer.Run(ctx.Done())
 			for nodeIndexInformer.HasSynced() {
@@ -237,6 +247,97 @@ var _ = Describe("Testing core-controller installation", func() {
 			cancel()
 		})
 
+		Context("non-cluster host tests", func() {
+			nonClusterHostObjectMeta := metav1.ObjectMeta{Name: "tigera-secure"}
+
+			BeforeEach(func() {
+				By("Creating a NonClusterHost CR")
+				Expect(c.Create(ctx, &operator.NonClusterHost{
+					TypeMeta:   metav1.TypeMeta{Kind: "NonClusterHost", APIVersion: "operator.tigera.io/v1"},
+					ObjectMeta: nonClusterHostObjectMeta,
+				})).NotTo(HaveOccurred())
+
+				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus)
+				r.typhaAutoscalerNonClusterHost.start(ctx)
+			})
+
+			AfterEach(func() {
+				r.typhaAutoscalerNonClusterHost = nil
+				Expect(c.Delete(ctx, &operator.NonClusterHost{ObjectMeta: nonClusterHostObjectMeta})).NotTo(HaveOccurred())
+			})
+
+			It("should create a separate Typha deployment for non-cluster hosts", func() {
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+
+				deploy := appsv1.Deployment{}
+				err = c.Get(ctx, types.NamespacedName{Name: "calico-typha-noncluster-host", Namespace: common.CalicoNamespace}, &deploy)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+				Expect(deploy.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+					corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: "typha-client-noncluster-host"},
+				))
+			})
+
+			It("should use the common name from node-certs-noncluster-host certificate", func() {
+				secret := &corev1.Secret{
+					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "node-certs-noncluster-host", Namespace: common.OperatorNamespace()},
+					Data: map[string][]byte{
+						"tls.crt": customNodeCert,
+						"tls.key": []byte("tls.key"),
+					},
+				}
+				Expect(c.Create(ctx, secret)).NotTo(HaveOccurred())
+
+				defer func() {
+					Expect(c.Delete(ctx, secret)).NotTo(HaveOccurred())
+				}()
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+
+				deploy := appsv1.Deployment{}
+				err = c.Get(ctx, types.NamespacedName{Name: "calico-typha-noncluster-host", Namespace: common.CalicoNamespace}, &deploy)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+				Expect(deploy.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+					corev1.EnvVar{Name: "TYPHA_CLIENTCN", Value: "custom-node-certs"},
+				))
+			})
+
+			It("should use the URI SAN from node-certs-noncluster-host certificate", func() {
+				secret := &corev1.Secret{
+					TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "node-certs-noncluster-host", Namespace: common.OperatorNamespace()},
+					Data: map[string][]byte{
+						"tls.crt": customNodeCertURISAN,
+						"tls.key": []byte("tls.key"),
+					},
+				}
+				err := c.Create(ctx, secret)
+				Expect(err).NotTo(HaveOccurred())
+
+				defer func() {
+					Expect(c.Delete(ctx, secret)).NotTo(HaveOccurred())
+				}()
+
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+
+				deploy := appsv1.Deployment{}
+				err = c.Get(ctx, types.NamespacedName{Name: "calico-typha-noncluster-host", Namespace: common.CalicoNamespace}, &deploy)
+				Expect(err).ToNot(HaveOccurred())
+
+				Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
+				Expect(deploy.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+					corev1.EnvVar{Name: "TYPHA_CLIENTURISAN", Value: "spiffe://example.org/calico-node"},
+				))
+			})
+		})
+
 		Context("with Goldmane installed", func() {
 			BeforeEach(func() {
 				// Create a Goldmane CR.
@@ -302,7 +403,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
 				Expect(controller).ToNot(BeNil())
 				Expect(controller.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
+					fmt.Sprintf("some.registry.org/%s%s:%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraKubeControllers.Image,
 						components.ComponentTigeraKubeControllers.Version)))
 
@@ -318,14 +420,16 @@ var _ = Describe("Testing core-controller installation", func() {
 				typha := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-typha")
 				Expect(typha).ToNot(BeNil())
 				Expect(typha.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
+					fmt.Sprintf("some.registry.org/%s%s:%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraTypha.Image,
 						components.ComponentTigeraTypha.Version)))
 				Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 				csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
+					fmt.Sprintf("some.registry.org/%s%s:%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraCSRInitContainer.Image,
 						components.ComponentTigeraCSRInitContainer.Version)))
 
@@ -341,38 +445,44 @@ var _ = Describe("Testing core-controller installation", func() {
 				node := test.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
 				Expect(node).ToNot(BeNil())
 				Expect(node.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
+					fmt.Sprintf("some.registry.org/%s%s:%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraNode.Image,
 						components.ComponentTigeraNode.Version)))
 				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
 				fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 				Expect(fv).ToNot(BeNil())
 				Expect(fv.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
+					fmt.Sprintf("some.registry.org/%s%s:%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraFlexVolume.Image,
 						components.ComponentTigeraFlexVolume.Version)))
 				cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				Expect(cni).ToNot(BeNil())
 				Expect(cni.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
+					fmt.Sprintf("some.registry.org/%s%s:%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraCNI.Image,
 						components.ComponentTigeraCNI.Version)))
 				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
+					fmt.Sprintf("some.registry.org/%s%s:%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraCSRInitContainer.Image,
 						components.ComponentTigeraCSRInitContainer.Version)))
 				csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 				Expect(csrinit2).ToNot(BeNil())
 				Expect(csrinit2.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
+					fmt.Sprintf("some.registry.org/%s%s:%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraCSRInitContainer.Image,
 						components.ComponentTigeraCSRInitContainer.Version)))
 				bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 				Expect(bpfInit).ToNot(BeNil())
 				Expect(bpfInit.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
+					fmt.Sprintf("some.registry.org/%s%s:%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraNode.Image,
 						components.ComponentTigeraNode.Version)))
 			})
@@ -410,7 +520,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
 				Expect(controller).ToNot(BeNil())
 				Expect(controller.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
+					fmt.Sprintf("some.registry.org/%s%s@%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraKubeControllers.Image,
 						"sha256:tigerakubecontrollerhash")))
 
@@ -426,14 +537,16 @@ var _ = Describe("Testing core-controller installation", func() {
 				typha := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-typha")
 				Expect(typha).ToNot(BeNil())
 				Expect(typha.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
+					fmt.Sprintf("some.registry.org/%s%s@%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraTypha.Image,
 						"sha256:tigeratyphahash")))
 				Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 				csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
+					fmt.Sprintf("some.registry.org/%s%s@%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraCSRInitContainer.Image,
 						"sha256:calicocsrinithash")))
 
@@ -449,39 +562,45 @@ var _ = Describe("Testing core-controller installation", func() {
 				node := test.GetContainer(ds.Spec.Template.Spec.Containers, "calico-node")
 				Expect(node).ToNot(BeNil())
 				Expect(node.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
+					fmt.Sprintf("some.registry.org/%s%s@%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraNode.Image,
 						"sha256:tigeranodehash")))
 				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
 				fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 				Expect(fv).ToNot(BeNil())
 				Expect(fv.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
+					fmt.Sprintf("some.registry.org/%s%s@%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraFlexVolume.Image,
 						"sha256:calicoflexvolhash")))
 				cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				Expect(cni).ToNot(BeNil())
 				Expect(cni.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
+					fmt.Sprintf("some.registry.org/%s%s@%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraCNI.Image,
 						"sha256:tigeracnihash")))
 				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
+					fmt.Sprintf("some.registry.org/%s%s@%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraCSRInitContainer.Image,
 						"sha256:calicocsrinithash")))
 				csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 				Expect(csrinit2).ToNot(BeNil())
 				Expect(csrinit2.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
+					fmt.Sprintf("some.registry.org/%s%s@%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraCSRInitContainer.Image,
 						"sha256:calicocsrinithash")))
 
 				bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 				Expect(bpfInit).ToNot(BeNil())
 				Expect(bpfInit.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s@%s",
+					fmt.Sprintf("some.registry.org/%s%s@%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraNode.Image,
 						"sha256:tigeranodehash")))
 				inst := operator.Installation{
@@ -523,7 +642,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				controller := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
 				Expect(controller).ToNot(BeNil())
 				Expect(controller.Image).To(Equal(
-					fmt.Sprintf("some.registry.org/%s:%s",
+					fmt.Sprintf("some.registry.org/%s%s:%s",
+						components.TigeraImagePath,
 						components.ComponentTigeraKubeControllers.Image,
 						components.ComponentTigeraKubeControllers.Version)))
 			})
@@ -1047,7 +1167,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 					ipt := operator.LinuxDataplaneIptables
-					enabled := operator.BPFNetworkAutoEnabled
+					enabled := operator.BPFNetworkBootstrapEnabled
 					cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
 						LinuxDataplane:      &ipt,
 						BPFNetworkBootstrap: &enabled,
@@ -1064,13 +1184,14 @@ var _ = Describe("Testing core-controller installation", func() {
 					Expect(err.Error()).To(ContainSubstring("bpfNetworkBootstrap is enabled but linuxDataplane is not set to BPF"))
 				})
 			})
+
 			When("the LinuxDataplane is BPF", func() {
 				BeforeEach(func() {
 					By("Setting the dataplane to BPF and Enabling network bootstrap")
 					mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 					bpf := operator.LinuxDataplaneBPF
-					enabled := operator.BPFNetworkAutoEnabled
+					enabled := operator.BPFNetworkBootstrapEnabled
 					cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
 						LinuxDataplane:      &bpf,
 						BPFNetworkBootstrap: &enabled,
@@ -1129,7 +1250,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 					Expect(install.Spec.CalicoNetwork).ToNot(BeNil())
 					Expect(install.Spec.CalicoNetwork.BPFNetworkBootstrap).ToNot(BeNil())
-					Expect(*install.Spec.CalicoNetwork.BPFNetworkBootstrap).To(Equal(operator.BPFNetworkAutoEnabled))
+					Expect(*install.Spec.CalicoNetwork.BPFNetworkBootstrap).To(Equal(operator.BPFNetworkBootstrapEnabled))
 					Expect(install.Spec.BPFNetworkBootstrapEnabled()).To(BeTrue())
 
 					By("Checking that the FelixConfiguration has BPF Enabled")

@@ -178,7 +178,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		// Image override results in correct image.
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(
-			fmt.Sprintf("test-reg/%s:%s", components.ComponentCalicoKubeControllers.Image, components.ComponentCalicoKubeControllers.Version),
+			fmt.Sprintf("test-reg/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoKubeControllers.Image, components.ComponentCalicoKubeControllers.Version),
 		))
 
 		// Verify env
@@ -253,7 +253,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(1))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(21))
+		Expect(clusterRole.Rules).To(HaveLen(22))
 
 		ms := rtest.GetResource(resources, kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless")
@@ -340,7 +340,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(19))
+		Expect(clusterRole.Rules).To(HaveLen(20))
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -551,7 +551,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(19))
+		Expect(clusterRole.Rules).To(HaveLen(20))
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -705,9 +705,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		for _, container := range deployment.Spec.Template.Spec.Containers {
 			if container.Name == kubecontrollers.EsKubeController {
 				for _, env := range container.Env {
-					if env.Name == "OIDC_AUTH_USERNAME_PREFIX" {
+					switch env.Name {
+					case "OIDC_AUTH_USERNAME_PREFIX":
 						usernamePrefix = env.Value
-					} else if env.Name == "OIDC_AUTH_GROUP_PREFIX" {
+					case "OIDC_AUTH_GROUP_PREFIX":
 						groupPrefix = env.Value
 					}
 				}
@@ -1070,7 +1071,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 			Expect(len(zeroedPolicy.Spec.Ingress)).To(Equal(len(baselinePolicy.Spec.Ingress) - 1))
 		})
-
 	})
 
 	Context("es-kube-controllers allow-tigera rendering", func() {

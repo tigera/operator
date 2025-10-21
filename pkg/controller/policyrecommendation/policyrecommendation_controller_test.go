@@ -169,45 +169,6 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		r.policyRecScopeWatchReady.MarkAsReady()
 	})
 
-	It("should reconcile namespace, role binding and pull secrts", func() {
-		result, err := r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
-
-		namespace := corev1.Namespace{
-			TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-		}
-		Expect(c.Get(ctx, client.ObjectKey{
-			Name: render.PolicyRecommendationNamespace,
-		}, &namespace)).NotTo(HaveOccurred())
-		Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
-		Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
-
-		// Expect operator role binding to be created
-		rb := rbacv1.RoleBinding{
-			ObjectMeta: metav1.ObjectMeta{},
-		}
-		Expect(c.Get(ctx, client.ObjectKey{
-			Name:      render.TigeraOperatorSecrets,
-			Namespace: render.PolicyRecommendationNamespace,
-		}, &rb)).NotTo(HaveOccurred())
-		Expect(rb.OwnerReferences).To(HaveLen(1))
-		ownerRoleBinding := rb.OwnerReferences[0]
-		Expect(ownerRoleBinding.Kind).To(Equal("PolicyRecommendation"))
-
-		// Expect pull secrets to be created
-		pullSecrets := corev1.Secret{
-			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		}
-		Expect(c.Get(ctx, client.ObjectKey{
-			Name:      "tigera-pull-secret",
-			Namespace: render.PolicyRecommendationNamespace,
-		}, &pullSecrets)).NotTo(HaveOccurred())
-		Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
-		pullSecret := pullSecrets.OwnerReferences[0]
-		Expect(pullSecret.Kind).To(Equal("PolicyRecommendation"))
-	})
-
 	Context("image reconciliation", func() {
 		It("should use builtin images", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -226,7 +187,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			Expect(d.Spec.Template.Spec.NodeSelector).To((Equal(map[string]string{"kubernetes.io/os": "linux"})))
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
 			Expect(controller).ToNot(BeNil())
-			Expect(controller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
+			Expect(controller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s:%s",
+				components.TigeraImagePath,
 				components.ComponentPolicyRecommendation.Image,
 				components.ComponentPolicyRecommendation.Version)))
 		})
@@ -257,7 +219,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
 					components.ComponentPolicyRecommendation.Image,
 					"sha256:policyrecommendationcontrollerhash")))
 		})
@@ -491,64 +454,6 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				// Now reconcile tenant A's namespace and do not expect an error
 				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
 				Expect(err).ShouldNot(HaveOccurred())
-			})
-
-			It("should reconcile pull secrets and role bindings", func() {
-				// Create the Tenant resources for tenant-a.
-				tenantA := &operatorv1.Tenant{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "default",
-						Namespace: tenantANamespace,
-					},
-					Spec: operatorv1.TenantSpec{ID: "tenant-a"},
-				}
-				Expect(c.Create(ctx, tenantA)).NotTo(HaveOccurred())
-				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
-				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
-
-				linseedTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantANamespace, []string{render.TigeraLinseedSecret})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, linseedTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
-
-				Expect(c.Create(ctx, &operatorv1.PolicyRecommendation{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-secure",
-						Namespace: tenantANamespace,
-					},
-				})).NotTo(HaveOccurred())
-
-				_, err = r.Reconcile(ctx, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Namespace: tenantANamespace,
-					},
-				})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// Expect operator role binding to be created
-				rb := rbacv1.RoleBinding{
-					ObjectMeta: metav1.ObjectMeta{},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name:      render.TigeraOperatorSecrets,
-					Namespace: tenantANamespace,
-				}, &rb)).NotTo(HaveOccurred())
-				Expect(rb.OwnerReferences).To(HaveLen(1))
-				ownerRoleBinding := rb.OwnerReferences[0]
-				Expect(ownerRoleBinding.Kind).To(Equal("Tenant"))
-
-				// Expect pull secrets to be created
-				pullSecrets := corev1.Secret{
-					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name:      "tigera-pull-secret",
-					Namespace: tenantANamespace,
-				}, &pullSecrets)).NotTo(HaveOccurred())
-				Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
-				pullSecret := pullSecrets.OwnerReferences[0]
-				Expect(pullSecret.Kind).To(Equal("Tenant"))
 			})
 		})
 	})

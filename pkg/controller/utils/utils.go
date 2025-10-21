@@ -78,6 +78,9 @@ var (
 	// most scenarios. Retries should be used sparingly, and only in extraordinary
 	// circumstances. Use this as a default when retries are needed.
 	StandardRetry = 30 * time.Second
+	// FinalizerRemovalRetry is the amount of time to wait before retrying a request
+	// when waiting for the removal of a finalizer from the Installation by a non-core controller.
+	FinalizerRemovalRetry = 10 * time.Second
 
 	// AllowedSysctlKeys controls the allowed Sysctl keys can be set in Tuning plugin
 	AllowedSysctlKeys = map[string]bool{
@@ -1033,22 +1036,24 @@ func RemoveInstallationFinalizer(i *operatorv1.Installation, finalizer string) {
 // We add a finalizer to the Installation when the mainResource has been installed, and only remove that finalizer when
 // the resource has been deleted and its secondary resources have stopped running. This allows for a graceful cleanup of any resources
 // prior to the CNI plugin being removed.
+// The bool return value indicates if the finalizer is Set
 func MaintainInstallationFinalizer(
 	ctx context.Context,
 	c client.Client,
 	mainResource client.Object,
 	finalizer string,
 	secondaryResources ...client.Object,
-) error {
+) (bool, error) {
+	finalizerSet := false
 	// Get the Installation.
 	installation := &operatorv1.Installation{}
 	if err := c.Get(ctx, DefaultInstanceKey, installation); err != nil {
 		if errors.IsNotFound(err) {
 			log.V(1).Info("Installation config not found")
-			return nil
+			return finalizerSet, nil
 		}
 		log.Error(err, "An error occurred when querying the Installation resource")
-		return err
+		return finalizerSet, err
 	}
 	patchFrom := client.MergeFrom(installation.DeepCopy())
 
@@ -1056,31 +1061,89 @@ func MaintainInstallationFinalizer(
 	if mainResource != nil {
 		// Add a finalizer indicating that the mainResource is still available.
 		SetInstallationFinalizer(installation, finalizer)
+		finalizerSet = true
 	} else {
 		// Remove the finalizer. We can skip this check if the finalizer is already not present.
 		if !stringsutil.StringInSlice(finalizer, installation.GetFinalizers()) {
 			log.V(2).Info("Finalizer not present, skipping removal", "finalizer", finalizer)
-			return nil
+			return finalizerSet, nil
 		}
+		finalizerSet = true
 
 		// Check if the namespaced secondaryResources are still present.
 		// Keep track of all the secondary resources that the main resource creates.
-		// Only delete the finalizer if all of the secondary resources are deleted.
+		// Only delete the finalizer if all of the secondary resources are deleted and there are no lingering Pods.
 		for _, secondaryResource := range secondaryResources {
 			err := c.Get(ctx, types.NamespacedName{Namespace: secondaryResource.GetNamespace(), Name: secondaryResource.GetName()}, secondaryResource)
 			if err != nil && !errors.IsNotFound(err) {
-				return err
+				return finalizerSet, err
 			} else if errors.IsNotFound(err) {
 				log.Info("Object no longer exists.", "object", secondaryResource)
 			} else {
 				log.Info("Object is still present, waiting for termination", "object", secondaryResource)
-				return nil
+				return finalizerSet, nil
+			}
+
+			// If the secondary resource itself is gone, ensure there are no Pods left over from this resource.
+			terminated, err := AllPodsTerminated(ctx, c, secondaryResource)
+			if err != nil {
+				return finalizerSet, err
+			}
+			if !terminated {
+				log.Info("Pods for object are still present, waiting for termination", "object", secondaryResource)
+				return finalizerSet, nil
 			}
 		}
 		log.Info("All objects no longer exist. Removing finalizer", "finalizer", finalizer)
 		RemoveInstallationFinalizer(installation, finalizer)
+		finalizerSet = false
 	}
 
 	// Update the installation with any finalizer changes.
-	return c.Patch(ctx, installation, patchFrom)
+	return finalizerSet, c.Patch(ctx, installation, patchFrom)
+}
+
+func AllPodsTerminated(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
+	// Find the selector to use for listing Pods owned by obj.
+	matchLabels := getMatchLabels(obj)
+	if matchLabels == nil {
+		// This resource doesn't have a selector, so it can't own Pods.
+		return true, nil
+	}
+
+	// List the Pods in the same namespace as obj, matching the selector.
+	podList := &corev1.PodList{}
+	if err := c.List(ctx, podList, client.InNamespace(obj.GetNamespace()), client.MatchingLabels(matchLabels)); err != nil {
+		return false, err
+	}
+	return len(podList.Items) == 0, nil
+}
+
+// getMatchLabels extracts the matchLabels from the given workload object.
+// Returns nil if the object is not a supported workload type or if it has no matchLabels.
+// TODO: This should be extended with full label selector support if we ever need to support more complex matching.
+func getMatchLabels(obj client.Object) map[string]string {
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+		// If the Selector or MatchLabels is nil then assume it isn't populated and return the operator default
+		if o.Spec.Selector == nil || o.Spec.Selector.MatchLabels == nil {
+			return map[string]string{"k8s-app": o.Name}
+		}
+	case *appsv1.DaemonSet:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+		// If the Selector or MatchLabels is nil then assume it isn't populated and return the operator default
+		if o.Spec.Selector == nil || o.Spec.Selector.MatchLabels == nil {
+			return map[string]string{"k8s-app": o.Name}
+		}
+	case *appsv1.StatefulSet:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+	}
+	return nil
 }

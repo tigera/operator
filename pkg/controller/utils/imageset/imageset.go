@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -147,7 +147,7 @@ func ValidateImageSet(is *operator.ImageSet) error {
 	for _, img := range is.Spec.Images {
 		valid := false
 		for _, x := range components.CalicoImages {
-			if img.Image == x.Image {
+			if img.Image == fmt.Sprintf("%s%s", components.CalicoImagePath, x.Image) {
 				valid = true
 				break
 			}
@@ -156,7 +156,7 @@ func ValidateImageSet(is *operator.ImageSet) error {
 			continue
 		}
 		for _, x := range components.EnterpriseImages {
-			if img.Image == x.Image {
+			if img.Image == fmt.Sprintf("%s%s", components.TigeraImagePath, x.Image) {
 				valid = true
 				break
 			}
@@ -205,5 +205,5 @@ func ResolveImages(is *operator.ImageSet, comps ...render.Component) error {
 		return nil
 	}
 
-	return fmt.Errorf("Invalid ImageSet: %s", strings.Join(errMsgs, ", "))
+	return fmt.Errorf("invalid ImageSet: %s", strings.Join(errMsgs, ", "))
 }

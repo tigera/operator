@@ -21,7 +21,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -114,6 +113,13 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 		return operatorv1.ProviderRKE2, nil
 	}
 
+	// Attempt to detect KinD, which also cannot be done via API groups.
+	if kind, err := isKind(ctx, clientset); err != nil {
+		return operatorv1.ProviderNone, fmt.Errorf("failed to check if KinD is the provider: %s", err)
+	} else if kind {
+		return operatorv1.ProviderKind, nil
+	}
+
 	// Couldn't detect any specific platform.
 	return operatorv1.ProviderNone, nil
 }
@@ -180,7 +186,7 @@ func isEKS(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	_, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "aws-auth", metav1.GetOptions{})
 	if err == nil {
 		return true, nil
-	} else if !kerrors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return false, err
 	}
 
@@ -189,7 +195,7 @@ func isEKS(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	_, err = c.CoreV1().ConfigMaps("kube-system").Get(ctx, "eks-certificates-controller", metav1.GetOptions{})
 	if err == nil {
 		return true, nil
-	} else if !kerrors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return false, err
 	}
 
@@ -204,7 +210,7 @@ func isEKS(ctx context.Context, c kubernetes.Interface) (bool, error) {
 				}
 			}
 		}
-	} else if !kerrors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return false, err
 	}
 
@@ -221,7 +227,7 @@ func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	_, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "rke2", metav1.GetOptions{})
 	if err == nil {
 		foundRKE2Resource = true
-	} else if !kerrors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return false, err
 	}
 
@@ -232,11 +238,26 @@ func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	_, err = c.CoreV1().Services("kube-system").Get(ctx, "rke2-coredns-rke2-coredns", metav1.GetOptions{})
 	if err == nil {
 		foundRKE2Resource = true
-	} else if !kerrors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return false, err
 	}
 
 	return foundRKE2Resource, nil
+}
+
+// isKind checks if the cluster is a kind cluster by evaluating the node.Spec.ProviderID value.
+func isKind(ctx context.Context, c kubernetes.Interface) (bool, error) {
+	nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, fmt.Errorf("failed to get nodes: %w", err)
+	}
+
+	for _, node := range nodes.Items {
+		if strings.HasPrefix(node.Spec.ProviderID, "kind://") {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // UseExternalElastic returns true if this cluster is configured to use an external elasticsearch cluster,

@@ -184,6 +184,8 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(ok).To(BeTrue())
 		Expect(d).NotTo(BeNil())
 
+		Expect(d.Spec.Template.Annotations).NotTo(HaveKey(cfg.TLS.TyphaSecret.HashAnnotationKey()))
+		Expect(d.Spec.Template.Annotations).To(HaveKeyWithValue(cfg.TLS.TyphaSecretNonClusterHost.HashAnnotationKey(), cfg.TLS.TyphaSecretNonClusterHost.HashAnnotationValue()))
 		Expect(d.Spec.Template.Spec.Affinity).To(BeNil())
 		Expect(d.Spec.Template.Spec.HostNetwork).To(BeFalse())
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))

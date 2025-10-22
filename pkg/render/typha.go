@@ -464,6 +464,9 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 		// Create a separate deployment to handle non-cluster host requests.
 		deployNonClusterHost := deploy.DeepCopy()
 		deployNonClusterHost.Name += TyphaNonClusterHostSuffix
+		// Replace Typha secret annotation for NonClusterHost deployment.
+		delete(deployNonClusterHost.Spec.Template.Annotations, c.cfg.TLS.TyphaSecret.HashAnnotationKey())
+		deployNonClusterHost.Spec.Template.Annotations[c.cfg.TLS.TyphaSecretNonClusterHost.HashAnnotationKey()] = c.cfg.TLS.TyphaSecretNonClusterHost.HashAnnotationValue()
 		// Remove the affinity and use pod network
 		deployNonClusterHost.Spec.Template.Spec.Affinity = nil
 		deployNonClusterHost.Spec.Template.Spec.HostNetwork = false

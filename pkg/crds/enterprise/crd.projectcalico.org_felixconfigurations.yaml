@@ -759,6 +759,15 @@ spec:
                     fail the health check will be taken our of use as if they have been deleted.
                   pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                   type: string
+                egressIPHostIfacePattern:
+                  description: |-
+                    EgressIPHostIfacePattern is a comma-separated list of interface names which might send and receive egress traffic
+                    across the cluster boundary, after it has left an Egress Gateway pod. Felix will ensure `src_valid_mark` sysctl flags
+                    are set correctly for matching interfaces.
+                    To target multiple interfaces with a single string, the list supports regular expressions.
+                    For regular expressions, wrap the value with `/`.
+                    Example: `/^bond/,eth0` will match all interfaces that begin with `bond` and also the interface `eth0`. [Default: ""]
+                  type: string
                 egressIPRoutingRulePriority:
                   description:
                     "EgressIPRoutingRulePriority controls the priority value

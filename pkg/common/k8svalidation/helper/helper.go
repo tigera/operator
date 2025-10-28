@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 /*
 Copyright 2014 The Kubernetes Authors.
 
@@ -56,10 +56,10 @@ var Semantic = conversion.EqualitiesOrDie(
 		return a.Cmp(b) == 0
 	},
 	func(a, b metav1.MicroTime) bool {
-		return a.UTC() == b.UTC()
+		return a.Equal(&b)
 	},
 	func(a, b metav1.Time) bool {
-		return a.UTC() == b.UTC()
+		return a.Equal(&b)
 	},
 	func(a, b labels.Selector) bool {
 		return a.String() == b.String()

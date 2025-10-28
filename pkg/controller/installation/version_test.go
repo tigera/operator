@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -65,10 +65,10 @@ var _ = Describe("Version validation logic tests", func() {
 		table.Entry("happy path 3", "v1.0.1-11-ga64", "1.0.1", nil),
 		table.Entry("happy path 4", "v3-11-ga64", "3.0.0", nil),
 		table.Entry("invalid build version", "ga64a5a6", "",
-			fmt.Errorf(`Invalid build version: "ga64a5a6"`)),
+			fmt.Errorf(`invalid build version: "ga64a5a6"`)),
 		table.Entry("dirty build version", "ga64a5a6-dirty", "",
-			fmt.Errorf(`Invalid build version: "ga64a5a6-dirty"`)),
+			fmt.Errorf(`invalid build version: "ga64a5a6-dirty"`)),
 		table.Entry("empty build version", "", "",
-			fmt.Errorf(`Invalid build version: ""`)),
+			fmt.Errorf(`invalid build version: ""`)),
 	)
 })

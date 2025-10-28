@@ -155,7 +155,6 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 		mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
-
 	})
 
 	Context("verify reconciliation", func() {
@@ -186,23 +185,25 @@ var _ = Describe("apiserver controller tests", func() {
 			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-apiserver")
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
 					components.ComponentAPIServer.Image,
 					components.ComponentAPIServer.Version)))
 			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-queryserver")
 			Expect(qserver).ToNot(BeNil())
 			Expect(qserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
 					components.ComponentQueryServer.Image,
 					components.ComponentQueryServer.Version)))
 			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, "calico-apiserver-certs-key-cert-provisioner")
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s:%s",
+				fmt.Sprintf("some.registry.org/%s%s:%s",
+					components.TigeraImagePath,
 					components.ComponentTigeraCSRInitContainer.Image,
 					components.ComponentTigeraCSRInitContainer.Version)))
-
 		})
 		It("should use images from imageset", func() {
 			installation.Spec.CertificateManagement = certificateManagement
@@ -242,22 +243,24 @@ var _ = Describe("apiserver controller tests", func() {
 			apiserver := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-apiserver")
 			Expect(apiserver).ToNot(BeNil())
 			Expect(apiserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
 					components.ComponentAPIServer.Image,
 					"sha256:apiserverhash")))
 			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-queryserver")
 			Expect(qserver).ToNot(BeNil())
 			Expect(qserver.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
 					components.ComponentQueryServer.Image,
 					"sha256:queryserverhash")))
 			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, "calico-apiserver-certs-key-cert-provisioner")
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
 					components.ComponentTigeraCSRInitContainer.Image,
 					"sha256:calicocsrinithash")))
-
 		})
 
 		It("should not add OwnerReference to user-supplied apiserver TLS cert secrets", func() {
@@ -282,7 +285,6 @@ var _ = Describe("apiserver controller tests", func() {
 			apiSecret2 := &corev1.Secret{}
 			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: secretName}, apiSecret2)).ShouldNot(HaveOccurred())
 			Expect(apiSecret2.GetOwnerReferences()).To(HaveLen(0))
-
 		})
 
 		It("should add OwnerReference apiserver cert operator managed secrets", func() {
@@ -304,7 +306,6 @@ var _ = Describe("apiserver controller tests", func() {
 			secret := &corev1.Secret{}
 			Expect(cli.Get(ctx, client.ObjectKey{Namespace: common.OperatorNamespace(), Name: secretName}, secret)).ShouldNot(HaveOccurred())
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
-
 		})
 
 		It("should render allow-tigera policy when tier and tier watch are ready", func() {
@@ -796,8 +797,6 @@ var _ = Describe("apiserver controller tests", func() {
 				err = test.GetResource(cli, &clusterConnectionInAppNs)
 				Expect(kerror.IsNotFound(err)).Should(BeTrue())
 			})
-
 		})
 	})
-
 })

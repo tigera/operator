@@ -227,7 +227,13 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		if errors.IsNotFound(err) {
 			reqLogger.Info("APIServer config not found")
 			r.status.OnCRNotFound()
-			return reconcile.Result{}, r.maintainFinalizer(ctx, nil)
+			f, err := r.maintainFinalizer(ctx, nil)
+			// If the finalizer is still set, then requeue so we aren't dependent on the periodic reconcile to check and remove the finalizer
+			if f {
+				return reconcile.Result{RequeueAfter: utils.FinalizerRemovalRetry}, nil
+			} else {
+				return reconcile.Result{}, err
+			}
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("An error occurred when querying the APIServer resource: %s", msg), err, reqLogger)
 		return reconcile.Result{}, err
@@ -432,7 +438,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// API server exists and configuration is valid - maintain a Finalizer on the installation.
-	if err := r.maintainFinalizer(ctx, instance); err != nil {
+	if _, err := r.maintainFinalizer(ctx, instance); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -532,7 +538,8 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 // We add a finalizer to the Installation when the API server has been installed, and only remove that finalizer when
 // the API server has been deleted and its pods have stopped running. This allows for a graceful cleanup of API server resources
 // prior to the CNI plugin being removed.
-func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver client.Object) error {
+// The bool return value indicates if the finalizer is Set
+func (r *ReconcileAPIServer) maintainFinalizer(ctx context.Context, apiserver client.Object) (bool, error) {
 	// These objects require graceful termination before the CNI plugin is torn down.
 	apiServerDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: render.APIServerNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, apiserver, render.APIServerFinalizer, &apiServerDeployment)

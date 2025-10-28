@@ -292,11 +292,12 @@ func getTigeraStatus(client client.Client, name string) (*operator.TigeraStatus,
 
 func readStatus(ts *operator.TigeraStatus) (available, degraded, progressing bool) {
 	for _, condition := range ts.Status.Conditions {
-		if condition.Type == operator.ComponentAvailable {
+		switch condition.Type {
+		case operator.ComponentAvailable:
 			available = condition.Status == operator.ConditionTrue
-		} else if condition.Type == operator.ComponentDegraded {
+		case operator.ComponentDegraded:
 			degraded = condition.Status == operator.ConditionTrue
-		} else if condition.Type == operator.ComponentProgressing {
+		case operator.ComponentProgressing:
 			progressing = condition.Status == operator.ConditionTrue
 		}
 	}

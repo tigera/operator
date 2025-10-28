@@ -33,10 +33,10 @@ import (
 	"github.com/tigera/operator/pkg/render"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
+	"k8s.io/utils/ptr"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -63,7 +63,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	c, err := ctrlruntime.NewController("tigera-ippool-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("Failed to create tigera-ippool-controller: %w", err)
+		return fmt.Errorf("failed to create tigera-ippool-controller: %w", err)
 	}
 
 	// Watch for changes to primary resource Installation
@@ -95,7 +95,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		// merge this configuration with our own and the write back the status object.
 		err = c.WatchObject(&configv1.Network{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
-			if !apierrors.IsNotFound(err) {
+			if !errors.IsNotFound(err) {
 				return fmt.Errorf("tigera-installation-controller failed to watch openshift network config: %w", err)
 			}
 		}
@@ -148,7 +148,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// this controller.
 	installation := &operatorv1.Installation{}
 	if err := r.client.Get(ctx, utils.DefaultInstanceKey, installation); err != nil {
-		if apierrors.IsNotFound(err) {
+		if errors.IsNotFound(err) {
 			reqLogger.Info("Installation config not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
@@ -219,7 +219,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// This controller will never delete pools using the v1 API, as deletion is a complex process and is only
 	// properly handled when using the v3 API.
 	apiserver, _, err := utils.GetAPIServer(ctx, r.client)
-	if err != nil && !apierrors.IsNotFound(err) {
+	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying APIServer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -480,11 +480,7 @@ func FromProjectCalicoV1(p *operatorv1.IPPool, crd crdv1.IPPool) {
 	}
 
 	// Configure DisableNewAllocations
-	disableAlloc := false
-	if crd.Spec.Disabled {
-		disableAlloc = true
-	}
-	p.DisableNewAllocations = &disableAlloc
+	p.DisableNewAllocations = ptr.To(crd.Spec.Disabled)
 
 	// Set BlockSize
 	blockSize := int32(crd.Spec.BlockSize)
@@ -494,11 +490,7 @@ func FromProjectCalicoV1(p *operatorv1.IPPool, crd crdv1.IPPool) {
 	p.NodeSelector = crd.Spec.NodeSelector
 
 	// Set BGP export.
-	disableExport := false
-	if crd.Spec.DisableBGPExport {
-		disableExport = true
-	}
-	p.DisableBGPExport = &disableExport
+	p.DisableBGPExport = ptr.To(crd.Spec.DisableBGPExport)
 
 	for _, use := range crd.Spec.AllowedUses {
 		p.AllowedUses = append(p.AllowedUses, operatorv1.IPPoolAllowedUse(use))

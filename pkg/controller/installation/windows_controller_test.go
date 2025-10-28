@@ -212,7 +212,6 @@ var _ = Describe("windows-controller installation tests", func() {
 					},
 				}
 				Expect(c.Create(ctx, endPointCM)).ToNot(HaveOccurred())
-
 			})
 
 			It("should not render the Windows daemonset when it is disabled in the installation resource", func() {
@@ -373,13 +372,13 @@ var _ = Describe("windows-controller installation tests", func() {
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).Should(HaveOccurred())
-				Expect(err.Error()).To(Equal("Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
+				Expect(err.Error()).To(Equal("services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
 
 				// The calico-node-windows daemonset should be rendered, but in a degraded state
 				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
 				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
 				Expect(degradedMsg).To(ConsistOf([]string{"Invalid Installation provided"}))
-				Expect(degradedErr).To(ConsistOf([]string{"Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"}))
+				Expect(degradedErr).To(ConsistOf([]string{"services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"}))
 			})
 
 			It("should not render the Windows daemonset when the encapsulation is VXLANCrossSubnet (not supported)", func() {
@@ -509,7 +508,7 @@ var _ = Describe("windows-controller installation tests", func() {
 
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).Should(HaveOccurred())
-				Expect(err.Error()).To(Equal("Installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows"))
+				Expect(err.Error()).To(Equal("installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows"))
 
 				Expect(test.GetResource(c, &dsWin)).To(HaveOccurred())
 				Expect(dsWin.Spec).To(Equal(appsv1.DaemonSetSpec{}))
@@ -689,26 +688,30 @@ var _ = Describe("windows-controller installation tests", func() {
 						nodeWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "node")
 						Expect(nodeWin).ToNot(BeNil())
 						Expect(nodeWin.Image).To(Equal(
-							fmt.Sprintf("some.registry.org/%s:%s",
+							fmt.Sprintf("some.registry.org/%s%s:%s",
+								components.CalicoImagePath,
 								components.ComponentCalicoNodeWindows.Image,
 								components.ComponentCalicoNodeWindows.Version)))
 						felixWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "felix")
 						Expect(felixWin).ToNot(BeNil())
 						Expect(felixWin.Image).To(Equal(
-							fmt.Sprintf("some.registry.org/%s:%s",
+							fmt.Sprintf("some.registry.org/%s%s:%s",
+								components.CalicoImagePath,
 								components.ComponentCalicoNodeWindows.Image,
 								components.ComponentCalicoNodeWindows.Version)))
 						confdWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "confd")
 						Expect(confdWin).ToNot(BeNil())
 						Expect(confdWin.Image).To(Equal(
-							fmt.Sprintf("some.registry.org/%s:%s",
+							fmt.Sprintf("some.registry.org/%s%s:%s",
+								components.CalicoImagePath,
 								components.ComponentCalicoNodeWindows.Image,
 								components.ComponentCalicoNodeWindows.Version)))
 						Expect(dsWin.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 						cniWin := test.GetContainer(dsWin.Spec.Template.Spec.InitContainers, "install-cni")
 						Expect(cniWin).ToNot(BeNil())
 						Expect(cniWin.Image).To(Equal(
-							fmt.Sprintf("some.registry.org/%s:%s",
+							fmt.Sprintf("some.registry.org/%s%s:%s",
+								components.CalicoImagePath,
 								components.ComponentCalicoCNIWindows.Image,
 								components.ComponentCalicoCNIWindows.Version)))
 					} else {
@@ -762,26 +765,30 @@ var _ = Describe("windows-controller installation tests", func() {
 						nodeWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "node")
 						Expect(nodeWin).ToNot(BeNil())
 						Expect(nodeWin.Image).To(Equal(
-							fmt.Sprintf("some.registry.org/%s@%s",
+							fmt.Sprintf("some.registry.org/%s%s@%s",
+								components.CalicoImagePath,
 								components.ComponentCalicoNodeWindows.Image,
 								"sha256:tigeranodewindowshash")))
 						felixWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "felix")
 						Expect(felixWin).ToNot(BeNil())
 						Expect(felixWin.Image).To(Equal(
-							fmt.Sprintf("some.registry.org/%s@%s",
+							fmt.Sprintf("some.registry.org/%s%s@%s",
+								components.CalicoImagePath,
 								components.ComponentCalicoNodeWindows.Image,
 								"sha256:tigeranodewindowshash")))
 						confdWin := test.GetContainer(dsWin.Spec.Template.Spec.Containers, "confd")
 						Expect(confdWin).ToNot(BeNil())
 						Expect(confdWin.Image).To(Equal(
-							fmt.Sprintf("some.registry.org/%s@%s",
+							fmt.Sprintf("some.registry.org/%s%s@%s",
+								components.CalicoImagePath,
 								components.ComponentCalicoNodeWindows.Image,
 								"sha256:tigeranodewindowshash")))
 						Expect(dsWin.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 						cniWin := test.GetContainer(dsWin.Spec.Template.Spec.InitContainers, "install-cni")
 						Expect(cniWin).ToNot(BeNil())
 						Expect(cniWin.Image).To(Equal(
-							fmt.Sprintf("some.registry.org/%s@%s",
+							fmt.Sprintf("some.registry.org/%s%s@%s",
+								components.CalicoImagePath,
 								components.ComponentCalicoCNIWindows.Image,
 								"sha256:tigeracniwindowshash")))
 					} else {

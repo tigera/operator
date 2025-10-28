@@ -159,7 +159,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	} else if whiskerCR == nil {
 		r.status.OnCRNotFound()
-		return reconcile.Result{}, r.maintainFinalizer(ctx, nil)
+		f, err := r.maintainFinalizer(ctx, nil)
+		// If the finalizer is still set, then requeue so we aren't dependent on the periodic reconcile to check and remove the finalizer
+		if f {
+			return reconcile.Result{RequeueAfter: utils.FinalizerRemovalRetry}, nil
+		} else {
+			return reconcile.Result{}, err
+		}
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -223,7 +229,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	if err := r.maintainFinalizer(ctx, whiskerCR); err != nil {
+	if _, err := r.maintainFinalizer(ctx, whiskerCR); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -284,7 +290,8 @@ func updateWhiskerWithDefaults(instance *operatorv1.Whisker) {
 	}
 }
 
-func (r *Reconciler) maintainFinalizer(ctx context.Context, whiskerCr client.Object) error {
+// The bool return value indicates if the finalizer is Set
+func (r *Reconciler) maintainFinalizer(ctx context.Context, whiskerCr client.Object) (bool, error) {
 	// These objects require graceful termination before the CNI plugin is torn down.
 	whiskerDeployment := &v1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: whisker.WhiskerDeploymentName}}
 	return utils.MaintainInstallationFinalizer(ctx, r.cli, whiskerCr, render.WhiskerFinalizer, whiskerDeployment)

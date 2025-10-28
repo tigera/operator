@@ -31,7 +31,6 @@ import (
 	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	restMeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -429,7 +428,7 @@ var _ = Describe("Component handler tests", func() {
 		labels := map[string]string{
 			"extra": "extra-value",
 		}
-		ns.ObjectMeta.Labels = labels
+		ns.Labels = labels
 		Expect(c.Update(ctx, ns)).NotTo(HaveOccurred())
 
 		By("checking that the namespace is updated with extra label")
@@ -478,7 +477,7 @@ var _ = Describe("Component handler tests", func() {
 			"cattle-not-pets":     "indeed",
 			fakeComponentLabelKey: "not-present",
 		}
-		ns.ObjectMeta.Labels = labels
+		ns.Labels = labels
 		err = c.Update(ctx, ns)
 		Expect(err).To(BeNil())
 
@@ -548,7 +547,7 @@ var _ = Describe("Component handler tests", func() {
 				Expect(c.Create(ctx, installation)).To(BeNil())
 				Expect(ensureTLSCiphers(ctx, obj, c)).To(BeNil())
 
-				var containers []v1.Container
+				var containers []corev1.Container
 				switch o := obj.(type) {
 				case *apps.Deployment:
 					containers = o.Spec.Template.Spec.Containers

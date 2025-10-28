@@ -17,163 +17,182 @@
 
 package components
 
-import "github.com/tigera/operator/version"
-
 var (
 	CalicoRelease string = "master"
 
 	ComponentCalicoCNI = Component{
 		Version:  "master",
-		Image:    "calico/cni",
+		Image:    "cni",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCNIFIPS = Component{
 		Version:  "master-fips",
-		Image:    "calico/cni",
+		Image:    "cni",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCNIWindows = Component{
 		Version:  "master",
-		Image:    "calico/cni-windows",
+		Image:    "cni-windows",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCSRInitContainer = Component{
 		Version:  "master",
-		Image:    "calico/key-cert-provisioner",
+		Image:    "key-cert-provisioner",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoKubeControllers = Component{
 		Version:  "master",
-		Image:    "calico/kube-controllers",
+		Image:    "kube-controllers",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoKubeControllersFIPS = Component{
 		Version:  "master-fips",
-		Image:    "calico/kube-controllers",
+		Image:    "kube-controllers",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoNode = Component{
 		Version:  "master",
-		Image:    "calico/node",
+		Image:    "node",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoNodeFIPS = Component{
 		Version:  "master-fips",
-		Image:    "calico/node",
+		Image:    "node",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoNodeWindows = Component{
 		Version:  "master",
-		Image:    "calico/node-windows",
+		Image:    "node-windows",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoTypha = Component{
 		Version:  "master",
-		Image:    "calico/typha",
+		Image:    "typha",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoTyphaFIPS = Component{
 		Version:  "master-fips",
-		Image:    "calico/typha",
+		Image:    "typha",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoFlexVolume = Component{
 		Version:  "master",
-		Image:    "calico/pod2daemon-flexvol",
+		Image:    "pod2daemon-flexvol",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoAPIServer = Component{
 		Version:  "master",
-		Image:    "calico/apiserver",
+		Image:    "apiserver",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoAPIServerFIPS = Component{
 		Version:  "master-fips",
-		Image:    "calico/apiserver",
+		Image:    "apiserver",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCSI = Component{
 		Version:  "master",
-		Image:    "calico/csi",
+		Image:    "csi",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCSIFIPS = Component{
 		Version:  "master-fips",
-		Image:    "calico/csi",
+		Image:    "csi",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCSIRegistrar = Component{
 		Version:  "master",
-		Image:    "calico/node-driver-registrar",
+		Image:    "node-driver-registrar",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoCSIRegistrarFIPS = Component{
 		Version:  "master-fips",
-		Image:    "calico/node-driver-registrar",
+		Image:    "node-driver-registrar",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoGoldmane = Component{
 		Version:  "master",
-		Image:    "calico/goldmane",
+		Image:    "goldmane",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoWhisker = Component{
 		Version:  "master",
-		Image:    "calico/whisker",
+		Image:    "whisker",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoWhiskerBackend = Component{
 		Version:  "master",
-		Image:    "calico/whisker-backend",
+		Image:    "whisker-backend",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoEnvoyGateway = Component{
 		Version:  "master",
-		Image:    "calico/envoy-gateway",
+		Image:    "envoy-gateway",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoEnvoyProxy = Component{
 		Version:  "master",
-		Image:    "calico/envoy-proxy",
+		Image:    "envoy-proxy",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoEnvoyRatelimit = Component{
 		Version:  "master",
-		Image:    "calico/envoy-ratelimit",
+		Image:    "envoy-ratelimit",
 		Registry: "",
+		variant:  calicoVariant,
 	}
 
 	ComponentCalicoGuardian = Component{
 		Version:  "master",
-		Image:    "calico/guardian",
+		Image:    "guardian",
 		Registry: "",
-	}
-	ComponentOperatorInit = Component{
-		Version: version.VERSION,
-		Image:   "tigera/operator",
+		variant:  calicoVariant,
 	}
 
 	CalicoImages = []Component{

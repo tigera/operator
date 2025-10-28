@@ -37,7 +37,7 @@ func GetClusterDomain(resolvConfPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	reg := regexp.MustCompile(`^search.*?\ssvc\.([^\s]*)`)
 
@@ -73,10 +73,15 @@ func IsDomainName(name string) bool {
 // - <svc_name>.<ns>.svc
 // - <svc_name>.<ns>.svc.<cluster-domain>
 func GetServiceDNSNames(name, namespace, clusterDomain string) []string {
-	return []string{
+	domains := []string{
 		name,
 		fmt.Sprintf("%s.%s", name, namespace),
 		fmt.Sprintf("%s.%s.svc", name, namespace),
-		fmt.Sprintf("%s.%s.svc.%s", name, namespace, clusterDomain),
 	}
+
+	// If the cluster domain isn't set, this becomes an invalid DNS name since it would end in a dot. So only add it if it's set.
+	if clusterDomain != "" {
+		domains = append(domains, fmt.Sprintf("%s.%s.svc.%s", name, namespace, clusterDomain))
+	}
+	return domains
 }

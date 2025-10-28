@@ -269,12 +269,14 @@ var _ = Describe("Application layer controller tests", func() {
 
 			proxy := ds.Spec.Template.Spec.Containers[0]
 			Expect(proxy).ToNot(BeNil())
-			Expect(proxy.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
+			Expect(proxy.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s:%s",
+				components.TigeraImagePath,
 				components.ComponentEnvoyProxy.Image, components.ComponentEnvoyProxy.Version)))
 
 			l7collector := ds.Spec.Template.Spec.Containers[1]
 			Expect(l7collector).ToNot(BeNil())
-			Expect(l7collector.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
+			Expect(l7collector.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s:%s",
+				components.TigeraImagePath,
 				components.ComponentL7Collector.Image, components.ComponentL7Collector.Version)))
 
 			By("ensuring that felix configuration updated to enabled")

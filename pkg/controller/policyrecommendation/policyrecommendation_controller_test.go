@@ -187,7 +187,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			Expect(d.Spec.Template.Spec.NodeSelector).To((Equal(map[string]string{"kubernetes.io/os": "linux"})))
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
 			Expect(controller).ToNot(BeNil())
-			Expect(controller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s:%s",
+			Expect(controller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s:%s",
+				components.TigeraImagePath,
 				components.ComponentPolicyRecommendation.Image,
 				components.ComponentPolicyRecommendation.Version)))
 		})
@@ -218,7 +219,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			controller := test.GetContainer(d.Spec.Template.Spec.Containers, "policy-recommendation-controller")
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(
-				fmt.Sprintf("some.registry.org/%s@%s",
+				fmt.Sprintf("some.registry.org/%s%s@%s",
+					components.TigeraImagePath,
 					components.ComponentPolicyRecommendation.Image,
 					"sha256:policyrecommendationcontrollerhash")))
 		})
@@ -451,40 +453,6 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 
 				// Now reconcile tenant A's namespace and do not expect an error
 				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
-				Expect(err).ShouldNot(HaveOccurred())
-			})
-
-			It("should reconcile pull secrets and role bindings", func() {
-				// Create the Tenant resources for tenant-a.
-				tenantA := &operatorv1.Tenant{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "default",
-						Namespace: tenantANamespace,
-					},
-					Spec: operatorv1.TenantSpec{ID: "tenant-a"},
-				}
-				Expect(c.Create(ctx, tenantA)).NotTo(HaveOccurred())
-				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
-				Expect(err).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
-				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
-
-				linseedTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, tenantANamespace, []string{render.TigeraLinseedSecret})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, linseedTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
-
-				Expect(c.Create(ctx, &operatorv1.PolicyRecommendation{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-secure",
-						Namespace: tenantANamespace,
-					},
-				})).NotTo(HaveOccurred())
-
-				_, err = r.Reconcile(ctx, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Namespace: tenantANamespace,
-					},
-				})
 				Expect(err).ShouldNot(HaveOccurred())
 			})
 		})

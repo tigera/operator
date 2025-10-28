@@ -1,4 +1,4 @@
-// Copyright (c) 2020,2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,7 +28,6 @@ import (
 
 	"github.com/olivere/elastic/v7"
 
-	operator "github.com/tigera/operator/api/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
@@ -613,7 +612,7 @@ func getClientCredentials(ctx context.Context, client client.Client, externalEla
 
 // getESRoots returns the root certificates used to validate the Elasticsearch server certificate.
 func getESRoots(ctx context.Context, client client.Client, secretName string) (*x509.CertPool, error) {
-	instance := &operator.Installation{}
+	instance := &operatorv1.Installation{}
 	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
 		return nil, err
 	}

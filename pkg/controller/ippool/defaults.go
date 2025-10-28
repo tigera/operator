@@ -71,7 +71,7 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 	if instance.Spec.CNI == nil || instance.Spec.CNI.IPAM == nil {
 		// These fields are needed for IP pool defaulting but defaulted themselves by the core Installation controller, which this controller waits for before
 		// running. We should never hit this branch, but handle it just in case.
-		return fmt.Errorf("Cannot perform IP pool defaulting until CNI configuration is available")
+		return fmt.Errorf("cannot perform IP pool defaulting until CNI configuration is available")
 	}
 
 	// Only add default CIDRs if there are no existing pools in the cluster. If there are existing pools in the cluster,
@@ -83,12 +83,12 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 			openshiftConfig := &configv1.Network{}
 			openshiftNetworkConfig := "cluster"
 			if err := client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig); err != nil {
-				return fmt.Errorf("Unable to read openshift network configuration: %s", err.Error())
+				return fmt.Errorf("unable to read openshift network configuration: %s", err.Error())
 			}
 
 			// Merge in OpenShift configuration.
 			if err := updateInstallationForOpenshiftNetwork(instance, openshiftConfig); err != nil {
-				return fmt.Errorf("Could not resolve CalicoNetwork IPPool and OpenShift network: %s", err.Error())
+				return fmt.Errorf("could not resolve CalicoNetwork IPPool and OpenShift network: %s", err.Error())
 			}
 		} else {
 			// Check if we're running on kubeadm by getting the config map.
@@ -98,10 +98,10 @@ func fillDefaults(ctx context.Context, client client.Client, instance *operator.
 			if err := client.Get(ctx, key, kubeadmConfig); err == nil {
 				// We found the configmap - merge in kubeadm configuration.
 				if err := updateInstallationForKubeadm(instance, kubeadmConfig); err != nil {
-					return fmt.Errorf("Could not resolve CalicoNetwork IPPool and kubeadm configuration: %s", err.Error())
+					return fmt.Errorf("could not resolve CalicoNetwork IPPool and kubeadm configuration: %s", err.Error())
 				}
 			} else if !apierrors.IsNotFound(err) {
-				return fmt.Errorf("Unable to read kubeadm config map: %s", err.Error())
+				return fmt.Errorf("unable to read kubeadm config map: %s", err.Error())
 			}
 		}
 

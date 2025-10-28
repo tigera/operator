@@ -22,21 +22,15 @@ import (
 )
 
 const (
-	defaultCalicoRegistry     = "quay.io"
-	defaultEnterpriseRegistry = "gcr.io/unique-caldron-775/cnx"
-
-	eeVersionsTpl     = "enterprise.go.tpl"
-	osVersionsTpl     = "calico.go.tpl"
-	commonVersionsTpl = "common.go.tpl"
+	eeVersionsTpl = "enterprise.go.tpl"
+	osVersionsTpl = "calico.go.tpl"
 )
 
 var (
-	templateDir        string
-	debug              bool
-	eeVersionsPath     string
-	osVersionsPath     string
-	commonVersionsPath string
-	gcrBearer          string
+	templateDir    string
+	debug          bool
+	eeVersionsPath string
+	osVersionsPath string
 )
 
 func main() {
@@ -44,8 +38,6 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "enable debug logging")
 	flag.StringVar(&eeVersionsPath, "ee-versions", "", "path to calico versions file")
 	flag.StringVar(&osVersionsPath, "os-versions", "", "path to enterprise versions file")
-	flag.StringVar(&commonVersionsPath, "common-versions", "", "path to common versions file")
-	flag.StringVar(&gcrBearer, "gcr-bearer", "", "output of 'gcloud auth print-access-token")
 	flag.Parse()
 
 	if debug {
@@ -60,15 +52,11 @@ func main() {
 	}
 
 	if osVersionsPath != "" {
-		if err := run(osVersionsPath, filepath.Join(templateDir, osVersionsTpl), defaultCalicoRegistry); err != nil {
+		if err := run(osVersionsPath, filepath.Join(templateDir, osVersionsTpl)); err != nil {
 			log.Fatalln(err)
 		}
 	} else if eeVersionsPath != "" {
-		if err := run(eeVersionsPath, filepath.Join(templateDir, eeVersionsTpl), defaultEnterpriseRegistry); err != nil {
-			log.Fatalln(err)
-		}
-	} else if commonVersionsPath != "" {
-		if err := run(commonVersionsPath, filepath.Join(templateDir, commonVersionsTpl), defaultEnterpriseRegistry); err != nil {
+		if err := run(eeVersionsPath, filepath.Join(templateDir, eeVersionsTpl)); err != nil {
 			log.Fatalln(err)
 		}
 	} else {
@@ -78,7 +66,7 @@ func main() {
 	}
 }
 
-func run(versionsPath, tpl, defaultRegistry string) error {
+func run(versionsPath, tpl string) error {
 	vz, err := GetComponents(versionsPath)
 	if err != nil {
 		return err

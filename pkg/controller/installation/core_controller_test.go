@@ -1381,7 +1381,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
 		})
 
-		It("should reconcile namespace, role binding and pull secrts", func() {
+		It("should reconcile namespace, role binding and pull secrets", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())

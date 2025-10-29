@@ -168,16 +168,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 					// Verify the specified encapsulation type is valid.
 					switch pool.Encapsulation {
 					case operatorv1.EncapsulationIPIP, operatorv1.EncapsulationIPIPCrossSubnet:
-						// IPIP currently requires BGP to be running in order to program routes.
-						if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
-							return fmt.Errorf("IPIP encapsulation requires that BGP is enabled")
-						}
 					case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
 					case operatorv1.EncapsulationNone:
-						// Unencapsulated currently requires BGP to be running in order to program routes.
-						if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
-							return fmt.Errorf("unencapsulated IP pools require that BGP is enabled")
-						}
 					}
 				case operatorv1.IPAMPluginHostLocal:
 					// The host-local IPAM plugin doesn't support VXLAN.

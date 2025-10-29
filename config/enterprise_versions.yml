@@ -47,13 +47,13 @@ components:
     version: master
   # eck-kibana holds the version of Kibana built for tigera/kibana
   eck-kibana:
-    version: 8.18.4
+    version: 8.18.8
   kibana:
     image: kibana
     version: master
   # eck-elasticsearch holds the version of Elasticsearch built for tigera/elasticsearch
   eck-elasticsearch:
-    version: 8.18.4
+    version: 8.18.8
   elasticsearch:
     image: elasticsearch
     version: master

@@ -164,13 +164,6 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			// Check that the encapsulation mode on the IP pool is compatible with the CNI plugin that is in-use.
 			if instance.Spec.CNI.Type == operatorv1.PluginCalico {
 				switch instance.Spec.CNI.IPAM.Type {
-				case operatorv1.IPAMPluginCalico:
-					// Verify the specified encapsulation type is valid.
-					switch pool.Encapsulation {
-					case operatorv1.EncapsulationIPIP, operatorv1.EncapsulationIPIPCrossSubnet:
-					case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
-					case operatorv1.EncapsulationNone:
-					}
 				case operatorv1.IPAMPluginHostLocal:
 					// The host-local IPAM plugin doesn't support VXLAN.
 					switch pool.Encapsulation {

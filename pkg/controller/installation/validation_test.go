@@ -246,7 +246,10 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should prevent IPIP if BGP is disabled", func() {
+	// Previously, IPIP encapsulation were only possible with BGP enabled,
+	// however, Felix can do the same thing now which means IPIP with BGP disabled
+	// is supported.
+	It("should allow IPIP if BGP is disabled", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
@@ -258,10 +261,10 @@ var _ = Describe("Installation validation tests", func() {
 			},
 		}
 		err := validateCustomResource(instance)
-		Expect(err).To(HaveOccurred())
+		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should prevent IPIP cross-subnet if BGP is disabled", func() {
+	It("should allow IPIP cross-subnet if BGP is disabled", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
@@ -273,7 +276,7 @@ var _ = Describe("Installation validation tests", func() {
 			},
 		}
 		err := validateCustomResource(instance)
-		Expect(err).To(HaveOccurred())
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should not error if CalicoNetwork is provided on EKS", func() {

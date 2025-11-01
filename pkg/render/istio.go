@@ -27,6 +27,11 @@ import (
 	renderistio "github.com/tigera/operator/pkg/render/istio"
 )
 
+const (
+	labelIstioAmbient        = "servicemesh.projectcalico.org/istio-dataplane"
+	labelIstioAmbientEnabled = "ambient"
+)
+
 type IstioConfig struct {
 	Installation     *operatorv1.InstallationSpec
 	Istio            *operatorv1.Istio
@@ -121,7 +126,7 @@ func (c *istioComponent) Objects() ([]client.Object, []client.Object) {
 				map[string]interface{}{
 					"podSelector": map[string]interface{}{
 						"matchLabels": map[string]interface{}{
-							"servicemesh.projectcalico.org/istio-dataplane": "ambient",
+							labelIstioAmbient: labelIstioAmbientEnabled,
 						},
 					},
 				},
@@ -129,7 +134,7 @@ func (c *istioComponent) Objects() ([]client.Object, []client.Object) {
 					"podSelector": map[string]interface{}{
 						"matchExpression": []interface{}{
 							map[string]interface{}{
-								"key":      "servicemesh.projectcalico.org/istio-dataplane",
+								"key":      labelIstioAmbient,
 								"operator": "NotIn",
 								"values":   []interface{}{"none"},
 							},
@@ -137,7 +142,7 @@ func (c *istioComponent) Objects() ([]client.Object, []client.Object) {
 					},
 					"namespaceSelector": map[string]interface{}{
 						"matchLabels": map[string]interface{}{
-							"servicemesh.projectcalico.org/istio-dataplane": "ambient",
+							labelIstioAmbient: labelIstioAmbientEnabled,
 						},
 					},
 				},

@@ -18,16 +18,11 @@ import (
 	"fmt"
 	"strings"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	renderistio "github.com/tigera/operator/pkg/render/istio"
 )
 
@@ -235,9 +230,6 @@ func (c *istioComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, resources.CNI...)
 	objs = append(objs, resources.ZTunnel...)
 
-	// Append allow-tigera GlobalNetworkPolicies
-	objs = append(objs, c.ztunnelAllowTigeraPolicies()...)
-
 	return objs, nil
 }
 
@@ -247,131 +239,4 @@ func (c *istioComponent) Ready() bool {
 
 func (c *istioComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
-}
-
-func (c *istioComponent) ztunnelAllowTigeraPolicies() []client.Object {
-	const (
-		istioTier       = "allow-calico-istio"
-		istioTierPrefix = istioTier + "."
-		istioSelector   = "istio.io/dataplane-mode == 'ambient'"
-	)
-	istioPort := numorstring.SinglePort(15008)
-
-	return []client.Object{
-		&v3.Tier{
-			TypeMeta: metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: istioTier,
-				Labels: map[string]string{
-					"projectcalico.org/system-tier": "true",
-				},
-			},
-			Spec: v3.TierSpec{
-				Order:         ptr.To(float64(100.0)),
-				DefaultAction: ptr.To(v3.Pass),
-			},
-		},
-		&v3.GlobalNetworkPolicy{
-			TypeMeta: metav1.TypeMeta{Kind: "GlobalNetworkPolicy", APIVersion: v3.SchemeGroupVersion.String()},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: istioTierPrefix + "ambient-workloads",
-			},
-			Spec: v3.GlobalNetworkPolicySpec{
-				Tier:     istioTier,
-				Selector: istioSelector,
-				Ingress: []v3.Rule{
-					{
-						Action:   v3.Allow,
-						Protocol: &networkpolicy.TCPProtocol,
-						Source: v3.EntityRule{
-							Selector: istioSelector,
-						},
-						Destination: v3.EntityRule{
-							Ports: []numorstring.Port{istioPort},
-						},
-					},
-					{
-						Action:   v3.Allow,
-						Protocol: &networkpolicy.TCPProtocol,
-						Source: v3.EntityRule{
-							NamespaceSelector: istioSelector,
-						},
-						Destination: v3.EntityRule{
-							Ports: []numorstring.Port{istioPort},
-						},
-					},
-				},
-				Egress: []v3.Rule{
-					{
-						Action:   v3.Allow,
-						Protocol: &networkpolicy.TCPProtocol,
-						Destination: v3.EntityRule{
-							Selector: istioSelector,
-							Ports:    []numorstring.Port{istioPort},
-						},
-					},
-					{
-						Action:   v3.Allow,
-						Protocol: &networkpolicy.TCPProtocol,
-						Destination: v3.EntityRule{
-							NamespaceSelector: istioSelector,
-							Ports:             []numorstring.Port{istioPort},
-						},
-					},
-				},
-				Types: []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			},
-		},
-		&v3.GlobalNetworkPolicy{
-			TypeMeta: metav1.TypeMeta{Kind: "GlobalNetworkPolicy", APIVersion: v3.SchemeGroupVersion.String()},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: istioTierPrefix + "ambient-namespaces",
-			},
-			Spec: v3.GlobalNetworkPolicySpec{
-				Tier:              istioTier,
-				NamespaceSelector: istioSelector,
-				Ingress: []v3.Rule{
-					{
-						Action:   v3.Allow,
-						Protocol: &networkpolicy.TCPProtocol,
-						Source: v3.EntityRule{
-							Selector: istioSelector,
-						},
-						Destination: v3.EntityRule{
-							Ports: []numorstring.Port{istioPort},
-						},
-					},
-					{
-						Action:   v3.Allow,
-						Protocol: &networkpolicy.TCPProtocol,
-						Source: v3.EntityRule{
-							NamespaceSelector: istioSelector,
-						},
-						Destination: v3.EntityRule{
-							Ports: []numorstring.Port{istioPort},
-						},
-					},
-				},
-				Egress: []v3.Rule{
-					{
-						Action:   v3.Allow,
-						Protocol: &networkpolicy.TCPProtocol,
-						Destination: v3.EntityRule{
-							Selector: istioSelector,
-							Ports:    []numorstring.Port{istioPort},
-						},
-					},
-					{
-						Action:   v3.Allow,
-						Protocol: &networkpolicy.TCPProtocol,
-						Destination: v3.EntityRule{
-							NamespaceSelector: istioSelector,
-							Ports:             []numorstring.Port{istioPort},
-						},
-					},
-				},
-				Types: []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			},
-		},
-	}
 }

@@ -119,6 +119,34 @@ func (c *istioComponent) Objects() ([]client.Object, []client.Object) {
 			"istioNamespace": c.cfg.IstioNamespace,
 		},
 		"profile": "ambient",
+		"ambient": map[string]interface{}{
+			"enabled": true,
+			"enablementSelectors": []interface{}{
+				map[string]interface{}{
+					"podSelector": map[string]interface{}{
+						"matchLabels": map[string]interface{}{
+							"servicemesh.projectcalico.org/istio-dataplane": "ambient",
+						},
+					},
+				},
+				map[string]interface{}{
+					"podSelector": map[string]interface{}{
+						"matchExpression": []interface{}{
+							map[string]interface{}{
+								"key":      "servicemesh.projectcalico.org/istio-dataplane",
+								"operator": "NotIn",
+								"values":   []interface{}{"none"},
+							},
+						},
+					},
+					"namespaceSelector": map[string]interface{}{
+						"matchLabels": map[string]interface{}{
+							"servicemesh.projectcalico.org/istio-dataplane": "ambient",
+						},
+					},
+				},
+			},
+		},
 	}
 	if c.cfg.Installation.KubernetesProvider == operatorv1.ProviderGKE {
 		cniOpts["global"].(map[string]interface{})["platform"] = "gke"

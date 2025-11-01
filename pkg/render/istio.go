@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	v1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -209,6 +210,18 @@ func (c *istioComponent) Objects() ([]client.Object, []client.Object) {
 			if len(c.cfg.Istio.Spec.ZTunnel.Spec.Template.Spec.Tolerations) > 0 {
 				resources.ZTunnelDaemonSet.Spec.Template.Spec.Tolerations = c.cfg.Istio.Spec.ZTunnel.Spec.Template.Spec.Tolerations
 			}
+		}
+	}
+
+	// Set required configs
+	for i := range resources.ZTunnelDaemonSet.Spec.Template.Spec.Containers {
+		cont := &resources.ZTunnelDaemonSet.Spec.Template.Spec.Containers[i]
+		if cont.Name == "istio-proxy" {
+			cont.Env = append(cont.Env, v1.EnvVar{
+				Name:  "TRANSPARENT_NETWORK_POLICIES",
+				Value: "true",
+			})
+			break
 		}
 	}
 

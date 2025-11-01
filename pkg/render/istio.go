@@ -100,23 +100,21 @@ func (c *istioComponent) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 	istiodOpts := map[string]interface{}{
-		// XXX "image": c.istioPilotImage,
+		"image": c.istioPilotImage,
 		"global": map[string]interface{}{
 			"istioNamespace":         c.cfg.IstioNamespace,
 			"operatorManageWebhooks": true,
-			/* XXX
 			"proxy": map[string]interface{}{
 				"image": c.istioProxyv2Image,
 			},
 			"proxy_init": map[string]interface{}{
 				"image": c.istioProxyv2Image,
 			},
-			*/
 		},
 		"profile": "ambient",
 	}
 	cniOpts := map[string]interface{}{
-		// XXX "image": c.istioInstallCNIImage,
+		"image": c.istioInstallCNIImage,
 		"global": map[string]interface{}{
 			"istioNamespace": c.cfg.IstioNamespace,
 		},
@@ -126,7 +124,7 @@ func (c *istioComponent) Objects() ([]client.Object, []client.Object) {
 		cniOpts["global"].(map[string]interface{})["platform"] = "gke"
 	}
 	ztunnelOpts := map[string]interface{}{
-		//"image": c.istioZtunnelImage,
+		"image": c.istioZtunnelImage,
 		"global": map[string]interface{}{
 			"istioNamespace": c.cfg.IstioNamespace,
 		},

@@ -121,7 +121,6 @@ func (c *istioComponent) Objects() ([]client.Object, []client.Object) {
 		},
 		"profile": "ambient",
 		"ambient": map[string]interface{}{
-			"enabled": true,
 			"enablementSelectors": []interface{}{
 				map[string]interface{}{
 					"podSelector": map[string]interface{}{
@@ -132,9 +131,10 @@ func (c *istioComponent) Objects() ([]client.Object, []client.Object) {
 				},
 				map[string]interface{}{
 					"podSelector": map[string]interface{}{
-						"matchExpression": []interface{}{
+						"matchExpressions": []interface{}{
 							map[string]interface{}{
-								"key":      labelIstioAmbient,
+								// istio internal filter, keep the original
+								"key":      "istio.io/dataplane-mode",
 								"operator": "NotIn",
 								"values":   []interface{}{"none"},
 							},

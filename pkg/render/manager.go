@@ -51,18 +51,18 @@ import (
 const (
 	ManagerPort           = 9443
 	managerTargetPort     = 9443
-	ManagerServiceName    = "tigera-manager"
-	ManagerDeploymentName = "tigera-manager"
+	ManagerServiceName    = "calico-manager"
+	ManagerDeploymentName = "calico-manager"
 	ManagerNamespace      = common.CalicoNamespace
-	ManagerServiceAccount = "tigera-manager"
+	ManagerServiceAccount = "calico-manager"
 
 	// Default manager RBAC resources.
-	ManagerClusterRole        = "tigera-manager-role"
-	ManagerClusterRoleBinding = "tigera-manager-binding"
+	ManagerClusterRole        = "calico-manager-role"
+	ManagerClusterRoleBinding = "calico-manager-binding"
 
 	// Manager RBAC resources for Calico managed clusters.
-	ManagerManagedCalicoClusterRole        = "tigera-manager-managed-calico"
-	ManagerManagedCalicoClusterRoleBinding = "tigera-manager-managed-calico"
+	ManagerManagedCalicoClusterRole        = "calico-manager-managed-calico"
+	ManagerManagedCalicoClusterRoleBinding = "calico-manager-managed-calico"
 
 	ManagerTLSSecretName         = "manager-tls"
 	ManagerInternalTLSSecretName = "internal-manager-tls"
@@ -70,34 +70,34 @@ const (
 
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
-	VoltronLinseedTLS        = "tigera-voltron-linseed-tls"
-	VoltronLinseedPublicCert = "tigera-voltron-linseed-certs-public"
+	VoltronLinseedTLS        = "calico-voltron-linseed-tls"
+	VoltronLinseedPublicCert = "calico-voltron-linseed-certs-public"
 
 	ManagerClusterSettings            = "cluster-settings"
 	ManagerUserSettings               = "user-settings"
 	ManagerClusterSettingsLayerTigera = "cluster-settings.layer.tigera-infrastructure"
 	ManagerClusterSettingsViewDefault = "cluster-settings.view.default"
 
-	ElasticsearchManagerUserSecret                                = "tigera-ee-manager-elasticsearch-access"
+	ElasticsearchManagerUserSecret                                = "calico-ee-manager-elasticsearch-access"
 	TlsSecretHashAnnotation                                       = "hash.operator.tigera.io/tls-secret"
 	KibanaTLSHashAnnotation                                       = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation                               = "hash.operator.tigera.io/elasticsearch-user"
-	ManagerMultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-manager-managed-cluster-access"
-	ManagerManagedClustersWatchRoleBindingName                    = "tigera-manager-managed-cluster-watch"
-	ManagerManagedClustersUpdateRBACName                          = "tigera-manager-managed-cluster-write-access"
+	ManagerMultiTenantManagedClustersAccessClusterRoleBindingName = "calico-manager-managed-cluster-access"
+	ManagerManagedClustersWatchRoleBindingName                    = "calico-manager-managed-cluster-watch"
+	ManagerManagedClustersUpdateRBACName                          = "calico-manager-managed-cluster-write-access"
 )
 
 // ManagementClusterConnection configuration constants
 const (
-	ManagerName              = "tigera-manager"
-	UIAPIsName               = "tigera-ui-apis"
-	VoltronName              = "tigera-voltron"
-	VoltronTunnelSecretName  = "tigera-management-cluster-connection"
+	ManagerName              = "calico-manager"
+	UIAPIsName               = "calico-ui-apis"
+	VoltronName              = "calico-voltron"
+	VoltronTunnelSecretName  = "calico-management-cluster-connection"
 	defaultVoltronPort       = "9443"
 	defaultTunnelVoltronPort = "9449"
 	DashboardAPIPort         = "8444"
 	DashboardAPIHealthPort   = "8090"
-	DashboardAPIName         = "tigera-dashboard-api"
+	DashboardAPIName         = "calico-dashboard-api"
 )
 
 // Manager returns a component for rendering namespaced manager resources.
@@ -243,9 +243,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 			managerClusterWideTigeraLayer(),
 			managerClusterWideDefaultView(),
 		)
-
-		objsToDelete = c.deprecatedResources()
 	}
+
+	objsToDelete = c.deprecatedResources(c.cfg.Tenant, c.cfg.Namespace, c.cfg.TruthNamespace)
 
 	objsToCreate = append(objsToCreate,
 		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
@@ -335,7 +335,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 	}
 
 	if c.cfg.Replicas != nil && *c.cfg.Replicas > 1 {
-		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity("tigera-manager", []string{c.cfg.Namespace})
+		podTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(ManagerName, []string{c.cfg.Namespace})
 	}
 
 	d := &appsv1.Deployment{
@@ -625,7 +625,7 @@ func (c *managerComponent) dashboardContainer() corev1.Container {
 		{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc.%s", ElasticsearchNamespace, c.cfg.ClusterDomain)},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
-		{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:%s", c.cfg.Namespace, defaultVoltronPort)},
+		{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: ManagerService(c.cfg.Tenant)},
 		{Name: "HEALTH_PORT", Value: DashboardAPIHealthPort},
 	}
 
@@ -682,7 +682,7 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant())},
-		{Name: "VOLTRON_URL", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", c.cfg.Namespace)},
+		{Name: "VOLTRON_URL", Value: ManagerService(c.cfg.Tenant)},
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,
@@ -1326,16 +1326,98 @@ func managerClusterWideDefaultView() *v3.UISettings {
 	}
 }
 
-func (*managerComponent) deprecatedResources() []client.Object {
-	return []client.Object{
-		&corev1.Namespace{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "Namespace",
-				APIVersion: "v1",
-			},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "tigera-manager",
-			},
-		},
+// TODO: Indicate the release these resources were deprecated in so that we can remove this 4 releases later.
+// Currently targeting v3.23
+func (*managerComponent) deprecatedResources(tenant *operatorv1.Tenant, installNS, truthNS string) []client.Object {
+
+	objs := []client.Object{}
+	clusterRoleName := "tigera-manager-role"
+	clusterRoleBindingName := "tigera-manager-binding"
+	managedClustersWatchRoleBindingName := "tigera-manager-managed-cluster-watch"
+	managedClustersUpdateRBACName := "tigera-manager-managed-cluster-write-access"
+	multiTenantManagedClustersAccessName := "tigera-manager-managed-cluster-access"
+	if tenant.ManagedClusterIsCalico() {
+		clusterRoleName = "tigera-manager-managed-calico"
+		clusterRoleBindingName = "tigera-manager-managed-calico"
 	}
+
+	var managedClustersWatchObj client.Object
+	var managedClustersUpdateRBACObjs []client.Object
+	if tenant.MultiTenant() {
+		managedClustersWatchObj = &rbacv1.RoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Namespace: installNS},
+		}
+
+		managedClustersUpdateRBACObjs = []client.Object{
+			&rbacv1.Role{
+				TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Namespace: installNS},
+			},
+			&rbacv1.RoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Namespace: installNS},
+			},
+		}
+
+		objs = append(objs,
+			&rbacv1.RoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: multiTenantManagedClustersAccessName, Namespace: installNS},
+			},
+		)
+	} else {
+		managedClustersWatchObj = &rbacv1.ClusterRoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		}
+		managedClustersUpdateRBACObjs = []client.Object{
+			&rbacv1.ClusterRole{
+				TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			},
+			&rbacv1.ClusterRoleBinding{
+				TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			},
+		}
+	}
+
+	managedClustersWatchObj.SetName(managedClustersWatchRoleBindingName)
+	for _, o := range managedClustersUpdateRBACObjs {
+		o.SetName(managedClustersUpdateRBACName)
+	}
+
+	objs = append(objs, managedClustersWatchObj)
+	objs = append(objs, managedClustersUpdateRBACObjs...)
+
+	objs = append(objs,
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"},
+		},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterRoleName},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: clusterRoleBindingName},
+		},
+		&corev1.Service{
+			TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: installNS},
+		},
+		&appsv1.Deployment{
+			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: installNS},
+		},
+		&corev1.ServiceAccount{
+			TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: installNS},
+		},
+		&corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-voltron-linseed-certs-public", Namespace: truthNS},
+		},
+	)
+
+	return objs
 }

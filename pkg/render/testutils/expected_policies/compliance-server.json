@@ -18,7 +18,7 @@
         "action": "Allow",
         "protocol": "TCP",
         "source": {
-          "selector": "k8s-app == 'tigera-manager'",
+          "selector": "k8s-app == 'calico-manager'",
           "namespaceSelector": "projectcalico.org/name == 'calico-system'"
         },
         "destination": {
@@ -79,7 +79,7 @@
         "protocol": "TCP",
         "destination": {
           "namespaceSelector": "projectcalico.org/name == 'calico-system'",
-          "selector": "k8s-app == 'tigera-manager'",
+          "selector": "k8s-app == 'calico-manager'",
           "ports": [
             9443
           ]

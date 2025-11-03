@@ -137,6 +137,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: "calico-system"}}).Return()
 			mockStatus.On("AddStatefulSets", mock.Anything).Return()
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
@@ -507,6 +508,7 @@ var _ = Describe("Manager controller tests", func() {
 			BeforeEach(func() {
 				mockStatus.On("AddDaemonsets", mock.Anything).Return()
 				mockStatus.On("AddDeployments", mock.Anything).Return()
+				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: "calico-system"}}).Return()
 				mockStatus.On("AddStatefulSets", mock.Anything).Return()
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("IsAvailable").Return(true)
@@ -576,13 +578,13 @@ var _ = Describe("Manager controller tests", func() {
 					d := appsv1.Deployment{
 						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "tigera-manager",
+							Name:      render.ManagerName,
 							Namespace: render.ManagerNamespace,
 						},
 					}
 					Expect(test.GetResource(c, &d)).To(BeNil())
 					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
-					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
+					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, render.ManagerName)
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s:%s",
@@ -596,7 +598,7 @@ var _ = Describe("Manager controller tests", func() {
 							components.TigeraImagePath,
 							components.ComponentUIAPIs.Image,
 							components.ComponentUIAPIs.Version)))
-					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
+					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s:%s",
@@ -630,7 +632,7 @@ var _ = Describe("Manager controller tests", func() {
 					d := appsv1.Deployment{
 						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "tigera-manager",
+							Name:      render.ManagerName,
 							Namespace: render.ManagerNamespace,
 						},
 					}
@@ -731,6 +733,7 @@ var _ = Describe("Manager controller tests", func() {
 					mockStatus.On("IsAvailable").Return(true)
 					mockStatus.On("OnCRFound").Return()
 					mockStatus.On("AddDeployments", mock.Anything)
+					mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: "calico-system"}}).Return()
 					mockStatus.On("ClearDegraded")
 					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return().Maybe()
 					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
@@ -966,7 +969,7 @@ var _ = Describe("Manager controller tests", func() {
 					deployment := appsv1.Deployment{
 						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "tigera-manager",
+							Name:      render.ManagerName,
 							Namespace: render.ManagerNamespace,
 						},
 					}
@@ -1104,7 +1107,7 @@ var _ = Describe("Manager controller tests", func() {
 					d := appsv1.Deployment{
 						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "tigera-manager",
+							Name:      render.ManagerName,
 							Namespace: render.ManagerNamespace,
 						},
 					}
@@ -1157,6 +1160,8 @@ var _ = Describe("Manager controller tests", func() {
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 				mockStatus.On("AddDeployments", mock.Anything).Return()
+				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: tenantANamespace}}).Return()
+				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: tenantBNamespace}}).Return()
 				mockStatus.On("ReadyToMonitor")
 				mockStatus.On("ClearDegraded")
 				mockStatus.On("IsAvailable").Return(true)
@@ -1234,7 +1239,7 @@ var _ = Describe("Manager controller tests", func() {
 				tenantADeployment := appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-manager",
+						Name:      render.ManagerName,
 						Namespace: tenantANamespace,
 					},
 				}
@@ -1249,7 +1254,7 @@ var _ = Describe("Manager controller tests", func() {
 				tenantBDeployment := appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-manager",
+						Name:      render.ManagerName,
 						Namespace: tenantBNamespace,
 					},
 				}
@@ -1319,6 +1324,7 @@ var _ = Describe("Manager controller tests", func() {
 				tenantCNamespace := "tenant-c"
 
 				BeforeEach(func() {
+					mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: tenantCNamespace}}).Return()
 					// Create a third tenant that manages a Calico OSS cluster.
 					tenantC := &operatorv1.Tenant{
 						ObjectMeta: metav1.ObjectMeta{
@@ -1368,9 +1374,9 @@ var _ = Describe("Manager controller tests", func() {
 					err = test.GetResource(c, &ossClusterRolebinding)
 					Expect(kerror.IsNotFound(err)).Should(BeFalse())
 					Expect(ossClusterRolebinding.Subjects).To(HaveLen(1))
-					Expect(ossClusterRolebinding.Subjects[0].Name).To(Equal("tigera-manager"))
+					Expect(ossClusterRolebinding.Subjects[0].Name).To(Equal(render.ManagerServiceAccount))
 					Expect(ossClusterRolebinding.Subjects[0].Namespace).To(Equal(tenantCNamespace))
-					Expect(ossClusterRolebinding.RoleRef.Name).To(Equal("tigera-manager-managed-calico"))
+					Expect(ossClusterRolebinding.RoleRef.Name).To(Equal(render.ManagerManagedCalicoClusterRoleBinding))
 
 					// The cluster role should exist too.
 					ossClusterRole := rbacv1.ClusterRole{
@@ -1403,7 +1409,7 @@ var _ = Describe("Manager controller tests", func() {
 				})
 			})
 
-			It("should apply TLSRoutes in from the manager namespace", func() {
+			It("should apply TLSRoutes in the manager namespace", func() {
 				Expect(c.Create(ctx, &operatorv1.TLSTerminatedRoute{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: tenantANamespace,

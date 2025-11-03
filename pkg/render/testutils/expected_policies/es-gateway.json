@@ -57,7 +57,7 @@
         "action": "Allow",
         "protocol": "TCP",
         "source": {
-          "selector": "k8s-app == 'tigera-manager'",
+          "selector": "k8s-app == 'calico-manager'",
           "namespaceSelector": "projectcalico.org/name == 'calico-system'"
         },
         "destination": {

@@ -2237,6 +2237,12 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 		},
 	})
 
+	// Renamed ClusterRole tigera-managed-cluster-watch to calico-managed-cluster-watch
+	renamedRscList = append(renamedRscList, &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-managed-cluster-watch"},
+	})
+
 	return renamedRscList
 }
 

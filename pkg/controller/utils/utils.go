@@ -24,6 +24,7 @@ import (
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 
 	"github.com/go-logr/logr"
 
@@ -55,6 +56,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	"github.com/tigera/operator/pkg/render/monitor"
 )
 
 const (
@@ -825,6 +827,30 @@ func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch
 		return nil, err
 	}
 	return &es, nil
+}
+
+func GetAlertmanager(ctx context.Context, c client.Client) (*monitoringv1.Alertmanager, error) {
+	a := monitoringv1.Alertmanager{}
+	err := c.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, &a)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &a, nil
+}
+
+func GetPrometheus(ctx context.Context, c client.Client) (*monitoringv1.Prometheus, error) {
+	p := monitoringv1.Prometheus{}
+	err := c.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, &p)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &p, nil
 }
 
 func IsNodeLocalDNSAvailable(ctx context.Context, cli client.Client) (bool, error) {

@@ -1303,6 +1303,33 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantANamespace}))
 		})
 
+		It("should render multi-tenant environment variables for connected Calioco clusters", func() {
+			resources := renderObjects(renderConfig{
+				oidc:                    false,
+				managementCluster:       nil,
+				installation:            installation,
+				compliance:              compliance,
+				complianceFeatureActive: true,
+				ns:                      tenantANamespace,
+				tenant: &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tenant",
+						Namespace: tenantANamespace,
+					},
+					Spec: operatorv1.TenantSpec{
+						ID:                    "tenant-a",
+						ManagedClusterVariant: &operatorv1.Calico,
+					},
+				},
+				externalElastic: true,
+			})
+			d := rtest.GetResource(resources, "tigera-manager", tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			uiAPIsEnv := d.Spec.Template.Spec.Containers[0].Env
+			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "SERVICE_GRAPH_CACHE_FETCH_L7", Value: "false"}))
+			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "SERVICE_GRAPH_CACHE_FETCH_DNS", Value: "false"}))
+			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "SERVICE_GRAPH_CACHE_FETCH_EVENTS", Value: "false"}))
+		})
+
 		It("should not install UISettings / UISettingsGroups", func() {
 			resources := renderObjects(renderConfig{
 				oidc:                    false,

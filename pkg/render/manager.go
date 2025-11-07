@@ -703,6 +703,10 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 
 			// Calico clusters use Goldmane for policy metrics and stats.
 			env = append(env, corev1.EnvVar{Name: "GOLDMANE_ENABLED", Value: "true"})
+
+			env = append(env, corev1.EnvVar{Name: "SERVICE_GRAPH_CACHE_FETCH_L7", Value: "false"})
+			env = append(env, corev1.EnvVar{Name: "SERVICE_GRAPH_CACHE_FETCH_DNS", Value: "false"})
+			env = append(env, corev1.EnvVar{Name: "SERVICE_GRAPH_CACHE_FETCH_EVENTS", Value: "false"})
 		}
 	}
 

@@ -566,7 +566,6 @@ func verifyCalicoHasDeployed(c client.Client) {
 		}
 		return fmt.Errorf("Only %d available replicas", ds.Status.NumberAvailable)
 	}, 240*time.Second).Should(BeNil())
-	By(fmt.Sprintf("calico-node daemonset %v", ds.Status))
 
 	Eventually(func() error {
 		err := GetResource(c, kc)

@@ -1325,9 +1325,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			})
 			d := rtest.GetResource(resources, "tigera-manager", tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			uiAPIsEnv := d.Spec.Template.Spec.Containers[0].Env
-			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "SERVICE_GRAPH_CACHE_FETCH_L7", Value: "false"}))
-			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "SERVICE_GRAPH_CACHE_FETCH_DNS", Value: "false"}))
-			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "SERVICE_GRAPH_CACHE_FETCH_EVENTS", Value: "false"}))
+			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "L7_LOGS_ENABLED", Value: "false"}))
+			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "DNS_LOGS_ENABLED", Value: "false"}))
+			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "EVENTS_ENABLED", Value: "false"}))
 		})
 
 		It("should not install UISettings / UISettingsGroups", func() {

@@ -387,6 +387,30 @@ var (
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
+
+	ComponentIstioPilot = Component{
+		Version:  "master",
+		Image:    "tigera/istio-pilot",
+		Registry: "",
+	}
+
+	ComponentIstioInstallCNI = Component{
+		Version:  "master",
+		Image:    "tigera/istio-install-cni",
+		Registry: "",
+	}
+
+	ComponentIstioZTunnel = Component{
+		Version:  "master",
+		Image:    "tigera/istio-ztunnel",
+		Registry: "",
+	}
+
+	ComponentIstioProxyv2 = Component{
+		Version:  "master",
+		Image:    "tigera/istio-proxyv2",
+		Registry: "",
+	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{

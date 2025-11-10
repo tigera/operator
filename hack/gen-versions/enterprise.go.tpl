@@ -441,6 +441,38 @@ var (
 		variant:  enterpriseVariant,
 	}
 {{- end }}
+{{ with index .Components "istio-pilot" }}
+	ComponentIstioPilot = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-install-cni" }}
+	ComponentIstioInstallCNI = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-ztunnel" }}
+	ComponentIstioZTunnel = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-proxyv2" }}
+	ComponentIstioProxyv2 = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
+	}
+{{- end }}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
@@ -493,5 +525,9 @@ var (
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,
+		ComponentIstioPilot,
+		ComponentIstioInstallCNI,
+		ComponentIstioZTunnel,
+		ComponentIstioProxyv2,
 	}
 )

@@ -161,7 +161,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		// the variables only can be equal if they are nil
 		if istioMode != fc.Spec.IstioMode &&
 			(istioMode == nil || fc.Spec.IstioMode == nil || *istioMode != *fc.Spec.IstioMode) {
-			return false, fmt.Errorf("Felixconfig %q modified by user", "IstioMode")
+			return false, fmt.Errorf("felixconfig %q modified by user", "IstioMode")
 		}
 
 		istioModeDesired := "Enabled"
@@ -188,7 +188,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		// the variables only can be equal if they are nil
 		if dscpValue != fc.Spec.IstioDSCPValue &&
 			(dscpValue == nil || fc.Spec.IstioDSCPValue == nil || *dscpValue != *fc.Spec.IstioDSCPValue) {
-			return false, fmt.Errorf("Felixconfig %q modified by user", "IstioDSCPValue")
+			return false, fmt.Errorf("felixconfig %q modified by user", "IstioDSCPValue")
 		}
 
 		fc.Spec.IstioDSCPValue = istio.Spec.DSCPValue

@@ -223,6 +223,15 @@ type FelixConfigurationSpec struct {
 	HealthHost    *string `json:"healthHost,omitempty"`
 	HealthPort    *int    `json:"healthPort,omitempty"`
 
+	// IstioMode configures Felix to work together with Tigera's Istio distribution.
+	// [Default: Disabled]
+	IstioMode *string `json:"istioMode,omitempty"`
+
+	// IstioDSCPValue sets the value to use when directing traffic to Istio ZTunnel, when Istio is enabled. The mark is set only on
+	// SYN packets at the final hop to avoid interference with other protocols. This value is reserved by Calico and must not be used
+	// elsewhere. [Default: 23]
+	IstioDSCPValue *uint32 `json:"istioDSCPValue,omitempty"`
+
 	// CgroupV2Path overrides the default location where to find the cgroup hierarchy.
 	CgroupV2Path string `json:"cgroupV2Path,omitempty"`
 

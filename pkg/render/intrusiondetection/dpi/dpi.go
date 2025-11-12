@@ -457,6 +457,12 @@ func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 				Resources: []string{"endpoints", "services"},
 				Verbs:     []string{"watch", "list", "get"},
 			},
+			{
+				// Used to discover Typha endpoints using EndpointSlice API (Kubernetes 1.17+).
+				APIGroups: []string{"discovery.k8s.io"},
+				Resources: []string{"endpointslices"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
 		},
 	}
 	if d.cfg.OpenShift {

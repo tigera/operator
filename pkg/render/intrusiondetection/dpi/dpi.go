@@ -206,6 +206,7 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
+			Labels:      map[string]string{"k8s-app": DeepPacketInspectionName},
 			Annotations: d.dpiAnnotations(),
 		},
 		Spec: corev1.PodSpec{
@@ -228,6 +229,9 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 			Namespace: DeepPacketInspectionNamespace,
 		},
 		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"k8s-app": DeepPacketInspectionName},
+			},
 			Template: *podTemplate,
 		},
 	}
@@ -455,6 +459,12 @@ func (d *dpiComponent) dpiClusterRole() *rbacv1.ClusterRole {
 				// Used to discover Typha endpoints and service IPs for advertisement.
 				APIGroups: []string{""},
 				Resources: []string{"endpoints", "services"},
+				Verbs:     []string{"watch", "list", "get"},
+			},
+			{
+				// Used to discover Typha endpoints using EndpointSlice API (Kubernetes 1.17+).
+				APIGroups: []string{"discovery.k8s.io"},
+				Resources: []string{"endpointslices"},
 				Verbs:     []string{"watch", "list", "get"},
 			},
 		},

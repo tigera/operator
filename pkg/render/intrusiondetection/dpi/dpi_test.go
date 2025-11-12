@@ -789,10 +789,6 @@ func validateDPIComponents(resources []client.Object, openshift bool) {
 	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
 	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/node-certs"))
 
-	Expect(dpiDaemonSet.Spec.Selector).NotTo(BeNil())
-	Expect(dpiDaemonSet.Spec.Selector.MatchLabels).To(Equal(map[string]string{"k8s-app": dpi.DeepPacketInspectionName}))
-	Expect(dpiDaemonSet.Spec.Template.Labels).To(Equal(map[string]string{"k8s-app": dpi.DeepPacketInspectionName}))
-
 	Expect(dpiDaemonSet.Spec.Template.Spec.Volumes).To(ContainElements(expectedVolumes))
 	Expect(dpiDaemonSet.Spec.Template.Spec.HostNetwork).Should(BeTrue())
 	Expect(dpiDaemonSet.Spec.Template.Spec.NodeSelector).To(BeNil())

@@ -950,6 +950,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 			{
 				APIGroups: []string{"policy.networking.k8s.io"},
 				Resources: []string{
+					"clusternetworkpolicies",
 					"adminnetworkpolicies",
 					"baselineadminnetworkpolicies",
 				},

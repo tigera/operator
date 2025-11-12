@@ -884,8 +884,12 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 		},
 		{
 			APIGroups: []string{"policy.networking.k8s.io"},
-			Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
-			Verbs:     []string{"list"},
+			Resources: []string{
+				"clusternetworkpolicies",
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
+			},
+			Verbs: []string{"list"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org"},

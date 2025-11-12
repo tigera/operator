@@ -424,10 +424,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list"},
 			},
 			{
-				// For enforcing admin network policies.
+				// For enforcing k8s cluster network policies.
 				APIGroups: []string{"policy.networking.k8s.io"},
-				Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
-				Verbs:     []string{"watch", "list"},
+				Resources: []string{
+					"clusternetworkpolicies",
+					"adminnetworkpolicies",
+					"baselineadminnetworkpolicies",
+				},
+				Verbs: []string{"watch", "list"},
 			},
 			{
 				// Metadata from these are used in conjunction with network policy.

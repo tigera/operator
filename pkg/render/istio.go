@@ -19,12 +19,13 @@ import (
 	"strconv"
 	"strings"
 
-	v1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	renderistio "github.com/tigera/operator/pkg/render/istio"
 )
 
@@ -33,6 +34,7 @@ type IstioConfig struct {
 	Istio          *operatorv1.Istio
 	IstioNamespace string
 	Resources      *renderistio.IstioResources
+	PullSecrets    []*corev1.Secret
 }
 
 var _ Component = &IstioComponent{}
@@ -68,19 +70,29 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
 	errMsgs := []string{}
 
-	c.IstioPilotImage, err = components.GetReference(components.ComponentIstioPilot, reg, path, prefix, is)
+	compPilot := components.ComponentCalicoIstioPilot
+	compCNI := components.ComponentCalicoIstioInstallCNI
+	compZTunnel := components.ComponentCalicoIstioZTunnel
+	compProxy := components.ComponentCalicoIstioProxyv2
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		compPilot = components.ComponentTigeraIstioPilot
+		compCNI = components.ComponentTigeraIstioInstallCNI
+		compZTunnel = components.ComponentTigeraIstioZTunnel
+		compProxy = components.ComponentTigeraIstioProxyv2
+	}
+	c.IstioPilotImage, err = components.GetReference(compPilot, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
-	c.IstioInstallCNIImage, err = components.GetReference(components.ComponentIstioInstallCNI, reg, path, prefix, is)
+	c.IstioInstallCNIImage, err = components.GetReference(compCNI, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
-	c.IstioZtunnelImage, err = components.GetReference(components.ComponentIstioZTunnel, reg, path, prefix, is)
+	c.IstioZtunnelImage, err = components.GetReference(compZTunnel, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
-	c.IstioProxyv2Image, err = components.GetReference(components.ComponentIstioProxyv2, reg, path, prefix, is)
+	c.IstioProxyv2Image, err = components.GetReference(compProxy, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -153,7 +165,7 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	for i := range res.ZTunnelDaemonSet.Spec.Template.Spec.Containers {
 		cont := &res.ZTunnelDaemonSet.Spec.Template.Spec.Containers[i]
 		if cont.Name == "istio-proxy" {
-			cont.Env = append(cont.Env, v1.EnvVar{
+			cont.Env = append(cont.Env, corev1.EnvVar{
 				Name:  "TRANSPARENT_NETWORK_POLICIES",
 				Value: "true",
 			})
@@ -167,12 +179,24 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 			if c.cfg.Istio.Spec.DSCPValue != nil {
 				dscpValue = strconv.FormatInt(int64(*c.cfg.Istio.Spec.DSCPValue), 10)
 			}
-			cont.Env = append(cont.Env, v1.EnvVar{
+			cont.Env = append(cont.Env, corev1.EnvVar{
 				Name:  "DSCP_MAGIC_MARK",
 				Value: dscpValue,
 			})
 		}
 	}
+	res.IstiodDeployment.Spec.Template.Spec.ImagePullSecrets = append(
+		res.IstiodDeployment.Spec.Template.Spec.ImagePullSecrets,
+		corev1.LocalObjectReference{Name: "tigera-pull-secret"},
+	)
+	res.CNIDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
+		res.CNIDaemonSet.Spec.Template.Spec.ImagePullSecrets,
+		corev1.LocalObjectReference{Name: "tigera-pull-secret"},
+	)
+	res.ZTunnelDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
+		res.ZTunnelDaemonSet.Spec.Template.Spec.ImagePullSecrets,
+		corev1.LocalObjectReference{Name: "tigera-pull-secret"},
+	)
 
 	// Tigera Istio Namespace
 	objs := make([]client.Object, 0, len(res.Base)+len(res.Istiod)+
@@ -185,6 +209,12 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 		PSSPrivileged, // Needed for HostPath volume to write logs to
 		c.cfg.Installation.Azure,
 	))
+
+	// Create role binding to allow creating secrets in our namespace.
+	objs = append(objs, CreateOperatorSecretsRoleBinding(c.cfg.IstioNamespace))
+
+	// Add pull secrets (inferred from the Installation resource).
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.IstioNamespace, c.cfg.PullSecrets...)...)...)
 
 	// Append Istio resources in order: Base, Istiod, CNI, ZTunnel
 	objs = append(objs, res.Base...)

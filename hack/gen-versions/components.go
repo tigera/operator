@@ -59,6 +59,10 @@ var (
 		"gateway-api-envoy-gateway":   "envoy-gateway",
 		"gateway-api-envoy-proxy":     "envoy-proxy",
 		"gateway-api-envoy-ratelimit": "envoy-ratelimit",
+		"istio-pilot":                 "istio-pilot",
+		"istio-install-cni":           "istio-install-cni",
+		"istio-ztunnel":               "istio-ztunnel",
+		"istio-proxyv2":               "istio-proxyv2",
 	}
 
 	ignoredImages = map[string]struct{}{

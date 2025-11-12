@@ -217,11 +217,19 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		reqLogger.Info("Could not render all optional Tigera Istio CRDs", "err", err)
 	}
 
+	// Get pull secrets
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.Client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Render non-CRD resources for Istio support
 	istioCfg := &render.IstioConfig{
 		Installation:   installation,
 		Istio:          istio,
 		IstioNamespace: render.IstioNamespace,
+		PullSecrets:    pullSecrets,
 	}
 	istioComponent := render.NewIstioComponent(istioCfg)
 
@@ -256,7 +264,10 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		"global": map[string]interface{}{
 			"istioNamespace": render.IstioNamespace,
 		},
-		"profile": "ambient",
+		"ambient": map[string]interface{}{
+			"enabled":                    true,
+			"reconcileIptablesOnStartup": true,
+		},
 	}
 	if installation.KubernetesProvider == operatorv1.ProviderGKE {
 		cniOpts["global"].(map[string]interface{})["platform"] = "gke"

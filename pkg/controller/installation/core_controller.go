@@ -835,27 +835,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// See the section 'Use of Finalizers for graceful termination' at the top of this file for details.
 	if installationMarkedForDeletion {
-		// This controller manages a finalizer to track whether its own pods have been properly torn down. Only remove it
-		// when all pod-networked Pods managed by this controller have been torn down. For now, this is just calico-kube-controllers.
-		l := &appsv1.Deployment{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}, l)
-		if err != nil && !apierrors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read calico-kube-controllers deployment", err, reqLogger)
+		ckcDeploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}}
+		csiDaemon := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: render.CSIDaemonSetName, Namespace: common.CalicoNamespace}}
+		_, err := utils.MaintainInstallationFinalizer(ctx, r.client, nil, render.InstallationControllerFinalizer, ckcDeploy, csiDaemon)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "failed to maintain finalizer", err, reqLogger)
 			return reconcile.Result{}, err
-		} else if apierrors.IsNotFound(err) {
-			terminated, err := utils.AllPodsTerminated(ctx, r.client, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}})
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read calico-kube-controllers pods", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			if !terminated {
-				reqLogger.Info("calico-kube-controller pod is still present, waiting for termination")
-			} else {
-				reqLogger.Info("calico-kube-controllers has been deleted, removing finalizer", "finalizer", render.InstallationControllerFinalizer)
-				utils.RemoveInstallationFinalizer(instance, render.InstallationControllerFinalizer)
-			}
-		} else {
-			reqLogger.Info("calico-kube-controller deployment is still present, waiting for termination")
 		}
 
 		// Keep an overarching finalizer on the Installation object until ALL necessary dependencies have been cleaned up.
@@ -868,7 +853,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// controllers have completed their finalization logic and removed their finalizer from the Installation.
 		crb := rbacv1.ClusterRoleBinding{}
 		key := types.NamespacedName{Name: "calico-node"}
-		err := r.client.Get(ctx, key, &crb)
+		err = r.client.Get(ctx, key, &crb)
 		if err != nil && !apierrors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Unable to get ClusterRoleBinding", err, reqLogger)
 			return reconcile.Result{}, err
@@ -887,6 +872,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			utils.RemoveInstallationFinalizer(instance, render.OperatorCompleteFinalizer)
 		}
 	} else {
+		// Instead of using the MaintainInstallationFinalizer here we just set the Finalizers on the instance and let the following patch add them. This avoids 2 updates to the installation CR.
+
 		// Add a finalizer to track whether or not this controller's specific finalization logic has completed.
 		utils.SetInstallationFinalizer(instance, render.InstallationControllerFinalizer)
 

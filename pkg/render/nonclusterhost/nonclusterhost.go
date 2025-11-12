@@ -203,7 +203,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"certificates.k8s.io"},
 			Resources: []string{"certificatesigningrequests"},
-			Verbs:     []string{"create", "list", "watch"},
+			Verbs:     []string{"create", "delete", "list", "watch"},
 		},
 		{
 			APIGroups:     []string{"certificates.tigera.io"},

@@ -630,14 +630,14 @@ hack/bin/gh:
 	chmod +x $@
 	rm hack/bin/gh.tgz
 
-hack/bin/release-from: $(shell find ./hack/release-from -type f)
+hack/bin/release: $(shell find ./hack/release -type f)
 	mkdir -p hack/bin
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -buildvcs=false -o hack/bin/release-from ./hack/release-from'
+	go build -buildvcs=false -o hack/bin/release ./hack/release'
 
-release-from: hack/bin/release-from var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
-	hack/bin/release-from
+release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
+	hack/bin/release from
 
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:

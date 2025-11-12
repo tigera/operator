@@ -238,7 +238,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list"},
 			},
 			{
-				// For enforcing admin network policies.
+				// For enforcing k8s cluster network policies.
 				APIGroups: []string{"policy.networking.k8s.io"},
 				Resources: []string{
 					"clusternetworkpolicies",

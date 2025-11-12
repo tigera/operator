@@ -1441,6 +1441,7 @@ var (
 		{
 			APIGroups: []string{"policy.networking.k8s.io"},
 			Resources: []string{
+				"clusternetworkpolicies",
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},
@@ -1606,6 +1607,7 @@ var (
 				"policy.networking.k8s.io",
 			},
 			Resources: []string{
+				"clusternetworkpolicies",
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},

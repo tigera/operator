@@ -382,6 +382,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{
 				APIGroups: []string{"policy.networking.k8s.io"},
 				Resources: []string{
+					"clusternetworkpolicies",
 					"adminnetworkpolicies",
 					"baselineadminnetworkpolicies",
 				},
@@ -695,6 +696,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{
 				APIGroups: []string{"policy.networking.k8s.io"},
 				Resources: []string{
+					"clusternetworkpolicies",
 					"adminnetworkpolicies",
 					"baselineadminnetworkpolicies",
 				},

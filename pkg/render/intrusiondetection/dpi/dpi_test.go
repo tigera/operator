@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -84,6 +84,11 @@ var (
 		{
 			APIGroups: []string{""},
 			Resources: []string{"endpoints", "services"},
+			Verbs:     []string{"watch", "list", "get"},
+		},
+		{
+			APIGroups: []string{"discovery.k8s.io"},
+			Resources: []string{"endpointslices"},
 			Verbs:     []string{"watch", "list", "get"},
 		},
 	}
@@ -783,6 +788,10 @@ func validateDPIComponents(resources []client.Object, openshift bool) {
 	dpiDaemonSet := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/tigera-ca-private"))
 	Expect(dpiDaemonSet.Spec.Template.Annotations).To(HaveKey("tigera-operator.hash.operator.tigera.io/node-certs"))
+
+	Expect(dpiDaemonSet.Spec.Selector).NotTo(BeNil())
+	Expect(dpiDaemonSet.Spec.Selector.MatchLabels).To(Equal(map[string]string{"k8s-app": dpi.DeepPacketInspectionName}))
+	Expect(dpiDaemonSet.Spec.Template.Labels).To(Equal(map[string]string{"k8s-app": dpi.DeepPacketInspectionName}))
 
 	Expect(dpiDaemonSet.Spec.Template.Spec.Volumes).To(ContainElements(expectedVolumes))
 	Expect(dpiDaemonSet.Spec.Template.Spec.HostNetwork).Should(BeTrue())

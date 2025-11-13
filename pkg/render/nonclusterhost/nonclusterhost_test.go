@@ -88,8 +88,12 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"policy.networking.k8s.io"},
-				Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
-				Verbs:     []string{"get", "watch", "list"},
+				Resources: []string{
+					"clusternetworkpolicies",
+					"adminnetworkpolicies",
+					"baselineadminnetworkpolicies",
+				},
+				Verbs: []string{"get", "watch", "list"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},

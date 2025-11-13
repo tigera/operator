@@ -97,13 +97,13 @@ var _ = Describe("Gateway API rendering tests", func() {
 	})
 
 	It("should report UDPRoute as required when platform is not OpenShift", func() {
-		essentialCRDs, optionalCRDs := GatewayAPICRDs(operatorv1.ProviderAKS)
+		essentialCRDs, optionalCRDs := CalicoGatewayAPICRDs(operatorv1.ProviderAKS)
 		Expect(essentialCRDs).To(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 		Expect(optionalCRDs).NotTo(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 	})
 
 	It("should report UDPRoute as optional when platform is OpenShift", func() {
-		essentialCRDs, optionalCRDs := GatewayAPICRDs(operatorv1.ProviderOpenShift)
+		essentialCRDs, optionalCRDs := CalicoGatewayAPICRDs(operatorv1.ProviderOpenShift)
 		Expect(essentialCRDs).NotTo(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 		Expect(optionalCRDs).To(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 	})

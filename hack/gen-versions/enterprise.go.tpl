@@ -441,6 +441,38 @@ var (
 		variant:  enterpriseVariant,
 	}
 {{- end }}
+{{ with index .Components "istio-pilot" }}
+	ComponentTigeraIstioPilot = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-install-cni" }}
+	ComponentTigeraIstioInstallCNI = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-ztunnel" }}
+	ComponentTigeraIstioZTunnel = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-proxyv2" }}
+	ComponentTigeraIstioProxyv2 = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  enterpriseVariant,
+	}
+{{- end }}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
@@ -493,5 +525,9 @@ var (
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,
+		ComponentTigeraIstioPilot,
+		ComponentTigeraIstioInstallCNI,
+		ComponentTigeraIstioZTunnel,
+		ComponentTigeraIstioProxyv2,
 	}
 )

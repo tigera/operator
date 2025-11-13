@@ -3,12 +3,12 @@
   "kind": "NetworkPolicy",
   "metadata": {
     "name": "allow-tigera.manager-access",
-    "namespace": "tigera-manager"
+    "namespace": "calico-system"
   },
   "spec": {
     "order": 1,
     "tier": "allow-tigera",
-    "selector": "k8s-app == 'tigera-manager'",
+    "selector": "k8s-app == 'calico-manager'",
     "types": [
       "Ingress",
       "Egress"
@@ -61,8 +61,8 @@
         "source": {
         },
         "destination": {
-          "selector": "k8s-app == 'tigera-manager'",
-          "namespaceSelector": "projectcalico.org/name == 'tigera-manager'",
+          "selector": "k8s-app == 'calico-manager'",
+          "namespaceSelector": "projectcalico.org/name == 'calico-system'",
           "ports": [
             9443
           ]

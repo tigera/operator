@@ -22,6 +22,7 @@ package v1
 
 import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -6091,9 +6092,9 @@ func (in *IstioSpec) DeepCopyInto(out *IstioSpec) {
 		*out = new(ZTunnelDaemonset)
 		(*in).DeepCopyInto(*out)
 	}
-	if in.DSCPValue != nil {
-		in, out := &in.DSCPValue, &out.DSCPValue
-		*out = new(uint32)
+	if in.DSCPMark != nil {
+		in, out := &in.DSCPMark, &out.DSCPMark
+		*out = new(numorstring.DSCP)
 		**out = **in
 	}
 }

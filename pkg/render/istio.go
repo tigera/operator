@@ -54,7 +54,7 @@ const (
 	IstioCNIDaemonSetName       = "istio-cni-node"
 	IstioZTunnelDaemonSetName   = "ztunnel"
 	IstioOperatorAnnotationMode = "operator.tigera.io/istioMode"
-	IstioOperatorAnnotationDSCP = "operator.tigera.io/istioDSCPValue"
+	IstioOperatorAnnotationDSCP = "operator.tigera.io/istioDSCPMark"
 )
 
 func NewIstioComponent(cfg *IstioConfig) *IstioComponent {
@@ -176,11 +176,11 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 		cont := &res.CNIDaemonSet.Spec.Template.Spec.Containers[i]
 		if cont.Name == "install-cni" {
 			dscpValue := "23" // default value
-			if c.cfg.Istio.Spec.DSCPValue != nil {
-				dscpValue = strconv.FormatInt(int64(*c.cfg.Istio.Spec.DSCPValue), 10)
+			if c.cfg.Istio.Spec.DSCPMark != nil {
+				dscpValue = strconv.FormatInt(int64(c.cfg.Istio.Spec.DSCPMark.ToUint8()), 10)
 			}
 			cont.Env = append(cont.Env, corev1.EnvVar{
-				Name:  "DSCP_MAGIC_MARK",
+				Name:  "MAGIC_DSCP_MARK",
 				Value: dscpValue,
 			})
 		}

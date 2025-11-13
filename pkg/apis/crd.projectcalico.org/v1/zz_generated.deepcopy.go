@@ -555,9 +555,9 @@ func (in *FelixConfigurationSpec) DeepCopyInto(out *FelixConfigurationSpec) {
 		*out = new(string)
 		**out = **in
 	}
-	if in.IstioDSCPValue != nil {
-		in, out := &in.IstioDSCPValue, &out.IstioDSCPValue
-		*out = new(uint32)
+	if in.IstioDSCPMark != nil {
+		in, out := &in.IstioDSCPMark, &out.IstioDSCPMark
+		*out = new(libnumorstring.DSCP)
 		**out = **in
 	}
 	if in.PrometheusMetricsEnabled != nil {

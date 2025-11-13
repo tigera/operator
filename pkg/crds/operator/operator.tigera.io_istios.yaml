@@ -38,12 +38,23 @@ spec:
             spec:
               description: IstioSpec defines the desired state of Istio
               properties:
-                dscpValue:
+                dscpMark:
                   description: |-
-                    DSCPValue define the value of the DSCP mark done by Felix and recognised by Istio CNI for Transparent
+                    DSCPMark define the value of the DSCP mark done by Felix and recognised by Istio CNI for Transparent
                     NetworkPolicies.
-                  format: int32
-                  type: integer
+                  properties:
+                    numVal:
+                      type: integer
+                    strVal:
+                      type: string
+                    type:
+                      description: Type represents the stored type of Int32OrString.
+                      type: integer
+                  required:
+                    - numVal
+                    - strVal
+                    - type
+                  type: object
                 istioCNI:
                   description:
                     IstioCNI defines the resource requirements for the Istio
@@ -377,7 +388,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -392,7 +402,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -566,7 +575,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -581,7 +589,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -757,7 +764,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -772,7 +778,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -946,7 +951,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -961,7 +965,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -1492,7 +1495,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -1507,7 +1509,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -1681,7 +1682,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -1696,7 +1696,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -1872,7 +1871,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -1887,7 +1885,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -2061,7 +2058,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -2076,7 +2072,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -2607,7 +2602,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -2622,7 +2616,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -2796,7 +2789,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -2811,7 +2803,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -2987,7 +2978,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -3002,7 +2992,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -3176,7 +3165,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -3191,7 +3179,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array

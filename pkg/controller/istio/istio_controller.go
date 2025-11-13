@@ -171,28 +171,29 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		}
 		fc.Annotations[render.IstioOperatorAnnotationMode] = istioModeDesired
 
-		if istio.Spec.DSCPValue == nil {
+		if istio.Spec.DSCPMark == nil {
 			return true, nil
 		}
 
-		var dscpValue *uint32
+		var dscpValue *uint8
 		if fc.Annotations[render.IstioOperatorAnnotationDSCP] != "" {
 			value, err := strconv.ParseUint(fc.Annotations[render.IstioOperatorAnnotationDSCP], 10, 32)
 			if err != nil {
 				return false, err
 			}
-			u32Value := uint32(value)
-			dscpValue = &u32Value
+			u8Value := uint8(value)
+			dscpValue = &u8Value
 		}
 
 		// the variables only can be equal if they are nil
-		if dscpValue != fc.Spec.IstioDSCPValue &&
-			(dscpValue == nil || fc.Spec.IstioDSCPValue == nil || *dscpValue != *fc.Spec.IstioDSCPValue) {
-			return false, fmt.Errorf("felixconfig %q modified by user", "IstioDSCPValue")
+		if interface{}(dscpValue) != interface{}(fc.Spec.IstioDSCPMark) &&
+			(dscpValue == nil || fc.Spec.IstioDSCPMark == nil || *dscpValue != fc.Spec.IstioDSCPMark.ToUint8()) {
+			return false, fmt.Errorf("felixconfig %q modified by user", "IstioDSCPMark")
 		}
 
-		fc.Spec.IstioDSCPValue = istio.Spec.DSCPValue
-		fc.Annotations[render.IstioOperatorAnnotationMode] = strconv.FormatUint(uint64(*istio.Spec.DSCPValue), 32)
+		istioDSCPMarkDesired := *istio.Spec.DSCPMark
+		fc.Spec.IstioDSCPMark = &istioDSCPMarkDesired
+		fc.Annotations[render.IstioOperatorAnnotationDSCP] = strconv.FormatUint(uint64(istioDSCPMarkDesired.ToUint8()), 10)
 
 		return true, nil
 	})

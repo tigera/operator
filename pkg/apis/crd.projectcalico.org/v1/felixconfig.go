@@ -227,10 +227,11 @@ type FelixConfigurationSpec struct {
 	// [Default: Disabled]
 	IstioMode *string `json:"istioMode,omitempty"`
 
-	// IstioDSCPValue sets the value to use when directing traffic to Istio ZTunnel, when Istio is enabled. The mark is set only on
-	// SYN packets at the final hop to avoid interference with other protocols. This value is reserved by Calico and must not be used
+	// IstioDSCPMark sets the value to use when directing traffic to Istio ZTunnel, when Istio is enabled. The mark is set only on
+	// SYN packets at the final hop to avoid interference with other protocols. This value is reserved by Calico and must not be
+	// used with other Istio intallation
 	// elsewhere. [Default: 23]
-	IstioDSCPValue *uint32 `json:"istioDSCPValue,omitempty"`
+	IstioDSCPMark *numorstring.DSCP `json:"istioDSCPMark,omitempty"`
 
 	// CgroupV2Path overrides the default location where to find the cgroup hierarchy.
 	CgroupV2Path string `json:"cgroupV2Path,omitempty"`

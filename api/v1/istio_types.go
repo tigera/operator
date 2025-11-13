@@ -15,6 +15,7 @@
 package v1
 
 import (
+	"github.com/tigera/api/pkg/lib/numorstring"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -141,10 +142,10 @@ type IstioSpec struct {
 	// ZTunnel defines the resource requirements for the ZTunnel component.
 	// +optional
 	ZTunnel *ZTunnelDaemonset `json:"ztunnel,omitempty"`
-	// DSCPValue define the value of the DSCP mark done by Felix and recognised by Istio CNI for Transparent
+	// DSCPMark define the value of the DSCP mark done by Felix and recognised by Istio CNI for Transparent
 	// NetworkPolicies.
 	// +optional
-	DSCPValue *uint32 `json:"dscpValue,omitempty"`
+	DSCPMark *numorstring.DSCP `json:"dscpMark,omitempty"`
 }
 
 // IstioStatus defines the observed state of Istio

@@ -75,6 +75,9 @@ var _ = Describe("Tests for Whisker installation", func() {
 	})
 
 	AfterEach(func() {
+		By("Cleaning up resources after the test")
+		cleanupResources(c)
+
 		defer func() {
 			cancel()
 			Eventually(func() error {
@@ -86,9 +89,6 @@ var _ = Describe("Tests for Whisker installation", func() {
 				}
 			}, 60*time.Second).ShouldNot(HaveOccurred())
 		}()
-
-		By("Cleaning up resources after the test")
-		cleanupResources(c)
 
 		// Clean up Calico data that might be left behind.
 		Eventually(func() error {
@@ -143,7 +143,7 @@ var _ = Describe("Tests for Whisker installation", func() {
 		Expect(install.ObjectMeta.Finalizers).To(ContainElement(render.WhiskerFinalizer))
 		Expect(install.ObjectMeta.Finalizers).To(ContainElement(render.GoldmaneFinalizer))
 
-		By("Verifying that the whisker finalizer is removed in the installation CR")
+		By("Verifying that the whisker and goldmane finalizers are removed from the installation CR")
 		Expect(c.Delete(context.Background(), whiskerCR)).To(BeNil())
 		Expect(c.Delete(context.Background(), goldmaneCR)).To(BeNil())
 		Eventually(func() error {
@@ -151,7 +151,7 @@ var _ = Describe("Tests for Whisker installation", func() {
 			fmt.Println("Finalizers: ", install.ObjectMeta.Finalizers)
 			if containsFinalizer(install.ObjectMeta.Finalizers, render.WhiskerFinalizer) ||
 				containsFinalizer(install.ObjectMeta.Finalizers, render.GoldmaneFinalizer) {
-				return fmt.Errorf("expected finalizers to be removed, but found: %v", install.ObjectMeta.Finalizers)
+				return fmt.Errorf("expected whisker and goldmane finalizers to be removed, but found: %v", install.ObjectMeta.Finalizers)
 			}
 			return nil
 		}, 1*time.Minute, 1*time.Second).Should(BeNil())

@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -175,19 +176,19 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 			return true, nil
 		}
 
-		var dscpValue *uint8
+		var dscpValue *numorstring.DSCP
 		if fc.Annotations[render.IstioOperatorAnnotationDSCP] != "" {
 			value, err := strconv.ParseUint(fc.Annotations[render.IstioOperatorAnnotationDSCP], 10, 32)
 			if err != nil {
 				return false, err
 			}
-			u8Value := uint8(value)
-			dscpValue = &u8Value
+			dscp := numorstring.DSCPFromInt(uint8(value))
+			dscpValue = &dscp
 		}
 
 		// the variables only can be equal if they are nil
-		if interface{}(dscpValue) != interface{}(fc.Spec.IstioDSCPMark) &&
-			(dscpValue == nil || fc.Spec.IstioDSCPMark == nil || *dscpValue != fc.Spec.IstioDSCPMark.ToUint8()) {
+		if dscpValue != fc.Spec.IstioDSCPMark &&
+			(dscpValue == nil || fc.Spec.IstioDSCPMark == nil || dscpValue.ToUint8() != fc.Spec.IstioDSCPMark.ToUint8()) {
 			return false, fmt.Errorf("felixconfig %q modified by user", "IstioDSCPMark")
 		}
 

@@ -42,19 +42,9 @@ spec:
                   description: |-
                     DSCPMark define the value of the DSCP mark done by Felix and recognised by Istio CNI for Transparent
                     NetworkPolicies.
-                  properties:
-                    numVal:
-                      type: integer
-                    strVal:
-                      type: string
-                    type:
-                      description: Type represents the stored type of Int32OrString.
-                      type: integer
-                  required:
-                    - numVal
-                    - strVal
-                    - type
-                  type: object
+                  pattern: ^.*
+                  type: integer
+                  x-kubernetes-int-or-string: true
                 istioCNI:
                   description:
                     IstioCNI defines the resource requirements for the Istio

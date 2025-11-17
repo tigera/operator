@@ -145,6 +145,10 @@ type IstioSpec struct {
 	// DSCPMark define the value of the DSCP mark done by Felix and recognised by Istio CNI for Transparent
 	// NetworkPolicies.
 	// +optional
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:validation:Type=integer
+	// +kubebuilder:validation:XIntOrString
+	// +kubebuilder:validation:Pattern=`^.*`
 	DSCPMark *numorstring.DSCP `json:"dscpMark,omitempty"`
 }
 

@@ -1603,6 +1603,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	r.status.AddDeployments([]types.NamespacedName{{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}})
 	certificateManager.AddToStatusManager(r.status, common.CalicoNamespace)
 
+	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
+	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
+	})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Run this after we have rendered our components so the new (operator created)
 	// Deployments and Daemonset exist with our special migration nodeSelectors.
 	if needNsMigration {
@@ -1668,15 +1677,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
-
-	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
-		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
-	})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating resource", err, reqLogger)
-		return reconcile.Result{}, err
-	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()

@@ -31,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
@@ -92,6 +91,9 @@ type TyphaNodeTLS struct {
 	NodeSecret                certificatemanagement.KeyPairInterface
 	NodeCommonName            string
 	NodeURISAN                string
+
+	NodeNonClusterHostCommonName string
+	NodeNonClusterHostURISAN     string
 }
 
 // NodeConfiguration is the public API used to provide information to the render code to
@@ -422,10 +424,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list"},
 			},
 			{
-				// For enforcing admin network policies.
+				// For enforcing k8s cluster network policies.
 				APIGroups: []string{"policy.networking.k8s.io"},
-				Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
-				Verbs:     []string{"watch", "list"},
+				Resources: []string{
+					"clusternetworkpolicies",
+					"adminnetworkpolicies",
+					"baselineadminnetworkpolicies",
+				},
+				Verbs: []string{"watch", "list"},
 			},
 			{
 				// Metadata from these are used in conjunction with network policy.
@@ -676,7 +682,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 			"type": "k8s",
 		},
 		"policy_setup_timeout_seconds": linuxPolicySetupTimeoutSeconds,
-		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().VolumeSource.HostPath.Path, "endpoint-status"),
+		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().HostPath.Path, "endpoint-status"),
 	}
 
 	// Determine logging configuration
@@ -1936,7 +1942,7 @@ func getMTU(instance *operatorv1.InstallationSpec) *int32 {
 }
 
 // DefaultCNIDirectories returns the binary and network config directories for the configured platform.
-func DefaultCNIDirectories(provider v1.Provider) (string, string) {
+func DefaultCNIDirectories(provider operatorv1.Provider) (string, string) {
 	var cniBinDir, cniNetDir string
 	switch provider {
 	case operatorv1.ProviderOpenShift:

@@ -565,9 +565,13 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 		{
-			// Kubernetes admin network policy resources.
+			// Kubernetes cluster network policy resources.
 			APIGroups: []string{"policy.networking.k8s.io"},
-			Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
+			Resources: []string{
+				"clusternetworkpolicies",
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
+			},
 			Verbs: []string{
 				"get",
 				"list",
@@ -611,6 +615,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 	}
+	//nolint:staticcheck // Ignore QF1001 could apply De Morgan's law
 	if c.cfg.KubernetesVersion == nil || !(c.cfg.KubernetesVersion != nil && c.cfg.KubernetesVersion.Major < 2 && c.cfg.KubernetesVersion.Minor < 30) {
 		// If the kubernetes version is higher than 1.30, we add extra RBAC permissions to allow establishing watches.
 		// https://v1-30.docs.kubernetes.io/docs/reference/access-authn-authz/validating-admission-policy/
@@ -913,11 +918,12 @@ func getContainerPort(cfg *APIServerConfiguration, containerName ContainerName) 
 	}
 
 	// If no override port is found, return the default port
-	if containerName == APIServerContainerName {
+	switch containerName {
+	case APIServerContainerName:
 		return &operatorv1.APIServerDeploymentContainerPort{ContainerPort: APIServerPort}
-	} else if containerName == TigeraAPIServerQueryServerContainerName {
+	case TigeraAPIServerQueryServerContainerName:
 		return &operatorv1.APIServerDeploymentContainerPort{ContainerPort: QueryServerPort}
-	} else if containerName == L7AdmissionControllerContainerName {
+	case L7AdmissionControllerContainerName:
 		return &operatorv1.APIServerDeploymentContainerPort{ContainerPort: L7AdmissionControllerPort}
 	}
 
@@ -1062,7 +1068,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		if c.cfg.TrustedBundle != nil {
 			trustedBundleHashAnnotations := c.cfg.TrustedBundle.HashAnnotations()
 			for k, v := range trustedBundleHashAnnotations {
-				d.Spec.Template.ObjectMeta.Annotations[k] = v
+				d.Spec.Template.Annotations[k] = v
 			}
 		}
 	}
@@ -1077,7 +1083,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 // apiServer creates a MutatingWebhookConfiguration for sidecars.
 func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConfiguration {
 	var cacert []byte
-	var svcPort int32 = getContainerPort(c.cfg, L7AdmissionControllerContainerName).ContainerPort
+	svcPort := getContainerPort(c.cfg, L7AdmissionControllerContainerName).ContainerPort
 
 	svcpath := "/sidecar-webhook"
 	svcref := admregv1.ServiceReference{
@@ -1620,6 +1626,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"policy.networking.k8s.io"},
 			Resources: []string{
+				"clusternetworkpolicies",
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},
@@ -1826,6 +1833,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"policy.networking.k8s.io",
 			},
 			Resources: []string{
+				"clusternetworkpolicies",
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},

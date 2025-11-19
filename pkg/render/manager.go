@@ -703,6 +703,10 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 
 			// Calico clusters use Goldmane for policy metrics and stats.
 			env = append(env, corev1.EnvVar{Name: "GOLDMANE_ENABLED", Value: "true"})
+
+			env = append(env, corev1.EnvVar{Name: "L7_LOGS_ENABLED", Value: "false"})
+			env = append(env, corev1.EnvVar{Name: "DNS_LOGS_ENABLED", Value: "false"})
+			env = append(env, corev1.EnvVar{Name: "EVENTS_ENABLED", Value: "false"})
 		}
 	}
 
@@ -946,6 +950,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 			{
 				APIGroups: []string{"policy.networking.k8s.io"},
 				Resources: []string{
+					"clusternetworkpolicies",
 					"adminnetworkpolicies",
 					"baselineadminnetworkpolicies",
 				},

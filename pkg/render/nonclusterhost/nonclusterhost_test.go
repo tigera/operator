@@ -88,8 +88,12 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"policy.networking.k8s.io"},
-				Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
-				Verbs:     []string{"get", "watch", "list"},
+				Resources: []string{
+					"clusternetworkpolicies",
+					"adminnetworkpolicies",
+					"baselineadminnetworkpolicies",
+				},
+				Verbs: []string{"get", "watch", "list"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -150,7 +154,7 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 			rbacv1.PolicyRule{
 				APIGroups: []string{"certificates.k8s.io"},
 				Resources: []string{"certificatesigningrequests"},
-				Verbs:     []string{"create", "list", "watch"},
+				Verbs:     []string{"create", "delete", "list", "watch"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups:     []string{"certificates.tigera.io"},
@@ -162,6 +166,15 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"hostendpoints"},
 				Verbs:     []string{"list", "update"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets"},
+				Verbs:     []string{"get"},
+				ResourceNames: []string{
+					"node-certs-noncluster-host",
+					"typha-certs-noncluster-host",
+				},
 			},
 		))
 	})

@@ -99,7 +99,7 @@ func (c *nonClusterHostComponent) tokenSecret() *corev1.Secret {
 }
 
 func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
-	// calico node rules
+	// Calico node rules
 	rules := []rbacv1.PolicyRule{
 		{
 			// Calico uses endpoint slices for service-based network policy rules.
@@ -120,10 +120,14 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"watch", "list"},
 		},
 		{
-			// For enforcing admin network policies.
+			// For enforcing k8s cluster network policies.
 			APIGroups: []string{"policy.networking.k8s.io"},
-			Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
-			Verbs:     []string{"get", "watch", "list"},
+			Resources: []string{
+				"clusternetworkpolicies",
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
+			},
+			Verbs: []string{"get", "watch", "list"},
 		},
 		{
 			// Metadata from these are used in conjunction with network policy.
@@ -172,7 +176,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 		},
 	}
 
-	// calico fluent-bit rules
+	// Calico fluent-bit rules
 	rules = append(rules, []rbacv1.PolicyRule{
 		{
 			// Used for creating service account tokens to be used by the linseed out plugin.
@@ -199,7 +203,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"certificates.k8s.io"},
 			Resources: []string{"certificatesigningrequests"},
-			Verbs:     []string{"create", "list", "watch"},
+			Verbs:     []string{"create", "delete", "list", "watch"},
 		},
 		{
 			APIGroups:     []string{"certificates.tigera.io"},
@@ -209,12 +213,23 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 		},
 	}...)
 
-	// For non-cluster host init process to update labels.
+	// For non-cluster host init process
 	rules = append(rules, []rbacv1.PolicyRule{
 		{
+			// Used to update labels on the HostEndpoint resource.
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"hostendpoints"},
 			Verbs:     []string{"list", "update"},
+		},
+		{
+			// Used to get BYO certificate secrets.
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get"},
+			ResourceNames: []string{
+				render.NodeTLSSecretNameNonClusterHost,
+				render.TyphaTLSSecretNameNonClusterHost,
+			},
 		},
 	}...)
 

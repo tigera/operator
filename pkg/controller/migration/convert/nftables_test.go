@@ -20,11 +20,11 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-	pcv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 
 	v1 "k8s.io/api/core/v1"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("convert nftables mode", func() {
@@ -43,8 +43,7 @@ var _ = Describe("convert nftables mode", func() {
 	})
 
 	It("converts nftables mode from FelixConfiguration Enabled", func() {
-		nftMode := pcv1.NFTablesModeEnabled
-		f.Spec.NFTablesMode = &nftMode
+		f.Spec.NFTablesMode = ptr.To(crdv1.NFTablesModeEnabled)
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 
 		err := handleNftables(&comps, i)
@@ -54,8 +53,7 @@ var _ = Describe("convert nftables mode", func() {
 	})
 
 	It("converts nftables mode from FelixConfiguration Disabled", func() {
-		nftMode := pcv1.NFTablesModeDisabled
-		f.Spec.NFTablesMode = &nftMode
+		f.Spec.NFTablesMode = ptr.To(crdv1.NFTablesModeDisabled)
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 		err := handleNftables(&comps, i)
 		Expect(err).ToNot(HaveOccurred())
@@ -63,8 +61,7 @@ var _ = Describe("convert nftables mode", func() {
 	})
 
 	It("rejects migration if another dataplane is already set", func() {
-		nftMode := pcv1.NFTablesModeEnabled
-		f.Spec.NFTablesMode = &nftMode
+		f.Spec.NFTablesMode = ptr.To(crdv1.NFTablesModeEnabled)
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 
 		// Set the Installation to already have a dataplane mode set.

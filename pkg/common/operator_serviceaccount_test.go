@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,9 +22,11 @@ import (
 )
 
 var _ = Describe("Operator ServiceAccount name tests", func() {
-	It("should read service account name from the environment variable", func() {
+	It("should read service account name from the environment variable once", func() {
 		Expect(os.Setenv("OPERATOR_SERVICEACCOUNT", "tigera-operator-env-var")).NotTo(HaveOccurred())
-		Expect(getServiceAccount()).To(Equal("tigera-operator-env-var"))
+		Expect(OperatorServiceAccount()).To(Equal("tigera-operator-env-var"))
 		Expect(os.Unsetenv("OPERATOR_SERVICEACCOUNT")).NotTo(HaveOccurred())
+		Expect(os.Setenv("OPERATOR_SERVICEACCOUNT", "other-value")).NotTo(HaveOccurred())
+		Expect(OperatorServiceAccount()).To(Equal("tigera-operator-env-var"))
 	})
 })

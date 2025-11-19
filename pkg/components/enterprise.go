@@ -85,12 +85,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = Component{
-		Version: "8.18.4",
+		Version: "8.18.8",
 		variant: enterpriseVariant,
 	}
 
 	ComponentEckKibana = Component{
-		Version: "8.18.4",
+		Version: "8.18.8",
 		variant: enterpriseVariant,
 	}
 
@@ -257,6 +257,13 @@ var (
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
+	}
+
+	ComponentGatewayL7Collector = Component{
+		Version:  "master",
+		Image:    "gateway-l7-collector",
+		Registry: "",
+		variant:  enterpriseVariant,
 	}
 
 	ComponentEnvoyProxy = Component{
@@ -457,6 +464,7 @@ var (
 		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
 		ComponentL7Collector,
+		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,

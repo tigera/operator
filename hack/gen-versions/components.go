@@ -140,19 +140,6 @@ func GetComponents(versionsPath string) (Release, error) {
 			component.ImagePath = imageParts[0]
 			component.Image = imageParts[1]
 		}
-
-		// ensure that imagePath and registry end with a '/' if they are set
-		// this is to avoid errors when constructing full image paths
-		// by concatenating registry + imagePath + image
-		if component.ImagePath != "" && !strings.HasSuffix(component.ImagePath, "/") {
-			return cv, fmt.Errorf("component '%s' has an imagePath that does not end with a '/'. "+
-				"Update the imagePath field to end with a '/'", key)
-		}
-		if component.Registry != "" && !strings.HasSuffix(component.Registry, "/") {
-			return cv, fmt.Errorf("component '%s' has a registry that does not end with a '/'. "+
-				"Update the registry field to end with a '/'", key)
-		}
-
 		cv.Components[key] = component
 	}
 

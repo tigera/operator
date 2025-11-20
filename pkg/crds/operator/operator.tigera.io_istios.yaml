@@ -3430,9 +3430,6 @@ spec:
                       - type
                     type: object
                   type: array
-                state:
-                  description: State provides user-readable status.
-                  type: string
               type: object
           type: object
       served: true

@@ -154,9 +154,6 @@ type IstioSpec struct {
 
 // IstioStatus defines the observed state of Istio
 type IstioStatus struct {
-	// State provides user-readable status.
-	State string `json:"state,omitempty"`
-
 	// Conditions represents the latest observed set of conditions for the component. A component may be one or more of
 	// Ready, Progressing, Degraded or other customer types.
 	Conditions []metav1.Condition `json:"conditions,omitempty"`

@@ -23,9 +23,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/common/secret"
 	renderistio "github.com/tigera/operator/pkg/render/istio"
 )
 
@@ -48,7 +48,7 @@ type IstioComponent struct {
 }
 
 const (
-	IstioNamespace              = "calico-istio"
+	IstioNamespace              = common.CalicoNamespace
 	IstioReleaseName            = "calico-istio"
 	IstioIstiodDeploymentName   = "istiod"
 	IstioCNIDaemonSetName       = "istio-cni-node"
@@ -200,21 +200,7 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Tigera Istio Namespace
 	objs := make([]client.Object, 0, len(res.Base)+len(res.Istiod)+
-		len(res.CNI)+len(res.ZTunnel)+1)
-
-	// Append Namespace
-	objs = append(objs, CreateNamespace(
-		c.cfg.IstioNamespace,
-		c.cfg.Installation.KubernetesProvider,
-		PSSPrivileged, // Needed for HostPath volume to write logs to
-		c.cfg.Installation.Azure,
-	))
-
-	// Create role binding to allow creating secrets in our namespace.
-	objs = append(objs, CreateOperatorSecretsRoleBinding(c.cfg.IstioNamespace))
-
-	// Add pull secrets (inferred from the Installation resource).
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(c.cfg.IstioNamespace, c.cfg.PullSecrets...)...)...)
+		len(res.CNI)+len(res.ZTunnel))
 
 	// Append Istio resources in order: Base, Istiod, CNI, ZTunnel
 	objs = append(objs, res.Base...)

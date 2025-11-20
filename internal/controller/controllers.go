@@ -71,7 +71,7 @@ func AddToManager(mgr ctrl.Manager, options options.AddOptions) error {
 		Log:    ctrl.Log.WithName("controllers").WithName("Istio"),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr, options); err != nil {
-		return fmt.Errorf("failed to create controller %s: %v", "Istio", err)
+		return fmt.Errorf("failed to create controller Istio: %v", err)
 	}
 	if err := (&ComplianceReconciler{
 		Client: mgr.GetClient(),

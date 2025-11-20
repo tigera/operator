@@ -550,8 +550,8 @@ func (in *FelixConfigurationSpec) DeepCopyInto(out *FelixConfigurationSpec) {
 		*out = new(int)
 		**out = **in
 	}
-	if in.IstioMode != nil {
-		in, out := &in.IstioMode, &out.IstioMode
+	if in.IstioAmbientMode != nil {
+		in, out := &in.IstioAmbientMode, &out.IstioAmbientMode
 		*out = new(string)
 		**out = **in
 	}

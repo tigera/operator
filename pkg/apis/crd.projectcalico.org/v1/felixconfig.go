@@ -223,9 +223,9 @@ type FelixConfigurationSpec struct {
 	HealthHost    *string `json:"healthHost,omitempty"`
 	HealthPort    *int    `json:"healthPort,omitempty"`
 
-	// IstioMode configures Felix to work together with Tigera's Istio distribution.
+	// IstioAmbientMode configures Felix to work together with Tigera's Istio distribution.
 	// [Default: Disabled]
-	IstioMode *string `json:"istioMode,omitempty"`
+	IstioAmbientMode *string `json:"istioMode,omitempty"`
 
 	// IstioDSCPMark sets the value to use when directing traffic to Istio ZTunnel, when Istio is enabled. The mark is set only on
 	// SYN packets at the final hop to avoid interference with other protocols. This value is reserved by Calico and must not be

@@ -160,13 +160,13 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		}
 
 		// the variables only can be equal if they are nil
-		if istioMode != fc.Spec.IstioMode &&
-			(istioMode == nil || fc.Spec.IstioMode == nil || *istioMode != *fc.Spec.IstioMode) {
-			return false, fmt.Errorf("felixconfig %q modified by user", "IstioMode")
+		if istioMode != fc.Spec.IstioAmbientMode &&
+			(istioMode == nil || fc.Spec.IstioAmbientMode == nil || *istioMode != *fc.Spec.IstioAmbientMode) {
+			return false, fmt.Errorf("felixconfig %q modified by user", "IstioAmbientMode")
 		}
 
 		istioModeDesired := "Enabled"
-		fc.Spec.IstioMode = &istioModeDesired
+		fc.Spec.IstioAmbientMode = &istioModeDesired
 		if fc.Annotations == nil {
 			fc.Annotations = make(map[string]string)
 		}

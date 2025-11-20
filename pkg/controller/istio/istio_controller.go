@@ -226,7 +226,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	// Render non-CRD resources for Istio support
+	// Render resources for Istio support
 	istioCfg := &render.IstioConfig{
 		Installation:   installation,
 		Istio:          istio,
@@ -284,6 +284,13 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		istiodOpts, cniOpts, ztunnelOpts)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Istio resources", err, log)
+		return reconcile.Result{}, err
+	}
+
+	// Deploy Istio CRDs
+	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(istioCfg.Resources.CRDs...), nil)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Tigera Istio CRDs", err, log)
 		return reconcile.Result{}, err
 	}
 

@@ -16,7 +16,7 @@ package components
 
 import (
 	"fmt"
-	"strings"
+	"path"
 
 	operator "github.com/tigera/operator/api/v1"
 )
@@ -88,10 +88,6 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 		if c.Registry != "" {
 			registry = c.Registry
 		}
-	} else if !strings.HasSuffix(registry, "/") {
-		// If the registry is explicitly set, make sure it ends with a slash so that the
-		// image can be appended correctly below.
-		registry = fmt.Sprintf("%s/", registry)
 	}
 
 	// If a user supplies an imaagePrefix, prepend it to the image name.
@@ -109,19 +105,15 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 		if c.imagePath != "" {
 			imagePath = c.imagePath
 		}
-	} else if !strings.HasSuffix(imagePath, "/") {
-		// If the imagePath is explicitly set, make sure it ends with a slash so that the
-		// image can be appended correctly below.
-		imagePath = fmt.Sprintf("%s/", imagePath)
 	}
 
 	if is == nil {
-		return fmt.Sprintf("%s%s%s:%s", registry, imagePath, imageName, c.Version), nil
+		return fmt.Sprintf("%s:%s", path.Join(registry, imagePath, imageName), c.Version), nil
 	}
 
 	for _, img := range is.Spec.Images {
-		if img.Image == fmt.Sprintf("%s%s", defaultImagePath, c.Image) {
-			return fmt.Sprintf("%s%s%s@%s", registry, imagePath, imageName, img.Digest), nil
+		if img.Image == path.Join(defaultImagePath, c.Image) {
+			return fmt.Sprintf("%s@%s", path.Join(registry, imagePath, imageName), img.Digest), nil
 		}
 	}
 

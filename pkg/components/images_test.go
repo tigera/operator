@@ -86,6 +86,20 @@ var _ = Describe("test GetReference", func() {
 		)
 	})
 
+	Context("registry override not ending with slash", func() {
+		DescribeTable("should render",
+			func(c Component, imagePath string) {
+				Expect(GetReference(c, "quay.io", "", "", nil)).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", imagePath, c.Image, c.Version)))
+			},
+			Entry("a calico image correctly", ComponentCalicoNode, CalicoImagePath),
+			Entry("a tigera image correctly", ComponentTigeraNode, TigeraImagePath),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraImagePath),
+			Entry("an operator init image correctly", ComponentOperatorInit, OperatorImagePath),
+			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoImagePath),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraImagePath),
+		)
+	})
+
 	Context("image prefix override", func() {
 		DescribeTable("should render",
 			func(c Component, image string) {
@@ -101,6 +115,20 @@ var _ = Describe("test GetReference", func() {
 	})
 
 	Context("imagepath override", func() {
+		DescribeTable("should render",
+			func(c Component, registry string) {
+				Expect(GetReference(c, "", "userpath/", "", nil)).To(Equal(fmt.Sprintf("%suserpath/%s:%s", registry, c.Image, c.Version)))
+			},
+			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry),
+			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry),
+			Entry("an operator init image correctly", ComponentOperatorInit, OperatorRegistry),
+			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoRegistry),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraRegistry),
+		)
+	})
+
+	Context("imagepath override not ending in slash", func() {
 		DescribeTable("should render",
 			func(c Component, registry string) {
 				Expect(GetReference(c, "", "userpath", "", nil)).To(Equal(fmt.Sprintf("%suserpath/%s:%s", registry, c.Image, c.Version)))

@@ -14,8 +14,8 @@ from github import Github, Auth, Issue  # https://github.com/PyGithub/PyGithub
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 assert GITHUB_TOKEN, "GITHUB_TOKEN must be set"
 # Version corresponds to the milestone in the GitHub repository
-VERSION = os.environ.get("VERSION")
-assert os.environ.get("VERSION"), "VERSION must be set"
+VERSION = os.environ.get("VERSION","")
+assert VERSION, "VERSION must be set"
 assert VERSION.startswith("v"), "VERSION must start with 'v'"
 
 # First create a Github instance. Create a token through Github website - provide "repo" auth.

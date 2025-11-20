@@ -371,7 +371,7 @@ run-fvs: $(ENVOY_GATEWAY_RESOURCES) istio_charts
 
 ## Create a local kind dual stack cluster.
 KIND_KUBECONFIG?=./kubeconfig.yaml
-KINDEST_NODE_VERSION?=v1.30.4
+KINDEST_NODE_VERSION?=v1.31.12
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy

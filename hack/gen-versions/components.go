@@ -79,18 +79,17 @@ var (
 type Release struct {
 	// Title is the Release version and should match the major.minor.patch of the
 	// Calico or Enterprise version included in the operator.
-	Title      string     `json:"title"`
-	Components Components `json:"components"`
+	Title      string     `yaml:"title"`
+	Components Components `yaml:"components"`
 }
 
 type Components map[string]*Component
 
 type Component struct {
-	Version  string `json:"version"`
-	Registry string `json:"registry"`
-
-	// Image is the image name without any image path (e.g. cni, api-server)
-	Image string `json:"image"`
+	Version   string `yaml:"version"`
+	Registry  string `yaml:"registry"`
+	ImagePath string `yaml:"imagePath"`
+	Image     string `yaml:"image"`
 }
 
 // GetComponents parses a versions.yml file, scrubs the data of known issues,
@@ -137,11 +136,14 @@ func GetComponents(versionsPath string) (Release, error) {
 		}
 		// Image must not contain any '/' characters - indicating an image path.
 		imageParts := strings.SplitAfterN(component.Image, "/", 2)
-		if len(imageParts) > 1 {
-			return cv, fmt.Errorf("component %q has %q image which contains a '/' "+
-				"indicating an image path, it should only contain the image name", key, component.Image)
+		if len(imageParts) == 2 {
+			if component.ImagePath != "" {
+				return cv, fmt.Errorf("component '%s' has both imagePath and image with a path. "+
+					"Either remove the imagePath field or update the image field to not include a path", key)
+			}
+			component.ImagePath = imageParts[0]
+			component.Image = imageParts[1]
 		}
-
 		cv.Components[key] = component
 	}
 

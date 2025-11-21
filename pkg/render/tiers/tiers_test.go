@@ -75,7 +75,6 @@ var _ = Describe("Tiers rendering tests", func() {
 				render.LogCollectorNamespace,
 				render.IntrusionDetectionNamespace,
 				kibana.Namespace,
-				render.ManagerNamespace,
 				eck.OperatorNamespace,
 				render.PacketCaptureNamespace,
 				common.TigeraPrometheusNamespace,

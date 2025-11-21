@@ -86,13 +86,9 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileIstio {
 	r := &ReconcileIstio{
-		Client:              mgr.GetClient(),
-		scheme:              mgr.GetScheme(),
-		provider:            opts.DetectedProvider,
-		enterpriseCRDsExist: opts.EnterpriseCRDExists,
-		status:              status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
-		clusterDomain:       opts.ClusterDomain,
-		multiTenant:         opts.MultiTenant,
+		Client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		status: status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -102,32 +98,26 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileIstio
 // ReconcileIstio reconciles a Istio object
 type ReconcileIstio struct {
 	client.Client
-	scheme              *runtime.Scheme
-	provider            operatorv1.Provider
-	enterpriseCRDsExist bool
-	status              status.StatusManager
-	clusterDomain       string
-	multiTenant         bool
+	scheme *runtime.Scheme
+	status status.StatusManager
 }
 
-// Reconcile reads that state of the cluster for a Istio object and makes changes based on the state read
-// and what is in the Istio.Spec
-// Note:
-// The Controller will requeue the Request to be processed again if the returned error is non-nil or
-// Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling Istio")
+	reqLogger.V(1).Info("Reconciling Istio")
 
 	// Get the Istio CR.
-	istio, msg, err := GetIstio(ctx, r)
+	istio := &operatorv1.Istio{}
+	err := r.Get(ctx, utils.DefaultInstanceKey, istio)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Info("Istio object not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Istio CR: "+msg, err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError,
+			fmt.Sprintf("Error querying for Istio CR: failed to get Istio %q", utils.DefaultInstanceKey),
+			err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	r.status.OnCRFound()
@@ -151,18 +141,17 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{Requeue: true}, nil
 	}
 
-	// patch felixconfiguration
 	_, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *crdv1.FelixConfiguration) (bool, error) {
-		var istioMode *string
+		var annotationMode *string
 		if fc.Annotations[render.IstioOperatorAnnotationMode] != "" {
 			value := fc.Annotations[render.IstioOperatorAnnotationMode]
-			istioMode = &value
+			annotationMode = &value
 		}
 
-		// the variables only can be equal if they are nil
-		if istioMode != fc.Spec.IstioAmbientMode &&
-			(istioMode == nil || fc.Spec.IstioAmbientMode == nil || *istioMode != *fc.Spec.IstioAmbientMode) {
-			return false, fmt.Errorf("felixconfig %q modified by user", "IstioAmbientMode")
+		// If the annotation does not match the spec value (ignoring both nil), it indicates a misconfiguration.
+		if annotationMode != fc.Spec.IstioAmbientMode &&
+			(annotationMode == nil || fc.Spec.IstioAmbientMode == nil || *annotationMode != *fc.Spec.IstioAmbientMode) {
+			return false, fmt.Errorf("felixconfig IstioAmbientMode modified by user")
 		}
 
 		istioModeDesired := "Enabled"
@@ -186,10 +175,10 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 			dscpValue = &dscp
 		}
 
-		// the variables only can be equal if they are nil
+		// Return an error if it appears that FelixConfiguration has been modified out of band.
 		if dscpValue != fc.Spec.IstioDSCPMark &&
 			(dscpValue == nil || fc.Spec.IstioDSCPMark == nil || dscpValue.ToUint8() != fc.Spec.IstioDSCPMark.ToUint8()) {
-			return false, fmt.Errorf("felixconfig %q modified by user", "IstioDSCPMark")
+			return false, fmt.Errorf("felixconfig IstioDSCPMark modified by user")
 		}
 
 		istioDSCPMarkDesired := *istio.Spec.DSCPMark
@@ -199,7 +188,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return true, nil
 	})
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering essential Tigera Istio CRDs", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error patching felix configuration with Istio settings", err, log)
 		return reconcile.Result{}, err
 	}
 
@@ -211,12 +200,12 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	handler.SetCreateOnly()
 	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(essentialCRDs...), nil)
 	if err != nil && !errors.IsAlreadyExists(err) {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering essential Tigera Istio CRDs", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating gateway API CRDs", err, log)
 		return reconcile.Result{}, err
 	}
 	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(optionalCRDs...), nil)
 	if err != nil && !errors.IsAlreadyExists(err) {
-		reqLogger.Info("Could not render all optional Tigera Istio CRDs", "err", err)
+		reqLogger.Info("Could not render all optional gateway API CRDs", "err", err)
 	}
 
 	// Get pull secrets
@@ -343,15 +332,4 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 
 	// Update the status of the Istio instance and StatusManager.
 	return reconcile.Result{RequeueAfter: utils.PeriodicReconcileTime}, nil
-}
-
-// GetIstio finds the correct Istio resource and returns a message and error in the case of an error.
-func GetIstio(ctx context.Context, client client.Client) (*operatorv1.Istio, string, error) {
-	// Fetch the Istio resource.  Look for "default" first.
-	resource := &operatorv1.Istio{}
-	err := client.Get(ctx, utils.DefaultInstanceKey, resource)
-	if err != nil {
-		return nil, fmt.Sprintf("failed to get Istio '%s'", utils.DefaultInstanceKey), err
-	}
-	return resource, "", nil
 }

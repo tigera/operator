@@ -22,6 +22,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -45,6 +46,11 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 	renderistio "github.com/tigera/operator/pkg/render/istio"
+)
+
+const (
+	reasonInfo = "Info_reconciling_Calico_Istio"
+	reasonErr  = "Error_reconciling_Calico_Istio"
 )
 
 var (
@@ -135,7 +141,11 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	// SetMetaData in the TigeraStatus such as observedGenerations.
 	defer r.status.SetMetaData(&instance.ObjectMeta)
 
-	if res, err := r.maintainFinalizer(ctx, instance, reqLogger); err != nil {
+	defer r.setCondition(ctx, instance, reqLogger)
+
+	setCurrentCondition(instance, v1.ComponentProgressing, reasonInfo, "Deploying Calico Istio resources")
+
+	if res, err, finished := r.maintainFinalizer(ctx, instance, reqLogger); err != nil || finished {
 		return res, err
 	}
 
@@ -147,6 +157,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 			return reconcile.Result{}, nil
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
+		setCurrentCondition(instance, v1.ComponentDegraded, reasonErr, "Installation resource not found")
 		return reconcile.Result{}, err
 	}
 
@@ -164,6 +175,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(essentialCRDs...), nil)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating gateway API CRDs", err, log)
+		setCurrentCondition(instance, v1.ComponentDegraded, reasonErr, fmt.Sprintf("Error creating Gateway API resources: %s", err.Error()))
 		return reconcile.Result{}, err
 	}
 	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(optionalCRDs...), nil)
@@ -182,6 +194,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	// Apply the image set
 	if err = imageset.ApplyImageSet(ctx, r.Client, installation.Variant, istioComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error with ImageSet", err, reqLogger)
+		setCurrentCondition(instance, v1.ComponentDegraded, reasonErr, fmt.Sprintf("Error applying image set: %s", err.Error()))
 		return reconcile.Result{}, err
 	}
 
@@ -227,7 +240,8 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	istioCfg.Resources, err = renderistio.GetResources(render.IstioNamespace, render.IstioReleaseName, baseOpts,
 		istiodOpts, cniOpts, ztunnelOpts)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Istio resources", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error generating Calico Istio resources", err, log)
+		setCurrentCondition(instance, v1.ComponentDegraded, reasonErr, fmt.Sprintf("Error generating Calico Istio resources: %s", err.Error()))
 		return reconcile.Result{}, err
 	}
 
@@ -235,13 +249,15 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(istioCfg.Resources.CRDs...), nil)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Tigera Istio CRDs", err, log)
+		setCurrentCondition(instance, v1.ComponentDegraded, reasonErr, fmt.Sprintf("Error rendering Tigera Istio CRDs: %s", err.Error()))
 		return reconcile.Result{}, err
 	}
 
 	// Deploy Istio components
 	err = utils.NewComponentHandler(log, r, r.scheme, instance).CreateOrUpdateOrDelete(ctx, istioComponent, r.status)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Istio resources", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Tigera Istio resources", err, log)
+		setCurrentCondition(instance, v1.ComponentDegraded, reasonErr, fmt.Sprintf("Error rendering Tigera Istio CRDs: %s", err.Error()))
 		return reconcile.Result{}, err
 	}
 
@@ -250,10 +266,13 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error patching felix configuration with Istio settings", err, log)
+		setCurrentCondition(instance, v1.ComponentDegraded, reasonErr, fmt.Sprintf("Error patching felix configuration with Istio settings: %s", err.Error()))
 		return reconcile.Result{}, err
 	}
 
 	// Check all components are ready
+	setCurrentCondition(instance, v1.ComponentProgressing, reasonInfo, "Waiting component \"Istiod\" to be ready")
+
 	readyDep := &appsv1.Deployment{}
 	if err = r.Get(ctx, client.ObjectKey{Namespace: render.IstioNamespace,
 		Name: render.IstioIstiodDeploymentName}, readyDep); err != nil {
@@ -272,6 +291,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		{render.IstioNamespace, render.IstioZTunnelDaemonSetName, "ZTunnel"},
 		{common.CalicoNamespace, render.CalicoNodeObjectName, "Calico"},
 	} {
+		setCurrentCondition(instance, v1.ComponentProgressing, reasonInfo, fmt.Sprintf("Waiting component %q to be ready", checker.description))
 		if err = r.Get(ctx, client.ObjectKey{Namespace: checker.namespace,
 			Name: checker.name}, readyDS); err != nil {
 
@@ -288,6 +308,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
+	setCurrentCondition(instance, v1.ComponentReady, reasonInfo, "Successfully deployed")
 
 	// Update the status of the Istio instance and StatusManager.
 	return reconcile.Result{RequeueAfter: utils.PeriodicReconcileTime}, nil
@@ -356,34 +377,73 @@ _end:
 	return true, nil
 }
 
-func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, istio *v1.Istio, reqLogger logr.Logger) (reconcile.Result, error) {
+func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, istio *v1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
 	// Executing clean up on finalizing
 	if !istio.ObjectMeta.DeletionTimestamp.IsZero() {
-		if _, err := utils.PatchFelixConfiguration(ctx, r.Client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+		if _, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 			return r.setIstioFelixConfiguration(ctx, istio, fc, true)
 		}); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error cleaning up felix configuration", err, reqLogger)
-			return reconcile.Result{}, err
+			return
 		}
 		patchFrom := client.MergeFrom(istio.DeepCopy())
 		istio.Finalizers = stringsutil.RemoveStringInSlice(render.IstioFinalizer, istio.Finalizers)
-		if err := r.Patch(ctx, istio, patchFrom); err != nil {
+		if err = r.Patch(ctx, istio, patchFrom); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error removing finalizer on Istio", err, reqLogger)
-			return reconcile.Result{}, err
+			return
 		}
 
 		r.status.ClearDegraded()
-		return reconcile.Result{}, nil
+		return res, nil, true
 	}
 
 	if !stringsutil.StringInSlice(render.IstioFinalizer, istio.Finalizers) {
 		patchFrom := client.MergeFrom(istio.DeepCopy())
 		istio.Finalizers = append(istio.Finalizers, render.IstioFinalizer)
-		if err := r.Patch(ctx, istio, patchFrom); err != nil {
+		if err = r.Patch(ctx, istio, patchFrom); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Istio", err, reqLogger)
-			return reconcile.Result{}, err
+			return
 		}
 	}
 
-	return reconcile.Result{}, nil
+	return
+}
+
+func (r *ReconcileIstio) setCondition(ctx context.Context, istio *v1.Istio, reqLogger logr.Logger) {
+	if err := r.Status().Update(ctx, istio); err != nil {
+		reqLogger.Error(err, "Error updating Istio status condition")
+	}
+}
+
+func setCurrentCondition(istio *v1.Istio, ctype v1.StatusConditionType, reason, msg string) {
+	found := false
+	for i, cond := range istio.Status.Conditions {
+		if cond.Type == string(ctype) {
+			if cond.Status == metav1.ConditionTrue &&
+				cond.Reason == reason &&
+				cond.Message == msg {
+				return
+			}
+			cond.Status = metav1.ConditionTrue
+			cond.Reason = reason
+			cond.Message = msg
+			found = true
+		} else {
+			cond.Status = metav1.ConditionFalse
+			cond.Reason = string(operatorv1.Unknown)
+			cond.Message = ""
+		}
+		cond.LastTransitionTime = metav1.Now()
+		istio.Status.Conditions[i] = cond
+	}
+	if !found {
+		istio.Status.Conditions = append(istio.Status.Conditions, metav1.Condition{
+			Type:               string(ctype),
+			Status:             metav1.ConditionTrue,
+			Reason:             reason,
+			Message:            msg,
+			ObservedGeneration: istio.GetGeneration(),
+			LastTransitionTime: metav1.Now(),
+		})
+	}
 }

@@ -46,11 +46,11 @@ type TLS struct {
 	// If changed on a running cluster with connected managed clusters, all managed clusters will disconnect as they will no longer be able to verify Voltron's identity.
 	// To reconnect existing managed clusters, change the tls.ca of the  managed clusters' ManagementClusterConnection resource.
 	//
-	// One of: calico-management-cluster-connection, manager-tls
+	// One of: calico-management-cluster-connection, manager-tls, tigera-management-cluster-connection (deprecated)
 	//
 	// Default: calico-management-cluster-connection
 	//
-	// +kubebuilder:validation:Enum=calico-management-cluster-connection;manager-tls
+	// +kubebuilder:validation:Enum=calico-management-cluster-connection;manager-tls;tigera-management-cluster-connection
 	// +optional
 	SecretName string `json:"secretName,omitempty"`
 }

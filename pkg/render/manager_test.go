@@ -980,6 +980,57 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(container.Resources).To(Equal(managerResources))
 	})
 
+	It("should gracefully override container resource request using deprecated component names", func() {
+		managerResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":     resource.MustParse("2"),
+				"memory":  resource.MustParse("300Mi"),
+				"storage": resource.MustParse("20Gi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":     resource.MustParse("1"),
+				"memory":  resource.MustParse("150Mi"),
+				"storage": resource.MustParse("10Gi"),
+			},
+		}
+
+		managercfg := operatorv1.Manager{
+			Spec: operatorv1.ManagerSpec{
+				ManagerDeployment: &operatorv1.ManagerDeployment{
+					Spec: &operatorv1.ManagerDeploymentSpec{
+						Template: &operatorv1.ManagerDeploymentPodTemplateSpec{
+							Spec: &operatorv1.ManagerDeploymentPodSpec{
+								Containers: []operatorv1.ManagerDeploymentContainer{{
+									Name:      "tigera-voltron",
+									Resources: &managerResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		resourcesToCreate, _ := renderObjects(renderConfig{
+			oidc:                    false,
+			managementCluster:       nil,
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			compliance:              compliance,
+			complianceFeatureActive: true,
+			ns:                      render.ManagerNamespace,
+			manager:                 &managercfg,
+		})
+
+		d, ok := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+
+		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
+
+		container := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(managerResources))
+	})
+
 	It("should override init container's resource request with the value from Manager CR", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block

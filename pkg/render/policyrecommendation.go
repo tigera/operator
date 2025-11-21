@@ -233,7 +233,32 @@ func (pr *policyRecommendationComponent) clusterRoleBinding() client.Object {
 
 func (pr *policyRecommendationComponent) managedClustersWatchRoleBinding() client.Object {
 	if pr.cfg.Tenant.MultiTenant() {
-		return rcomponents.RoleBinding(PolicyRecommendationManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, PolicyRecommendationName, pr.cfg.Namespace)
+		// There are 2 service accounts that require permissions on managedcluster resources; the real service account in
+		// the tenant namespace that is used to watch managedcluster resources and the tigera-policy-recommendation:tigera-policy-recommendation
+		// service account which is hardcoded into the impersonation headers by voltron and used only for checking whether
+		// the request is allowed to access the managed cluster in question
+		policyRecRoleBinding := &rbacv1.RoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: PolicyRecommendationManagedClustersWatchRoleBindingName, Namespace: pr.cfg.Namespace},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "ClusterRole",
+				Name:     ManagedClustersWatchClusterRoleName,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      PolicyRecommendationName,
+					Namespace: pr.cfg.Namespace,
+				},
+				{
+					Kind:      "ServiceAccount",
+					Name:      "tigera-policy-recommendation",
+					Namespace: "tigera-policy-recommendation",
+				},
+			},
+		}
+		return policyRecRoleBinding
 	}
 
 	return rcomponents.ClusterRoleBinding(PolicyRecommendationManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, PolicyRecommendationName, []string{pr.cfg.Namespace})

@@ -237,6 +237,38 @@ var (
 		variant:   calicoVariant,
 	}
 {{- end }}
+{{ with index .Components "istio-pilot" }}
+	ComponentCalicoIstioPilot = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-install-cni" }}
+	ComponentCalicoIstioInstallCNI = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-ztunnel" }}
+	ComponentCalicoIstioZTunnel = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-proxyv2" }}
+	ComponentCalicoIstioProxyv2 = Component{
+		Version:  "{{ .Version }}",
+		Image:    "{{ .Image }}",
+		Registry: "{{ .Registry }}",
+		variant:  calicoVariant,
+	}
+{{- end }}
 
 	CalicoImages = []Component{
 		ComponentCalicoCNI,
@@ -264,5 +296,9 @@ var (
 		ComponentCalicoEnvoyProxy,
 		ComponentCalicoEnvoyRatelimit,
 		ComponentCalicoGuardian,
+		ComponentCalicoIstioPilot,
+		ComponentCalicoIstioInstallCNI,
+		ComponentCalicoIstioZTunnel,
+		ComponentCalicoIstioProxyv2,
 	}
 )

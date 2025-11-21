@@ -347,10 +347,10 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 
 var GatewayAPIResources = GatewayAPIResourcesGetter()
 
-func GatewayAPICRDs(provider operatorv1.Provider) ([]client.Object, []client.Object) {
+func gatewayAPIK8sCRDs(provider operatorv1.Provider) (*gatewayAPIResources, []client.Object, []client.Object) {
 	resources := GatewayAPIResources()
-	essentialCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
-	optionalCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
+	essentialCRDs := make([]client.Object, 0, len(resources.k8sCRDs))
+	optionalCRDs := make([]client.Object, 0, len(resources.k8sCRDs))
 	for _, crd := range resources.k8sCRDs {
 		if provider.IsOpenShift() {
 			// OpenShift 4.19+ restricts the Gateway CRDs that we can install, so report
@@ -367,9 +367,22 @@ func GatewayAPICRDs(provider operatorv1.Provider) ([]client.Object, []client.Obj
 			essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
 		}
 	}
+
+	return resources, essentialCRDs, optionalCRDs
+}
+
+func K8SGatewayAPICRDs(provider operatorv1.Provider) ([]client.Object, []client.Object) {
+	_, essentialCRDs, optionalCRDs := gatewayAPIK8sCRDs(provider)
+	return essentialCRDs, optionalCRDs
+}
+
+func CalicoGatewayAPICRDs(provider operatorv1.Provider) ([]client.Object, []client.Object) {
+	resources, essentialCRDs, optionalCRDs := gatewayAPIK8sCRDs(provider)
+	envoyCRDs := make([]client.Object, 0, len(resources.envoyCRDs))
 	for _, crd := range resources.envoyCRDs {
-		essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
+		envoyCRDs = append(envoyCRDs, crd.DeepCopyObject().(client.Object))
 	}
+	essentialCRDs = append(essentialCRDs, envoyCRDs...)
 
 	return essentialCRDs, optionalCRDs
 }

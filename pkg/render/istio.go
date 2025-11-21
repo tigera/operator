@@ -34,7 +34,6 @@ type IstioConfig struct {
 	Istio          *operatorv1.Istio
 	IstioNamespace string
 	Resources      *renderistio.IstioResources
-	PullSecrets    []*corev1.Secret
 }
 
 var _ Component = &IstioComponent{}
@@ -53,8 +52,9 @@ const (
 	IstioIstiodDeploymentName   = "istiod"
 	IstioCNIDaemonSetName       = "istio-cni-node"
 	IstioZTunnelDaemonSetName   = "ztunnel"
-	IstioOperatorAnnotationMode = "operator.tigera.io/istioMode"
+	IstioOperatorAnnotationMode = "operator.tigera.io/istioAmbientMode"
 	IstioOperatorAnnotationDSCP = "operator.tigera.io/istioDSCPMark"
+	IstioFinalizer              = "operator.tigera.io/calico-istio"
 )
 
 func NewIstioComponent(cfg *IstioConfig) *IstioComponent {

@@ -48,13 +48,13 @@ type IstioComponent struct {
 
 const (
 	IstioNamespace              = common.CalicoNamespace
-	IstioReleaseName            = "calico-istio"
+	IstioReleaseName            = "tigera-istio"
 	IstioIstiodDeploymentName   = "istiod"
 	IstioCNIDaemonSetName       = "istio-cni-node"
 	IstioZTunnelDaemonSetName   = "ztunnel"
 	IstioOperatorAnnotationMode = "operator.tigera.io/istioAmbientMode"
 	IstioOperatorAnnotationDSCP = "operator.tigera.io/istioDSCPMark"
-	IstioFinalizer              = "operator.tigera.io/calico-istio"
+	IstioFinalizer              = "operator.tigera.io/tigera-istio"
 )
 
 func NewIstioComponent(cfg *IstioConfig) *IstioComponent {
@@ -70,10 +70,10 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
 	errMsgs := []string{}
 
-	compPilot := components.ComponentCalicoIstioPilot
-	compCNI := components.ComponentCalicoIstioInstallCNI
-	compZTunnel := components.ComponentCalicoIstioZTunnel
-	compProxy := components.ComponentCalicoIstioProxyv2
+	compPilot := components.ComponentTigeraIstioPilot
+	compCNI := components.ComponentTigeraIstioInstallCNI
+	compZTunnel := components.ComponentTigeraIstioZTunnel
+	compProxy := components.ComponentTigeraIstioProxyv2
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		compPilot = components.ComponentTigeraIstioPilot
 		compCNI = components.ComponentTigeraIstioInstallCNI

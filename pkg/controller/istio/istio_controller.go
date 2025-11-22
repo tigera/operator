@@ -49,8 +49,8 @@ import (
 )
 
 const (
-	reasonInfo = "Info_reconciling_Calico_Istio"
-	reasonErr  = "Error_reconciling_Calico_Istio"
+	reasonInfo = "Info_reconciling_Tigera_Istio"
+	reasonErr  = "Error_reconciling_Tigera_Istio"
 )
 
 var (
@@ -143,7 +143,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 
 	defer r.setCondition(ctx, instance, reqLogger)
 
-	setCurrentCondition(instance, v1.ComponentProgressing, reasonInfo, "Deploying Calico Istio resources")
+	setCurrentCondition(instance, v1.ComponentProgressing, reasonInfo, "Deploying Tigera Istio resources")
 
 	if res, err, finished := r.maintainFinalizer(ctx, instance, reqLogger); err != nil || finished {
 		return res, err
@@ -240,8 +240,8 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	istioCfg.Resources, err = renderistio.GetResources(render.IstioNamespace, render.IstioReleaseName, baseOpts,
 		istiodOpts, cniOpts, ztunnelOpts)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error generating Calico Istio resources", err, log)
-		setCurrentCondition(instance, v1.ComponentDegraded, reasonErr, fmt.Sprintf("Error generating Calico Istio resources: %s", err.Error()))
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error generating Tigera Istio resources", err, log)
+		setCurrentCondition(instance, v1.ComponentDegraded, reasonErr, fmt.Sprintf("Error generating Tigera Istio resources: %s", err.Error()))
 		return reconcile.Result{}, err
 	}
 

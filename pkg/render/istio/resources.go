@@ -63,8 +63,7 @@ type IstioResources struct {
 }
 
 // GetResources returns istio-chart generated templates
-func GetResources(namespace, releaseName string, baseOptions, istiodOptions, cniOptions,
-	ztunnelOptions map[string]interface{}) (*IstioResources, error) {
+func GetResources(namespace, releaseName string, baseOptions, istiodOptions, cniOptions, ztunnelOptions map[string]interface{}) (*IstioResources, error) {
 	var crds []client.Object
 
 	actionConfig := new(action.Configuration)

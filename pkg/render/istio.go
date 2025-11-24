@@ -20,13 +20,17 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	renderistio "github.com/tigera/operator/pkg/render/istio"
 )
 
@@ -56,6 +60,10 @@ const (
 	IstioOperatorAnnotationMode = "operator.tigera.io/istioAmbientMode"
 	IstioOperatorAnnotationDSCP = "operator.tigera.io/istioDSCPMark"
 	IstioFinalizer              = "operator.tigera.io/tigera-istio"
+	IstioIstiodPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + IstioIstiodDeploymentName
+	IstioCNIPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + IstioCNIDaemonSetName
+	IstioZTunnelPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + IstioZTunnelDaemonSetName
+	IstioIstiodServiceName      = "istiod"
 )
 
 func NewIstioComponent(cfg *IstioConfig) *IstioComponent {
@@ -109,6 +117,13 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	res := c.cfg.Resources
 
+	objs := []client.Object{}
+	objs = append(objs,
+		c.istiodAllowTigeraPolicy(),
+		c.istioCNIAllowTigeraPolicy(),
+		c.ztunnelAllowTigeraPolicy(),
+	)
+
 	if overrides := c.cfg.Istio.Spec.Istiod; overrides != nil {
 		rcomp.ApplyDeploymentOverrides(res.IstiodDeployment, overrides)
 	}
@@ -142,8 +157,6 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 		}
 	}
 
-	objs := []client.Object{}
-
 	// Append Istio resources in order: Base, Istiod, CNI, ZTunnel
 	objs = append(objs, res.Base...)
 	objs = append(objs, res.Istiod...)
@@ -159,4 +172,91 @@ func (c *IstioComponent) Ready() bool {
 
 func (c *IstioComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
+}
+
+func (c *IstioComponent) istiodAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+	}
+
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: []numorstring.Port{
+					numorstring.SinglePort(15012),
+					numorstring.SinglePort(15017),
+				},
+			},
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      IstioIstiodPolicyName,
+			Namespace: c.cfg.IstioNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(IstioIstiodDeploymentName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
+		},
+	}
+}
+
+func (c *IstioComponent) istioCNIAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      IstioCNIPolicyName,
+			Namespace: c.cfg.IstioNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(IstioCNIDaemonSetName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}
+
+func (c *IstioComponent) ztunnelAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.CreateServiceSelectorEntityRule(c.cfg.IstioNamespace, IstioIstiodServiceName),
+		},
+	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Installation.KubernetesProvider.IsOpenShift())
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      IstioZTunnelPolicyName,
+			Namespace: c.cfg.IstioNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(IstioZTunnelDaemonSetName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
 }

@@ -637,7 +637,7 @@ hack/bin/release: $(shell find ./hack/release -type f)
 	go build -buildvcs=false -o hack/bin/release ./hack/release'
 
 release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
-	hack/bin/release from
+	GIT_REMOTE=$(GIT_REMOTE) hack/bin/release from
 
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:

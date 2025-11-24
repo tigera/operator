@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -35,21 +36,6 @@ var gitRemoteFlag = &cli.StringFlag{
 	Usage:   "The git remote to push the release to",
 	Value:   "origin",
 	Sources: cli.EnvVars("GIT_REMOTE"),
-}
-
-var baseOperatorFlag = &cli.StringFlag{
-	Name:     "base-version",
-	Aliases:  []string{"base"},
-	Usage:    "The version of the operator to use as the base for this new version.",
-	Sources:  cli.EnvVars("OPERATOR_BASE_VERSION"),
-	Required: true,
-	Action: func(ctx context.Context, c *cli.Command, value string) error {
-		if !regexp.MustCompile(fmt.Sprintf(baseVersionFormat, c.String(devTagSuffixFlag.Name))).MatchString(value) {
-			return fmt.Errorf("base-version must be in the format vX.Y.Z or vX.Y.Z-<dev-tag-suffix>-n-g<git-hash>-<hashrelease-name> or " +
-				"vX.Y.Z-<dev-tag-suffix>-n-g<git-hash>-<product-hashrelease-version>")
-		}
-		return nil
-	},
 }
 
 var devTagSuffixFlag = &cli.StringFlag{
@@ -82,24 +68,41 @@ var versionFlag = &cli.StringFlag{
 	},
 }
 
-var exceptCalicoFlag = &cli.StringSliceFlag{
-	Name:    "except-calico",
-	Usage:   "Calico image and version to update where the image name adheres with config/calico_versions.yaml file. Can be specified multiple times.",
-	Sources: cli.EnvVars("OS_IMAGES_VERSIONS"),
-	Action:  validateOverrides,
-}
+var (
+	baseOperatorFlag = &cli.StringFlag{
+		Name:     "base-version",
+		Aliases:  []string{"base"},
+		Usage:    "The version of the operator to use as the base for this new version.",
+		Sources:  cli.EnvVars("OPERATOR_BASE_VERSION"),
+		Required: true,
+		Action: func(ctx context.Context, c *cli.Command, value string) error {
+			if !regexp.MustCompile(fmt.Sprintf(baseVersionFormat, c.String(devTagSuffixFlag.Name))).MatchString(value) {
+				return fmt.Errorf("base-version must be in the format vX.Y.Z or vX.Y.Z-<dev-tag-suffix>-n-g<git-hash>-<hashrelease-name> or " +
+					"vX.Y.Z-<dev-tag-suffix>-n-g<git-hash>-<product-hashrelease-version>")
+			}
+			return nil
+		},
+	}
 
-var exceptEnterpriseFlag = &cli.StringSliceFlag{
-	Name:    "except-calico-enterprise",
-	Usage:   "Enterprise image and version to update where image name adheres with config/enterprise_versions.yaml file. Can be specified multiple times.",
-	Sources: cli.EnvVars("EE_IMAGES_VERSIONS"),
-	Action: func(ctx context.Context, c *cli.Command, values []string) error {
-		if len(values) == 0 && len(c.StringSlice("except-calico")) == 0 {
-			return fmt.Errorf("at least one of --except-calico or --except-enterprise must be set")
-		}
-		return validateOverrides(ctx, c, values)
-	},
-}
+	exceptCalicoFlag = &cli.StringSliceFlag{
+		Name:    "except-calico",
+		Usage:   "Calico image and version to update where the image name adheres with config/calico_versions.yaml file. Can be specified multiple times.",
+		Sources: cli.EnvVars("OS_IMAGES_VERSIONS"),
+		Action:  validateOverrides,
+	}
+
+	exceptEnterpriseFlag = &cli.StringSliceFlag{
+		Name:    "except-calico-enterprise",
+		Usage:   "Enterprise image and version to update where image name adheres with config/enterprise_versions.yaml file. Can be specified multiple times.",
+		Sources: cli.EnvVars("EE_IMAGES_VERSIONS"),
+		Action: func(ctx context.Context, c *cli.Command, values []string) error {
+			if len(values) == 0 && len(c.StringSlice("except-calico")) == 0 {
+				return fmt.Errorf("at least one of --except-calico or --except-enterprise must be set")
+			}
+			return validateOverrides(ctx, c, values)
+		},
+	}
+)
 
 func validateOverrides(ctx context.Context, c *cli.Command, values []string) error {
 	for _, value := range values {
@@ -121,7 +124,7 @@ var (
 		Value:   archOptions,
 		Action: func(ctx context.Context, c *cli.Command, values []string) error {
 			for _, arch := range values {
-				if !contains(archOptions, arch) {
+				if !slices.Contains(archOptions, arch) {
 					return fmt.Errorf("invalid architecture %s", arch)
 				}
 			}

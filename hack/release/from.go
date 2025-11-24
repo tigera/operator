@@ -27,9 +27,40 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// releaseFrom is the main action for the command.
-// It builds (and publishes) a new operator based on the base version specified.
-func releaseFrom(ctx context.Context, c *cli.Command) error {
+// Command to release from a previous version.
+// It creates a new operator image version based on a previous version.
+var releaseFromCommand = &cli.Command{
+	Name:  "from",
+	Usage: "Release a new operator image version using a previous version as the base",
+	Flags: []cli.Flag{
+		baseOperatorFlag,
+		versionFlag,
+		exceptCalicoFlag,
+		exceptEnterpriseFlag,
+		publishFlag,
+		archFlag,
+		registryFlag,
+		imageFlag,
+		devTagSuffixFlag,
+	},
+	Before: releaseFromBefore,
+	Action: releaseFromAction,
+}
+
+// Pre-action for "release from" command.
+// It configures logging and checks that the git working tree is clean.
+var releaseFromBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	if version, err := gitVersion(); err != nil {
+		return ctx, fmt.Errorf("error getting git version: %s", err)
+	} else if strings.Contains(version, "dirty") {
+		return ctx, fmt.Errorf("git repo is dirty, please commit changes before releasing")
+	}
+	return ctx, nil
+})
+
+// Action executed for "release from" command.
+// It builds (and publishes) a new operator image based on the base version specified.
+var releaseFromAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
 	// get root directory of operator git repo
 	repoRootDir, err := runCommand("git", []string{"rev-parse", "--show-toplevel"}, nil)
 	if err != nil {
@@ -65,7 +96,7 @@ func releaseFrom(ctx context.Context, c *cli.Command) error {
 	}
 
 	return newHashreleaseOperator(repoRootDir, version, c.String(imageFlag.Name), c.String(registryFlag.Name), c.StringSlice(archFlag.Name), c.Bool(publishFlag.Name))
-}
+})
 
 // isReleaseVersionFormat checks if the version in the format vX.Y.Z.
 func isReleaseVersionFormat(version string) (bool, error) {

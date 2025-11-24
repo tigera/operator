@@ -41,15 +41,6 @@ const (
 	baseVersionFormat = `^v\d+\.\d+\.\d+(-%s-\d+-g[a-f0-9]{12}-[a-z0-9-]+)?$`
 )
 
-func contains(haystack []string, needle string) bool {
-	for _, item := range haystack {
-		if item == needle {
-			return true
-		}
-	}
-	return false
-}
-
 func gitVersion() (string, error) {
 	return runCommand("git", []string{"describe", "--tags", "--always", "--long", "--abbrev=12", "--dirty"}, nil)
 }

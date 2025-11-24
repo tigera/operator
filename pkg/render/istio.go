@@ -25,6 +25,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	renderistio "github.com/tigera/operator/pkg/render/istio"
 )
@@ -107,58 +108,17 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 // Objects implements the Component interface.
 func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	res := c.cfg.Resources
-	if c.cfg.Istio.Spec.Istiod != nil {
-		if c.cfg.Istio.Spec.Istiod.Spec != nil && c.cfg.Istio.Spec.Istiod.Spec.Template != nil &&
-			c.cfg.Istio.Spec.Istiod.Spec.Template.Spec != nil {
-			if c.cfg.Istio.Spec.Istiod.Spec.Template.Spec.Affinity != nil {
-				res.IstiodDeployment.Spec.Template.Spec.Affinity = c.cfg.Istio.Spec.Istiod.Spec.Template.Spec.Affinity
-			}
-			if c.cfg.Istio.Spec.Istiod.Spec.Template.Spec.NodeSelector != nil {
-				res.IstiodDeployment.Spec.Template.Spec.NodeSelector = c.cfg.Istio.Spec.Istiod.Spec.Template.Spec.NodeSelector
-			}
-			if c.cfg.Istio.Spec.Istiod.Spec.Template.Spec.Resources != nil {
-				res.IstiodDeployment.Spec.Template.Spec.Containers[0].Resources = *c.cfg.Istio.Spec.Istiod.Spec.Template.Spec.Resources
-			}
-			if len(c.cfg.Istio.Spec.Istiod.Spec.Template.Spec.Tolerations) > 0 {
-				res.IstiodDeployment.Spec.Template.Spec.Tolerations = c.cfg.Istio.Spec.Istiod.Spec.Template.Spec.Tolerations
-			}
-		}
+
+	if overrides := c.cfg.Istio.Spec.Istiod; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(res.IstiodDeployment, overrides)
 	}
 
-	if c.cfg.Istio.Spec.IstioCNI != nil {
-		if c.cfg.Istio.Spec.IstioCNI.Spec != nil && c.cfg.Istio.Spec.IstioCNI.Spec.Template != nil &&
-			c.cfg.Istio.Spec.IstioCNI.Spec.Template.Spec != nil {
-			if c.cfg.Istio.Spec.IstioCNI.Spec.Template.Spec.Affinity != nil {
-				res.CNIDaemonSet.Spec.Template.Spec.Affinity = c.cfg.Istio.Spec.IstioCNI.Spec.Template.Spec.Affinity
-			}
-			if c.cfg.Istio.Spec.IstioCNI.Spec.Template.Spec.NodeSelector != nil {
-				res.CNIDaemonSet.Spec.Template.Spec.NodeSelector = c.cfg.Istio.Spec.IstioCNI.Spec.Template.Spec.NodeSelector
-			}
-			if c.cfg.Istio.Spec.IstioCNI.Spec.Template.Spec.Resources != nil {
-				res.CNIDaemonSet.Spec.Template.Spec.Containers[0].Resources = *c.cfg.Istio.Spec.IstioCNI.Spec.Template.Spec.Resources
-			}
-			if len(c.cfg.Istio.Spec.IstioCNI.Spec.Template.Spec.Tolerations) > 0 {
-				res.CNIDaemonSet.Spec.Template.Spec.Tolerations = c.cfg.Istio.Spec.IstioCNI.Spec.Template.Spec.Tolerations
-			}
-		}
+	if overrides := c.cfg.Istio.Spec.IstioCNI; overrides != nil {
+		rcomp.ApplyDaemonSetOverrides(res.CNIDaemonSet, overrides)
 	}
 
-	if c.cfg.Istio.Spec.ZTunnel != nil {
-		if c.cfg.Istio.Spec.ZTunnel.Spec != nil && c.cfg.Istio.Spec.ZTunnel.Spec.Template != nil &&
-			c.cfg.Istio.Spec.ZTunnel.Spec.Template.Spec != nil {
-			if c.cfg.Istio.Spec.ZTunnel.Spec.Template.Spec.Affinity != nil {
-				res.ZTunnelDaemonSet.Spec.Template.Spec.Affinity = c.cfg.Istio.Spec.ZTunnel.Spec.Template.Spec.Affinity
-			}
-			if c.cfg.Istio.Spec.ZTunnel.Spec.Template.Spec.NodeSelector != nil {
-				res.ZTunnelDaemonSet.Spec.Template.Spec.NodeSelector = c.cfg.Istio.Spec.ZTunnel.Spec.Template.Spec.NodeSelector
-			}
-			if c.cfg.Istio.Spec.ZTunnel.Spec.Template.Spec.Resources != nil {
-				res.ZTunnelDaemonSet.Spec.Template.Spec.Containers[0].Resources = *c.cfg.Istio.Spec.ZTunnel.Spec.Template.Spec.Resources
-			}
-			if len(c.cfg.Istio.Spec.ZTunnel.Spec.Template.Spec.Tolerations) > 0 {
-				res.ZTunnelDaemonSet.Spec.Template.Spec.Tolerations = c.cfg.Istio.Spec.ZTunnel.Spec.Template.Spec.Tolerations
-			}
-		}
+	if overrides := c.cfg.Istio.Spec.ZTunnel; overrides != nil {
+		rcomp.ApplyDaemonSetOverrides(res.ZTunnelDaemonSet, overrides)
 	}
 
 	// Set required configs
@@ -175,32 +135,14 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	for i := range res.CNIDaemonSet.Spec.Template.Spec.Containers {
 		cont := &res.CNIDaemonSet.Spec.Template.Spec.Containers[i]
 		if cont.Name == "install-cni" {
-			dscpValue := "23" // default value
-			if c.cfg.Istio.Spec.DSCPMark != nil {
-				dscpValue = strconv.FormatInt(int64(c.cfg.Istio.Spec.DSCPMark.ToUint8()), 10)
-			}
 			cont.Env = append(cont.Env, corev1.EnvVar{
 				Name:  "MAGIC_DSCP_MARK",
-				Value: dscpValue,
+				Value: strconv.FormatInt(int64(c.cfg.Istio.Spec.DSCPMark.ToUint8()), 10),
 			})
 		}
 	}
-	res.IstiodDeployment.Spec.Template.Spec.ImagePullSecrets = append(
-		res.IstiodDeployment.Spec.Template.Spec.ImagePullSecrets,
-		corev1.LocalObjectReference{Name: "tigera-pull-secret"},
-	)
-	res.CNIDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
-		res.CNIDaemonSet.Spec.Template.Spec.ImagePullSecrets,
-		corev1.LocalObjectReference{Name: "tigera-pull-secret"},
-	)
-	res.ZTunnelDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
-		res.ZTunnelDaemonSet.Spec.Template.Spec.ImagePullSecrets,
-		corev1.LocalObjectReference{Name: "tigera-pull-secret"},
-	)
 
-	// Tigera Istio Namespace
-	objs := make([]client.Object, 0, len(res.Base)+len(res.Istiod)+
-		len(res.CNI)+len(res.ZTunnel))
+	objs := []client.Object{}
 
 	// Append Istio resources in order: Base, Istiod, CNI, ZTunnel
 	objs = append(objs, res.Base...)

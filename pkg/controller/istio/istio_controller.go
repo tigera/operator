@@ -90,6 +90,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("istio-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
+	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("istio-controller failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
@@ -136,6 +140,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 			err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	updateDefaults(instance)
 	r.status.OnCRFound()
 
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -199,46 +204,54 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Produce Helm templates for Istio
-	baseOpts := map[string]interface{}{
-		"global": map[string]interface{}{
-			"istioNamespace": render.IstioNamespace,
-		},
-	}
-	istiodOpts := map[string]interface{}{
-		"image": istioComponent.IstioPilotImage,
-		"global": map[string]interface{}{
-			"istioNamespace":         render.IstioNamespace,
-			"operatorManageWebhooks": true,
-			"proxy": map[string]interface{}{
-				"image": istioComponent.IstioProxyv2Image,
-			},
-			"proxy_init": map[string]interface{}{
-				"image": istioComponent.IstioProxyv2Image,
+	istioResOpts := &renderistio.ResourceOpts{
+		Namespace:                 render.IstioNamespace,
+		ReleaseName:               render.IstioReleaseName,
+		IstiodDeploymentName:      render.IstioIstiodDeploymentName,
+		IstioCNIDaemonSetName:     render.IstioCNIDaemonSetName,
+		IstioZTunnelDaemonSetName: render.IstioZTunnelDaemonSetName,
+
+		// Helm chart opts
+		BaseOpts: renderistio.BaseOpts{
+			Global: &renderistio.GlobalConfig{
+				IstioNamespace: render.IstioNamespace,
 			},
 		},
-		"profile": "ambient",
-	}
-	cniOpts := map[string]interface{}{
-		"image": istioComponent.IstioInstallCNIImage,
-		"global": map[string]interface{}{
-			"istioNamespace": render.IstioNamespace,
+		IstiodOpts: renderistio.IstiodOpts{
+			Image: istioComponent.IstioPilotImage,
+			Global: &renderistio.GlobalConfig{
+				IstioNamespace:         render.IstioNamespace,
+				OperatorManageWebhooks: true,
+				Proxy: &renderistio.ProxyConfig{
+					Image: istioComponent.IstioProxyv2Image,
+				},
+				ProxyInit: &renderistio.ProxyInitConfig{
+					Image: istioComponent.IstioProxyv2Image,
+				},
+			},
+			Profile: "ambient",
 		},
-		"ambient": map[string]interface{}{
-			"enabled":                    true,
-			"reconcileIptablesOnStartup": true,
+		IstioCNIOpts: renderistio.IstioCNIOpts{
+			Image: istioComponent.IstioInstallCNIImage,
+			Global: &renderistio.GlobalConfig{
+				IstioNamespace: render.IstioNamespace,
+			},
+			Ambient: &renderistio.AmbientConfig{
+				Enabled:                    true,
+				ReconcileIptablesOnStartup: true,
+			},
+		},
+		ZTunnelOpts: renderistio.ZTunnelOpts{
+			Image: istioComponent.IstioZtunnelImage,
+			Global: &renderistio.GlobalConfig{
+				IstioNamespace: render.IstioNamespace,
+			},
 		},
 	}
 	if installation.KubernetesProvider == operatorv1.ProviderGKE {
-		cniOpts["global"].(map[string]interface{})["platform"] = "gke"
+		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
 	}
-	ztunnelOpts := map[string]interface{}{
-		"image": istioComponent.IstioZtunnelImage,
-		"global": map[string]interface{}{
-			"istioNamespace": render.IstioNamespace,
-		},
-	}
-	istioCfg.Resources, err = renderistio.GetResources(render.IstioNamespace, render.IstioReleaseName, baseOpts,
-		istiodOpts, cniOpts, ztunnelOpts)
+	istioCfg.Resources, err = istioResOpts.GetResources()
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error generating Tigera Istio resources", err, log)
 		setCurrentCondition(instance, v1.ComponentDegraded, reasonErr, fmt.Sprintf("Error generating Tigera Istio resources: %s", err.Error()))
@@ -274,8 +287,8 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	setCurrentCondition(instance, v1.ComponentProgressing, reasonInfo, "Waiting component \"Istiod\" to be ready")
 
 	readyDep := &appsv1.Deployment{}
-	if err = r.Get(ctx, client.ObjectKey{Namespace: render.IstioNamespace,
-		Name: render.IstioIstiodDeploymentName}, readyDep); err != nil {
+	k := client.ObjectKey{Namespace: render.IstioNamespace, Name: render.IstioIstiodDeploymentName}
+	if err = r.Get(ctx, k, readyDep); err != nil {
 
 		r.status.SetDegraded(operatorv1.ResourceNotFound, "Istiod deployment not found", err, log)
 		return reconcile.Result{}, err
@@ -292,16 +305,13 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		{common.CalicoNamespace, render.CalicoNodeObjectName, "Calico"},
 	} {
 		setCurrentCondition(instance, v1.ComponentProgressing, reasonInfo, fmt.Sprintf("Waiting component %q to be ready", checker.description))
-		if err = r.Get(ctx, client.ObjectKey{Namespace: checker.namespace,
-			Name: checker.name}, readyDS); err != nil {
+		if err = r.Get(ctx, client.ObjectKey{Namespace: checker.namespace, Name: checker.name}, readyDS); err != nil {
 
-			r.status.SetDegraded(operatorv1.ResourceNotFound, checker.description+
-				" daemonset not found", err, log)
+			r.status.SetDegraded(operatorv1.ResourceNotFound, checker.description+" daemonset not found", err, log)
 			return reconcile.Result{}, err
 		}
 		if readyDS.Status.NumberReady != readyDS.Status.DesiredNumberScheduled {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, checker.description+
-				" daemonset not ready", nil, log)
+			r.status.SetDegraded(operatorv1.ResourceNotReady, checker.description+" daemonset not ready", nil, log)
 			return reconcile.Result{RequeueAfter: time.Second * 5}, nil
 		}
 	}
@@ -310,8 +320,14 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	r.status.ClearDegraded()
 	setCurrentCondition(instance, v1.ComponentReady, reasonInfo, "Successfully deployed")
 
-	// Update the status of the Istio instance and StatusManager.
-	return reconcile.Result{RequeueAfter: utils.PeriodicReconcileTime}, nil
+	return reconcile.Result{}, nil
+}
+
+func updateDefaults(istio *v1.Istio) {
+	if istio.Spec.DSCPMark == nil {
+		dscpMark := numorstring.DSCPFromInt(23)
+		istio.Spec.DSCPMark = &dscpMark
+	}
 }
 
 func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, istio *v1.Istio, fc *crdv1.FelixConfiguration, remove bool) (bool, error) {

@@ -33,12 +33,6 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-const (
-	IstiodDeploymentName      = "istiod"
-	IstioCNIDaemonSetName     = "istio-cni-node"
-	IstioZTunnelDaemonSetName = "ztunnel"
-)
-
 var (
 	//go:embed base.tgz
 	baseTgz []byte
@@ -62,8 +56,22 @@ type IstioResources struct {
 	ZTunnelDaemonSet *appsv1.DaemonSet
 }
 
+type ResourceOpts struct {
+	Namespace   string
+	ReleaseName string
+
+	IstiodDeploymentName      string
+	IstioCNIDaemonSetName     string
+	IstioZTunnelDaemonSetName string
+
+	BaseOpts     BaseOpts
+	IstiodOpts   IstiodOpts
+	IstioCNIOpts IstioCNIOpts
+	ZTunnelOpts  ZTunnelOpts
+}
+
 // GetResources returns istio-chart generated templates
-func GetResources(namespace, releaseName string, baseOptions, istiodOptions, cniOptions, ztunnelOptions map[string]interface{}) (*IstioResources, error) {
+func (r *ResourceOpts) GetResources() (*IstioResources, error) {
 	var crds []client.Object
 
 	actionConfig := new(action.Configuration)
@@ -88,45 +96,49 @@ func GetResources(namespace, releaseName string, baseOptions, istiodOptions, cni
 	client := action.NewInstall(actionConfig)
 	client.DryRun = true
 	client.ClientOnly = true
-	client.Namespace = namespace
-	client.ReleaseName = releaseName
+	client.Namespace = r.Namespace
+	client.ReleaseName = r.ReleaseName
 
 	res := &IstioResources{}
+	baseOptions, _ := toMap(r.BaseOpts)
 	rel, err := client.Run(baseChart, baseOptions)
 	if err != nil {
 		return nil, err
 	}
-	crds, res.Base, err = parseManifest(rel.Manifest, res)
+	crds, res.Base, err = r.parseManifest(rel.Manifest, res)
 	if err != nil {
 		return nil, err
 	}
 	res.CRDs = append(res.CRDs, crds...)
 
+	istiodOptions, _ := toMap(r.IstiodOpts)
 	rel, err = client.Run(istiodChart, istiodOptions)
 	if err != nil {
 		return nil, err
 	}
-	crds, res.Istiod, err = parseManifest(rel.Manifest, res)
+	crds, res.Istiod, err = r.parseManifest(rel.Manifest, res)
 	if err != nil {
 		return nil, err
 	}
 	res.CRDs = append(res.CRDs, crds...)
 
+	cniOptions, _ := toMap(r.IstioCNIOpts)
 	rel, err = client.Run(cniChart, cniOptions)
 	if err != nil {
 		return nil, err
 	}
-	crds, res.CNI, err = parseManifest(rel.Manifest, res)
+	crds, res.CNI, err = r.parseManifest(rel.Manifest, res)
 	if err != nil {
 		return nil, err
 	}
 	res.CRDs = append(res.CRDs, crds...)
 
+	ztunnelOptions, _ := toMap(r.ZTunnelOpts)
 	rel, err = client.Run(ztunnelChart, ztunnelOptions)
 	if err != nil {
 		return nil, err
 	}
-	crds, res.ZTunnel, err = parseManifest(rel.Manifest, res)
+	crds, res.ZTunnel, err = r.parseManifest(rel.Manifest, res)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +152,7 @@ type yamlKind struct {
 	Kind       string `yaml:"kind"`
 }
 
-func parseManifest(manifest string, istRes *IstioResources) (crds, objs []client.Object, err error) {
+func (r *ResourceOpts) parseManifest(manifest string, istRes *IstioResources) (crds, objs []client.Object, err error) {
 	for _, yml := range strings.Split(manifest, "\n---\n") {
 		var yamlKind yamlKind
 		if err := yaml.Unmarshal([]byte(yml), &yamlKind); err != nil {
@@ -214,7 +226,7 @@ func parseManifest(manifest string, istRes *IstioResources) (crds, objs []client
 			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
 				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 			}
-			if obj.Name == IstiodDeploymentName {
+			if obj.Name == r.IstiodDeploymentName {
 				istRes.IstiodDeployment = obj
 			}
 			objs = append(objs, obj)
@@ -242,9 +254,9 @@ func parseManifest(manifest string, istRes *IstioResources) (crds, objs []client
 				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 			}
 			switch obj.Name {
-			case IstioCNIDaemonSetName:
+			case r.IstioCNIDaemonSetName:
 				istRes.CNIDaemonSet = obj
-			case IstioZTunnelDaemonSetName:
+			case r.IstioZTunnelDaemonSetName:
 				istRes.ZTunnelDaemonSet = obj
 			}
 			objs = append(objs, obj)

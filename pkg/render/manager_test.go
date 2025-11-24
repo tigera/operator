@@ -1416,10 +1416,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		})
 
 		It("should not render dashboard sidecar", func() {
+
 			tenant := &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: tenantANamespace},
 				Spec:       operatorv1.TenantSpec{ID: "tenant-a"},
 			}
+
 			resources := renderObjects(renderConfig{
 				oidc:                    false,
 				managementCluster:       nil,

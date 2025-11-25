@@ -22,6 +22,7 @@ import (
 
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -426,6 +427,48 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	for _, component := range components {
 		if err = hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
+	p, err := utils.GetPrometheus(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve the Prometheus status", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if p != nil {
+		available := monitoringv1.ConditionFalse
+
+		for _, cond := range p.Status.Conditions {
+			if cond.Type == monitoringv1.Available {
+				available = cond.Status
+			}
+		}
+
+		if available != monitoringv1.ConditionTrue {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Prometheus component is not available", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
+	am, err := utils.GetAlertmanager(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve the Alertmanager status", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if am != nil {
+		available := monitoringv1.ConditionFalse
+
+		for _, cond := range am.Status.Conditions {
+			if cond.Type == monitoringv1.Available {
+				available = cond.Status
+			}
+		}
+
+		if available != monitoringv1.ConditionTrue {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Alertmanager component is not available", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}

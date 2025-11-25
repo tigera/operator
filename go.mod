@@ -24,6 +24,7 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1
 	github.com/r3labs/diff/v2 v2.15.1
 	github.com/sirupsen/logrus v1.9.3
+	github.com/snowzach/rotatefilehook v0.0.0-20220211133110-53752135082d
 	github.com/stretchr/testify v1.10.0
 	github.com/tigera/api v0.0.0-20230406222214-ca74195900cb
 	github.com/tigera/operator/api v0.0.0-20250718195010-e4328952af47
@@ -119,6 +120,7 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/asn1-ber.v1 v1.0.0-20181015200546-f715ec2f112d // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	howett.net/plist v1.0.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect

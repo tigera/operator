@@ -50,6 +50,7 @@ var releaseFromCommand = &cli.Command{
 // Pre-action for "release from" command.
 // It configures logging and checks that the git working tree is clean.
 var releaseFromBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	configureLogging(c)
 	if version, err := gitVersion(); err != nil {
 		return ctx, fmt.Errorf("error getting git version: %s", err)
 	} else if strings.Contains(version, "dirty") {

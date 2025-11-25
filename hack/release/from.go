@@ -51,10 +51,30 @@ var releaseFromCommand = &cli.Command{
 // It configures logging and checks that the git working tree is clean.
 var releaseFromBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	configureLogging(c)
-	if version, err := gitVersion(); err != nil {
-		return ctx, fmt.Errorf("error getting git version: %s", err)
-	} else if strings.Contains(version, "dirty") {
-		return ctx, fmt.Errorf("git repo is dirty, please commit changes before releasing")
+	if dirty, err := gitDirty(); err != nil {
+		return ctx, fmt.Errorf("error checking git state: %s", err)
+	} else if dirty {
+		return ctx, fmt.Errorf("git working tree is dirty, please commit or stash changes before proceeding")
+	}
+	version := c.String(versionFlag.Name)
+	if c.String(baseOperatorFlag.Name) == version {
+		return ctx, fmt.Errorf("base version and new version cannot be the same")
+	}
+	if isRelease, err := isReleaseVersionFormat(version); err != nil {
+		return ctx, fmt.Errorf("error determining if version is a release: %s", err)
+	} else if isRelease && c.Bool(publishFlag.Name) {
+		logrus.Warn("You are about to publish a release version. Ensure this is intended.")
+		return ctx, nil
+	}
+	hashreleaseRegex, err := regexp.Compile(fmt.Sprintf(hashreleaseFormat, c.String(devTagSuffixFlag.Name)))
+	if err != nil {
+		return ctx, fmt.Errorf("error compiling hashrelease regex: %s", err)
+	}
+	if !hashreleaseRegex.MatchString(version) {
+		if c.Bool(publishFlag.Name) && c.String(registryFlag.Name) == quayRegistry && c.String(imageFlag.Name) == defaultImageName {
+			return ctx, fmt.Errorf("cannot use the default registry and image for publishing operator version %q. "+
+				"Either update registry and/or image flag OR specify version in the format ", version)
+		}
 	}
 	return ctx, nil
 })
@@ -63,7 +83,7 @@ var releaseFromBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command)
 // It builds (and publishes) a new operator image based on the base version specified.
 var releaseFromAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
 	// get root directory of operator git repo
-	repoRootDir, err := runCommand("git", []string{"rev-parse", "--show-toplevel"}, nil)
+	repoRootDir, err := gitDir()
 	if err != nil {
 		return fmt.Errorf("error getting git root directory: %s", err)
 	}

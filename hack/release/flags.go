@@ -21,7 +21,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
 )
 
@@ -58,22 +57,6 @@ var versionFlag = &cli.StringFlag{
 	Usage:    "The version of the operator to release",
 	Sources:  cli.EnvVars("OPERATOR_VERSION", "VERSION"),
 	Required: true,
-	Action: func(ctx context.Context, c *cli.Command, value string) error {
-		if value == c.String("base-version") {
-			return fmt.Errorf("version cannot be the same as base-version")
-		}
-		if regexp.MustCompile(releaseFormat).MatchString(value) {
-			logrus.Warn("You are releasing a new operator version.")
-			return nil
-		}
-		if !regexp.MustCompile(fmt.Sprintf(hashreleaseFormat, c.String(devTagSuffixFlag.Name))).MatchString(value) {
-			if c.Bool(publishFlag.Name) && c.String(registryFlag.Name) == quayRegistry && c.String(imageFlag.Name) == defaultImageName {
-				return fmt.Errorf("cannot use the default registry and image for publishing operator version %q. "+
-					"Either update registry and/or image flag OR specify version in the format ", value)
-			}
-		}
-		return nil
-	},
 }
 
 var (

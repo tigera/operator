@@ -251,7 +251,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	if installation.KubernetesProvider == operatorv1.ProviderGKE {
 		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
 	}
-	istioCfg.Resources, err = istioResOpts.GetResources()
+	istioCfg.Resources, err = istioResOpts.GetResources(r.scheme)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error generating Tigera Istio resources", err, log)
 		setCurrentCondition(instance, v1.ComponentDegraded, reasonErr, fmt.Sprintf("Error generating Tigera Istio resources: %s", err.Error()))

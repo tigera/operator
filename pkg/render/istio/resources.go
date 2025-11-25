@@ -17,20 +17,15 @@ package istio
 import (
 	"bytes"
 	_ "embed"
-	"fmt"
 	"strings"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
-	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
-	corev1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/yaml"
 )
 
 var (
@@ -71,7 +66,7 @@ type ResourceOpts struct {
 }
 
 // GetResources returns istio-chart generated templates
-func (r *ResourceOpts) GetResources() (*IstioResources, error) {
+func (r *ResourceOpts) GetResources(scheme *runtime.Scheme) (*IstioResources, error) {
 	var crds []client.Object
 
 	actionConfig := new(action.Configuration)
@@ -105,7 +100,7 @@ func (r *ResourceOpts) GetResources() (*IstioResources, error) {
 	if err != nil {
 		return nil, err
 	}
-	crds, res.Base, err = r.parseManifest(rel.Manifest, res)
+	crds, res.Base, err = r.parseManifest(scheme, rel.Manifest, res)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +111,7 @@ func (r *ResourceOpts) GetResources() (*IstioResources, error) {
 	if err != nil {
 		return nil, err
 	}
-	crds, res.Istiod, err = r.parseManifest(rel.Manifest, res)
+	crds, res.Istiod, err = r.parseManifest(scheme, rel.Manifest, res)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +122,7 @@ func (r *ResourceOpts) GetResources() (*IstioResources, error) {
 	if err != nil {
 		return nil, err
 	}
-	crds, res.CNI, err = r.parseManifest(rel.Manifest, res)
+	crds, res.CNI, err = r.parseManifest(scheme, rel.Manifest, res)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +133,7 @@ func (r *ResourceOpts) GetResources() (*IstioResources, error) {
 	if err != nil {
 		return nil, err
 	}
-	crds, res.ZTunnel, err = r.parseManifest(rel.Manifest, res)
+	crds, res.ZTunnel, err = r.parseManifest(scheme, rel.Manifest, res)
 	if err != nil {
 		return nil, err
 	}
@@ -147,124 +142,51 @@ func (r *ResourceOpts) GetResources() (*IstioResources, error) {
 	return res, nil
 }
 
-type yamlKind struct {
-	APIVersion string `yaml:"apiVersion"`
-	Kind       string `yaml:"kind"`
-}
+func (r *ResourceOpts) parseManifest(scheme *runtime.Scheme, manifest string, istRes *IstioResources) (crds, objs []client.Object, err error) {
+	codecs := serializer.NewCodecFactory(scheme)
+	decoder := codecs.UniversalDeserializer()
 
-func (r *ResourceOpts) parseManifest(manifest string, istRes *IstioResources) (crds, objs []client.Object, err error) {
-	for _, yml := range strings.Split(manifest, "\n---\n") {
-		var yamlKind yamlKind
-		if err := yaml.Unmarshal([]byte(yml), &yamlKind); err != nil {
-			panic(fmt.Sprintf("unable to unmarshal YAML: %v:\n%v\n", err, yml))
+	docs := strings.Split(manifest, "\n---\n")
+
+	for _, yml := range docs {
+		yml = strings.TrimSpace(yml)
+		if yml == "" {
+			continue
 		}
-		kindStr := yamlKind.APIVersion + "/" + yamlKind.Kind
 
-		switch kindStr {
-		case "v1/ServiceAccount":
-			obj := &corev1.ServiceAccount{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
+		obj, _, decodeErr := decoder.Decode([]byte(yml), nil, nil)
+		if decodeErr != nil {
+			continue
+		}
+
+		clientObj, ok := obj.(client.Object)
+		if !ok {
+			continue
+		}
+
+		switch typedObj := clientObj.(type) {
+		case *apiextv1.CustomResourceDefinition:
+			crds = append(crds, typedObj)
+
+		case *appsv1.Deployment:
+			objs = append(objs, typedObj)
+			if r.IstiodDeploymentName != "" && typedObj.Name == r.IstiodDeploymentName {
+				istRes.IstiodDeployment = typedObj
 			}
-			objs = append(objs, obj)
-		case "apiextensions.k8s.io/v1/CustomResourceDefinition":
-			obj := &apiextv1.CustomResourceDefinition{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			crds = append(crds, obj)
-		case "admissionregistration.k8s.io/v1/ValidatingWebhookConfiguration":
-			obj := &admregv1.ValidatingWebhookConfiguration{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			objs = append(objs, obj)
-		case "policy/v1/PodDisruptionBudget":
-			obj := &policyv1.PodDisruptionBudget{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			objs = append(objs, obj)
-		case "v1/ConfigMap":
-			obj := &corev1.ConfigMap{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			objs = append(objs, obj)
-		case "rbac.authorization.k8s.io/v1/ClusterRole":
-			obj := &rbacv1.ClusterRole{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			objs = append(objs, obj)
-		case "rbac.authorization.k8s.io/v1/ClusterRoleBinding":
-			obj := &rbacv1.ClusterRoleBinding{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			objs = append(objs, obj)
-		case "rbac.authorization.k8s.io/v1/Role":
-			obj := &rbacv1.Role{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			objs = append(objs, obj)
-		case "rbac.authorization.k8s.io/v1/RoleBinding":
-			obj := &rbacv1.RoleBinding{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			objs = append(objs, obj)
-		case "v1/Service":
-			obj := &corev1.Service{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			objs = append(objs, obj)
-		case "apps/v1/Deployment":
-			obj := &appsv1.Deployment{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			if obj.Name == r.IstiodDeploymentName {
-				istRes.IstiodDeployment = obj
-			}
-			objs = append(objs, obj)
-		case "autoscaling/v2/HorizontalPodAutoscaler":
-			obj := &autoscalingv2.HorizontalPodAutoscaler{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			objs = append(objs, obj)
-		case "admissionregistration.k8s.io/v1/MutatingWebhookConfiguration":
-			obj := &admregv1.MutatingWebhookConfiguration{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			objs = append(objs, obj)
-		case "v1/ResourceQuota":
-			obj := &corev1.ResourceQuota{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			objs = append(objs, obj)
-		case "apps/v1/DaemonSet":
-			obj := &appsv1.DaemonSet{}
-			if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-				panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-			}
-			switch obj.Name {
+
+		case *appsv1.DaemonSet:
+			objs = append(objs, typedObj)
+			switch typedObj.Name {
 			case r.IstioCNIDaemonSetName:
-				istRes.CNIDaemonSet = obj
+				istRes.CNIDaemonSet = typedObj
 			case r.IstioZTunnelDaemonSetName:
-				istRes.ZTunnelDaemonSet = obj
+				istRes.ZTunnelDaemonSet = typedObj
 			}
-			objs = append(objs, obj)
-		case "/":
-			// Ignore empty documents.
+
 		default:
-			panic(fmt.Sprintf("unhandled type %v", kindStr))
+			objs = append(objs, typedObj)
 		}
 	}
+
 	return crds, objs, nil
 }

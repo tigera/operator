@@ -133,15 +133,15 @@ type ZTunnelDaemonset struct {
 
 // IstioSpec defines the desired state of Istio
 type IstioSpec struct {
-	// Istiod defines the resource requirements and node selector for the Istio deployment.
+	// IstiodDeployment defines the resource requirements and node selector for the Istio deployment.
 	// +optional
-	Istiod *IstiodDeployment `json:"istiod,omitempty"`
-	// IstioCNI defines the resource requirements for the Istio CNI plugin.
+	IstiodDeployment *IstiodDeployment `json:"istiod,omitempty"`
+	// IstioCNIDaemonset defines the resource requirements for the Istio CNI plugin.
 	// +optional
-	IstioCNI *IstioCNIDaemonset `json:"istioCNI,omitempty"`
-	// ZTunnel defines the resource requirements for the ZTunnel component.
+	IstioCNIDaemonset *IstioCNIDaemonset `json:"istioCNI,omitempty"`
+	// ZTunnelDaemonset defines the resource requirements for the ZTunnelDaemonset component.
 	// +optional
-	ZTunnel *ZTunnelDaemonset `json:"ztunnel,omitempty"`
+	ZTunnelDaemonset *ZTunnelDaemonset `json:"ztunnel,omitempty"`
 	// DSCPMark define the value of the DSCP mark done by Felix and recognised by Istio CNI for Transparent
 	// NetworkPolicies.
 	// +optional

@@ -124,15 +124,15 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 		c.ztunnelAllowTigeraPolicy(),
 	)
 
-	if overrides := c.cfg.Istio.Spec.Istiod; overrides != nil {
+	if overrides := c.cfg.Istio.Spec.IstiodDeployment; overrides != nil {
 		rcomp.ApplyDeploymentOverrides(res.IstiodDeployment, overrides)
 	}
 
-	if overrides := c.cfg.Istio.Spec.IstioCNI; overrides != nil {
+	if overrides := c.cfg.Istio.Spec.IstioCNIDaemonset; overrides != nil {
 		rcomp.ApplyDaemonSetOverrides(res.CNIDaemonSet, overrides)
 	}
 
-	if overrides := c.cfg.Istio.Spec.ZTunnel; overrides != nil {
+	if overrides := c.cfg.Istio.Spec.ZTunnelDaemonset; overrides != nil {
 		rcomp.ApplyDaemonSetOverrides(res.ZTunnelDaemonSet, overrides)
 	}
 

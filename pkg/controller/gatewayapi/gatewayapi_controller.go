@@ -85,8 +85,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
-		log.V(5).Info("Failed to create network watch", "err", err)
-		return fmt.Errorf("gatewayapi-controller failed to watch Tigera network resource: %w", err)
+		return fmt.Errorf("gatewayapi-controller failed to watch Installation resource: %w", err)
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,

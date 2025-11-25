@@ -47,8 +47,8 @@ spec:
                   x-kubernetes-int-or-string: true
                 istioCNI:
                   description:
-                    IstioCNI defines the resource requirements for the Istio
-                    CNI plugin.
+                    IstioCNIDaemonset defines the resource requirements for
+                    the Istio CNI plugin.
                   properties:
                     spec:
                       description:
@@ -1154,8 +1154,8 @@ spec:
                   type: object
                 istiod:
                   description:
-                    Istiod defines the resource requirements and node selector
-                    for the Istio deployment.
+                    IstiodDeployment defines the resource requirements and
+                    node selector for the Istio deployment.
                   properties:
                     spec:
                       description:
@@ -2261,8 +2261,8 @@ spec:
                   type: object
                 ztunnel:
                   description:
-                    ZTunnel defines the resource requirements for the ZTunnel
-                    component.
+                    ZTunnelDaemonset defines the resource requirements for
+                    the ZTunnelDaemonset component.
                   properties:
                     spec:
                       description:

@@ -33,16 +33,30 @@ const (
 
 	sourceGitHubURL = `https://github.com/tigera/operator/raw/%s/%s`
 
-	calicoConfig     = "config/calico_versions.yml"
-	enterpriseConfig = "config/enterprise_versions.yml"
+	configDir        = "config"
+	calicoConfig     = configDir + "/calico_versions.yml"
+	enterpriseConfig = configDir + "/enterprise_versions.yml"
 
-	releaseFormat     = `^v\d+\.\d+\.\d+$`
-	hashreleaseFormat = `^v\d+\.\d+\.\d+-%s-\d+-g[a-f0-9]{12}-[a-z0-9-]+$`
-	baseVersionFormat = `^v\d+\.\d+\.\d+(-%s-\d+-g[a-f0-9]{12}-[a-z0-9-]+)?$`
+	releaseFormat           = `^v\d+\.\d+\.\d+$`
+	enterpriseReleaseFormat = `^v\d+\.\d+\.\d+(-\d+\.\d+)?$`
+	hashreleaseFormat       = `^v\d+\.\d+\.\d+-%s-\d+-g[a-f0-9]{12}-[a-z0-9-]+$`
+	baseVersionFormat       = `^v\d+\.\d+\.\d+(-%s-\d+-g[a-f0-9]{12}-[a-z0-9-]+)?$`
 )
+
+func gitDirty() (bool, error) {
+	version, err := gitVersion()
+	if err != nil {
+		return false, err
+	}
+	return strings.Contains(version, "dirty"), nil
+}
 
 func gitVersion() (string, error) {
 	return runCommand("git", []string{"describe", "--tags", "--always", "--long", "--abbrev=12", "--dirty"}, nil)
+}
+
+func gitDir() (string, error) {
+	return runCommand("git", []string{"rev-parse", "--show-toplevel"}, nil)
 }
 
 func runCommand(name string, args, env []string) (string, error) {

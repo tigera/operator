@@ -31,12 +31,20 @@ var debugFlag = &cli.BoolFlag{
 	Sources: cli.EnvVars("DEBUG"),
 }
 
-var gitRemoteFlag = &cli.StringFlag{
-	Name:    "remote",
-	Usage:   "The git remote to push the release to",
-	Value:   "origin",
-	Sources: cli.EnvVars("GIT_REMOTE"),
-}
+var (
+	gitRemoteFlag = &cli.StringFlag{
+		Name:    "remote",
+		Usage:   "The git remote to push the release to",
+		Value:   "origin",
+		Sources: cli.EnvVars("GIT_REMOTE"),
+	}
+	gitRepoFlag = &cli.StringFlag{
+		Name:    "repo",
+		Usage:   "The git repository to use",
+		Value:   "tigera/operator",
+		Sources: cli.EnvVars("REPO"),
+	}
+)
 
 var devTagSuffixFlag = &cli.StringFlag{
 	Name:    "dev-tag-suffix",
@@ -151,5 +159,26 @@ var publishFlag = &cli.BoolFlag{
 	Name:    "publish",
 	Usage:   "Publish the new operator",
 	Sources: cli.EnvVars("PUBLISH"),
+	Value:   false,
+}
+
+var localFlag = &cli.BoolFlag{
+	Name:    "local",
+	Usage:   "Run the release process using local files where possible",
+	Sources: cli.EnvVars("LOCAL"),
+	Value:   false,
+}
+
+var githubTokenFlag = &cli.StringFlag{
+	Name:     "github-token",
+	Usage:    "GitHub token to use for interacting with the GitHub API",
+	Sources:  cli.EnvVars("GITHUB_TOKEN"),
+	Required: true,
+}
+
+var skipValidationFlag = &cli.BoolFlag{
+	Name:    "skip-validation",
+	Usage:   "Skip validation",
+	Sources: cli.EnvVars("SKIP_VALIDATION"),
 	Value:   false,
 }

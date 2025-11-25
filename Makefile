@@ -570,9 +570,8 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release-github VERSION=$(RELEASE_TAG)
 
 
-release-notes: var-require-all-VERSION-GITHUB_TOKEN
-	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .
-	@docker run --rm -v $(CURDIR):/workdir -e	GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) tigera/release-notes
+release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
+	REPO=$(REPO) hack/bin/release notes
 
 ## Tags and builds a release from start to finish.
 release: release-prereqs

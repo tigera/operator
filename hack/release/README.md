@@ -2,6 +2,15 @@
 
 `release` is a tool designed to streamline the process of creating and releasing a new operator version.
 
+- [release](#release)
+  - [Installation](#installation)
+  - [Usage](#usage)
+  - [Commands](#commands)
+    - [release notes](#release-notes)
+      - [Examples](#examples)
+    - [release from](#release-from)
+      - [Examples](#examples-1)
+
 ## Installation
 
 To install `release`, use the following command:
@@ -20,14 +29,43 @@ release --help
 
 ## Commands
 
+### release notes
+
+This command generates release notes for a specific operator version.
+To generate release notes, use the following command:
+
+```sh
+release notes --version <operator version>
+```
+
+The generated releases notes are saved in a markdown file named `<operator version>-release-notes.md`.
+
+The release notes includes the Calico and Calico Enterprise versions included in the operator version.
+By default, this is gotten from the versions files corresponding to the product in `config/` directory
+in the commit with the tag matching the operator version.
+
+To get the versions file from the local working directory instead of the tagged commit, use the `--local` flag.
+
+#### Examples
+
+1. To generate release notes for operator version `v1.36.0` from the tagged commit
+
+    ```sh
+    release notes --version v1.36.0
+    ```
+
+2. To generate release notes for operator version `v1.36.0` using the local versions files
+
+    ```sh
+    release notes --version v1.36.0 --local
+    ```
+
 ### release from
 
 This command creates a new operator version based on a previous operator version.
 The base operator version must reference either a tag or commit hash in `tigera/operator`.
 The new operator version will be built from the current codebase
 with updates made to the image list based on the changes passed in.
-
-To create a new release. See [Examples](#examples) below for usage options
 
 ```sh
 release from --base-version <previous operator version> --version <version to release> \

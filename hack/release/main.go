@@ -38,6 +38,7 @@ func main() {
 
 func app(version string) *cli.Command {
 	appCmds := []*cli.Command{
+		releaseNotesCommand,
 		releaseFromCommand,
 	}
 
@@ -48,6 +49,7 @@ func app(version string) *cli.Command {
 		Commands: appCmds,
 		Flags: []cli.Flag{
 			gitRemoteFlag,
+			gitRepoFlag,
 			debugFlag,
 		},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {

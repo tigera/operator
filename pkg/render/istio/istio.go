@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package istio
 
 import (
 	"fmt"
@@ -21,6 +21,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -28,86 +29,170 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	renderistio "github.com/tigera/operator/pkg/render/istio"
 )
 
-type IstioConfig struct {
+type Configuration struct {
 	Installation   *operatorv1.InstallationSpec
 	Istio          *operatorv1.Istio
 	IstioNamespace string
-	Resources      *renderistio.IstioResources
+	Resources      *IstioResources
+	Scheme         *runtime.Scheme
+	OpenShift      bool
+	GKE            bool
 }
 
-var _ Component = &IstioComponent{}
+var _ render.Component = &IstioComponent{}
 
 type IstioComponent struct {
-	cfg                  *IstioConfig
+	cfg                  *Configuration
 	IstioPilotImage      string
 	IstioInstallCNIImage string
-	IstioZtunnelImage    string
+	IstioZTunnelImage    string
 	IstioProxyv2Image    string
 }
 
 const (
 	IstioNamespace              = common.CalicoNamespace
-	IstioReleaseName            = "tigera-istio"
+	IstioReleaseName            = "calico-istio"
 	IstioIstiodDeploymentName   = "istiod"
 	IstioCNIDaemonSetName       = "istio-cni-node"
 	IstioZTunnelDaemonSetName   = "ztunnel"
 	IstioOperatorAnnotationMode = "operator.tigera.io/istioAmbientMode"
 	IstioOperatorAnnotationDSCP = "operator.tigera.io/istioDSCPMark"
-	IstioFinalizer              = "operator.tigera.io/tigera-istio"
+	IstioFinalizer              = "operator.tigera.io/calico-istio"
 	IstioIstiodPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + IstioIstiodDeploymentName
 	IstioCNIPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + IstioCNIDaemonSetName
 	IstioZTunnelPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + IstioZTunnelDaemonSetName
 	IstioIstiodServiceName      = "istiod"
+
+	istioFakeImageProxyv2 = "fake.io/fakeimg/proxyv2:faketag"
 )
 
-func NewIstioComponent(cfg *IstioConfig) *IstioComponent {
-	return &IstioComponent{
+func Istio(cfg *Configuration) (*IstioComponent, error) {
+	c := &IstioComponent{
 		cfg: cfg,
 	}
+	return c.init()
+}
+
+func (c *IstioComponent) init() (*IstioComponent, error) {
+	var err error
+
+	// Produce Helm templates for Istio
+	istioResOpts := &ResourceOpts{
+		Namespace:                 IstioNamespace,
+		ReleaseName:               IstioReleaseName,
+		IstiodDeploymentName:      IstioIstiodDeploymentName,
+		IstioCNIDaemonSetName:     IstioCNIDaemonSetName,
+		IstioZTunnelDaemonSetName: IstioZTunnelDaemonSetName,
+
+		// Helm chart opts
+		BaseOpts: BaseOpts{
+			Global: &GlobalConfig{
+				IstioNamespace: IstioNamespace,
+			},
+		},
+		IstiodOpts: IstiodOpts{
+			Global: &GlobalConfig{
+				IstioNamespace:         IstioNamespace,
+				OperatorManageWebhooks: true,
+				Proxy: &ProxyConfig{
+					Image: istioFakeImageProxyv2,
+				},
+				ProxyInit: &ProxyInitConfig{
+					Image: istioFakeImageProxyv2,
+				},
+			},
+			Profile: "ambient",
+		},
+		IstioCNIOpts: IstioCNIOpts{
+			Global: &GlobalConfig{
+				IstioNamespace: IstioNamespace,
+			},
+			Ambient: &AmbientConfig{
+				Enabled:                    true,
+				ReconcileIptablesOnStartup: true,
+			},
+		},
+		ZTunnelOpts: ZTunnelOpts{
+			Global: &GlobalConfig{
+				IstioNamespace: IstioNamespace,
+			},
+		},
+	}
+	if c.cfg.GKE {
+		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
+	}
+	c.cfg.Resources, err = istioResOpts.GetResources(c.cfg.Scheme)
+	if err != nil {
+		return nil, err
+	}
+
+	return c, nil
+}
+
+func (c *IstioComponent) patchImages() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("Failed to patch Images with panic value: %v", r)
+		}
+	}()
+
+	for i := range c.cfg.Resources.IstiodDeployment.Spec.Template.Spec.Containers {
+		container := &c.cfg.Resources.IstiodDeployment.Spec.Template.Spec.Containers[i]
+		if container.Name == "discovery" {
+			container.Image = c.IstioPilotImage
+		}
+	}
+	for i := range c.cfg.Resources.CNIDaemonSet.Spec.Template.Spec.Containers {
+		container := &c.cfg.Resources.CNIDaemonSet.Spec.Template.Spec.Containers[i]
+		if container.Name == "install-cni" {
+			container.Image = c.IstioInstallCNIImage
+		}
+	}
+	for i := range c.cfg.Resources.ZTunnelDaemonSet.Spec.Template.Spec.Containers {
+		container := &c.cfg.Resources.ZTunnelDaemonSet.Spec.Template.Spec.Containers[i]
+		if container.Name == "istio-proxy" {
+			container.Image = c.IstioZTunnelImage
+		}
+	}
+	mapData := c.cfg.Resources.IstioSidecarInjectorConfigMap.Data
+	for k, v := range mapData {
+		mapData[k] = strings.Replace(v, istioFakeImageProxyv2, c.IstioProxyv2Image, -1)
+	}
+	return nil
 }
 
 func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	var err error
+
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
-	var err error
-	errMsgs := []string{}
 
-	compPilot := components.ComponentTigeraIstioPilot
-	compCNI := components.ComponentTigeraIstioInstallCNI
-	compZTunnel := components.ComponentTigeraIstioZTunnel
-	compProxy := components.ComponentTigeraIstioProxyv2
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		compPilot = components.ComponentTigeraIstioPilot
-		compCNI = components.ComponentTigeraIstioInstallCNI
-		compZTunnel = components.ComponentTigeraIstioZTunnel
-		compProxy = components.ComponentTigeraIstioProxyv2
-	}
-	c.IstioPilotImage, err = components.GetReference(compPilot, reg, path, prefix, is)
+	c.IstioPilotImage, err = components.GetReference(components.ComponentCalicoIstioPilot, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		return err
 	}
-	c.IstioInstallCNIImage, err = components.GetReference(compCNI, reg, path, prefix, is)
+	c.IstioInstallCNIImage, err = components.GetReference(components.ComponentCalicoIstioInstallCNI, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		return err
 	}
-	c.IstioZtunnelImage, err = components.GetReference(compZTunnel, reg, path, prefix, is)
+	c.IstioZTunnelImage, err = components.GetReference(components.ComponentCalicoIstioZTunnel, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		return err
 	}
-	c.IstioProxyv2Image, err = components.GetReference(compProxy, reg, path, prefix, is)
+	c.IstioProxyv2Image, err = components.GetReference(components.ComponentCalicoIstioProxyv2, reg, path, prefix, is)
 	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
+		return err
 	}
 
-	if len(errMsgs) > 0 {
-		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
+	if err = c.patchImages(); err != nil {
+		return err
 	}
 
 	return nil

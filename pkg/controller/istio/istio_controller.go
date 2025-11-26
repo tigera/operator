@@ -18,9 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -37,7 +35,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	v1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
-	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -45,7 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
-	renderistio "github.com/tigera/operator/pkg/render/istio"
+	"github.com/tigera/operator/pkg/render/istio"
 )
 
 const IstioName = "istio"
@@ -100,9 +97,10 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileIstio {
 	r := &ReconcileIstio{
-		Client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
-		status: status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
+		Client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		status:   status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
+		provider: opts.DetectedProvider,
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -112,8 +110,9 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileIstio
 // ReconcileIstio reconciles a Istio object
 type ReconcileIstio struct {
 	client.Client
-	scheme *runtime.Scheme
-	status status.StatusManager
+	scheme   *runtime.Scheme
+	status   status.StatusManager
+	provider operatorv1.Provider
 }
 
 func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -201,12 +200,19 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Render resources for Istio support
-	istioCfg := &render.IstioConfig{
+	istioCfg := &istio.Configuration{
 		Installation:   installation,
 		Istio:          instance,
-		IstioNamespace: render.IstioNamespace,
+		IstioNamespace: istio.IstioNamespace,
+		Scheme:         r.scheme,
+		OpenShift:      r.provider.IsOpenShift(),
+		GKE:            r.provider.IsGKE(),
 	}
-	istioComponent := render.NewIstioComponent(istioCfg)
+	istioComponent, err := istio.Istio(istioCfg)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error initializing Istio components", err, reqLogger)
+		return reconcile.Result{}, err
+	}
 
 	// Apply the image set
 	if err = imageset.ApplyImageSet(ctx, r.Client, installation.Variant, istioComponent); err != nil {
@@ -214,71 +220,17 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	// Produce Helm templates for Istio
-	istioResOpts := &renderistio.ResourceOpts{
-		Namespace:                 render.IstioNamespace,
-		ReleaseName:               render.IstioReleaseName,
-		IstiodDeploymentName:      render.IstioIstiodDeploymentName,
-		IstioCNIDaemonSetName:     render.IstioCNIDaemonSetName,
-		IstioZTunnelDaemonSetName: render.IstioZTunnelDaemonSetName,
-
-		// Helm chart opts
-		BaseOpts: renderistio.BaseOpts{
-			Global: &renderistio.GlobalConfig{
-				IstioNamespace: render.IstioNamespace,
-			},
-		},
-		IstiodOpts: renderistio.IstiodOpts{
-			Image: istioComponent.IstioPilotImage,
-			Global: &renderistio.GlobalConfig{
-				IstioNamespace:         render.IstioNamespace,
-				OperatorManageWebhooks: true,
-				Proxy: &renderistio.ProxyConfig{
-					Image: istioComponent.IstioProxyv2Image,
-				},
-				ProxyInit: &renderistio.ProxyInitConfig{
-					Image: istioComponent.IstioProxyv2Image,
-				},
-			},
-			Profile: "ambient",
-		},
-		IstioCNIOpts: renderistio.IstioCNIOpts{
-			Image: istioComponent.IstioInstallCNIImage,
-			Global: &renderistio.GlobalConfig{
-				IstioNamespace: render.IstioNamespace,
-			},
-			Ambient: &renderistio.AmbientConfig{
-				Enabled:                    true,
-				ReconcileIptablesOnStartup: true,
-			},
-		},
-		ZTunnelOpts: renderistio.ZTunnelOpts{
-			Image: istioComponent.IstioZtunnelImage,
-			Global: &renderistio.GlobalConfig{
-				IstioNamespace: render.IstioNamespace,
-			},
-		},
-	}
-	if installation.KubernetesProvider == operatorv1.ProviderGKE {
-		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
-	}
-	istioCfg.Resources, err = istioResOpts.GetResources(r.scheme)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error generating Tigera Istio resources", err, log)
-		return reconcile.Result{}, err
-	}
-
 	// Deploy Istio CRDs
 	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(istioCfg.Resources.CRDs...), nil)
 	if err != nil && !errors.IsAlreadyExists(err) {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Tigera Istio CRDs", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Calico Istio CRDs", err, log)
 		return reconcile.Result{}, err
 	}
 
 	// Deploy Istio components
 	err = utils.NewComponentHandler(log, r, r.scheme, instance).CreateOrUpdateOrDelete(ctx, istioComponent, r.status)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Tigera Istio resources", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Calico Istio resources", err, log)
 		return reconcile.Result{}, err
 	}
 
@@ -288,36 +240,6 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error patching felix configuration with Istio settings", err, log)
 		return reconcile.Result{}, err
-	}
-
-	// Check all components are ready
-	readyDep := &appsv1.Deployment{}
-	k := client.ObjectKey{Namespace: render.IstioNamespace, Name: render.IstioIstiodDeploymentName}
-	if err = r.Get(ctx, k, readyDep); err != nil {
-
-		r.status.SetDegraded(operatorv1.ResourceNotFound, "Istiod deployment not found", err, log)
-		return reconcile.Result{}, err
-	}
-	if readyDep.Spec.Replicas == nil || readyDep.Status.ReadyReplicas != *readyDep.Spec.Replicas {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Istiod deployment not ready", nil, log)
-		return reconcile.Result{RequeueAfter: time.Second * 5}, nil
-	}
-
-	readyDS := &appsv1.DaemonSet{}
-	for _, checker := range []struct{ namespace, name, description string }{
-		{render.IstioNamespace, render.IstioCNIDaemonSetName, "Istio CNI"},
-		{render.IstioNamespace, render.IstioZTunnelDaemonSetName, "ZTunnel"},
-		{common.CalicoNamespace, render.CalicoNodeObjectName, "Calico"},
-	} {
-		if err = r.Get(ctx, client.ObjectKey{Namespace: checker.namespace, Name: checker.name}, readyDS); err != nil {
-
-			r.status.SetDegraded(operatorv1.ResourceNotFound, checker.description+" daemonset not found", err, log)
-			return reconcile.Result{}, err
-		}
-		if readyDS.Status.NumberReady != readyDS.Status.DesiredNumberScheduled {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, checker.description+" daemonset not ready", nil, log)
-			return reconcile.Result{RequeueAfter: time.Second * 5}, nil
-		}
 	}
 
 	// Clear the degraded bit if we've reached this far.
@@ -333,25 +255,37 @@ func updateDefaults(istio *v1.Istio) {
 	}
 }
 
-func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, istio *v1.Istio, fc *crdv1.FelixConfiguration, remove bool) (bool, error) {
+func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, instance *v1.Istio, fc *crdv1.FelixConfiguration, remove bool) (bool, error) {
+	// Handle Istio Ambient Mode configuration
+	if err := r.configureIstioAmbientMode(fc, remove); err != nil {
+		return false, err
+	}
+
+	// Handle Istio DSCP Mark configuration
+	if err := r.configureIstioDSCPMark(instance, fc, remove); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (r *ReconcileIstio) configureIstioAmbientMode(fc *crdv1.FelixConfiguration, remove bool) error {
 	var annotationMode *string
-	if fc.Annotations[render.IstioOperatorAnnotationMode] != "" {
-		value := fc.Annotations[render.IstioOperatorAnnotationMode]
+	if fc.Annotations[istio.IstioOperatorAnnotationMode] != "" {
+		value := fc.Annotations[istio.IstioOperatorAnnotationMode]
 		annotationMode = &value
 	}
 
 	// If the annotation does not match the spec value (ignoring both nil), it indicates a misconfiguration.
-	if annotationMode != fc.Spec.IstioAmbientMode &&
-		(annotationMode == nil || fc.Spec.IstioAmbientMode == nil || *annotationMode != *fc.Spec.IstioAmbientMode) {
-		if remove {
-			delete(fc.Annotations, render.IstioOperatorAnnotationMode)
-			goto _checkDSCP
-		}
-		return false, fmt.Errorf("felixconfig IstioAmbientMode modified by user")
+	mismatch := annotationMode != fc.Spec.IstioAmbientMode &&
+		(annotationMode == nil || fc.Spec.IstioAmbientMode == nil || *annotationMode != *fc.Spec.IstioAmbientMode)
+
+	if mismatch && !remove {
+		return fmt.Errorf("felixconfig IstioAmbientMode modified by user")
 	}
 
 	if remove {
-		delete(fc.Annotations, render.IstioOperatorAnnotationMode)
+		delete(fc.Annotations, istio.IstioOperatorAnnotationMode)
 		fc.Spec.IstioAmbientMode = nil
 	} else {
 		istioModeDesired := "Enabled"
@@ -359,55 +293,55 @@ func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, istio *
 		if fc.Annotations == nil {
 			fc.Annotations = make(map[string]string)
 		}
-		fc.Annotations[render.IstioOperatorAnnotationMode] = istioModeDesired
+		fc.Annotations[istio.IstioOperatorAnnotationMode] = istioModeDesired
 	}
 
-_checkDSCP:
+	return nil
+}
+
+func (r *ReconcileIstio) configureIstioDSCPMark(instance *v1.Istio, fc *crdv1.FelixConfiguration, remove bool) error {
 	var annotationDSCP *numorstring.DSCP
-	if fc.Annotations[render.IstioOperatorAnnotationDSCP] != "" {
-		value, err := strconv.ParseUint(fc.Annotations[render.IstioOperatorAnnotationDSCP], 10, 32)
+	if fc.Annotations[istio.IstioOperatorAnnotationDSCP] != "" {
+		value, err := strconv.ParseUint(fc.Annotations[istio.IstioOperatorAnnotationDSCP], 10, 32)
 		if err != nil {
-			return false, err
+			return err
 		}
 		dscp := numorstring.DSCPFromInt(uint8(value))
 		annotationDSCP = &dscp
 	}
 
 	// Return an error if it appears that FelixConfiguration has been modified out of band.
-	if annotationDSCP != fc.Spec.IstioDSCPMark &&
-		(annotationDSCP == nil || fc.Spec.IstioDSCPMark == nil || annotationDSCP.ToUint8() != fc.Spec.IstioDSCPMark.ToUint8()) {
-		if remove {
-			delete(fc.Annotations, render.IstioOperatorAnnotationDSCP)
-			goto _end
-		}
-		return false, fmt.Errorf("felixconfig IstioDSCPMark modified by user")
+	mismatch := annotationDSCP != fc.Spec.IstioDSCPMark &&
+		(annotationDSCP == nil || fc.Spec.IstioDSCPMark == nil || annotationDSCP.ToUint8() != fc.Spec.IstioDSCPMark.ToUint8())
+
+	if mismatch && !remove {
+		return fmt.Errorf("felixconfig IstioDSCPMark modified by user")
 	}
 
-	if remove || istio.Spec.DSCPMark == nil {
-		delete(fc.Annotations, render.IstioOperatorAnnotationDSCP)
+	if remove || instance.Spec.DSCPMark == nil {
+		delete(fc.Annotations, istio.IstioOperatorAnnotationDSCP)
 		fc.Spec.IstioDSCPMark = nil
 	} else {
-		istioDSCPMarkDesired := *istio.Spec.DSCPMark
+		istioDSCPMarkDesired := *instance.Spec.DSCPMark
 		fc.Spec.IstioDSCPMark = &istioDSCPMarkDesired
-		fc.Annotations[render.IstioOperatorAnnotationDSCP] = strconv.FormatUint(uint64(istioDSCPMarkDesired.ToUint8()), 10)
+		fc.Annotations[istio.IstioOperatorAnnotationDSCP] = strconv.FormatUint(uint64(istioDSCPMarkDesired.ToUint8()), 10)
 	}
 
-_end:
-	return true, nil
+	return nil
 }
 
-func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, istio *v1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
+func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *v1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
 	// Executing clean up on finalizing
-	if !istio.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !instance.ObjectMeta.DeletionTimestamp.IsZero() {
 		if _, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *crdv1.FelixConfiguration) (bool, error) {
-			return r.setIstioFelixConfiguration(ctx, istio, fc, true)
+			return r.setIstioFelixConfiguration(ctx, instance, fc, true)
 		}); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error cleaning up felix configuration", err, reqLogger)
 			return
 		}
-		patchFrom := client.MergeFrom(istio.DeepCopy())
-		istio.Finalizers = stringsutil.RemoveStringInSlice(render.IstioFinalizer, istio.Finalizers)
-		if err = r.Patch(ctx, istio, patchFrom); err != nil {
+		patchFrom := client.MergeFrom(instance.DeepCopy())
+		instance.Finalizers = stringsutil.RemoveStringInSlice(istio.IstioFinalizer, instance.Finalizers)
+		if err = r.Patch(ctx, instance, patchFrom); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error removing finalizer on Istio", err, reqLogger)
 			return
 		}
@@ -416,10 +350,10 @@ func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, istio *v1.Istio,
 		return res, nil, true
 	}
 
-	if !stringsutil.StringInSlice(render.IstioFinalizer, istio.Finalizers) {
-		patchFrom := client.MergeFrom(istio.DeepCopy())
-		istio.Finalizers = append(istio.Finalizers, render.IstioFinalizer)
-		if err = r.Patch(ctx, istio, patchFrom); err != nil {
+	if !stringsutil.StringInSlice(istio.IstioFinalizer, instance.Finalizers) {
+		patchFrom := client.MergeFrom(instance.DeepCopy())
+		instance.Finalizers = append(instance.Finalizers, istio.IstioFinalizer)
+		if err = r.Patch(ctx, instance, patchFrom); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Istio", err, reqLogger)
 			return
 		}

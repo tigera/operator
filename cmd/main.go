@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	"github.com/tigera/operator/pkg/render/istio"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/version"
@@ -407,7 +408,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		render.LogCollectorNamespace,
 		render.CSIDaemonSetNamespace,
 		render.ManagerNamespace,
-		render.IstioNamespace,
+		istio.IstioNamespace,
 	}
 	for _, ns := range badNamespaces {
 		if common.OperatorNamespace() == ns {

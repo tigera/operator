@@ -22,6 +22,7 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -46,9 +47,10 @@ type IstioResources struct {
 	CNI     []client.Object
 	ZTunnel []client.Object
 
-	IstiodDeployment *appsv1.Deployment
-	CNIDaemonSet     *appsv1.DaemonSet
-	ZTunnelDaemonSet *appsv1.DaemonSet
+	IstiodDeployment              *appsv1.Deployment
+	CNIDaemonSet                  *appsv1.DaemonSet
+	ZTunnelDaemonSet              *appsv1.DaemonSet
+	IstioSidecarInjectorConfigMap *corev1.ConfigMap
 }
 
 type ResourceOpts struct {
@@ -167,6 +169,15 @@ func (r *ResourceOpts) parseManifest(scheme *runtime.Scheme, manifest string, is
 		switch typedObj := clientObj.(type) {
 		case *apiextv1.CustomResourceDefinition:
 			crds = append(crds, typedObj)
+
+		case *corev1.ConfigMap:
+			switch typedObj.Name {
+			case "values":
+				break
+			case "istio-sidecar-injector":
+				istRes.IstioSidecarInjectorConfigMap = typedObj
+			}
+			objs = append(objs, typedObj)
 
 		case *appsv1.Deployment:
 			objs = append(objs, typedObj)

@@ -1,0 +1,347 @@
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package istio
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+)
+
+type Configuration struct {
+	Installation   *operatorv1.InstallationSpec
+	Istio          *operatorv1.Istio
+	IstioNamespace string
+	Resources      *IstioResources
+	Scheme         *runtime.Scheme
+	OpenShift      bool
+	GKE            bool
+}
+
+var _ render.Component = &IstioComponent{}
+
+type IstioComponent struct {
+	cfg                  *Configuration
+	IstioPilotImage      string
+	IstioInstallCNIImage string
+	IstioZTunnelImage    string
+	IstioProxyv2Image    string
+}
+
+const (
+	IstioNamespace              = common.CalicoNamespace
+	IstioReleaseName            = "calico-istio"
+	IstioIstiodDeploymentName   = "istiod"
+	IstioCNIDaemonSetName       = "istio-cni-node"
+	IstioZTunnelDaemonSetName   = "ztunnel"
+	IstioOperatorAnnotationMode = "operator.tigera.io/istioAmbientMode"
+	IstioOperatorAnnotationDSCP = "operator.tigera.io/istioDSCPMark"
+	IstioFinalizer              = "operator.tigera.io/calico-istio"
+	IstioIstiodPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + IstioIstiodDeploymentName
+	IstioCNIPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + IstioCNIDaemonSetName
+	IstioZTunnelPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + IstioZTunnelDaemonSetName
+	IstioIstiodServiceName      = "istiod"
+
+	istioFakeImageProxyv2 = "fake.io/fakeimg/proxyv2:faketag"
+)
+
+func Istio(cfg *Configuration) (*IstioComponent, error) {
+	c := &IstioComponent{
+		cfg: cfg,
+	}
+	return c.init()
+}
+
+func (c *IstioComponent) init() (*IstioComponent, error) {
+	var err error
+
+	// Produce Helm templates for Istio
+	istioResOpts := &ResourceOpts{
+		Namespace:                 IstioNamespace,
+		ReleaseName:               IstioReleaseName,
+		IstiodDeploymentName:      IstioIstiodDeploymentName,
+		IstioCNIDaemonSetName:     IstioCNIDaemonSetName,
+		IstioZTunnelDaemonSetName: IstioZTunnelDaemonSetName,
+
+		// Helm chart opts
+		BaseOpts: BaseOpts{
+			Global: &GlobalConfig{
+				IstioNamespace: IstioNamespace,
+			},
+		},
+		IstiodOpts: IstiodOpts{
+			Global: &GlobalConfig{
+				IstioNamespace:         IstioNamespace,
+				OperatorManageWebhooks: true,
+				Proxy: &ProxyConfig{
+					Image: istioFakeImageProxyv2,
+				},
+				ProxyInit: &ProxyInitConfig{
+					Image: istioFakeImageProxyv2,
+				},
+			},
+			Profile: "ambient",
+		},
+		IstioCNIOpts: IstioCNIOpts{
+			Global: &GlobalConfig{
+				IstioNamespace: IstioNamespace,
+			},
+			Ambient: &AmbientConfig{
+				Enabled:                    true,
+				ReconcileIptablesOnStartup: true,
+			},
+		},
+		ZTunnelOpts: ZTunnelOpts{
+			Global: &GlobalConfig{
+				IstioNamespace: IstioNamespace,
+			},
+		},
+	}
+	if c.cfg.GKE {
+		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
+	}
+	c.cfg.Resources, err = istioResOpts.GetResources(c.cfg.Scheme)
+	if err != nil {
+		return nil, err
+	}
+
+	return c, nil
+}
+
+func (c *IstioComponent) patchImages() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("Failed to patch Images with panic value: %v", r)
+		}
+	}()
+
+	for i := range c.cfg.Resources.IstiodDeployment.Spec.Template.Spec.Containers {
+		container := &c.cfg.Resources.IstiodDeployment.Spec.Template.Spec.Containers[i]
+		if container.Name == "discovery" {
+			container.Image = c.IstioPilotImage
+		}
+	}
+	for i := range c.cfg.Resources.CNIDaemonSet.Spec.Template.Spec.Containers {
+		container := &c.cfg.Resources.CNIDaemonSet.Spec.Template.Spec.Containers[i]
+		if container.Name == "install-cni" {
+			container.Image = c.IstioInstallCNIImage
+		}
+	}
+	for i := range c.cfg.Resources.ZTunnelDaemonSet.Spec.Template.Spec.Containers {
+		container := &c.cfg.Resources.ZTunnelDaemonSet.Spec.Template.Spec.Containers[i]
+		if container.Name == "istio-proxy" {
+			container.Image = c.IstioZTunnelImage
+		}
+	}
+	mapData := c.cfg.Resources.IstioSidecarInjectorConfigMap.Data
+	for k, v := range mapData {
+		mapData[k] = strings.Replace(v, istioFakeImageProxyv2, c.IstioProxyv2Image, -1)
+	}
+	return nil
+}
+
+func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	var err error
+
+	reg := c.cfg.Installation.Registry
+	path := c.cfg.Installation.ImagePath
+	prefix := c.cfg.Installation.ImagePrefix
+
+	c.IstioPilotImage, err = components.GetReference(components.ComponentCalicoIstioPilot, reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+	c.IstioInstallCNIImage, err = components.GetReference(components.ComponentCalicoIstioInstallCNI, reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+	c.IstioZTunnelImage, err = components.GetReference(components.ComponentCalicoIstioZTunnel, reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+	c.IstioProxyv2Image, err = components.GetReference(components.ComponentCalicoIstioProxyv2, reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+
+	if err = c.patchImages(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Objects implements the Component interface.
+func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
+	res := c.cfg.Resources
+
+	objs := []client.Object{}
+	objs = append(objs,
+		c.istiodAllowTigeraPolicy(),
+		c.istioCNIAllowTigeraPolicy(),
+		c.ztunnelAllowTigeraPolicy(),
+	)
+
+	if overrides := c.cfg.Istio.Spec.IstiodDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(res.IstiodDeployment, overrides)
+	}
+
+	if overrides := c.cfg.Istio.Spec.IstioCNIDaemonset; overrides != nil {
+		rcomp.ApplyDaemonSetOverrides(res.CNIDaemonSet, overrides)
+	}
+
+	if overrides := c.cfg.Istio.Spec.ZTunnelDaemonset; overrides != nil {
+		rcomp.ApplyDaemonSetOverrides(res.ZTunnelDaemonSet, overrides)
+	}
+
+	// Set required configs
+	for i := range res.ZTunnelDaemonSet.Spec.Template.Spec.Containers {
+		cont := &res.ZTunnelDaemonSet.Spec.Template.Spec.Containers[i]
+		if cont.Name == "istio-proxy" {
+			cont.Env = append(cont.Env, corev1.EnvVar{
+				Name:  "TRANSPARENT_NETWORK_POLICIES",
+				Value: "true",
+			})
+			break
+		}
+	}
+	for i := range res.CNIDaemonSet.Spec.Template.Spec.Containers {
+		cont := &res.CNIDaemonSet.Spec.Template.Spec.Containers[i]
+		if cont.Name == "install-cni" {
+			cont.Env = append(cont.Env, corev1.EnvVar{
+				Name:  "MAGIC_DSCP_MARK",
+				Value: strconv.FormatInt(int64(c.cfg.Istio.Spec.DSCPMark.ToUint8()), 10),
+			})
+		}
+	}
+
+	// Append Istio resources in order: Base, Istiod, CNI, ZTunnel
+	objs = append(objs, res.Base...)
+	objs = append(objs, res.Istiod...)
+	objs = append(objs, res.CNI...)
+	objs = append(objs, res.ZTunnel...)
+
+	return objs, nil
+}
+
+func (c *IstioComponent) Ready() bool {
+	return true
+}
+
+func (c *IstioComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
+}
+
+func (c *IstioComponent) istiodAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+	}
+
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: []numorstring.Port{
+					numorstring.SinglePort(15012),
+					numorstring.SinglePort(15017),
+				},
+			},
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      IstioIstiodPolicyName,
+			Namespace: c.cfg.IstioNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(IstioIstiodDeploymentName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
+		},
+	}
+}
+
+func (c *IstioComponent) istioCNIAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      IstioCNIPolicyName,
+			Namespace: c.cfg.IstioNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(IstioCNIDaemonSetName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}
+
+func (c *IstioComponent) ztunnelAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.CreateServiceSelectorEntityRule(c.cfg.IstioNamespace, IstioIstiodServiceName),
+		},
+	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Installation.KubernetesProvider.IsOpenShift())
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      IstioZTunnelPolicyName,
+			Namespace: c.cfg.IstioNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(IstioZTunnelDaemonSetName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}

@@ -174,9 +174,18 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 		}
 	}
 
+	// Watch for changes to objects created by this controller.
+	if err = utils.AddDeploymentWatch(c, "tigera-apiserver", "tigera-system"); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
+	}
+	if err = utils.AddDeploymentWatch(c, "calico-apiserver", "calico-apiserver"); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
+	}
+
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch ImageSet: %w", err)
 	}
+
 	// Watch for changes to TigeraStatus.
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch apiserver Tigerastatus: %w", err)

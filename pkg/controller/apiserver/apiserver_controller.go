@@ -109,8 +109,7 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
-		log.V(5).Info("Failed to create network watch", "err", err)
-		return fmt.Errorf("apiserver-controller failed to watch Tigera network resource: %v", err)
+		return fmt.Errorf("apiserver-controller failed to watch Installation resource: %v", err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {

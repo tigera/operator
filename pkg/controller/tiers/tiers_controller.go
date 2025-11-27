@@ -112,7 +112,7 @@ type ReconcileTiers struct {
 // add adds watches for resources that are available at startup.
 func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	if err := utils.AddInstallationWatch(c); err != nil {
-		return fmt.Errorf("tiers-controller failed to watch Tigera network resource: %v", err)
+		return fmt.Errorf("tiers-controller failed to watch Installation resource: %v", err)
 	}
 
 	if err := utils.AddAPIServerWatch(c); err != nil {

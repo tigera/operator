@@ -171,3 +171,15 @@ components:
   gateway-api-envoy-ratelimit:
     image: envoy-ratelimit
     version: master
+  istio-pilot:
+    image: istio-pilot
+    version: master
+  istio-install-cni:
+    image: istio-install-cni
+    version: master
+  istio-ztunnel:
+    image: istio-ztunnel
+    version: master
+  istio-proxyv2:
+    image: istio-proxyv2
+    version: master

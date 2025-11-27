@@ -108,11 +108,19 @@ var releaseNotesAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command
 })
 
 type Release struct {
-	Org      string
-	Repo     string
-	Version  string
-	Token    string
-	Validate bool
+	Org          string
+	Repo         string
+	Version      string
+	Token        string
+	Validate     bool
+	githubClient *github.Client
+}
+
+func (r *Release) setupGitHubClient(ctx context.Context) {
+	if r.githubClient != nil {
+		return
+	}
+	r.githubClient = github.NewTokenClient(ctx, r.Token)
 }
 
 func (r *Release) GenerateNotes(ctx context.Context, outputDir string, useLocal bool) error {
@@ -136,6 +144,7 @@ func (r *Release) GenerateNotes(ctx context.Context, outputDir string, useLocal 
 		writer = f
 		writeLogger = logrus.WithField("output", f.Name())
 	}
+	r.setupGitHubClient(ctx)
 	noteData, err := r.collectReleaseNotes(ctx, useLocal)
 	if err != nil {
 		return fmt.Errorf("error collecting release notes: %s", err)
@@ -145,7 +154,7 @@ func (r *Release) GenerateNotes(ctx context.Context, outputDir string, useLocal 
 		logrus.WithError(err).Error("Failed to parse release note template")
 		return err
 	}
-	writeLogger.Info("Writing release notes")
+	writeLogger.Debug("Writing release notes")
 	if err := tmpl.Execute(writer, noteData); err != nil {
 		logrus.WithError(err).Error("Failed to execute release note template")
 		return err
@@ -156,12 +165,12 @@ func (r *Release) GenerateNotes(ctx context.Context, outputDir string, useLocal 
 }
 
 // Get the milestone for this release's version.
-func (r *Release) milestone(ctx context.Context, githubClient *github.Client) (*github.Milestone, error) {
+func (r *Release) milestone(ctx context.Context) (*github.Milestone, error) {
 	opts := &github.MilestoneListOptions{
 		State: string(allState),
 	}
 	for {
-		milestones, resp, err := githubClient.Issues.ListMilestones(ctx, r.Org, r.Repo, opts)
+		milestones, resp, err := r.githubClient.Issues.ListMilestones(ctx, r.Org, r.Repo, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -179,7 +188,7 @@ func (r *Release) milestone(ctx context.Context, githubClient *github.Client) (*
 }
 
 // Get all merged PRs (as issues) with the given milestone number that have the "release-note-required" label.
-func (r *Release) releaseNoteIssues(ctx context.Context, githubClient *github.Client, milestoneNumber int) ([]*github.Issue, error) {
+func (r *Release) releaseNoteIssues(ctx context.Context, milestoneNumber int) ([]*github.Issue, error) {
 	relIssues := []*github.Issue{}
 	opts := &github.IssueListByRepoOptions{
 		Milestone: strconv.Itoa(milestoneNumber),
@@ -190,14 +199,14 @@ func (r *Release) releaseNoteIssues(ctx context.Context, githubClient *github.Cl
 		Labels: []string{releaseNoteRequiredLabel},
 	}
 	for {
-		issues, resp, err := githubClient.Issues.ListByRepo(ctx, r.Org, r.Repo, opts)
+		issues, resp, err := r.githubClient.Issues.ListByRepo(ctx, r.Org, r.Repo, opts)
 		if err != nil {
 			return nil, err
 		}
 		for _, issue := range issues {
 			// Only include issues that are PRs and have been merged.
 			if issue.IsPullRequest() {
-				pr, _, err := githubClient.PullRequests.Get(ctx, r.Org, r.Repo, issue.GetNumber())
+				pr, _, err := r.githubClient.PullRequests.Get(ctx, r.Org, r.Repo, issue.GetNumber())
 				if err != nil {
 					return nil, err
 				}
@@ -225,18 +234,39 @@ func determineIssueKind(issue *github.Issue) issueKind {
 
 func extractReleaseNoteFromIssue(issue *github.Issue) []string {
 	body := issue.GetBody()
-	pattern := "\\`\\`\\`release-note\\r?\\n(.*)\\r?\\n\\`\\`\\`"
+	pattern := "\\`\\`\\`release-note(?s)(.*?)\\`\\`\\`"
 	re := regexp.MustCompile(pattern)
 	matches := re.FindAllStringSubmatch(body, -1)
 	if len(matches) == 0 {
 		logrus.WithField("issue", issue.GetNumber()).Warn("No release note found in issue body, using issue title instead")
 		return []string{issue.GetTitle()}
 	}
+	logrus.WithFields(logrus.Fields{
+		"issue":   issue.GetNumber(),
+		"matches": matches,
+	}).Debug("Found release note in issue body")
 	var notes []string
 	for _, match := range matches {
-		if len(match) > 1 {
-			notes = append(notes, strings.TrimSpace(match[1]))
+		if len(match) < 2 {
+			logrus.WithField("issue", issue.GetNumber()).Warn("No release note content found in matched block")
+			continue
 		}
+		for _, m := range match[1:] {
+			for _, line := range strings.Split(m, "\n") {
+				trimmedLine := strings.TrimSpace(line)
+				if trimmedLine == "TBD" {
+					logrus.WithField("issue", issue.GetNumber()).Warn("Release note marked as TBD, not including in release notes")
+					continue
+				}
+				if trimmedLine != "" {
+					notes = append(notes, trimmedLine)
+				}
+			}
+		}
+	}
+	if len(notes) == 0 {
+		logrus.WithField("issue", issue.GetNumber()).Warn("No release note content found after processing matched block, using issue title instead")
+		return []string{issue.GetTitle()}
 	}
 	return notes
 }
@@ -245,17 +275,20 @@ func extractReleaseNoteFromIssue(issue *github.Issue) []string {
 // A release note is gathered from all merged PRs in the milestone that have the "release-note-required" label.
 func (r *Release) collectReleaseNotes(ctx context.Context, local bool) (*ReleaseNoteData, error) {
 	data := &ReleaseNoteData{
-		Date: time.Now().Format("2006-01-02"),
+		Date: time.Now().Format("02 Jan 2006"),
 	}
-	versions, err := releaseVersions(r.Version, local)
+	dir, err := gitDir()
+	if err != nil {
+		return data, fmt.Errorf("error getting git directory: %s", err)
+	}
+	versions, err := calicoVersions(dir, r.Version, local)
 	if err != nil {
 		return data, fmt.Errorf("error retrieving release versions: %s", err)
 	}
 	data.Versions = versions
 
-	githubClient := github.NewTokenClient(ctx, r.Token)
 	log := logrus.WithField("org", r.Org).WithField("repo", r.Repo).WithField("version", r.Version)
-	milestone, err := r.milestone(ctx, githubClient)
+	milestone, err := r.milestone(ctx)
 	if err != nil {
 		return data, err
 	}
@@ -267,7 +300,7 @@ func (r *Release) collectReleaseNotes(ctx context.Context, local bool) (*Release
 		log.Warnf("Milestone %q is not closed", milestone.GetTitle())
 	}
 	log.Debug("Collecting release notes from issues and PRs")
-	issues, err := r.releaseNoteIssues(ctx, githubClient, milestone.GetNumber())
+	issues, err := r.releaseNoteIssues(ctx, milestone.GetNumber())
 	if err != nil {
 		return data, err
 	}
@@ -285,21 +318,21 @@ func (r *Release) collectReleaseNotes(ctx context.Context, local bool) (*Release
 		for _, note := range notes {
 			switch kind {
 			case issueKindBugFix:
-				data.BugFixes = append(data.BugFixes, &ReleaseNoteItem{
+				data.BugFixes = append(data.BugFixes, ReleaseNoteItem{
 					ID:     issue.GetNumber(),
 					Note:   note,
 					URL:    issue.GetHTMLURL(),
 					Author: issue.GetUser().GetLogin(),
 				})
 			case issueKindEnhancement:
-				data.Enhancements = append(data.Enhancements, &ReleaseNoteItem{
+				data.Enhancements = append(data.Enhancements, ReleaseNoteItem{
 					ID:     issue.GetNumber(),
 					Note:   note,
 					URL:    issue.GetHTMLURL(),
 					Author: issue.GetUser().GetLogin(),
 				})
 			default:
-				data.OtherChanges = append(data.OtherChanges, &ReleaseNoteItem{
+				data.OtherChanges = append(data.OtherChanges, ReleaseNoteItem{
 					ID:     issue.GetNumber(),
 					Note:   note,
 					URL:    issue.GetHTMLURL(),
@@ -321,15 +354,15 @@ type ReleaseNoteItem struct {
 }
 
 func (r ReleaseNoteItem) String() string {
-	return fmt.Sprintf("%s [#%d](%s) (%s)", r.Note, r.ID, r.URL, r.Author)
+	return fmt.Sprintf("%s [#%d](%s) (@%s)", r.Note, r.ID, r.URL, r.Author)
 }
 
 // ReleaseNoteData holds categorized release notes for a release.
 type ReleaseNoteData struct {
 	Date         string
-	Enhancements []*ReleaseNoteItem
-	BugFixes     []*ReleaseNoteItem
-	OtherChanges []*ReleaseNoteItem
+	Enhancements []ReleaseNoteItem
+	BugFixes     []ReleaseNoteItem
+	OtherChanges []ReleaseNoteItem
 	Versions     map[string]string // Calico and Enterprise versions
 }
 
@@ -338,18 +371,13 @@ type CalicoVersion struct {
 }
 
 // Retrieves the Calico and Calico Enterprise versions included in this release.
-func releaseVersions(version string, local bool) (map[string]string, error) {
+func calicoVersions(rootDir, operatorVersion string, local bool) (map[string]string, error) {
 	versions := make(map[string]string)
 
-	var rootDir string
-	if local {
-		dir, err := gitDir()
-		if err != nil {
-			return versions, fmt.Errorf("error getting git root directory: %s", err)
-		}
-		rootDir = dir
-	} else {
-		rootDir = filepath.Join(os.TempDir(), fmt.Sprintf("operator-%s", version))
+	if local && rootDir == "" {
+		return versions, fmt.Errorf("rootDir must be specified when using local flag")
+	} else if !local {
+		rootDir = filepath.Join(os.TempDir(), fmt.Sprintf("operator-%s", operatorVersion))
 		err := os.MkdirAll(filepath.Join(rootDir, configDir), os.ModePerm)
 		if err != nil {
 			return versions, fmt.Errorf("error creating config directory: %s", err)
@@ -357,7 +385,7 @@ func releaseVersions(version string, local bool) (map[string]string, error) {
 		defer func() {
 			_ = os.RemoveAll(rootDir)
 		}()
-		if err := retrieveBaseVersionConfig(version, rootDir); err != nil {
+		if err := retrieveBaseVersionConfig(operatorVersion, rootDir); err != nil {
 			return versions, fmt.Errorf("error retrieving version config: %s", err)
 		}
 	}

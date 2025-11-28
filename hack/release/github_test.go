@@ -97,7 +97,7 @@ func TestGenerateReleaseNotes(t *testing.T) {
 	client := github.NewClient(server.Client())
 	client.BaseURL, _ = url.Parse(server.URL + "/")
 
-	r := &Release{
+	r := &GithubRelease{
 		Org:          org,
 		Repo:         repo,
 		Version:      version,
@@ -195,7 +195,7 @@ func TestMilestone(t *testing.T) {
 		baseURL := server.URL + "/"
 		client.BaseURL, _ = url.Parse(baseURL)
 
-		r := &Release{
+		r := &GithubRelease{
 			Org:          org,
 			Repo:         repo,
 			Version:      version,
@@ -226,7 +226,7 @@ func TestMilestone(t *testing.T) {
 		client := github.NewClient(server.Client())
 		client.BaseURL, _ = url.Parse(server.URL + "/")
 
-		r := &Release{
+		r := &GithubRelease{
 			Org:          org,
 			Repo:         repo,
 			Version:      version,
@@ -296,7 +296,7 @@ func TestReleaseNoteIssuesFiltersMergedPRs(t *testing.T) {
 		client := github.NewClient(server.Client())
 		client.BaseURL, _ = url.Parse(server.URL + "/")
 
-		r := &Release{
+		r := &GithubRelease{
 			Org:          org,
 			Repo:         repo,
 			Version:      version,
@@ -335,7 +335,7 @@ func TestReleaseNoteIssuesFiltersMergedPRs(t *testing.T) {
 		client := github.NewClient(server.Client())
 		client.BaseURL, _ = url.Parse(server.URL + "/")
 
-		r := &Release{
+		r := &GithubRelease{
 			Org:          org,
 			Repo:         repo,
 			githubClient: client,
@@ -623,7 +623,7 @@ func TestCollectReleaseNotes(t *testing.T) {
 		client := github.NewClient(server.Client())
 		client.BaseURL, _ = url.Parse(server.URL + "/")
 
-		r := &Release{
+		r := &GithubRelease{
 			Org:          org,
 			Repo:         repo,
 			Version:      version,
@@ -707,7 +707,7 @@ func TestCollectReleaseNotes(t *testing.T) {
 		client := github.NewClient(server.Client())
 		client.BaseURL, _ = url.Parse(server.URL + "/")
 
-		r := &Release{
+		r := &GithubRelease{
 			Org:          org,
 			Repo:         repo,
 			Version:      version,
@@ -753,7 +753,7 @@ func TestCollectReleaseNotes(t *testing.T) {
 		client := github.NewClient(server.Client())
 		client.BaseURL, _ = url.Parse(server.URL + "/")
 
-		r := &Release{
+		r := &GithubRelease{
 			Org:          org,
 			Repo:         repo,
 			Version:      version,
@@ -775,197 +775,6 @@ func TestCollectReleaseNotes(t *testing.T) {
 		}
 		if diff := cmp.Diff(want, got); diff != "" {
 			t.Fatalf("releaseNotesData mismatch (-want +got):\n%s", diff)
-		}
-	})
-}
-
-func fakeOperatorRepo(t testing.TB, calicoVer, enterpriseVer string) string {
-	t.Helper()
-	td := t.TempDir()
-
-	// Simulate a git repository by creating a .git dir.
-	if _, err := runCommandInDir(td, "git", []string{"init"}, nil); err != nil {
-		t.Fatalf("failed to init dir (%s) as git repo: %v", td, err)
-	}
-
-	// Create config dir
-	if err := os.MkdirAll(filepath.Join(td, configDir), os.ModePerm); err != nil {
-		t.Fatalf("failed to create config dir: %v", err)
-	}
-
-	// Create calico version file
-	calicoContent := fmt.Sprintf("title: %s\n", calicoVer)
-	if err := os.WriteFile(filepath.Join(td, calicoConfig), []byte(calicoContent), 0o644); err != nil {
-		t.Fatalf("failed to write calico version file: %v", err)
-	}
-	// Create enterprise version file
-	enterpriseContent := fmt.Sprintf("title: %s\n", enterpriseVer)
-	if err := os.WriteFile(filepath.Join(td, enterpriseConfig), []byte(enterpriseContent), 0o644); err != nil {
-		t.Fatalf("failed to write enterprise version file: %v", err)
-	}
-	return td
-}
-
-func checkReleaseVersions(t testing.TB, got map[string]string, wantCalicoVer, wantEnterpriseVer string) {
-	t.Helper()
-	want := map[string]string{
-		"Calico": wantCalicoVer,
-	}
-	if wantEnterpriseVer != "" {
-		want["Calico Enterprise"] = wantEnterpriseVer
-	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Fatalf("releaseVersions() mismatch (-want +got):\n%s", diff)
-	}
-}
-
-func TestReleaseVersions(t *testing.T) {
-	t.Parallel()
-
-	t.Run("local", func(t *testing.T) {
-		t.Parallel()
-		calicoVer := "v3.25.0"
-		enterpriseVer := "v3.25.0-1.0"
-		dir := fakeOperatorRepo(t, calicoVer, enterpriseVer)
-
-		versions, err := calicoVersions(dir, "v1.2.3", true)
-		if err != nil {
-			t.Fatalf("expected no error, got: %v", err)
-		}
-		checkReleaseVersions(t, versions, calicoVer, enterpriseVer)
-	})
-
-	t.Run("local with no rootDir", func(t *testing.T) {
-		t.Parallel()
-
-		_, err := calicoVersions("", "v1.2.3", true)
-		if err == nil {
-			t.Fatalf("expected error for missing rootDir, got nil")
-		}
-		if !strings.Contains(err.Error(), "rootDir must be specified when using local flag") {
-			t.Fatalf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("local with development calico version", func(t *testing.T) {
-		t.Parallel()
-		dir := fakeOperatorRepo(t, "master", "master")
-
-		_, err := calicoVersions(dir, "v1.2.3", true)
-		if err == nil {
-			t.Fatalf("expected error for invalid calico version, got nil")
-		}
-		if !strings.Contains(err.Error(), "Calico version is not a valid release version") {
-			t.Fatalf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("local with development enterprise version", func(t *testing.T) {
-		t.Parallel()
-		calicoVer := "v3.25.0"
-		enterpriseVer := "release-calient-v3.20"
-		dir := fakeOperatorRepo(t, calicoVer, enterpriseVer)
-
-		versions, err := calicoVersions(dir, "v1.2.3", true)
-		if err != nil {
-			t.Fatalf("expected no error when enterprise missing, got: %v", err)
-		}
-		checkReleaseVersions(t, versions, calicoVer, "")
-	})
-}
-
-func TestIsEnterpriseReleaseVersionFormat(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		version string
-		want    bool
-	}{
-		{
-			version: "v3.25.0",
-			want:    true,
-		},
-		{
-			version: "v3.25.0-rc1",
-			want:    false,
-		},
-		{
-			version: "v3.25.0-1.0",
-			want:    true,
-		},
-		{
-			version: "3.25.0-1.0-rc1",
-			want:    false,
-		},
-		{
-			version: "not-a-version",
-			want:    false,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.version, func(t *testing.T) {
-			t.Parallel()
-			got, err := isEnterpriseReleaseVersionFormat(tc.version)
-			if err != nil {
-				t.Fatalf("isEnterpriseReleaseVersionFormat(%q) unexpected error: %v", tc.version, err)
-			}
-			if got != tc.want {
-				t.Fatalf("isEnterpriseReleaseVersionFormat(%q) = %v, want %v", tc.version, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestRetrieveVersion(t *testing.T) {
-	t.Parallel()
-	t.Run("success", func(t *testing.T) {
-		t.Parallel()
-		td := t.TempDir()
-		fn := "calico-version.yaml"
-		full := filepath.Join(td, fn)
-		content := "title: v3.25.0\n"
-		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
-			t.Fatalf("failed to write version file: %v", err)
-		}
-
-		got, err := retrieveVersion(td, fn)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if got != "v3.25.0" {
-			t.Fatalf("unexpected version: got %q want %q", got, "v3.25.0")
-		}
-	})
-
-	t.Run("read error", func(t *testing.T) {
-		t.Parallel()
-		td := t.TempDir()
-		_, err := retrieveVersion(td, "nonexistent.yaml")
-		if err == nil {
-			t.Fatalf("expected error reading nonexistent file, got nil")
-		}
-		if !strings.Contains(err.Error(), "error reading version file") {
-			t.Fatalf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("unmarshal error", func(t *testing.T) {
-		t.Parallel()
-		td := t.TempDir()
-		fn := "bad.yaml"
-		full := filepath.Join(td, fn)
-		// invalid YAML that will cause unmarshal to fail for expected struct
-		if err := os.WriteFile(full, []byte(":::: not yaml :::"), 0o644); err != nil {
-			t.Fatalf("failed to write bad yaml file: %v", err)
-		}
-
-		_, err := retrieveVersion(td, fn)
-		if err == nil {
-			t.Fatalf("expected unmarshal error, got nil")
-		}
-		if !strings.Contains(err.Error(), "error unmarshaling version file") {
-			t.Fatalf("unexpected error message: %v", err)
 		}
 	})
 }

@@ -51,10 +51,9 @@ var releaseFromCommand = &cli.Command{
 // It configures logging and checks that the git working tree is clean.
 var releaseFromBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	configureLogging(c)
-	if dirty, err := gitDirty(); err != nil {
-		return ctx, fmt.Errorf("error checking git state: %s", err)
-	} else if dirty {
-		return ctx, fmt.Errorf("git working tree is dirty, please commit or stash changes before proceeding")
+	ctx, err := checkGitClean(ctx, c)
+	if err != nil {
+		return ctx, err
 	}
 	version := c.String(versionFlag.Name)
 	if c.String(baseOperatorFlag.Name) == version {
@@ -118,15 +117,6 @@ var releaseFromAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command)
 
 	return newHashreleaseOperator(repoRootDir, version, c.String(imageFlag.Name), c.String(registryFlag.Name), c.StringSlice(archFlag.Name), c.Bool(publishFlag.Name))
 })
-
-// isReleaseVersionFormat checks if the version in the format vX.Y.Z.
-func isReleaseVersionFormat(version string) (bool, error) {
-	releaseRegex, err := regexp.Compile(releaseFormat)
-	if err != nil {
-		return false, fmt.Errorf("error compiling release regex: %s", err)
-	}
-	return releaseRegex.MatchString(version), nil
-}
 
 // newOperator handles creating a new operator release.
 // If publish is true, it will push a new tag to the git remote to trigger a release.

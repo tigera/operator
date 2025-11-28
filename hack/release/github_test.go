@@ -203,7 +203,7 @@ func TestMilestone(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		m, err := r.milestone(ctx)
+		m, err := r.getMilestone(ctx)
 		if err != nil {
 			t.Fatalf("expected milestone, got error: %v", err)
 		}
@@ -234,7 +234,7 @@ func TestMilestone(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		m, err := r.milestone(ctx)
+		m, err := r.getMilestone(ctx)
 		if m != nil {
 			t.Fatalf("expected no milestone, got: %v", m)
 		}
@@ -253,7 +253,6 @@ func TestReleaseNoteIssuesFiltersMergedPRs(t *testing.T) {
 	version := "v1.2.3"
 	org := "someorg"
 	repo := "somerepo"
-	milestoneNum := 1
 
 	t.Run("filters merged PRs", func(t *testing.T) {
 		t.Parallel()
@@ -263,6 +262,13 @@ func TestReleaseNoteIssuesFiltersMergedPRs(t *testing.T) {
 		// - issue 11: is a PR and not merged
 		// - issue 12: not a PR
 		server := fakeGithubServer(t, map[string]any{
+			fmt.Sprintf("/repos/%s/%s/milestones", org, repo): []map[string]interface{}{
+				{
+					"number": 1,
+					"title":  version,
+					"state":  "closed",
+				},
+			},
 			fmt.Sprintf("/repos/%s/%s/issues", org, repo): []map[string]interface{}{
 				{
 					"number": 10,
@@ -304,7 +310,7 @@ func TestReleaseNoteIssuesFiltersMergedPRs(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		issues, err := r.releaseNoteIssues(ctx, milestoneNum)
+		issues, err := r.releaseNoteIssues(ctx)
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -321,6 +327,13 @@ func TestReleaseNoteIssuesFiltersMergedPRs(t *testing.T) {
 
 		// Server returns one PR in the issues list, but returns an error for the pull request details.
 		server := fakeGithubServer(t, map[string]any{
+			fmt.Sprintf("/repos/%s/%s/milestones", org, repo): []map[string]interface{}{
+				{
+					"number": 1,
+					"title":  version,
+					"state":  "closed",
+				},
+			},
 			fmt.Sprintf("/repos/%s/%s/issues", org, repo): []map[string]interface{}{
 				{
 					"number": 20,
@@ -342,7 +355,7 @@ func TestReleaseNoteIssuesFiltersMergedPRs(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		issues, err := r.releaseNoteIssues(ctx, milestoneNum)
+		issues, err := r.releaseNoteIssues(ctx)
 		if err == nil {
 			t.Fatalf("expected error when pull request details endpoint fails, got issues: %#v", issues)
 		}
@@ -555,226 +568,214 @@ func TestCollectReleaseNotes(t *testing.T) {
 	org := "someorg"
 	repo := "somerepo"
 
-	t.Run("collects and categorizes notes", func(t *testing.T) {
-		// Create fake operator repo with version files and make it the cwd so gitDir() can find it.
-		td := fakeOperatorRepo(t, "v3.25.0", "v3.20.0")
-		origWd, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("failed to get cwd: %v", err)
-		}
-		if err := os.Chdir(td); err != nil {
-			t.Fatalf("failed to chdir to temp repo: %v", err)
-		}
-		defer func() {
-			_ = os.Chdir(origWd)
-		}()
+	// Create fake operator repo with version files and make it the cwd so gitDir() can find it.
+	td := fakeOperatorRepo(t, "v3.25.0", "v3.20.0")
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get cwd: %v", err)
+	}
+	if err := os.Chdir(td); err != nil {
+		t.Fatalf("failed to chdir to temp repo: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(origWd)
+	}()
 
-		// Prepare HTTP server to serve milestones, issues and pull request details.
-		server := fakeGithubServer(t, map[string]any{
-			fmt.Sprintf("/repos/%s/%s/milestones", org, repo): []map[string]interface{}{
-				{
-					"number": 1,
-					"title":  version,
-					"state":  "closed",
-				},
+	// Prepare HTTP server to serve milestones, issues and pull request details.
+	server := fakeGithubServer(t, map[string]any{
+		fmt.Sprintf("/repos/%s/%s/milestones", org, repo): []map[string]interface{}{
+			{
+				"number": 1,
+				"title":  version,
+				"state":  "closed",
 			},
-			fmt.Sprintf("/repos/%s/%s/issues", org, repo): []map[string]interface{}{
-				{
-					"number":   100,
-					"title":    "bug pr",
-					"body":     "intro\n```release-note\nFixed the foobar bug\n```\nend",
-					"html_url": "https://github.com/someorg/somerepo/pull/100",
-					"user":     map[string]interface{}{"login": "alice"},
-					"labels": []map[string]interface{}{
-						{"name": "release-note-required"},
-						{"name": "kind/bug"},
-					},
-					"pull_request": map[string]interface{}{"url": fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/100", org, repo)},
+		},
+		fmt.Sprintf("/repos/%s/%s/issues", org, repo): []map[string]interface{}{
+			{
+				"number":   100,
+				"title":    "bug pr",
+				"body":     "intro\n```release-note\nFixed the foobar bug\n```\nend",
+				"html_url": "https://github.com/someorg/somerepo/pull/100",
+				"user":     map[string]interface{}{"login": "alice"},
+				"labels": []map[string]interface{}{
+					{"name": "release-note-required"},
+					{"name": "kind/bug"},
 				},
-				{
-					"number":   101,
-					"title":    "enhancement pr",
-					"body":     "```release-note\nAdded a cool feature\nLine two\n```",
-					"html_url": "https://github.com/someorg/somerepo/pull/101",
-					"user":     map[string]interface{}{"login": "carol"},
-					"labels": []map[string]interface{}{
-						{"name": "release-note-required"},
-						{"name": "kind/enhancement"},
-					},
-					"pull_request": map[string]interface{}{"url": fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/101", org, repo)},
-				},
-				{
-					"number":   102,
-					"title":    "other change",
-					"body":     "```release-note\nDid a thing\n```",
-					"html_url": "https://github.com/someorg/somerepo/pull/102",
-					"user":     map[string]interface{}{"login": "bob"},
-					"labels": []map[string]interface{}{
-						{"name": "release-note-required"},
-					},
-					"pull_request": map[string]interface{}{"url": fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/102", org, repo)},
-				},
+				"pull_request": map[string]interface{}{"url": fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/100", org, repo)},
 			},
-			fmt.Sprintf("/repos/%s/%s/pulls/100", org, repo): map[string]interface{}{"number": 100, "merged": true},
-			fmt.Sprintf("/repos/%s/%s/pulls/101", org, repo): map[string]interface{}{"number": 101, "merged": true},
-			fmt.Sprintf("/repos/%s/%s/pulls/102", org, repo): map[string]interface{}{"number": 102, "merged": true},
-		})
+			{
+				"number":   101,
+				"title":    "enhancement pr",
+				"body":     "```release-note\nAdded a cool feature\nLine two\n```",
+				"html_url": "https://github.com/someorg/somerepo/pull/101",
+				"user":     map[string]interface{}{"login": "carol"},
+				"labels": []map[string]interface{}{
+					{"name": "release-note-required"},
+					{"name": "kind/enhancement"},
+				},
+				"pull_request": map[string]interface{}{"url": fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/101", org, repo)},
+			},
+			{
+				"number":   102,
+				"title":    "other change",
+				"body":     "```release-note\nDid a thing\n```",
+				"html_url": "https://github.com/someorg/somerepo/pull/102",
+				"user":     map[string]interface{}{"login": "bob"},
+				"labels": []map[string]interface{}{
+					{"name": "release-note-required"},
+				},
+				"pull_request": map[string]interface{}{"url": fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/102", org, repo)},
+			},
+		},
+		fmt.Sprintf("/repos/%s/%s/pulls/100", org, repo): map[string]interface{}{"number": 100, "merged": true},
+		fmt.Sprintf("/repos/%s/%s/pulls/101", org, repo): map[string]interface{}{"number": 101, "merged": true},
+		fmt.Sprintf("/repos/%s/%s/pulls/102", org, repo): map[string]interface{}{"number": 102, "merged": true},
+	})
 
-		client := github.NewClient(server.Client())
-		client.BaseURL, _ = url.Parse(server.URL + "/")
+	client := github.NewClient(server.Client())
+	client.BaseURL, _ = url.Parse(server.URL + "/")
 
-		r := &GithubRelease{
-			Org:          org,
-			Repo:         repo,
-			Version:      version,
-			githubClient: client,
-			Validate:     true,
+	r := &GithubRelease{
+		Org:          org,
+		Repo:         repo,
+		Version:      version,
+		githubClient: client,
+	}
+
+	ctx := context.Background()
+	got, err := r.collectReleaseNotes(ctx, true)
+	if err != nil {
+		t.Fatalf("unexpected error collecting release notes: %v", err)
+	}
+
+	want := &ReleaseNoteData{
+		Date: time.Now().Format("02 Jan 2006"),
+		Versions: map[string]string{
+			"Calico":            "v3.25.0",
+			"Calico Enterprise": "v3.20.0",
+		},
+		BugFixes: []ReleaseNoteItem{
+			{
+				ID:     100,
+				Note:   "Fixed the foobar bug",
+				Author: "alice",
+				URL:    "https://github.com/someorg/somerepo/pull/100",
+			},
+		},
+		Enhancements: []ReleaseNoteItem{
+			{
+				ID:     101,
+				Note:   "Added a cool feature",
+				Author: "carol",
+				URL:    "https://github.com/someorg/somerepo/pull/101",
+			},
+			{
+				ID:     101,
+				Note:   "Line two",
+				Author: "carol",
+				URL:    "https://github.com/someorg/somerepo/pull/101",
+			},
+		},
+		OtherChanges: []ReleaseNoteItem{
+			{
+				ID:     102,
+				Author: "bob",
+				Note:   "Did a thing",
+				URL:    "https://github.com/someorg/somerepo/pull/102",
+			},
+		},
+	}
+
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("releaseNotesData mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestGithubIssues(t *testing.T) {
+	t.Parallel()
+	org := "someorg"
+	repo := "somerepo"
+
+	// Server that returns paginated issues (one issue per page).
+	// https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api#using-link-headers
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != fmt.Sprintf("/repos/%s/%s/issues", org, repo) {
+			http.NotFound(w, r)
+			return
 		}
+		// extract page from query
+		page := r.URL.Query().Get("page")
+		var resp []map[string]interface{}
+		var link string
+		switch page {
+		case "3":
+			resp = []map[string]interface{}{
+				{"number": 3, "title": "issue 3"},
+			}
+			link = fmt.Sprintf(`<%[1]s/repos/%[2]s/%[3]s/issues?page=2>; rel="prev",`+
+				`<%[1]s/repos/%[2]s/%[3]s/issues?page=3>; rel="last",`+
+				`<%[1]s/repos/%[2]s/%[3]s/issues?page=1>; rel="first"`, server.URL, org, repo)
+		case "2":
+			resp = []map[string]interface{}{
+				{"number": 2, "title": "issue 2"},
+			}
+			link = fmt.Sprintf(`<%[1]s/repos/%[2]s/%[3]s/issues?page=1>; rel="prev"`+
+				`<%[1]s/repos/%[2]s/%[3]s/issues?page=3>; rel="next",`+
+				`<%[1]s/repos/%[2]s/%[3]s/issues?page=3>; rel="last",`+
+				`<%[1]s/repos/%[2]s/%[3]s/issues?page=1>; rel="first",`, server.URL, org, repo)
+		default:
+			resp = []map[string]interface{}{
+				{"number": 1, "title": "issue 1"},
+			}
+			link = fmt.Sprintf(`<%[1]s/repos/%[2]s/%[3]s/issues?page=2>; rel="next",`+
+				`<%[1]s/repos/%[2]s/%[3]s/issues?page=3>; rel="last",`+
+				`<%[1]s/repos/%[2]s/%[3]s/issues?page=1>; rel="first",`, server.URL, org, repo)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Link", link)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Fatalf("failed to write response %+v: %v", resp, err)
+		}
+	}))
+	t.Cleanup(server.Close)
 
+	client := github.NewClient(server.Client())
+	client.BaseURL, _ = url.Parse(server.URL + "/")
+
+	t.Run("no filter", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
-		got, err := r.collectReleaseNotes(ctx, true)
+		got, err := githubIssues(ctx, client, org, repo, &github.IssueListByRepoOptions{
+			ListOptions: github.ListOptions{PerPage: 100},
+		}, nil)
 		if err != nil {
-			t.Fatalf("unexpected error collecting release notes: %v", err)
+			t.Fatalf("unexpected error from githubIssues: %v", err)
 		}
-
-		want := &ReleaseNoteData{
-			Date: time.Now().Format("02 Jan 2006"),
-			Versions: map[string]string{
-				"Calico":            "v3.25.0",
-				"Calico Enterprise": "v3.20.0",
-			},
-			BugFixes: []ReleaseNoteItem{
-				{
-					ID:     100,
-					Note:   "Fixed the foobar bug",
-					Author: "alice",
-					URL:    "https://github.com/someorg/somerepo/pull/100",
-				},
-			},
-			Enhancements: []ReleaseNoteItem{
-				{
-					ID:     101,
-					Note:   "Added a cool feature",
-					Author: "carol",
-					URL:    "https://github.com/someorg/somerepo/pull/101",
-				},
-				{
-					ID:     101,
-					Note:   "Line two",
-					Author: "carol",
-					URL:    "https://github.com/someorg/somerepo/pull/101",
-				},
-			},
-			OtherChanges: []ReleaseNoteItem{
-				{
-					ID:     102,
-					Author: "bob",
-					Note:   "Did a thing",
-					URL:    "https://github.com/someorg/somerepo/pull/102",
-				},
-			},
+		want := []*github.Issue{
+			{Number: github.Int(1), Title: github.String("issue 1")},
+			{Number: github.Int(2), Title: github.String("issue 2")},
+			{Number: github.Int(3), Title: github.String("issue 3")},
 		}
-
-		if diff := cmp.Diff(want, got); diff != "" {
-			t.Fatalf("releaseNotesData mismatch (-want +got):\n%s", diff)
+		if diff := cmp.Diff(got, want); diff != "" {
+			t.Fatalf("unexpected issues (-want +got):\n%s", diff)
 		}
 	})
 
-	t.Run("milestone open", func(t *testing.T) {
-		td := fakeOperatorRepo(t, "v3.25.0", "v3.25.0-1.0")
-		origWd, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("failed to get cwd: %v", err)
-		}
-		if err := os.Chdir(td); err != nil {
-			t.Fatalf("failed to chdir to temp repo: %v", err)
-		}
-		defer func() {
-			_ = os.Chdir(origWd)
-		}()
-
-		// Server returns the milestone in open state.
-		server := fakeGithubServer(t, map[string]any{
-			fmt.Sprintf("/repos/%s/%s/milestones", org, repo): []map[string]interface{}{
-				{
-					"number": 1,
-					"title":  version,
-					"state":  "open",
-				},
-			},
-		})
-
-		client := github.NewClient(server.Client())
-		client.BaseURL, _ = url.Parse(server.URL + "/")
-
-		r := &GithubRelease{
-			Org:          org,
-			Repo:         repo,
-			Version:      version,
-			githubClient: client,
-			Validate:     true,
-		}
-
+	t.Run("with filter", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
-		_, err = r.collectReleaseNotes(ctx, true)
-		if err == nil {
-			t.Fatalf("expected error when milestone is not closed and validate is true")
-		}
-		if !strings.Contains(err.Error(), "milestone") {
-			t.Fatalf("unexpected error message: %v", err)
-		}
-	})
-
-	t.Run("milestone open with no validation", func(t *testing.T) {
-		td := fakeOperatorRepo(t, "v3.25.0", "v3.20.0")
-		origWd, err := os.Getwd()
+		got, err := githubIssues(ctx, client, org, repo, &github.IssueListByRepoOptions{
+			ListOptions: github.ListOptions{PerPage: 100},
+		}, func(issue *github.Issue) bool { return issue.GetNumber() == 2 })
 		if err != nil {
-			t.Fatalf("failed to get cwd: %v", err)
+			t.Fatalf("unexpected error from githubIssues with filter: %v", err)
 		}
-		if err := os.Chdir(td); err != nil {
-			t.Fatalf("failed to chdir to temp repo: %v", err)
+		want := []*github.Issue{
+			{Number: github.Int(2), Title: github.String("issue 2")},
 		}
-		defer func() {
-			_ = os.Chdir(origWd)
-		}()
-
-		// Server returns the milestone in open state.
-		server := fakeGithubServer(t, map[string]any{
-			fmt.Sprintf("/repos/%s/%s/milestones", org, repo): []map[string]interface{}{
-				{
-					"number": 1,
-					"title":  version,
-					"state":  "open",
-				},
-			},
-			fmt.Sprintf("/repos/%s/%s/issues", org, repo): []map[string]interface{}{},
-		})
-
-		client := github.NewClient(server.Client())
-		client.BaseURL, _ = url.Parse(server.URL + "/")
-
-		r := &GithubRelease{
-			Org:          org,
-			Repo:         repo,
-			Version:      version,
-			githubClient: client,
-			Validate:     false,
-		}
-
-		ctx := context.Background()
-		got, err := r.collectReleaseNotes(ctx, true)
-		if err != nil {
-			t.Fatalf("expected no error when milestone is open and validate is false, got: %v", err)
-		}
-		want := &ReleaseNoteData{
-			Date: time.Now().Format("02 Jan 2006"),
-			Versions: map[string]string{
-				"Calico":            "v3.25.0",
-				"Calico Enterprise": "v3.20.0",
-			},
-		}
-		if diff := cmp.Diff(want, got); diff != "" {
-			t.Fatalf("releaseNotesData mismatch (-want +got):\n%s", diff)
+		if diff := cmp.Diff(got, want); diff != "" {
+			t.Fatalf("unexpected issues (-want +got):\n%s", diff)
 		}
 	})
 }

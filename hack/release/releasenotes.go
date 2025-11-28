@@ -30,7 +30,6 @@ var releaseNotesCommand = &cli.Command{
 	Usage: "Generate release notes for a new operator release",
 	Flags: []cli.Flag{
 		versionFlag,
-		skipValidationFlag,
 		githubTokenFlag,
 		localFlag,
 	},
@@ -57,11 +56,12 @@ var releaseNotesAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command
 	logrus.WithField("version", ver).Info("Generating release notes")
 
 	release := &GithubRelease{
-		Org:      ctx.Value(githubOrgCtxKey).(string),
-		Repo:     ctx.Value(githubRepoCtxKey).(string),
-		Version:  ver,
-		Token:    c.String(githubTokenFlag.Name),
-		Validate: !c.Bool(skipValidationFlag.Name),
+		Org:     ctx.Value(githubOrgCtxKey).(string),
+		Repo:    ctx.Value(githubRepoCtxKey).(string),
+		Version: ver,
+	}
+	if err := release.setupClient(ctx, c.String(githubTokenFlag.Name)); err != nil {
+		return fmt.Errorf("error setting up GitHub client: %s", err)
 	}
 	// get root directory of operator git repo
 	repoRootDir, err := runCommand("git", []string{"rev-parse", "--show-toplevel"}, nil)

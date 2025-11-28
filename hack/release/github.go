@@ -70,20 +70,26 @@ type GithubRelease struct {
 	Org          string
 	Repo         string
 	Version      string
-	Token        string
-	Validate     bool
 	githubClient *github.Client
+	milstone     *github.Milestone
 }
 
-func (r *GithubRelease) setupClient(ctx context.Context) {
+func (r *GithubRelease) setupClient(ctx context.Context, token string) error {
 	if r.githubClient != nil {
-		return
+		return nil
 	}
-	r.githubClient = github.NewTokenClient(ctx, r.Token)
+	if token == "" {
+		return fmt.Errorf("GitHub token is required to create GitHub client")
+	}
+	r.githubClient = github.NewTokenClient(ctx, token)
+	return nil
 }
 
-// Get the milestone for this release's version.
-func (r *GithubRelease) milestone(ctx context.Context) (*github.Milestone, error) {
+// Get the getMilestone for this release's version.
+func (r *GithubRelease) getMilestone(ctx context.Context) (*github.Milestone, error) {
+	if r.milstone != nil {
+		return r.milstone, nil
+	}
 	opts := &github.MilestoneListOptions{
 		State: string(allState),
 	}
@@ -94,6 +100,7 @@ func (r *GithubRelease) milestone(ctx context.Context) (*github.Milestone, error
 		}
 		for _, m := range milestones {
 			if m.GetTitle() == r.Version {
+				r.milstone = m
 				return m, nil
 			}
 		}
@@ -126,7 +133,6 @@ func (r *GithubRelease) GenerateNotes(ctx context.Context, outputDir string, use
 		writer = f
 		writeLogger = logrus.WithField("output", f.Name())
 	}
-	r.setupClient(ctx)
 	noteData, err := r.collectReleaseNotes(ctx, useLocal)
 	if err != nil {
 		return fmt.Errorf("error collecting release notes: %s", err)
@@ -147,37 +153,36 @@ func (r *GithubRelease) GenerateNotes(ctx context.Context, outputDir string, use
 }
 
 // Get all merged PRs (as issues) with the given milestone number that have the "release-note-required" label.
-func (r *GithubRelease) releaseNoteIssues(ctx context.Context, milestoneNumber int) ([]*github.Issue, error) {
-	relIssues := []*github.Issue{}
+func (r *GithubRelease) releaseNoteIssues(ctx context.Context) ([]*github.Issue, error) {
+	milestone, err := r.getMilestone(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving milestone for version %s: %w", r.Version, err)
+	}
+	if milestone.GetState() != string(closedState) {
+		logrus.WithField("milestone", milestone.GetTitle()).Warn("Milestone is not closed")
+	}
 	opts := &github.IssueListByRepoOptions{
-		Milestone: strconv.Itoa(milestoneNumber),
+		Milestone: strconv.Itoa(milestone.GetNumber()),
 		State:     string(allState),
 		ListOptions: github.ListOptions{
 			PerPage: 100,
 		},
 		Labels: []string{releaseNoteRequiredLabel},
 	}
-	for {
-		issues, resp, err := r.githubClient.Issues.ListByRepo(ctx, r.Org, r.Repo, opts)
+	filter := func(issue *github.Issue) bool {
+		if !issue.IsPullRequest() {
+			return false
+		}
+		pr, _, err := r.githubClient.PullRequests.Get(ctx, r.Org, r.Repo, issue.GetNumber())
 		if err != nil {
-			return nil, err
+			logrus.WithField("issue", issue.GetNumber()).WithError(err).Error("Error retrieving PR for issue")
+			return false
 		}
-		for _, issue := range issues {
-			// Only include issues that are PRs and have been merged.
-			if issue.IsPullRequest() {
-				pr, _, err := r.githubClient.PullRequests.Get(ctx, r.Org, r.Repo, issue.GetNumber())
-				if err != nil {
-					return nil, err
-				}
-				if pr.Merged != nil && *pr.Merged {
-					relIssues = append(relIssues, issue)
-				}
-			}
-		}
-		if resp.NextPage == 0 {
-			break
-		}
-		opts.Page = resp.NextPage
+		return pr.Merged != nil && *pr.Merged
+	}
+	relIssues, err := githubIssues(ctx, r.githubClient, r.Org, r.Repo, opts, filter)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving release note issues: %w", err)
 	}
 	return relIssues, nil
 }
@@ -247,19 +252,7 @@ func (r *GithubRelease) collectReleaseNotes(ctx context.Context, local bool) (*R
 	data.Versions = versions
 
 	log := logrus.WithField("org", r.Org).WithField("repo", r.Repo).WithField("version", r.Version)
-	milestone, err := r.milestone(ctx)
-	if err != nil {
-		return data, err
-	}
-	log = log.WithField("milestone", milestone.GetTitle())
-	if milestone.GetState() != string(closedState) {
-		if r.Validate {
-			return data, fmt.Errorf("milestone %q is not closed", milestone.GetTitle())
-		}
-		log.Warnf("Milestone %q is not closed", milestone.GetTitle())
-	}
-	log.Debug("Collecting release notes from issues and PRs")
-	issues, err := r.releaseNoteIssues(ctx, milestone.GetNumber())
+	issues, err := r.releaseNoteIssues(ctx)
 	if err != nil {
 		return data, err
 	}
@@ -303,3 +296,24 @@ func (r *GithubRelease) collectReleaseNotes(ctx context.Context, local bool) (*R
 
 	return data, nil
 }
+
+func githubIssues(ctx context.Context, client *github.Client, org, repo string, opts *github.IssueListByRepoOptions, filter func(*github.Issue) bool) ([]*github.Issue, error) {
+	issues := []*github.Issue{}
+	for {
+		pageIssues, resp, err := client.Issues.ListByRepo(ctx, org, repo, opts)
+		if err != nil {
+			return nil, err
+		}
+		for _, issue := range pageIssues {
+			if filter == nil || filter(issue) {
+				issues = append(issues, issue)
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return issues, nil
+}
+

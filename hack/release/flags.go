@@ -40,7 +40,7 @@ var (
 	gitRepoFlag = &cli.StringFlag{
 		Name:    "repo",
 		Usage:   "The git repository to use",
-		Value:   "tigera/operator",
+		Value:   mainRepo,
 		Sources: cli.EnvVars("REPO"),
 	}
 )

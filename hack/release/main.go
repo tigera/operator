@@ -38,16 +38,14 @@ func main() {
 
 // Create the CLI app with the given version.
 func app(version string) *cli.Command {
-	appCmds := []*cli.Command{
-		releaseNotesCommand,
-		releaseFromCommand,
-	}
-
 	return &cli.Command{
-		Name:     "release",
-		Usage:    "CLI tool for releasing operator",
-		Version:  version,
-		Commands: appCmds,
+		Name:    "release",
+		Usage:   "CLI tool for releasing operator",
+		Version: version,
+		Commands: []*cli.Command{
+			releaseNotesCommand,
+			releaseFromCommand,
+		},
 		Flags: []cli.Flag{
 			gitRemoteFlag,
 			gitRepoFlag,

@@ -18,12 +18,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-
-	"github.com/urfave/cli/v3"
 )
 
 // checkGitClean ensures that the git working tree is clean.
-var checkGitClean = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
+var checkGitClean = func(ctx context.Context) (context.Context, error) {
 	version, err := gitVersion()
 	if err != nil {
 		return ctx, fmt.Errorf("error getting git version: %w", err)
@@ -32,4 +30,4 @@ var checkGitClean = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 		return ctx, fmt.Errorf("git working tree is dirty, please commit or stash changes before proceeding")
 	}
 	return ctx, nil
-})
+}

@@ -51,7 +51,7 @@ var releaseFromCommand = &cli.Command{
 // It configures logging and checks that the git working tree is clean.
 var releaseFromBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	configureLogging(c)
-	ctx, err := checkGitClean(ctx, c)
+	ctx, err := checkGitClean(ctx)
 	if err != nil {
 		return ctx, err
 	}

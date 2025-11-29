@@ -23,11 +23,14 @@ import (
 )
 
 // Command to generate release notes.
-// It generates release notes for a new release by collecting release notes from merged PRs
-// in the GitHub milestone corresponding to the release version.
 var releaseNotesCommand = &cli.Command{
 	Name:  "notes",
 	Usage: "Generate release notes for a new operator release",
+	Description: `Generate release notes based on merged PRs in the GitHub milestone for the specified release version.
+
+The tag corresponding to the release version must already exist in the GitHub repository.
+Otherwise, use --local flag to generate release notes based on local versions files.`,
+	Aliases: []string{"release-notes"},
 	Flags: []cli.Flag{
 		versionFlag,
 		githubTokenFlag,
@@ -38,7 +41,6 @@ var releaseNotesCommand = &cli.Command{
 }
 
 // Pre-action for "release notes" command.
-// It configures logging and extracts the operator GitHub org and repo from the CLI repo flag.
 var releaseNotesBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	configureLogging(c)
 

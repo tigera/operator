@@ -30,6 +30,7 @@ var debugFlag = &cli.BoolFlag{
 	Sources: cli.EnvVars("DEBUG"),
 }
 
+// Git/GitHub related flags.
 var (
 	gitRemoteFlag = &cli.StringFlag{
 		Name:    "remote",
@@ -42,6 +43,12 @@ var (
 		Usage:   "The git repository to use",
 		Value:   mainRepo,
 		Sources: cli.EnvVars("REPO"),
+	}
+	githubTokenFlag = &cli.StringFlag{
+		Name:     "github-token",
+		Usage:    "GitHub token to use for interacting with the GitHub API",
+		Sources:  cli.EnvVars("GITHUB_TOKEN"),
+		Required: true,
 	}
 )
 
@@ -57,6 +64,14 @@ var versionFlag = &cli.StringFlag{
 	Usage:    "The version of the operator to release",
 	Sources:  cli.EnvVars("OPERATOR_VERSION", "VERSION"),
 	Required: true,
+	Action: func(ctx context.Context, c *cli.Command, s string) error {
+		if valid, err := isReleaseVersionFormat(s); err != nil {
+			return fmt.Errorf("error validating version format: %w", err)
+		} else if !valid {
+			return fmt.Errorf("version %q is not a valid release version", s)
+		}
+		return nil
+	},
 }
 
 var (
@@ -74,14 +89,12 @@ var (
 			return nil
 		},
 	}
-
 	exceptCalicoFlag = &cli.StringSliceFlag{
 		Name:    "except-calico",
 		Usage:   "Calico image and version to update where the image name adheres with config/calico_versions.yaml file. Can be specified multiple times.",
 		Sources: cli.EnvVars("OS_IMAGES_VERSIONS"),
 		Action:  validateOverrides,
 	}
-
 	exceptEnterpriseFlag = &cli.StringSliceFlag{
 		Name:    "except-calico-enterprise",
 		Usage:   "Enterprise image and version to update where image name adheres with config/enterprise_versions.yaml file. Can be specified multiple times.",
@@ -105,7 +118,14 @@ func validateOverrides(ctx context.Context, c *cli.Command, values []string) err
 	return nil
 }
 
+// image, architecture, registry related flags.
 var (
+	imageFlag = &cli.StringFlag{
+		Name:    "image",
+		Usage:   "The image name to use for the new operator (ONLY for hashreleases operator).",
+		Sources: cli.EnvVars("IMAGE_NAME"),
+		Value:   defaultImageName,
+	}
 	archOptions = []string{"amd64", "arm64", "ppc64le", "s390x"}
 	archFlag    = &cli.StringSliceFlag{
 		Name:    "architecture",
@@ -122,21 +142,13 @@ var (
 			return nil
 		},
 	}
+	registryFlag = &cli.StringFlag{
+		Name:    "registry",
+		Usage:   "The registry to push the new operator to (ONLY for hashreleases operator).",
+		Sources: cli.EnvVars("REGISTRY"),
+		Value:   quayRegistry,
+	}
 )
-
-var registryFlag = &cli.StringFlag{
-	Name:    "registry",
-	Usage:   "The registry to push the new operator to (ONLY for hashreleases operator).",
-	Sources: cli.EnvVars("REGISTRY"),
-	Value:   quayRegistry,
-}
-
-var imageFlag = &cli.StringFlag{
-	Name:    "image",
-	Usage:   "The image name to use for the new operator (ONLY for hashreleases operator).",
-	Sources: cli.EnvVars("IMAGE_NAME"),
-	Value:   defaultImageName,
-}
 
 var publishFlag = &cli.BoolFlag{
 	Name:    "publish",
@@ -147,16 +159,9 @@ var publishFlag = &cli.BoolFlag{
 
 var localFlag = &cli.BoolFlag{
 	Name:    "local",
-	Usage:   "Run the release process using local files where possible",
+	Usage:   "Run the release process locally",
 	Sources: cli.EnvVars("LOCAL"),
 	Value:   false,
-}
-
-var githubTokenFlag = &cli.StringFlag{
-	Name:     "github-token",
-	Usage:    "GitHub token to use for interacting with the GitHub API",
-	Sources:  cli.EnvVars("GITHUB_TOKEN"),
-	Required: true,
 }
 
 var skipValidationFlag = &cli.BoolFlag{
@@ -164,4 +169,57 @@ var skipValidationFlag = &cli.BoolFlag{
 	Usage:   "Skip validation",
 	Sources: cli.EnvVars("SKIP_VALIDATION"),
 	Value:   false,
+}
+
+var calicoVersionFlag = &cli.StringFlag{
+	Name:     "calico-version",
+	Usage:    "The Calico version to use for the release",
+	Sources:  cli.EnvVars("CALICO_VERSION"),
+	Required: true,
+	Action: func(ctx context.Context, c *cli.Command, s string) error {
+		if valid, err := isReleaseVersionFormat(s); err != nil {
+			return fmt.Errorf("error validating Calico version format: %w", err)
+		} else if !valid {
+			return fmt.Errorf("version %q is not a valid Calico release version", s)
+		}
+		return nil
+	},
+}
+
+// Enterprise related flags.
+var (
+	enterpriseVersionFlag = &cli.StringFlag{
+		Name:     "enterprise-version",
+		Usage:    "The Calico Enterprise version to use for the release",
+		Sources:  cli.EnvVars("ENTERPRISE_VERSION"),
+		Required: true,
+		Action: func(ctx context.Context, c *cli.Command, s string) error {
+			if valid, err := isReleaseVersionFormat(s); err != nil {
+				return fmt.Errorf("error validating Enterprise version format: %w", err)
+			} else if !valid {
+				return fmt.Errorf("version %q is not a valid Enterprise release version", s)
+			}
+			return nil
+		},
+	}
+	enterpriseRegistryFlag = &cli.StringFlag{
+		Name:    "enterprise-registry",
+		Usage:   "The registry Enterprise images are hosted in.",
+		Sources: cli.EnvVars("ENTERPRISE_REGISTRY"),
+		Value:   quayRegistry,
+	}
+)
+
+var skipMilestoneFlag = &cli.BoolFlag{
+	Name:    "skip-milestone",
+	Usage:   "Skip updating GitHub milestones",
+	Sources: cli.EnvVars("SKIP_MILESTONE"),
+	Value:   false,
+	Action: func(ctx context.Context, c *cli.Command, skipMilestone bool) error {
+		// If not on the main repo, skip-milestone must be true
+		if c.String(gitRepoFlag.Name) != mainRepo && !skipMilestone {
+			return fmt.Errorf("skip-milestone must be true when using a forked repo")
+		}
+		return nil
+	},
 }

@@ -54,7 +54,7 @@ To get the versions file from the local working directory instead of the tagged 
     release notes --version v1.36.0
     ```
 
-2. To generate release notes for operator version `v1.36.0` using the local versions files
+1. To generate release notes for operator version `v1.36.0` using the local versions files
 
     ```sh
     release notes --version v1.36.0 --local

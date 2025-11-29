@@ -66,14 +66,16 @@ type ReleaseNoteData struct {
 	Versions     map[string]string // Calico and Enterprise versions
 }
 
+// GithubRelease represents a GitHub-hosted release of the operator.
 type GithubRelease struct {
-	Org          string
-	Repo         string
-	Version      string
-	githubClient *github.Client
-	milstone     *github.Milestone
+	Org          string            // GitHub organization
+	Repo         string            // GitHub repository
+	Version      string            // Release version
+	githubClient *github.Client    // GitHub API client
+	milstone     *github.Milestone // Cached milestone for the release version
 }
 
+// Setup the GitHub client for this release using the provided token.
 func (r *GithubRelease) setupClient(ctx context.Context, token string) error {
 	if r.githubClient != nil {
 		return nil
@@ -112,6 +114,10 @@ func (r *GithubRelease) getMilestone(ctx context.Context) (*github.Milestone, er
 	return nil, fmt.Errorf("milestone %q not found in %s/%s", r.Version, r.Org, r.Repo)
 }
 
+// Generate release notes for this release and write them to the specified output directory.
+// If outputDir is empty, write to stdout.
+// If useLocal is true, generate release notes based on local versions files
+// instead of using versions files from GitHub tag corresponding to the release version.
 func (r *GithubRelease) GenerateNotes(ctx context.Context, outputDir string, useLocal bool) error {
 	var writer io.Writer
 	var writeLogger *logrus.Entry
@@ -187,6 +193,8 @@ func (r *GithubRelease) releaseNoteIssues(ctx context.Context) ([]*github.Issue,
 	return relIssues, nil
 }
 
+// Determine the kind of issue based on its labels.
+// If no kind label is found, return "other".
 func determineIssueKind(issue *github.Issue) issueKind {
 	for _, label := range issue.Labels {
 		if strings.HasPrefix(label.GetName(), kindLabelPrefix) {
@@ -196,6 +204,10 @@ func determineIssueKind(issue *github.Issue) issueKind {
 	return issueKind("other")
 }
 
+// Extract release note text from the issue body using code blocks marked with "release-note".
+// If no such block is found, use the issue title as the release note.
+// If the block contains "TBD", it uses the issue title instead.
+// If multiple release-note blocks are found, all non-TBD content is included.
 func extractReleaseNoteFromIssue(issue *github.Issue) []string {
 	body := issue.GetBody()
 	pattern := "\\`\\`\\`release-note(?s)(.*?)\\`\\`\\`"
@@ -239,7 +251,7 @@ func extractReleaseNoteFromIssue(issue *github.Issue) []string {
 // A release note is gathered from all merged PRs in the milestone that have the "release-note-required" label.
 func (r *GithubRelease) collectReleaseNotes(ctx context.Context, local bool) (*ReleaseNoteData, error) {
 	data := &ReleaseNoteData{
-		Date: time.Now().Format("02 Jan 2006"),
+		Date: time.Now().Format("02 Jan 2006"), // assume today's date for the release.
 	}
 	dir, err := gitDir()
 	if err != nil {
@@ -250,23 +262,21 @@ func (r *GithubRelease) collectReleaseNotes(ctx context.Context, local bool) (*R
 		return data, fmt.Errorf("error retrieving release versions: %s", err)
 	}
 	data.Versions = versions
-
 	log := logrus.WithField("org", r.Org).WithField("repo", r.Repo).WithField("version", r.Version)
 	issues, err := r.releaseNoteIssues(ctx)
 	if err != nil {
 		return data, err
 	}
-
 	if len(issues) == 0 {
+		// If no merged PRs with release notes found, log a warning and return empty notes.
+		// Sometimes releases may not have any release notes, but this is uncommon.
 		log.Warnf("No merged PRs found with %q label", releaseNoteRequiredLabel)
 		return data, nil
 	}
-
 	for _, issue := range issues {
 		logrus.WithField("issue", issue.GetNumber()).Debug("Processing release note issue")
 		kind := determineIssueKind(issue)
 		notes := extractReleaseNoteFromIssue(issue)
-
 		for _, note := range notes {
 			switch kind {
 			case issueKindBugFix:
@@ -297,6 +307,7 @@ func (r *GithubRelease) collectReleaseNotes(ctx context.Context, local bool) (*R
 	return data, nil
 }
 
+// Helper function to list GitHub issues based on the provided options and optional filter function.
 func githubIssues(ctx context.Context, client *github.Client, org, repo string, opts *github.IssueListByRepoOptions, filter func(*github.Issue) bool) ([]*github.Issue, error) {
 	issues := []*github.Issue{}
 	for {

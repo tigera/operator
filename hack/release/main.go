@@ -36,6 +36,7 @@ func main() {
 	}
 }
 
+// Create the CLI app with the given version.
 func app(version string) *cli.Command {
 	appCmds := []*cli.Command{
 		releaseNotesCommand,

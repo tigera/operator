@@ -329,7 +329,7 @@ clean:
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
 	rm -rf .crds
-	rm -f *-release-notes.md
+	find . -type f -name 'release-*.log' -delete -o  -name '*release-notes.md' -delete
 	docker rmi -f $(shell docker images -f "reference=$(BUILD_IMAGE):latest*" -q) > /dev/null 2>&1 || true
 
 ###############################################################################

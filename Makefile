@@ -329,7 +329,7 @@ clean:
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
 	rm -rf .crds
-	rm -f *-release-notes.md
+	find . -type f -name 'release-*.log' -delete -o  -name '*release-notes.md' -delete
 	docker rmi -f $(shell docker images -f "reference=$(BUILD_IMAGE):latest*" -q) > /dev/null 2>&1 || true
 
 ###############################################################################
@@ -570,9 +570,8 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release-github VERSION=$(RELEASE_TAG)
 
 
-release-notes: var-require-all-VERSION-GITHUB_TOKEN
-	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .
-	@docker run --rm -v $(CURDIR):/workdir -e	GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) tigera/release-notes
+release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
+	REPO=$(REPO) hack/bin/release notes
 
 ## Tags and builds a release from start to finish.
 release: release-prereqs
@@ -630,14 +629,21 @@ hack/bin/gh:
 	chmod +x $@
 	rm hack/bin/gh.tgz
 
-hack/bin/release-from: $(shell find ./hack/release-from -type f)
+hack/bin/release: $(shell find ./hack/release -type f)
 	mkdir -p hack/bin
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -buildvcs=false -o hack/bin/release-from ./hack/release-from'
+	go build -buildvcs=false -o hack/bin/release ./hack/release'
 
-release-from: hack/bin/release-from var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
-	hack/bin/release-from
+hack/release/ut:
+	mkdir -p report/release
+	$(CONTAINERIZED) $(CALICO_BUILD) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	gotestsum --format=testname --junitfile report/release/ut.xml $(PACKAGE_NAME)/hack/release'
+
+
+release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
+	hack/bin/release from
 
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:
@@ -648,51 +654,8 @@ ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
 endif
 
-check-milestone: hack/bin/gh var-require-all-VERSION-GITHUB_TOKEN
-	@gh extension install valeriobelli/gh-milestone
-	@echo "Checking milestone $(VERSION) exists"
-	$(eval MILESTONE_NUMBER := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state all --json title --jq '.[0].title' | grep $(VERSION)))
-	$(if $(MILESTONE_NUMBER),,$(error Milestone $(VERSION) does not exist))
-	@echo "Checking $(VERSION) milestone has no open PRs"
-	$(eval OPEN_PRS := $(shell gh search prs --milestone $(VERSION) --repo $(REPO) --state open --json number --jq '.[].number'))
-	$(if $(OPEN_PRS),$(error Milestone $(VERSION) has open PRs))
-	@echo "Checking milestone $(VERSION) is closed"
-	$(eval CLOSED_MILESTONE := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json title --jq '.[0].title' | grep $(VERSION)))
-	$(if $(CLOSED_MILESTONE),,$(error Milestone $(VERSION) is not closed))
-
-release-prep: check-milestone var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
-	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
-	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
-	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
-	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
-	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-pr-labels
-
-GIT_REMOTE?=origin
-ifneq ($(if $(GIT_REPO_SLUG),$(shell dirname $(GIT_REPO_SLUG)),), $(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`))
-GIT_FORK_USER:=$(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`)
-endif
-GIT_PR_BRANCH_BASE?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_BRANCH),)
-GIT_REPO_SLUG?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_REPO_SLUG),)
-RELEASE_UPDATE_BRANCH?=$(if $(SEMAPHORE),semaphore-,)auto-build-updates-$(VERSION)
-GIT_PR_BRANCH_HEAD?=$(if $(GIT_FORK_USER),$(GIT_FORK_USER):$(RELEASE_UPDATE_BRANCH),$(RELEASE_UPDATE_BRANCH))
-release-prep/create-and-push-branch:
-ifeq ($(shell git rev-parse --abbrev-ref HEAD),$(RELEASE_UPDATE_BRANCH))
-	$(error Current branch is pull request head, cannot set it up.)
-endif
-	-git branch -D $(RELEASE_UPDATE_BRANCH)
-	-$(GIT) push $(GIT_REMOTE) --delete $(RELEASE_UPDATE_BRANCH)
-	git checkout -b $(RELEASE_UPDATE_BRANCH)
-	$(GIT) add config/*_versions.yml hack/gen-versions/main.go pkg/components/* pkg/crds/*
-	$(GIT) commit -m "Automatic version updates for $(VERSION) release"
-	$(GIT) push $(GIT_REMOTE) $(RELEASE_UPDATE_BRANCH)
-
-release-prep/create-pr:
-	$(call github_pr_create,$(GIT_REPO_SLUG),[$(GIT_PR_BRANCH_BASE)] $(if $(SEMAPHORE), Semaphore,) Auto Release Update for $(VERSION),$(GIT_PR_BRANCH_HEAD),$(GIT_PR_BRANCH_BASE))
-	echo 'Created release update pull request for $(VERSION): $(PR_NUMBER)'
-
-release-prep/set-pr-labels:
-	$(call github_pr_add_comment,$(GIT_REPO_SLUG),$(PR_NUMBER),/merge-when-ready release-note-not-required docs-not-required delete-branch)
-	echo "Added labels to pull request $(PR_NUMBER): merge-when-ready, release-note-not-required, docs-not-required & delete-branch"
+release-prep: hack/bin/release hack/bin/gh var-require-all-VERSION-CALICO_VERSION-ENTERPRISE_VERSION
+	@REPO=$(REPO) hack/bin/release prep
 
 ###############################################################################
 # Utilities

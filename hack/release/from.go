@@ -27,11 +27,62 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// releaseFrom is the main action for the command.
-// It builds (and publishes) a new operator based on the base version specified.
-func releaseFrom(ctx context.Context, c *cli.Command) error {
+// Command to release from a previous version.
+// It creates a new operator image version based on a previous version.
+var releaseFromCommand = &cli.Command{
+	Name:  "from",
+	Usage: "Release a new operator image version using a previous version as the base",
+	Flags: []cli.Flag{
+		baseOperatorFlag,
+		versionFlag,
+		exceptCalicoFlag,
+		exceptEnterpriseFlag,
+		publishFlag,
+		archFlag,
+		registryFlag,
+		imageFlag,
+		devTagSuffixFlag,
+	},
+	Before: releaseFromBefore,
+	Action: releaseFromAction,
+}
+
+// Pre-action for "release from" command.
+// It configures logging and checks that the git working tree is clean.
+var releaseFromBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	configureLogging(c)
+	ctx, err := checkGitClean(ctx)
+	if err != nil {
+		return ctx, err
+	}
+	version := c.String(versionFlag.Name)
+	if c.String(baseOperatorFlag.Name) == version {
+		return ctx, fmt.Errorf("base version and new version cannot be the same")
+	}
+	if isRelease, err := isReleaseVersionFormat(version); err != nil {
+		return ctx, fmt.Errorf("error determining if version is a release: %s", err)
+	} else if isRelease && c.Bool(publishFlag.Name) {
+		logrus.Warn("You are about to publish a release version. Ensure this is intended.")
+		return ctx, nil
+	}
+	hashreleaseRegex, err := regexp.Compile(fmt.Sprintf(hashreleaseFormat, c.String(devTagSuffixFlag.Name)))
+	if err != nil {
+		return ctx, fmt.Errorf("error compiling hashrelease regex: %s", err)
+	}
+	if !hashreleaseRegex.MatchString(version) {
+		if c.Bool(publishFlag.Name) && c.String(registryFlag.Name) == quayRegistry && c.String(imageFlag.Name) == defaultImageName {
+			return ctx, fmt.Errorf("cannot use the default registry and image for publishing operator version %q. "+
+				"Either update registry and/or image flag OR specify version in the format ", version)
+		}
+	}
+	return ctx, nil
+})
+
+// Action executed for "release from" command.
+// It builds (and publishes) a new operator image based on the base version specified.
+var releaseFromAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
 	// get root directory of operator git repo
-	repoRootDir, err := runCommand("git", []string{"rev-parse", "--show-toplevel"}, nil)
+	repoRootDir, err := gitDir()
 	if err != nil {
 		return fmt.Errorf("error getting git root directory: %s", err)
 	}
@@ -65,16 +116,7 @@ func releaseFrom(ctx context.Context, c *cli.Command) error {
 	}
 
 	return newHashreleaseOperator(repoRootDir, version, c.String(imageFlag.Name), c.String(registryFlag.Name), c.StringSlice(archFlag.Name), c.Bool(publishFlag.Name))
-}
-
-// isReleaseVersionFormat checks if the version in the format vX.Y.Z.
-func isReleaseVersionFormat(version string) (bool, error) {
-	releaseRegex, err := regexp.Compile(releaseFormat)
-	if err != nil {
-		return false, fmt.Errorf("error compiling release regex: %s", err)
-	}
-	return releaseRegex.MatchString(version), nil
-}
+})
 
 // newOperator handles creating a new operator release.
 // If publish is true, it will push a new tag to the git remote to trigger a release.

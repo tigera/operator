@@ -97,7 +97,7 @@ var releasePrepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command)
 	if valid, err := isReleaseVersionFormat(calicoVersion); err != nil {
 		return ctx, fmt.Errorf("error validating Calico version format: %w", err)
 	} else if !valid {
-		return ctx, fmt.Errorf("Every release must contain a released Calico version, but found %s in %s", calicoVersion, calicoConfig)
+		return ctx, fmt.Errorf("every release must contain a released Calico version, but found %s in %s", calicoVersion, calicoConfig)
 	}
 	return ctx, nil
 })

@@ -114,7 +114,7 @@ func TestReleaseVersions(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected error for invalid calico version, got nil")
 		}
-		if !strings.Contains(err.Error(), "Calico version is not a valid release version") {
+		if !strings.Contains(err.Error(), "the Calico version specified (master) is not a valid release version") {
 			t.Fatalf("unexpected error message: %v", err)
 		}
 	})

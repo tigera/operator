@@ -431,6 +431,9 @@ func manageStreamMilestone(ctx context.Context, githubToken string) error {
 		return fmt.Errorf("error retrieving milestone for version %s: %w", version, err)
 	}
 	semVersion, err := semver.Parse(strings.TrimPrefix(version, "v"))
+	if err != nil {
+		return fmt.Errorf("error parsing semantic version from %s: %w", version, err)
+	}
 	if err := semVersion.IncrementPatch(); err != nil {
 		return fmt.Errorf("error getting next version for %s: %w", version, err)
 	}

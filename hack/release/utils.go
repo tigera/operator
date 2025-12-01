@@ -54,11 +54,13 @@ const (
 
 // Context keys
 const (
-	githubOrgCtxKey  = "github-org"
-	githubRepoCtxKey = "github-repo"
-	versionCtxKey    = "version"
-	headBranchCtxKey = "head-branch"
+	githubOrgCtxKey  contextKey = "github-org"
+	githubRepoCtxKey contextKey = "github-repo"
+	versionCtxKey    contextKey = "version"
+	headBranchCtxKey contextKey = "head-branch"
 )
+
+type contextKey string
 
 type Component struct {
 	Version string `yaml:"version"`
@@ -170,7 +172,7 @@ func calicoVersions(rootDir, operatorVersion string, local bool) (map[string]str
 	if isReleaseVersion, err := isReleaseVersionFormat(calicoVer.Title); err == nil && isReleaseVersion {
 		versions["Calico"] = calicoVer.Title
 	} else {
-		return versions, fmt.Errorf("Calico version is not a valid release version: %s", err)
+		return versions, fmt.Errorf("the Calico version specified (%s) is not a valid release version: %w", calicoVer.Title, err)
 	}
 	enterpriseVer, err := calicoConfigVersions(rootDir, enterpriseConfig)
 	if err != nil {

@@ -43,6 +43,7 @@ func app(version string) *cli.Command {
 		Usage:   "CLI tool for releasing operator",
 		Version: version,
 		Commands: []*cli.Command{
+			releasePrepCommand,
 			releaseNotesCommand,
 			releaseFromCommand,
 		},

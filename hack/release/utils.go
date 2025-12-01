@@ -56,6 +56,8 @@ const (
 const (
 	githubOrgCtxKey  = "github-org"
 	githubRepoCtxKey = "github-repo"
+	versionCtxKey    = "version"
+	headBranchCtxKey = "head-branch"
 )
 
 type Component struct {
@@ -78,6 +80,10 @@ func gitDir() (string, error) {
 
 func git(args ...string) (string, error) {
 	return runCommand("git", args, nil)
+}
+
+func gitInDir(dir string, args ...string) (string, error) {
+	return runCommandInDir(dir, "git", args, nil)
 }
 
 func runCommand(name string, args, env []string) (string, error) {

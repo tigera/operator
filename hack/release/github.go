@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blang/semver/v4"
 	"github.com/google/go-github/v53/github"
 	"github.com/sirupsen/logrus"
 )
@@ -40,6 +41,7 @@ const (
 // State of issues and milestones
 const (
 	closedState = "closed"
+	openState   = "open"
 	allState    = "all"
 )
 
@@ -72,7 +74,7 @@ type GithubRelease struct {
 	Repo         string            // GitHub repository
 	Version      string            // Release version
 	githubClient *github.Client    // GitHub API client
-	milstone     *github.Milestone // Cached milestone for the release version
+	milestone    *github.Milestone // Cached milestone for the release version
 }
 
 // Setup the GitHub client for this release using the provided token.
@@ -89,8 +91,8 @@ func (r *GithubRelease) setupClient(ctx context.Context, token string) error {
 
 // Get the getMilestone for this release's version.
 func (r *GithubRelease) getMilestone(ctx context.Context) (*github.Milestone, error) {
-	if r.milstone != nil {
-		return r.milstone, nil
+	if r.milestone != nil {
+		return r.milestone, nil
 	}
 	opts := &github.MilestoneListOptions{
 		State: string(allState),
@@ -102,7 +104,7 @@ func (r *GithubRelease) getMilestone(ctx context.Context) (*github.Milestone, er
 		}
 		for _, m := range milestones {
 			if m.GetTitle() == r.Version {
-				r.milstone = m
+				r.milestone = m
 				return m, nil
 			}
 		}
@@ -112,6 +114,21 @@ func (r *GithubRelease) getMilestone(ctx context.Context) (*github.Milestone, er
 		opts.Page = resp.NextPage
 	}
 	return nil, fmt.Errorf("milestone %q not found in %s/%s", r.Version, r.Org, r.Repo)
+}
+
+// Close the milestone for this release's version.
+func (r *GithubRelease) closeMilestone(ctx context.Context) error {
+	milestone, err := r.getMilestone(ctx)
+	if err != nil {
+		return err
+	}
+	_, _, err = r.githubClient.Issues.EditMilestone(ctx, r.Org, r.Repo, milestone.GetNumber(), &github.Milestone{
+		State: github.String(closedState),
+	})
+	if err != nil {
+		return fmt.Errorf("error closing %s milestone (%d): %w", milestone.GetTitle(), milestone.GetNumber(), err)
+	}
+	return nil
 }
 
 // Generate release notes for this release and write them to the specified output directory.
@@ -191,6 +208,22 @@ func (r *GithubRelease) releaseNoteIssues(ctx context.Context) ([]*github.Issue,
 		return nil, fmt.Errorf("error retrieving release note issues: %w", err)
 	}
 	return relIssues, nil
+}
+
+// Get all open issues in this release using an optional filter function.
+func (r *GithubRelease) openIssues(ctx context.Context, filter func(*github.Issue) bool) ([]*github.Issue, error) {
+	milestone, err := r.getMilestone(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving milestone for version %s: %w", r.Version, err)
+	}
+	opts := &github.IssueListByRepoOptions{
+		Milestone: strconv.Itoa(milestone.GetNumber()),
+		State:     string(closedState),
+		ListOptions: github.ListOptions{
+			PerPage: 100,
+		},
+	}
+	return githubIssues(ctx, r.githubClient, r.Org, r.Repo, opts, filter)
 }
 
 // Determine the kind of issue based on its labels.
@@ -328,3 +361,109 @@ func githubIssues(ctx context.Context, client *github.Client, org, repo string, 
 	return issues, nil
 }
 
+// Create a new GitHub milestone with the given name.
+func newGithubMilestone(ctx context.Context, githubClient *github.Client, org, repo, name string) (*github.Milestone, error) {
+	milestone, _, err := githubClient.Issues.CreateMilestone(ctx, org, repo, &github.Milestone{
+		Title: github.String(name),
+		State: github.String(openState),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error creating next milestone %s: %w", name, err)
+	}
+	logrus.Debugf("Created new milestone %s (%d)", milestone.GetTitle(), milestone.GetNumber())
+	return milestone, nil
+}
+
+// Batch update GitHub issues in parallel to set their milestone.
+func updateGitHubIssues(ctx context.Context, githubClient *github.Client, org, repo string, issues []*github.Issue, request *github.IssueRequest) error {
+	type issueUpdateResult struct {
+		issueNumber int
+		err         error
+	}
+	resultCh := make(chan issueUpdateResult, len(issues))
+
+	for _, issue := range issues {
+		go func(issue *github.Issue) {
+			_, _, err := githubClient.Issues.Edit(ctx, org, repo, issue.GetNumber(), request)
+			resultCh <- issueUpdateResult{issueNumber: issue.GetNumber(), err: err}
+		}(issue)
+	}
+
+	var failedIssues []int
+	for i := 0; i < len(issues); i++ {
+		result := <-resultCh
+		if result.err != nil {
+			logrus.WithField("issue", result.issueNumber).WithError(result.err).Error("Failed to update issue")
+			failedIssues = append(failedIssues, result.issueNumber)
+		} else {
+			logrus.WithField("issue", result.issueNumber).Debug("Updated issue successfully")
+		}
+	}
+
+	if len(failedIssues) > 0 {
+		return fmt.Errorf("failed to update issues: %s", strings.Trim(strings.Join(strings.Fields(fmt.Sprint(failedIssues)), ", "), "[]"))
+	}
+
+	return nil
+}
+
+// Manage the stream milestone for the release version.
+// It creates a new milestone for the next patch version in the stream
+// and moves any open issues in the current milestone to it.
+// Finally, it closes the current milestone if there are no open issues remaining.
+func manageStreamMilestone(ctx context.Context, githubToken string) error {
+	githubOrg := ctx.Value(githubOrgCtxKey).(string)
+	githubRepo := ctx.Value(githubRepoCtxKey).(string)
+	version := ctx.Value(versionCtxKey).(string)
+
+	r := &GithubRelease{
+		Org:     githubOrg,
+		Repo:    githubRepo,
+		Version: version,
+	}
+	if err := r.setupClient(ctx, githubToken); err != nil {
+		return fmt.Errorf("error setting up GitHub client: %w", err)
+	}
+
+	// Get milestone for the release version
+	milestone, err := r.getMilestone(ctx)
+	if err != nil {
+		return fmt.Errorf("error retrieving milestone for version %s: %w", version, err)
+	}
+	semVersion, err := semver.Parse(strings.TrimPrefix(version, "v"))
+	if err := semVersion.IncrementPatch(); err != nil {
+		return fmt.Errorf("error getting next version for %s: %w", version, err)
+	}
+	nextVersion := fmt.Sprintf("v%s", semVersion.String())
+	nextMilestone, err := newGithubMilestone(ctx, r.githubClient, r.Org, r.Repo, nextVersion)
+	if err != nil {
+		return fmt.Errorf("error creating next milestone %s: %w", nextVersion, err)
+	}
+	var filter func(*github.Issue) bool
+	if headBranch := ctx.Value(headBranchCtxKey).(string); headBranch != "" {
+		filter = func(issue *github.Issue) bool {
+			if !issue.IsPullRequest() {
+				return true
+			}
+			pr, _, err := r.githubClient.PullRequests.Get(ctx, r.Org, r.Repo, issue.GetNumber())
+			if err != nil {
+				logrus.WithField("issue", issue.GetNumber()).WithError(err).Error("Error retrieving PR for issue")
+				return false
+			}
+			return pr.Base.GetRef() != headBranch
+		}
+	}
+	issues, err := r.openIssues(ctx, filter)
+	if err != nil {
+		return fmt.Errorf("error retrieving open issues in %s milestone: %w", milestone.GetTitle(), err)
+	}
+	if len(issues) == 0 {
+		return r.closeMilestone(ctx)
+	}
+	if err := updateGitHubIssues(ctx, r.githubClient, r.Org, r.Repo, issues, &github.IssueRequest{
+		Milestone: github.Int(nextMilestone.GetNumber()),
+	}); err != nil {
+		return fmt.Errorf("error moving issues from milestone %s to %s: %w", milestone.GetTitle(), nextMilestone.GetTitle(), err)
+	}
+	return r.closeMilestone(ctx)
+}

@@ -33,13 +33,14 @@ import (
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
 )
 
 type Configuration struct {
 	Installation   *operatorv1.InstallationSpec
+	PullSecrets    []*corev1.Secret
 	Istio          *operatorv1.Istio
 	IstioNamespace string
-	Resources      *IstioResources
 	Scheme         *runtime.Scheme
 	OpenShift      bool
 	GKE            bool
@@ -53,6 +54,12 @@ type IstioComponent struct {
 	IstioInstallCNIImage string
 	IstioZTunnelImage    string
 	IstioProxyv2Image    string
+
+	resources *IstioResources
+}
+
+type IstioComponentCRDs struct {
+	resources *IstioResources
 }
 
 const (
@@ -72,14 +79,14 @@ const (
 	istioFakeImageProxyv2 = "fake.io/fakeimg/proxyv2:faketag"
 )
 
-func Istio(cfg *Configuration) (*IstioComponent, error) {
+func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 	c := &IstioComponent{
 		cfg: cfg,
 	}
 	return c.init()
 }
 
-func (c *IstioComponent) init() (*IstioComponent, error) {
+func (c *IstioComponent) init() (*IstioComponentCRDs, *IstioComponent, error) {
 	var err error
 
 	// Produce Helm templates for Istio
@@ -127,12 +134,12 @@ func (c *IstioComponent) init() (*IstioComponent, error) {
 	if c.cfg.GKE {
 		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
 	}
-	c.cfg.Resources, err = istioResOpts.GetResources(c.cfg.Scheme)
+	c.resources, err = istioResOpts.GetResources(c.cfg.Scheme)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return c, nil
+	return &IstioComponentCRDs{resources: c.resources}, c, nil
 }
 
 func (c *IstioComponent) patchImages() (err error) {
@@ -142,25 +149,25 @@ func (c *IstioComponent) patchImages() (err error) {
 		}
 	}()
 
-	for i := range c.cfg.Resources.IstiodDeployment.Spec.Template.Spec.Containers {
-		container := &c.cfg.Resources.IstiodDeployment.Spec.Template.Spec.Containers[i]
+	for i := range c.resources.IstiodDeployment.Spec.Template.Spec.Containers {
+		container := &c.resources.IstiodDeployment.Spec.Template.Spec.Containers[i]
 		if container.Name == "discovery" {
 			container.Image = c.IstioPilotImage
 		}
 	}
-	for i := range c.cfg.Resources.CNIDaemonSet.Spec.Template.Spec.Containers {
-		container := &c.cfg.Resources.CNIDaemonSet.Spec.Template.Spec.Containers[i]
+	for i := range c.resources.CNIDaemonSet.Spec.Template.Spec.Containers {
+		container := &c.resources.CNIDaemonSet.Spec.Template.Spec.Containers[i]
 		if container.Name == "install-cni" {
 			container.Image = c.IstioInstallCNIImage
 		}
 	}
-	for i := range c.cfg.Resources.ZTunnelDaemonSet.Spec.Template.Spec.Containers {
-		container := &c.cfg.Resources.ZTunnelDaemonSet.Spec.Template.Spec.Containers[i]
+	for i := range c.resources.ZTunnelDaemonSet.Spec.Template.Spec.Containers {
+		container := &c.resources.ZTunnelDaemonSet.Spec.Template.Spec.Containers[i]
 		if container.Name == "istio-proxy" {
 			container.Image = c.IstioZTunnelImage
 		}
 	}
-	mapData := c.cfg.Resources.IstioSidecarInjectorConfigMap.Data
+	mapData := c.resources.IstioSidecarInjectorConfigMap.Data
 	for k, v := range mapData {
 		mapData[k] = strings.Replace(v, istioFakeImageProxyv2, c.IstioProxyv2Image, -1)
 	}
@@ -200,7 +207,7 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 // Objects implements the Component interface.
 func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
-	res := c.cfg.Resources
+	res := c.resources
 
 	objs := []client.Object{}
 	objs = append(objs,
@@ -241,6 +248,20 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 			})
 		}
 	}
+
+	// Set additional pull secrets
+	res.IstiodDeployment.Spec.Template.Spec.ImagePullSecrets = append(
+		res.IstiodDeployment.Spec.Template.Spec.ImagePullSecrets,
+		secret.GetReferenceList(c.cfg.PullSecrets)...,
+	)
+	res.CNIDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
+		res.CNIDaemonSet.Spec.Template.Spec.ImagePullSecrets,
+		secret.GetReferenceList(c.cfg.PullSecrets)...,
+	)
+	res.ZTunnelDaemonSet.Spec.Template.Spec.ImagePullSecrets = append(
+		res.ZTunnelDaemonSet.Spec.Template.Spec.ImagePullSecrets,
+		secret.GetReferenceList(c.cfg.PullSecrets)...,
+	)
 
 	// Append Istio resources in order: Base, Istiod, CNI, ZTunnel
 	objs = append(objs, res.Base...)
@@ -344,4 +365,20 @@ func (c *IstioComponent) ztunnelAllowTigeraPolicy() *v3.NetworkPolicy {
 			Egress:   egressRules,
 		},
 	}
+}
+
+func (c *IstioComponentCRDs) Objects() ([]client.Object, []client.Object) {
+	return c.resources.CRDs, nil
+}
+
+func (c *IstioComponentCRDs) Ready() bool {
+	return true
+}
+
+func (c *IstioComponentCRDs) ResolveImages(is *operatorv1.ImageSet) error {
+	return nil
+}
+
+func (c *IstioComponentCRDs) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeLinux
 }

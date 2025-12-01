@@ -183,6 +183,12 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{Requeue: true}, nil
 	}
 
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Get the Kubernetes Gateway API CRDs.
 	essentialCRDs, optionalCRDs := gatewayapi.K8SGatewayAPICRDs(installation.KubernetesProvider)
 
@@ -202,13 +208,14 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	// Render resources for Istio support
 	istioCfg := &istio.Configuration{
 		Installation:   installation,
+		PullSecrets:    pullSecrets,
 		Istio:          instance,
 		IstioNamespace: istio.IstioNamespace,
 		Scheme:         r.scheme,
 		OpenShift:      r.provider.IsOpenShift(),
 		GKE:            r.provider.IsGKE(),
 	}
-	istioComponent, err := istio.Istio(istioCfg)
+	istioComponentCRDs, istioComponent, err := istio.Istio(istioCfg)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error initializing Istio components", err, reqLogger)
 		return reconcile.Result{}, err
@@ -221,7 +228,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Deploy Istio CRDs
-	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(istioCfg.Resources.CRDs...), nil)
+	err = handler.CreateOrUpdateOrDelete(ctx, istioComponentCRDs, nil)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Calico Istio CRDs", err, log)
 		return reconcile.Result{}, err

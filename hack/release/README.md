@@ -6,10 +6,12 @@
   - [Installation](#installation)
   - [Usage](#usage)
   - [Commands](#commands)
-    - [release notes](#release-notes)
+    - [release prep](#release-prep)
       - [Examples](#examples)
-    - [release from](#release-from)
+    - [release notes](#release-notes)
       - [Examples](#examples-1)
+    - [release from](#release-from)
+      - [Examples](#examples-2)
 
 ## Installation
 
@@ -28,6 +30,52 @@ release --help
 ```
 
 ## Commands
+
+### release prep
+
+This command prepares the repo for a new release.
+This typically involves updating the versions config files, image registry for the product if applicable,
+and re-generating any generated files.
+All the changes are committed to a new branch, which is then pushed to the remote
+and a pull request is created against the release branch for review.
+Finally, it manages the milestones on GitHub for the release stream associated with the new release,
+which involves creating a new milestone for the next patch version and closing the current milestone
+for the release version. All open issues and pull requests associated with the current milestone
+are moved to the new milestone.
+
+  > [!NOTE]
+  > At least one of Calico or Calico Enterprise version must be specified.
+
+To prepare for a new release, use the following command:
+
+```sh
+release prep --version <new operator version> [--calico-version <calico version> |
+--enterprise-version <calico enterprise version>]
+```
+
+If the `--local` flag is specified, none of the remote changes will be made i.e.
+no branch in the remote repo and no pull request will be created. Also milestones will not be modified on GitHub.
+
+#### Examples
+
+1. To prepare for a new release `v1.36.0` with Calico version `v3.30.0`
+
+    ```sh
+    release prep --version v1.36.0 --calico-version v3.30.0
+    ```
+
+1. To prepare for a new release `v1.36.0` with Calico Enterprise version `v3.20.0-1.0`
+
+    ```sh
+    release prep --version v1.36.0 --enterprise-version v3.20.0-1.0
+    ```
+
+1. To prepare for a new release `v1.36.0` with Calico version `v3.30.0`
+   and Calico Enterprise version `v3.20.0-1.0` using local changes only
+
+    ```sh
+    release prep --version v1.36.0 --calico-version v3.30.0 --enterprise-version v3.20.0-1.0 --local
+    ```
 
 ### release notes
 

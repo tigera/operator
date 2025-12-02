@@ -137,7 +137,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()
-			mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: "calico-system"}}).Return()
+			mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: render.LegacyManagerNamespace}}).Return()
 			mockStatus.On("AddStatefulSets", mock.Anything).Return()
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
@@ -264,7 +264,8 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
-			dnsNames = append(dnsNames, "localhost")
+			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.clusterDomain)
+			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 		})
@@ -288,7 +289,8 @@ var _ = Describe("Manager controller tests", func() {
 			}
 
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
-			dnsNames = append(dnsNames, "localhost")
+			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.clusterDomain)
+			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 		})
@@ -363,6 +365,8 @@ var _ = Describe("Manager controller tests", func() {
 
 			secret := &corev1.Secret{}
 			dnsNames := append([]string{"localhost"}, dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)...)
+			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.clusterDomain)
+			dnsNames = append(dnsNames, legacyDNSNames...)
 			// Verify that the operator managed cert secrets exist. These cert
 			// secrets should have the manager service DNS names plus localhost only.
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
@@ -418,6 +422,8 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
+			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.clusterDomain)
+			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalTLS)).To(BeNil())
 			test.VerifyCert(internalTLS, dnsNames...)
 		})
@@ -508,7 +514,7 @@ var _ = Describe("Manager controller tests", func() {
 			BeforeEach(func() {
 				mockStatus.On("AddDaemonsets", mock.Anything).Return()
 				mockStatus.On("AddDeployments", mock.Anything).Return()
-				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: "calico-system"}}).Return()
+				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: render.LegacyManagerNamespace}}).Return()
 				mockStatus.On("AddStatefulSets", mock.Anything).Return()
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("IsAvailable").Return(true)
@@ -733,7 +739,7 @@ var _ = Describe("Manager controller tests", func() {
 					mockStatus.On("IsAvailable").Return(true)
 					mockStatus.On("OnCRFound").Return()
 					mockStatus.On("AddDeployments", mock.Anything)
-					mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: "calico-system"}}).Return()
+					mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: render.LegacyManagerNamespace}}).Return()
 					mockStatus.On("ClearDegraded")
 					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return().Maybe()
 					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
@@ -1160,8 +1166,8 @@ var _ = Describe("Manager controller tests", func() {
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 				mockStatus.On("AddDeployments", mock.Anything).Return()
-				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: tenantANamespace}}).Return()
-				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: tenantBNamespace}}).Return()
+				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: tenantANamespace}}).Return()
+				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: tenantBNamespace}}).Return()
 				mockStatus.On("ReadyToMonitor")
 				mockStatus.On("ClearDegraded")
 				mockStatus.On("IsAvailable").Return(true)
@@ -1324,7 +1330,7 @@ var _ = Describe("Manager controller tests", func() {
 				tenantCNamespace := "tenant-c"
 
 				BeforeEach(func() {
-					mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: "tigera-manager", Namespace: tenantCNamespace}}).Return()
+					mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: tenantCNamespace}}).Return()
 					// Create a third tenant that manages a Calico OSS cluster.
 					tenantC := &operatorv1.Tenant{
 						ObjectMeta: metav1.ObjectMeta{

@@ -67,7 +67,7 @@ type ManagerDeploymentPodSpec struct {
 // ManagerDeploymentContainer is a Manager Deployment container.
 type ManagerDeploymentContainer struct {
 	// Name is an enum which identifies the Manager Deployment container by name.
-	// Supported values are: calico-voltron, calico-manager, calico-ui-apis, tigera-voltron (deprecated), tigera-manager (deprecated), tigera-ui-apis (deprecated)
+	// Supported values are: calico-voltron, calico-manager, calico-ui-apis, tigera-voltron (deprecated), tigera-manager (deprecated), tigera-ui-apis (deprecated), tigera-es-proxy (deprecated)
 	// +kubebuilder:validation:Enum=calico-voltron;calico-manager;calico-ui-apis;tigera-voltron;tigera-manager;tigera-ui-apis
 	Name string `json:"name"`
 

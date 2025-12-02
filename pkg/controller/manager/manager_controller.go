@@ -364,6 +364,17 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, helper.InstallNamespace(), r.clusterDomain)
 
+	// Continue to add in the legacy names and namespaces of manager components to cover version skew scenarios. These
+	// can be removed in v3.26 when the oldest version we will officially support will use the newer names and namespace
+	var legacyInstallNamespace string
+	if r.multiTenant {
+		legacyInstallNamespace = helper.InstallNamespace()
+	} else {
+		legacyInstallNamespace = render.LegacyManagerNamespace
+	}
+	legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, legacyInstallNamespace, r.clusterDomain)
+	dnsNames = append(dnsNames, legacyDNSNames...)
+
 	// Get or create a certificate for clients of the manager pod ui-apis container.
 	tlsSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,

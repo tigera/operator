@@ -85,10 +85,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerServiceName, Namespace: render.LegacyManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerDeploymentName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerNamespace}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsLayerTigera}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
@@ -97,16 +99,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		rtest.ExpectResources(resourcesToCreate, expectedResourcesToCreate)
 
 		expectedResourcesToDelete := []client.Object{
-			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-watch"}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access"}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-role"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: render.ManagerNamespace}},
-			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: render.ManagerNamespace}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: render.ManagerNamespace}},
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-voltron-linseed-certs-public", Namespace: common.OperatorNamespace()}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersWatchRoleBindingName}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerClusterRole}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerClusterRoleBinding}},
+			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerDeploymentName, Namespace: render.LegacyManagerNamespace}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerServiceAccount, Namespace: render.LegacyManagerNamespace}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyVoltronLinseedPublicCert, Namespace: common.OperatorNamespace()}},
 		}
 		rtest.ExpectResources(resourcesToDelete, expectedResourcesToDelete)
 
@@ -585,7 +585,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerServiceName, Namespace: render.LegacyManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerDeploymentName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerNamespace}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsLayerTigera}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
@@ -870,10 +872,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerServiceName, Namespace: render.LegacyManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerDeploymentName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerNamespace}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettings{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettingsLayerTigera}, TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"}},
@@ -1002,10 +1006,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					Spec: &operatorv1.ManagerDeploymentSpec{
 						Template: &operatorv1.ManagerDeploymentPodTemplateSpec{
 							Spec: &operatorv1.ManagerDeploymentPodSpec{
-								Containers: []operatorv1.ManagerDeploymentContainer{{
-									Name:      "tigera-voltron",
-									Resources: &managerResources,
-								}},
+								Containers: []operatorv1.ManagerDeploymentContainer{
+									{
+										Name:      "tigera-voltron",
+										Resources: &managerResources,
+									},
+									{
+										Name:      "tigera-es-proxy",
+										Resources: &managerResources,
+									},
+								},
 							},
 						},
 					},
@@ -1029,6 +1039,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
 
 		container := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(managerResources))
+
+		container = test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
 		Expect(container).NotTo(BeNil())
 		Expect(container.Resources).To(Equal(managerResources))
 	})
@@ -1207,19 +1221,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerMultiTenantManagedClustersAccessClusterRoleBindingName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerServiceName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerDeploymentName, Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			}
 			rtest.ExpectResources(tenantAResourcesToCreate, expectedTenantAResources)
 
 			expectedTenantAResourcesToDelete := []client.Object{
-				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-watch", Namespace: tenantANamespace}},
 				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access", Namespace: tenantANamespace}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access", Namespace: tenantANamespace}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-access", Namespace: tenantANamespace}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-role"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"}},
-				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantANamespace}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantANamespace}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantANamespace}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-voltron-linseed-certs-public", Namespace: tenantANamespace}},
@@ -1256,19 +1269,18 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerMultiTenantManagedClustersAccessClusterRoleBindingName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerServiceName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerDeploymentName, Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			}
 			rtest.ExpectResources(tenantBResourcesToCreate, expectedTenantBResources)
 
 			expectedTenantBResourcesToDelete := []client.Object{
-				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-watch", Namespace: tenantBNamespace}},
 				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access", Namespace: tenantBNamespace}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access", Namespace: tenantBNamespace}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-access", Namespace: tenantBNamespace}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-role"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"}},
-				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantBNamespace}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantBNamespace}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: tenantBNamespace}},
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-voltron-linseed-certs-public", Namespace: tenantBNamespace}},
@@ -1557,16 +1569,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			})
 
 			expectedTenantAResourcesToDelete := []client.Object{
-				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager"}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-watch"}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access"}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access"}},
-				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-role"}},
-				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"}},
-				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: render.ManagerNamespace}},
-				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: render.ManagerNamespace}},
-				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: render.ManagerNamespace}},
-				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-voltron-linseed-certs-public", Namespace: common.OperatorNamespace()}},
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersWatchRoleBindingName}},
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},
+				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerClusterRole}},
+				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerClusterRoleBinding}},
+				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerDeploymentName, Namespace: render.LegacyManagerNamespace}},
+				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerServiceName, Namespace: render.LegacyManagerNamespace}},
+				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyVoltronLinseedPublicCert, Namespace: common.OperatorNamespace()}},
 			}
 
 			rtest.ExpectResources(tenantAResourcesToDelete, expectedTenantAResourcesToDelete)

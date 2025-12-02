@@ -88,6 +88,10 @@ func gitInDir(dir string, args ...string) (string, error) {
 	return runCommandInDir(dir, "git", args, nil)
 }
 
+func makeInDir(dir string, targets string, env ...string) (string, error) {
+	return runCommandInDir(dir, "make", strings.Fields(targets), env)
+}
+
 func runCommand(name string, args, env []string) (string, error) {
 	return runCommandInDir("", name, args, env)
 }

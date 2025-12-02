@@ -156,7 +156,7 @@ var releasePrepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command)
 	}
 
 	// Run make target to ensure files are formatted correctly and generated files are up to date.
-	if _, err := runCommandInDir(repoRootDir, "make", []string{"fix", "gen-versions"}, nil); err != nil {
+	if _, err := makeInDir(repoRootDir, "fix gen-versions"); err != nil {
 		return fmt.Errorf("error running \"make fix gen-versions\": %w", err)
 	}
 

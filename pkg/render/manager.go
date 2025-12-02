@@ -376,7 +376,6 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			// the upgrade scenario in a graceful way that doesn't force the user to update the new names. To accomplish
 			// this we will simply perform the substitution from old name to new name before applying the settings to
 			// the deployment
-
 			if overrides.Spec != nil && overrides.Spec.Template != nil && overrides.Spec.Template.Spec != nil {
 				fixedUpContainers := overrides.Spec.Template.Spec.Containers
 				for i, container := range overrides.Spec.Template.Spec.Containers {

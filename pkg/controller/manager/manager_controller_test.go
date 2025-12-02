@@ -20,6 +20,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -573,6 +574,21 @@ var _ = Describe("Manager controller tests", func() {
 				// Mark that watches were successful.
 				r.licenseAPIReady.MarkAsReady()
 				r.tierWatchReady.MarkAsReady()
+			})
+
+			It("should reconcile legacy manager namespace", func() {
+				result, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+				namespace := corev1.Namespace{
+					TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+				}
+				Expect(c.Get(ctx, client.ObjectKey{
+					Name: render.LegacyManagerNamespace,
+				}, &namespace)).NotTo(HaveOccurred())
+				Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
+				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 			})
 
 			Context("image reconciliation", func() {

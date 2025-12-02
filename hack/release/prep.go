@@ -33,6 +33,13 @@ var excludedComponentsPatterns = []string{
 	`^eck-.*`,
 }
 
+var changedFiles = []string{
+	calicoConfig,
+	enterpriseConfig,
+	"pkg/components",
+	"pkg/crds",
+}
+
 // Command to prepare repo for a new release.
 var prepCommand = &cli.Command{
 	Name:  "prep",
@@ -152,8 +159,8 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 		eRegistry := c.String(enterpriseRegistryFlag.Name)
 		if eRegistry != "" {
 			logrus.Debugf("Updating Enterprise registry to %s", eRegistry)
-			if _, err := runCommandInDir(repoRootDir, "sed", []string{"-i", fmt.Sprintf(`s|TigeraRegistry.*=.*".*"|TigeraRegistry = "%s/"|`, regexp.QuoteMeta(eRegistry)), "pkg/components/images.go"}, nil); err != nil {
-				return fmt.Errorf("failed to update Enterprise registry in pkg/components/images.go: %w", err)
+			if err := modifyComponentImageConfig(repoRootDir, enterpriseRegistryConfigKey, eRegistry); err != nil {
+				return err
 			}
 		}
 	}
@@ -164,7 +171,7 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	}
 
 	// Commit changes
-	if _, err := gitInDir(repoRootDir, "add", calicoConfig, enterpriseConfig, "pkg/components", "pkg/crds"); err != nil {
+	if _, err := gitInDir(repoRootDir, append([]string{"add"}, changedFiles...)...); err != nil {
 		return fmt.Errorf("error staging git changes: %w", err)
 	}
 	if _, err := git("commit", "-m", fmt.Sprintf("build: %s release", version)); err != nil {

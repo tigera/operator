@@ -573,29 +573,19 @@ release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
 	REPO=$(REPO) hack/bin/release notes
 
 ## Tags and builds a release from start to finish.
-release: release-prereqs
-ifneq ($(VERSION), $(GIT_VERSION))
-	$(error Attempt to build $(VERSION) from $(GIT_VERSION))
-endif
-	$(MAKE) release-build
-	$(MAKE) release-verify
-
-	@echo ""
-	@echo "Release build complete. Next, push the produced images."
-	@echo ""
-	@echo "  make VERSION=$(VERSION) release-publish"
-	@echo ""
+release: clean hack/bin/release
+	hack/bin/release build
 
 ## Produces a clean build of release artifacts at the specified version.
-release-build: release-prereqs clean
+release-build: release-prereqs var-require-all-VERSION-GIT_VERSION
 # Check that the correct code is checked out.
 ifneq ($(VERSION), $(GIT_VERSION))
 	$(error Attempt to build $(VERSION) from $(GIT_VERSION))
 endif
 	$(MAKE) image-all
-	$(MAKE) tag-images-all RELEASE=true IMAGETAG=$(VERSION)
+	$(MAKE) tag-images-all IMAGETAG=$(VERSION)
 	# Generate the `latest` images.
-	$(MAKE) tag-images-all RELEASE=true IMAGETAG=latest
+	$(MAKE) tag-images-all IMAGETAG=latest
 
 ## Verifies the release artifacts produces by `make release-build` are correct.
 release-verify: release-prereqs
@@ -647,7 +637,7 @@ release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:
 ifndef VERSION
-	$(error VERSION is undefined - run using make release VERSION=vX.Y.Z)
+	$(error VERSION is undefined - specify using "VERSION=vX.Y.Z" with make target(s))
 endif
 ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)

@@ -205,3 +205,14 @@ func isEnterpriseReleaseVersionFormat(version string) (bool, error) {
 	}
 	return releaseRegex.MatchString(version), nil
 }
+
+// Ensure string ends with a slash, if empty string returns empty string.
+func addTrailingSlash(registry string) string {
+	if registry == "" {
+		return ""
+	}
+	if strings.HasSuffix(registry, "/") {
+		return registry
+	}
+	return registry + "/"
+}

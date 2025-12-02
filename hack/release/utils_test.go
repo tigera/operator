@@ -258,3 +258,26 @@ func checkReleaseVersions(t testing.TB, got map[string]string, wantCalicoVer, wa
 		t.Fatalf("releaseVersions() mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestAddTrailingSlash(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"docker.io", "docker.io/"},
+		{"quay.io/", "quay.io/"},
+		{"gcr.io/some-repo", "gcr.io/some-repo/"},
+		{"", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+			got := addTrailingSlash(tc.input)
+			if got != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, got)
+			}
+		})
+	}
+}

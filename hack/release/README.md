@@ -6,12 +6,14 @@
   - [Installation](#installation)
   - [Usage](#usage)
   - [Commands](#commands)
-    - [release prep](#release-prep)
+    - [release build](#release-build)
       - [Examples](#examples)
-    - [release notes](#release-notes)
+    - [release prep](#release-prep)
       - [Examples](#examples-1)
-    - [release from](#release-from)
+    - [release notes](#release-notes)
       - [Examples](#examples-2)
+    - [release from](#release-from)
+      - [Examples](#examples-3)
 
 ## Installation
 
@@ -33,6 +35,59 @@ release --help
 ```
 
 ## Commands
+
+### release build
+
+This command builds the operator image for a specific operator version.
+
+To build the operator image, use the following command:
+
+```sh
+release build --version <operator version>
+```
+
+For hashrelease, use the `--hashrelease` flag and provide either the Calico or Calico Enterprise version or versions file.
+
+```sh
+release build --version <operator version> --hashrelease \
+  [--calico-version <calico version> | --calico-versions <path to calico version file> |--enterprise-version <enterprise version> | --enterprise-versions <path to enterprise version file>]
+```
+
+#### Examples
+
+1. To build the operator image for operator version `v1.36.0`
+
+    ```sh
+    release build --version v1.36.0
+    ```
+
+2. To build hashrelease operator image for Calico v3.30
+
+   1. Using Calico versions file
+
+         ```sh
+         release build --hashrelease --version v1.36.0-0.dev-259-g25c811f78fbd-v3.30.0-0.dev-338-gca80474016a5 --calico-versions hashrelease-versions.yaml
+         ```
+
+   2. Specifying version directly
+
+       ```sh
+       release build --hashrelease --version v1.36.0-0.dev-259-g25c811f78fbd-v3.30.0-0.dev-338-gca80474016a5 --calico-version v3.30.0-0.dev-338-gca80474016a5
+       ```
+
+3. To build hashrelease operator image for Calico Enterprise v3.22
+
+   1. Using Enterprise versions file
+
+         ```sh
+         release build --hashrelease --version v1.36.0-0.dev-259-g25c811f78fbd-v3.22.0-calient-0.dev-100-gabcdef123456 --enterprise-versions hashrelease-versions.yaml
+         ```
+
+   2. Specifying version directly
+
+       ```sh
+       release build --hashrelease --version v1.36.0-0.dev-259-g25c811f78fbd-v3.22.0-calient-0.dev-100-gabcdef123456 --enterprise-version v3.22.0-calient-0.dev-100-gabcdef123456
+       ```
 
 ### release prep
 

@@ -154,12 +154,12 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		}
 		instance.Status.Conditions = status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions)
 		if err := r.Status().Update(ctx, instance); err != nil {
-			log.WithValues("reason", err).Info("Failed to create Installation status conditions.")
+			log.WithValues("reason", err).Info("Failed to update Istio status conditions.")
 			return reconcile.Result{}, err
 		}
 	}
 
-	// Set deafults
+	// Set defaults
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 	updateDefaults(instance)
 	if err := r.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
@@ -212,8 +212,6 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		Istio:          instance,
 		IstioNamespace: istio.IstioNamespace,
 		Scheme:         r.scheme,
-		OpenShift:      r.provider.IsOpenShift(),
-		GKE:            r.provider.IsGKE(),
 	}
 	istioComponentCRDs, istioComponent, err := istio.Istio(istioCfg)
 	if err != nil {
@@ -234,7 +232,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	// Deploy Istio components
+	// Deploy Istio components, passing the Istio CR for the owner this time.
 	err = utils.NewComponentHandler(log, r, r.scheme, instance).CreateOrUpdateOrDelete(ctx, istioComponent, r.status)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Calico Istio resources", err, log)
@@ -284,10 +282,10 @@ func (r *ReconcileIstio) configureIstioAmbientMode(fc *crdv1.FelixConfiguration,
 	}
 
 	// If the annotation does not match the spec value (ignoring both nil), it indicates a misconfiguration.
-	mismatch := annotationMode != fc.Spec.IstioAmbientMode &&
-		(annotationMode == nil || fc.Spec.IstioAmbientMode == nil || *annotationMode != *fc.Spec.IstioAmbientMode)
+	match := annotationMode == nil && fc.Spec.IstioAmbientMode == nil ||
+		annotationMode != nil && fc.Spec.IstioAmbientMode != nil && *annotationMode == *fc.Spec.IstioAmbientMode
 
-	if mismatch && !remove {
+	if !match {
 		return fmt.Errorf("felixconfig IstioAmbientMode modified by user")
 	}
 
@@ -318,10 +316,10 @@ func (r *ReconcileIstio) configureIstioDSCPMark(instance *v1.Istio, fc *crdv1.Fe
 	}
 
 	// Return an error if it appears that FelixConfiguration has been modified out of band.
-	mismatch := annotationDSCP != fc.Spec.IstioDSCPMark &&
-		(annotationDSCP == nil || fc.Spec.IstioDSCPMark == nil || annotationDSCP.ToUint8() != fc.Spec.IstioDSCPMark.ToUint8())
+	match := annotationDSCP == nil && fc.Spec.IstioDSCPMark == nil ||
+		annotationDSCP != nil && fc.Spec.IstioDSCPMark != nil && annotationDSCP.ToUint8() == fc.Spec.IstioDSCPMark.ToUint8()
 
-	if mismatch && !remove {
+	if !match {
 		return fmt.Errorf("felixconfig IstioDSCPMark modified by user")
 	}
 

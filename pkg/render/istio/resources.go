@@ -17,7 +17,8 @@ package istio
 import (
 	"bytes"
 	_ "embed"
-	"strings"
+	"fmt"
+	"io"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart/loader"
@@ -26,6 +27,7 @@ import (
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -75,19 +77,19 @@ func (r *ResourceOpts) GetResources(scheme *runtime.Scheme) (*IstioResources, er
 
 	baseChart, err := loader.LoadArchive(bytes.NewReader(baseTgz))
 	if err != nil {
-		panic("Failed to load istio-base chart")
+		return nil, fmt.Errorf("Failed to load istio-base chart: %w", err)
 	}
 	istiodChart, err := loader.LoadArchive(bytes.NewReader(istiodTgz))
 	if err != nil {
-		panic("Failed to load istiod chart")
+		return nil, fmt.Errorf("Failed to load istiod chart: %w", err)
 	}
 	cniChart, err := loader.LoadArchive(bytes.NewReader(cniTgz))
 	if err != nil {
-		panic("Failed to load istio-cni chart")
+		return nil, fmt.Errorf("Failed to load istio-cni chart: %w", err)
 	}
 	ztunnelChart, err := loader.LoadArchive(bytes.NewReader(ztunnelTgz))
 	if err != nil {
-		panic("Failed to load ztunnel chart")
+		return nil, fmt.Errorf("Failed to load ztunnel chart: %w", err)
 	}
 
 	client := action.NewInstall(actionConfig)
@@ -146,24 +148,32 @@ func (r *ResourceOpts) GetResources(scheme *runtime.Scheme) (*IstioResources, er
 
 func (r *ResourceOpts) parseManifest(scheme *runtime.Scheme, manifest string, istRes *IstioResources) (crds, objs []client.Object, err error) {
 	codecs := serializer.NewCodecFactory(scheme)
-	decoder := codecs.UniversalDeserializer()
+	universalDeserializer := codecs.UniversalDeserializer()
 
-	docs := strings.Split(manifest, "\n---\n")
+	// Use streaming YAML decoder to handle multiple documents
+	decoder := yaml.NewYAMLOrJSONDecoder(bytes.NewReader([]byte(manifest)), 4096)
 
-	for _, yml := range docs {
-		yml = strings.TrimSpace(yml)
-		if yml == "" {
+	for {
+		var rawObj runtime.RawExtension
+		if err := decoder.Decode(&rawObj); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, nil, fmt.Errorf("error decoding manifest document: %w", err)
+		}
+
+		if len(rawObj.Raw) == 0 {
 			continue
 		}
 
-		obj, _, decodeErr := decoder.Decode([]byte(yml), nil, nil)
-		if decodeErr != nil {
-			continue
+		obj, _, err := universalDeserializer.Decode(rawObj.Raw, nil, nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error deserializing object: %w", err)
 		}
 
 		clientObj, ok := obj.(client.Object)
 		if !ok {
-			continue
+			return nil, nil, fmt.Errorf("missing scheme or object does not implement client.Object: %T", obj)
 		}
 
 		switch typedObj := clientObj.(type) {

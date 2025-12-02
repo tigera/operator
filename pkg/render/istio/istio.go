@@ -42,8 +42,6 @@ type Configuration struct {
 	Istio          *operatorv1.Istio
 	IstioNamespace string
 	Scheme         *runtime.Scheme
-	OpenShift      bool
-	GKE            bool
 }
 
 var _ render.Component = &IstioComponent{}
@@ -80,15 +78,6 @@ const (
 )
 
 func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
-	c := &IstioComponent{
-		cfg: cfg,
-	}
-	return c.init()
-}
-
-func (c *IstioComponent) init() (*IstioComponentCRDs, *IstioComponent, error) {
-	var err error
-
 	// Produce Helm templates for Istio
 	istioResOpts := &ResourceOpts{
 		Namespace:                 IstioNamespace,
@@ -131,15 +120,18 @@ func (c *IstioComponent) init() (*IstioComponentCRDs, *IstioComponent, error) {
 			},
 		},
 	}
-	if c.cfg.GKE {
+	if cfg.Installation.KubernetesProvider.IsGKE() {
 		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
 	}
-	c.resources, err = istioResOpts.GetResources(c.cfg.Scheme)
+	resources, err := istioResOpts.GetResources(cfg.Scheme)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &IstioComponentCRDs{resources: c.resources}, c, nil
+	crds := &IstioComponentCRDs{resources: resources}
+	istio := &IstioComponent{cfg: cfg, resources: resources}
+	return crds, istio, nil
+
 }
 
 func (c *IstioComponent) patchImages() (err error) {
@@ -264,6 +256,7 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	)
 
 	// Append Istio resources in order: Base, Istiod, CNI, ZTunnel
+	// This mimics the order from the documentation
 	objs = append(objs, res.Base...)
 	objs = append(objs, res.Istiod...)
 	objs = append(objs, res.CNI...)
@@ -289,6 +282,11 @@ func (c *IstioComponent) istiodAllowTigeraPolicy() *v3.NetworkPolicy {
 		},
 	}
 
+	// * Port 15012, gRPC, XDS and CA services (TLS and mTLS)
+	//   ztunnel and waypoints connect to it to request certs and dataplane
+	//   info.
+	// * Port 15017, https, Webhook container port
+	//   used for config validation.
 	ingressRules := []v3.Rule{
 		{
 			Action:   v3.Allow,

@@ -330,12 +330,6 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	setup := render.NewSetup(&render.SetUpConfiguration{
-		Namespace:       helper.InstallNamespace(),
-		PullSecrets:     pullSecrets,
-		CreateNamespace: false,
-	})
-
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		Installation:                 install,
@@ -364,12 +358,6 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 
 	if err = imageset.ResolveImages(imageSet, esKubeControllerComponents); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error resolving ImageSet for elasticsearch kube-controllers components", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	setupHandler := hdler
-	if err := setupHandler.CreateOrUpdateOrDelete(ctx, setup, nil); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating  elasticsearch kube-controllers resource", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

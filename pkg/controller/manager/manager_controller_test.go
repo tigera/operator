@@ -20,7 +20,6 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
@@ -138,6 +137,7 @@ var _ = Describe("Manager controller tests", func() {
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: render.LegacyManagerNamespace}}).Return()
 			mockStatus.On("AddStatefulSets", mock.Anything).Return()
 			mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
@@ -264,14 +264,16 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
-			dnsNames = append(dnsNames, "localhost")
+			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.clusterDomain)
+			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 		})
 
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {
 			// Update the internal manager TLS secret with old DNS name.
-			oldKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{"tigera-manager.tigera-manager.svc"})
+			oldKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(),
+				[]string{fmt.Sprintf("%s.%s.svc", render.ManagerServiceName, render.ManagerNamespace)})
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(c.Update(ctx, oldKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
@@ -287,7 +289,8 @@ var _ = Describe("Manager controller tests", func() {
 			}
 
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
-			dnsNames = append(dnsNames, "localhost")
+			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.clusterDomain)
+			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
 		})
@@ -362,6 +365,8 @@ var _ = Describe("Manager controller tests", func() {
 
 			secret := &corev1.Secret{}
 			dnsNames := append([]string{"localhost"}, dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)...)
+			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.clusterDomain)
+			dnsNames = append(dnsNames, legacyDNSNames...)
 			// Verify that the operator managed cert secrets exist. These cert
 			// secrets should have the manager service DNS names plus localhost only.
 			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
@@ -417,6 +422,8 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
+			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.clusterDomain)
+			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalTLS)).To(BeNil())
 			test.VerifyCert(internalTLS, dnsNames...)
 		})
@@ -507,6 +514,7 @@ var _ = Describe("Manager controller tests", func() {
 			BeforeEach(func() {
 				mockStatus.On("AddDaemonsets", mock.Anything).Return()
 				mockStatus.On("AddDeployments", mock.Anything).Return()
+				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: render.LegacyManagerNamespace}}).Return()
 				mockStatus.On("AddStatefulSets", mock.Anything).Return()
 				mockStatus.On("AddCronJobs", mock.Anything)
 				mockStatus.On("IsAvailable").Return(true)
@@ -567,45 +575,6 @@ var _ = Describe("Manager controller tests", func() {
 				r.tierWatchReady.MarkAsReady()
 			})
 
-			It("should reconcile manager namespace, role bindings and pull secrets", func() {
-				result, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.RequeueAfter).To(Equal(0 * time.Second))
-
-				namespace := corev1.Namespace{
-					TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name: render.ManagerNamespace,
-				}, &namespace)).NotTo(HaveOccurred())
-				Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("restricted"))
-				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
-
-				// Expect operator rolebinding to be created
-				rb := rbacv1.RoleBinding{
-					ObjectMeta: metav1.ObjectMeta{},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name:      render.TigeraOperatorSecrets,
-					Namespace: render.ManagerNamespace,
-				}, &rb)).NotTo(HaveOccurred())
-				Expect(rb.OwnerReferences).To(HaveLen(1))
-				ownerRoleBinding := rb.OwnerReferences[0]
-				Expect(ownerRoleBinding.Kind).To(Equal("Manager"))
-
-				// Expect pull secrets to be created
-				pullSecrets := corev1.Secret{
-					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name:      "tigera-pull-secret",
-					Namespace: render.ManagerNamespace,
-				}, &pullSecrets)).NotTo(HaveOccurred())
-				Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
-				pullSecret := pullSecrets.OwnerReferences[0]
-				Expect(pullSecret.Kind).To(Equal("Manager"))
-			})
-
 			Context("image reconciliation", func() {
 				It("should use builtin images", func() {
 					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
@@ -615,13 +584,13 @@ var _ = Describe("Manager controller tests", func() {
 					d := appsv1.Deployment{
 						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "tigera-manager",
+							Name:      render.ManagerName,
 							Namespace: render.ManagerNamespace,
 						},
 					}
 					Expect(test.GetResource(c, &d)).To(BeNil())
 					Expect(d.Spec.Template.Spec.Containers).To(HaveLen(4))
-					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-manager")
+					mgr := test.GetContainer(d.Spec.Template.Spec.Containers, render.ManagerName)
 					Expect(mgr).ToNot(BeNil())
 					Expect(mgr.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s:%s",
@@ -635,7 +604,7 @@ var _ = Describe("Manager controller tests", func() {
 							components.TigeraImagePath,
 							components.ComponentUIAPIs.Image,
 							components.ComponentUIAPIs.Version)))
-					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-ui-apis")
+					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s:%s",
@@ -669,7 +638,7 @@ var _ = Describe("Manager controller tests", func() {
 					d := appsv1.Deployment{
 						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "tigera-manager",
+							Name:      render.ManagerName,
 							Namespace: render.ManagerNamespace,
 						},
 					}
@@ -770,6 +739,7 @@ var _ = Describe("Manager controller tests", func() {
 					mockStatus.On("IsAvailable").Return(true)
 					mockStatus.On("OnCRFound").Return()
 					mockStatus.On("AddDeployments", mock.Anything)
+					mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: render.LegacyManagerNamespace}}).Return()
 					mockStatus.On("ClearDegraded")
 					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return().Maybe()
 					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
@@ -1005,7 +975,7 @@ var _ = Describe("Manager controller tests", func() {
 					deployment := appsv1.Deployment{
 						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "tigera-manager",
+							Name:      render.ManagerName,
 							Namespace: render.ManagerNamespace,
 						},
 					}
@@ -1143,7 +1113,7 @@ var _ = Describe("Manager controller tests", func() {
 					d := appsv1.Deployment{
 						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "tigera-manager",
+							Name:      render.ManagerName,
 							Namespace: render.ManagerNamespace,
 						},
 					}
@@ -1196,6 +1166,8 @@ var _ = Describe("Manager controller tests", func() {
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 				mockStatus.On("AddDeployments", mock.Anything).Return()
+				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: tenantANamespace}}).Return()
+				mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: tenantBNamespace}}).Return()
 				mockStatus.On("ReadyToMonitor")
 				mockStatus.On("ClearDegraded")
 				mockStatus.On("IsAvailable").Return(true)
@@ -1273,7 +1245,7 @@ var _ = Describe("Manager controller tests", func() {
 				tenantADeployment := appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-manager",
+						Name:      render.ManagerName,
 						Namespace: tenantANamespace,
 					},
 				}
@@ -1288,7 +1260,7 @@ var _ = Describe("Manager controller tests", func() {
 				tenantBDeployment := appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tigera-manager",
+						Name:      render.ManagerName,
 						Namespace: tenantBNamespace,
 					},
 				}
@@ -1358,6 +1330,7 @@ var _ = Describe("Manager controller tests", func() {
 				tenantCNamespace := "tenant-c"
 
 				BeforeEach(func() {
+					mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: tenantCNamespace}}).Return()
 					// Create a third tenant that manages a Calico OSS cluster.
 					tenantC := &operatorv1.Tenant{
 						ObjectMeta: metav1.ObjectMeta{
@@ -1407,9 +1380,9 @@ var _ = Describe("Manager controller tests", func() {
 					err = test.GetResource(c, &ossClusterRolebinding)
 					Expect(kerror.IsNotFound(err)).Should(BeFalse())
 					Expect(ossClusterRolebinding.Subjects).To(HaveLen(1))
-					Expect(ossClusterRolebinding.Subjects[0].Name).To(Equal("tigera-manager"))
+					Expect(ossClusterRolebinding.Subjects[0].Name).To(Equal(render.ManagerServiceAccount))
 					Expect(ossClusterRolebinding.Subjects[0].Namespace).To(Equal(tenantCNamespace))
-					Expect(ossClusterRolebinding.RoleRef.Name).To(Equal("tigera-manager-managed-calico"))
+					Expect(ossClusterRolebinding.RoleRef.Name).To(Equal(render.ManagerManagedCalicoClusterRoleBinding))
 
 					// The cluster role should exist too.
 					ossClusterRole := rbacv1.ClusterRole{
@@ -1442,7 +1415,7 @@ var _ = Describe("Manager controller tests", func() {
 				})
 			})
 
-			It("should apply TLSRoutes in from the manager namespace", func() {
+			It("should apply TLSRoutes in the manager namespace", func() {
 				Expect(c.Create(ctx, &operatorv1.TLSTerminatedRoute{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: tenantANamespace,
@@ -1496,39 +1469,6 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(tenantARoutes.Data).ToNot(BeEmpty())
 
 				Expect(kerror.IsNotFound(test.GetResource(c, &tenantBRoutes))).Should(BeTrue())
-			})
-
-			It("should reconcile pull secrets and rolebindings", func() {
-				_, err := r.Reconcile(ctx, reconcile.Request{
-					NamespacedName: types.NamespacedName{
-						Namespace: tenantANamespace,
-					},
-				})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// Expect operator role binding to be created
-				rb := rbacv1.RoleBinding{
-					ObjectMeta: metav1.ObjectMeta{},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name:      render.TigeraOperatorSecrets,
-					Namespace: tenantANamespace,
-				}, &rb)).NotTo(HaveOccurred())
-				Expect(rb.OwnerReferences).To(HaveLen(1))
-				ownerRoleBinding := rb.OwnerReferences[0]
-				Expect(ownerRoleBinding.Kind).To(Equal("Tenant"))
-
-				// Expect pull secrets to be created
-				pullSecrets := corev1.Secret{
-					TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name:      "tigera-pull-secret",
-					Namespace: tenantANamespace,
-				}, &pullSecrets)).NotTo(HaveOccurred())
-				Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
-				pullSecret := pullSecrets.OwnerReferences[0]
-				Expect(pullSecret.Kind).To(Equal("Tenant"))
 			})
 		})
 	})

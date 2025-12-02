@@ -6,22 +6,6 @@
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
 
-define yq_cmd
-	$(shell yq --version | grep v$1.* >/dev/null && which yq || echo docker run --rm --user="root" -i -v "$(shell pwd)":/workdir mikefarah/yq:$1 $(if $(shell [ $1 -lt 4 ] && echo "true"), yq,))
-endef
-YQ_V4 = $(call yq_cmd,4)
-
-GIT_CMD   = git
-CURL_CMD  = curl -fL
-
-ifdef CONFIRM
-GIT       = $(GIT_CMD)
-CURL      = $(CURL_CMD)
-else
-GIT       = echo [DRY RUN] $(GIT_CMD)
-CURL      = echo [DRY RUN] $(CURL_CMD)
-endif
-
 # These values are used for fetching tools to run as part of the build process
 # and shouldn't vary based on the target we're building for
 NATIVE_ARCH := $(shell bash -c 'if [[ "$(shell uname -m)" == "x86_64" ]]; then echo amd64; else uname -m; fi')
@@ -1000,34 +984,6 @@ var-require-all-%:
 # must be set you would call var-require-all-FOO-BAR.
 var-require-one-of-%:
 	$(MAKE) var-require REQUIRED_VARS=$*
-
-GITHUB_API_EXIT_ON_FAILURE?=1
-# Call the github API. $(1) is the http method type for the https request, $(2) is the repo slug, and is $(3) is for json
-# data (if omitted then no data is set for the request). If GITHUB_API_EXIT_ON_FAILURE is set then the macro exits with 1
-# on failure. On success, the ENV variable GITHUB_API_RESPONSE will contain the response from github
-define github_call_api
-	$(eval CMD := $(CURL) -X $(1) \
-		-H "Content-Type: application/json"\
-		-H "Authorization: Bearer ${GITHUB_TOKEN}"\
-		https://api.github.com/repos/$(2) $(if $(3),--data '$(3)',))
-	$(eval GITHUB_API_RESPONSE := $(shell $(CMD) | sed -e 's/#/\\\#/g'))
-	$(if $(GITHUB_API_EXIT_ON_FAILURE), $(if $(GITHUB_API_RESPONSE),,exit 1),)
-endef
-
-# Create the pull request. $(1) is the repo slug, $(2) is the title, $(3) is the head branch and $(4) is the base branch.
-# If the call was successful then the ENV variable PR_NUMBER will contain the pull request number of the created pull request.
-define github_pr_create
-	$(eval JSON := {"title": "$(2)", "head": "$(3)", "base": "$(4)"})
-	$(call github_call_api,POST,$(1)/pulls,$(JSON))
-	$(eval PR_NUMBER := $(filter-out null,$(shell echo '$(GITHUB_API_RESPONSE)' | jq '.number')))
-endef
-
-# Create a comment on a pull request. $(1) is the repo slug, $(2) is the pull request number, and $(3) is the comment
-# body.
-define github_pr_add_comment
-	$(eval JSON := {"body":"$(3)"})
-	$(call github_call_api,POST,$(1)/issues/$(2)/comments,$(JSON))
-endef
 
 #####################################
 #####################################

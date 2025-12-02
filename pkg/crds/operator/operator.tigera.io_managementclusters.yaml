@@ -61,11 +61,12 @@ spec:
                         and use of that cert will result in Guardian being unable to verify Voltron's identity.
                         If changed on a running cluster with connected managed clusters, all managed clusters will disconnect as they will no longer be able to verify Voltron's identity.
                         To reconnect existing managed clusters, change the tls.ca of the  managed clusters' ManagementClusterConnection resource.
-                        One of: calico-management-cluster-connection, manager-tls
+                        One of: calico-management-cluster-connection, manager-tls, tigera-management-cluster-connection (deprecated)
                         Default: calico-management-cluster-connection
                       enum:
                         - calico-management-cluster-connection
                         - manager-tls
+                        - tigera-management-cluster-connection
                       type: string
                   type: object
               type: object

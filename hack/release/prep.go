@@ -134,9 +134,6 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	if _, err := git("switch", "-C", prepBranch); err != nil {
 		return fmt.Errorf("error creating and switching to branch %s: %w", prepBranch, err)
 	}
-	if _, err := gitInDir(repoRootDir, "add", calicoConfig, enterpriseConfig, "pkg/components", "pkg/crds"); err != nil {
-		return fmt.Errorf("error staging git changes: %w", err)
-	}
 
 	// Modify config versions files
 	if calico := c.String(calicoVersionFlag.Name); calico != "" {
@@ -167,6 +164,9 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	}
 
 	// Commit changes
+	if _, err := gitInDir(repoRootDir, "add", calicoConfig, enterpriseConfig, "pkg/components", "pkg/crds"); err != nil {
+		return fmt.Errorf("error staging git changes: %w", err)
+	}
 	if _, err := git("commit", "-m", fmt.Sprintf("build: %s release", version)); err != nil {
 		return fmt.Errorf("error committing git changes: %w", err)
 	}

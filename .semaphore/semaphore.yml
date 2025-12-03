@@ -130,7 +130,7 @@ blocks:
             - make dirty-check
       epilogue:
           commands:
-            - '[[ -d ./report/ut ]] && test-results publish ./report/ut'
+            - '[[ -d ./report/ut ]] && test-results publish --name "UT" ./report/ut'
 
   - name: 'FV'
     dependencies: [ "Build amd64" ]
@@ -148,7 +148,23 @@ blocks:
             - make dirty-check
       epilogue:
           commands:
-            - '[[ -d ./report/fv ]] && test-results publish ./report/fv'
+            - '[[ -d ./report/fv ]] && test-results publish --name "FV" ./report/fv'
+
+  - name: Release tooling
+    dependencies:
+      - Pre-commit verification
+    run:
+      when: change_in('hack/release/')
+    task:
+      jobs:
+        - name: "Run tests"
+          execution_time_limit:
+            minutes: 30
+          commands:
+            - make hack/release/ut
+      epilogue:
+        commands:
+          - '[[ -d ./report/release ]] && test-results publish --name "Release tool: tests" ./report/release'
 
 after_pipeline:
   task:

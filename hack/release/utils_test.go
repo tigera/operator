@@ -41,7 +41,7 @@ func TestCalicoConfigVersions(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		want := CalicoVersion{Title: "v3.25.0"}
-		if diff := cmp.Diff(got, want); diff != "" {
+		if diff := cmp.Diff(want, got); diff != "" {
 			t.Fatalf("retrieved version mismatch (-want +got):\n%s", diff)
 		}
 	})

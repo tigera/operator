@@ -61,7 +61,7 @@ var (
 		Action: func(ctx context.Context, c *cli.Command, skipMilestone bool) error {
 			// If not on the main repo, skip-milestone must be true
 			if c.String(gitRepoFlag.Name) != mainRepo && !skipMilestone {
-				return fmt.Errorf("skip-milestone must be true when using a forked repo")
+				return fmt.Errorf("skip-milestone is required when using a forked repo")
 			}
 			return nil
 		},

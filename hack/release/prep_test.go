@@ -97,7 +97,7 @@ components:
     image: envoy-gateway
     version: v1.32.4
 `
-	if diff := cmp.Diff(got, want); diff != "" {
-		t.Errorf("modified config mismatch (-got +want):\n%s", diff)
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("modified config mismatch (-want +got):\n%s", diff)
 	}
 }

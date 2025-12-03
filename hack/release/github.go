@@ -367,8 +367,8 @@ func githubIssues(ctx context.Context, client *github.Client, org, repo string, 
 		}
 		opts.Page = resp.NextPage
 	}
-	if len(errs) > 0 {
-		return issues, fmt.Errorf("%+v", errs)
+	if num := len(errs); num > 0 {
+		return issues, fmt.Errorf("encountered %d error(s): %v", num, errs)
 	}
 	return issues, nil
 }

@@ -121,11 +121,10 @@ var _ = Describe("Istio controller tests", func() {
 			createResources()
 
 			r := &ReconcileIstio{
-				Client:        cli,
-				scheme:        scheme,
-				provider:      operatorv1.ProviderNone,
-				status:        mockStatus,
-				clusterDomain: "cluster.local",
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -141,11 +140,10 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, istio)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:        cli,
-				scheme:        scheme,
-				provider:      operatorv1.ProviderNone,
-				status:        mockStatus,
-				clusterDomain: "cluster.local",
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -158,11 +156,10 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:        cli,
-				scheme:        scheme,
-				provider:      operatorv1.ProviderNone,
-				status:        mockStatus,
-				clusterDomain: "cluster.local",
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -178,11 +175,10 @@ var _ = Describe("Istio controller tests", func() {
 
 			It("should handle basic Istio spec configuration", func() {
 				r := &ReconcileIstio{
-					Client:        cli,
-					scheme:        scheme,
-					provider:      operatorv1.ProviderNone,
-					status:        mockStatus,
-					clusterDomain: "cluster.local",
+					Client:   cli,
+					scheme:   scheme,
+					provider: operatorv1.ProviderNone,
+					status:   mockStatus,
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -195,7 +191,7 @@ var _ = Describe("Istio controller tests", func() {
 			})
 
 			It("should handle Istiod deployment customization", func() {
-				istio.Spec.Istiod = &operatorv1.IstiodDeployment{
+				istio.Spec.IstiodDeployment = &operatorv1.IstiodDeployment{
 					Spec: &operatorv1.IstiodDeploymentSpec{
 						Template: &operatorv1.IstiodDeploymentSpecTemplate{
 							Spec: &operatorv1.IstiodDeploymentPodSpec{
@@ -209,11 +205,10 @@ var _ = Describe("Istio controller tests", func() {
 				Expect(cli.Update(ctx, istio)).NotTo(HaveOccurred())
 
 				r := &ReconcileIstio{
-					Client:        cli,
-					scheme:        scheme,
-					provider:      operatorv1.ProviderNone,
-					status:        mockStatus,
-					clusterDomain: "cluster.local",
+					Client:   cli,
+					scheme:   scheme,
+					provider: operatorv1.ProviderNone,
+					status:   mockStatus,
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -222,7 +217,7 @@ var _ = Describe("Istio controller tests", func() {
 			})
 
 			It("should handle Istio CNI daemonset customization", func() {
-				istio.Spec.IstioCNI = &operatorv1.IstioCNIDaemonset{
+				istio.Spec.IstioCNIDaemonset = &operatorv1.IstioCNIDaemonset{
 					Spec: &operatorv1.IstioCNIDaemonsetSpec{
 						Template: &operatorv1.IstioCNIDaemonsetSpecTemplate{
 							Spec: &operatorv1.IstioCNIDaemonsetPodSpec{
@@ -236,11 +231,10 @@ var _ = Describe("Istio controller tests", func() {
 				Expect(cli.Update(ctx, istio)).NotTo(HaveOccurred())
 
 				r := &ReconcileIstio{
-					Client:        cli,
-					scheme:        scheme,
-					provider:      operatorv1.ProviderNone,
-					status:        mockStatus,
-					clusterDomain: "cluster.local",
+					Client:   cli,
+					scheme:   scheme,
+					provider: operatorv1.ProviderNone,
+					status:   mockStatus,
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -257,11 +251,10 @@ var _ = Describe("Istio controller tests", func() {
 
 		It("should update status when reconciliation is successful", func() {
 			r := &ReconcileIstio{
-				Client:        cli,
-				scheme:        scheme,
-				provider:      operatorv1.ProviderNone,
-				status:        mockStatus,
-				clusterDomain: "cluster.local",
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -275,11 +268,10 @@ var _ = Describe("Istio controller tests", func() {
 		It("should handle reconciliation without errors", func() {
 
 			r := &ReconcileIstio{
-				Client:        cli,
-				scheme:        scheme,
-				provider:      operatorv1.ProviderNone,
-				status:        mockStatus,
-				clusterDomain: "cluster.local",
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -294,11 +286,10 @@ var _ = Describe("Istio controller tests", func() {
 				createResources()
 
 				r := &ReconcileIstio{
-					Client:        cli,
-					scheme:        scheme,
-					provider:      provider,
-					status:        mockStatus,
-					clusterDomain: "cluster.local",
+					Client:   cli,
+					scheme:   scheme,
+					provider: provider,
+					status:   mockStatus,
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})

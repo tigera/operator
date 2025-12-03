@@ -61,6 +61,8 @@ type TLS struct {
 
 // The presence of ManagementCluster in your cluster, will configure it to be the management plane to which managed
 // clusters can connect. At most one instance of this resource is supported. It must be named "tigera-secure".
+//
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'",message="resource name must be 'tigera-secure'"
 type ManagementCluster struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

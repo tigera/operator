@@ -129,6 +129,7 @@ type ApplicationLayerStatus struct {
 // +kubebuilder:resource:scope=Cluster
 
 // ApplicationLayer is the Schema for the applicationlayers API
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'", message="resource name must be 'tigera-secure'"
 type ApplicationLayer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -234,6 +234,7 @@ type UserMatch struct {
 // +kubebuilder:resource:path=authentications,scope=Cluster
 
 // Authentication is the Schema for the authentications API
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'default'", message="resource name must be 'default'"
 type Authentication struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

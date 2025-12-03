@@ -367,8 +367,8 @@ func githubIssues(ctx context.Context, client *github.Client, org, repo string, 
 		}
 		opts.Page = resp.NextPage
 	}
-	if len(errs) > 0 {
-		return issues, fmt.Errorf("%+v", errs)
+	if num := len(errs); num > 0 {
+		return issues, fmt.Errorf("encountered %d error(s): %v", num, errs)
 	}
 	return issues, nil
 }
@@ -464,7 +464,7 @@ func manageStreamMilestone(ctx context.Context, githubToken string) error {
 			if err != nil {
 				return false, fmt.Errorf("error retrieving PR for issue %d: %w", issue.GetNumber(), err)
 			}
-			return pr.Base.GetRef() != headBranch, nil
+			return pr.Head.GetRef() != headBranch, nil
 		}
 	}
 	issues, err := r.openIssues(ctx, filter)

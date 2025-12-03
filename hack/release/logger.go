@@ -57,7 +57,7 @@ func configureLogging(c *cli.Command) {
 		},
 	})
 	if err != nil {
-		panic(err)
+		cli.HandleExitCoder(cli.Exit(fmt.Errorf("unable to create logrus hook for log file rotation: %w", err), 1))
 	}
 
 	logrus.AddHook(rotateFileHook)

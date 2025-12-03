@@ -89,7 +89,7 @@ func (r *GithubRelease) setupClient(ctx context.Context, token string) error {
 	return nil
 }
 
-// Get the getMilestone for this release's version.
+// Get the milestone for this release's version.
 func (r *GithubRelease) getMilestone(ctx context.Context) (*github.Milestone, error) {
 	if r.milestone != nil {
 		return r.milestone, nil
@@ -192,16 +192,15 @@ func (r *GithubRelease) releaseNoteIssues(ctx context.Context) ([]*github.Issue,
 		},
 		Labels: []string{releaseNoteRequiredLabel},
 	}
-	filter := func(issue *github.Issue) bool {
+	filter := func(issue *github.Issue) (bool, error) {
 		if !issue.IsPullRequest() {
-			return false
+			return false, nil
 		}
 		pr, _, err := r.githubClient.PullRequests.Get(ctx, r.Org, r.Repo, issue.GetNumber())
 		if err != nil {
-			logrus.WithField("issue", issue.GetNumber()).WithError(err).Error("Error retrieving PR for issue")
-			return false
+			return false, fmt.Errorf("error retrieving PR for issue %d: %w", issue.GetNumber(), err)
 		}
-		return pr.Merged != nil && *pr.Merged
+		return pr.Merged != nil && *pr.Merged, nil
 	}
 	relIssues, err := githubIssues(ctx, r.githubClient, r.Org, r.Repo, opts, filter)
 	if err != nil {
@@ -210,15 +209,15 @@ func (r *GithubRelease) releaseNoteIssues(ctx context.Context) ([]*github.Issue,
 	return relIssues, nil
 }
 
-// Get all open issues in this release using an optional filter function.
-func (r *GithubRelease) openIssues(ctx context.Context, filter func(*github.Issue) bool) ([]*github.Issue, error) {
+// Get all open issues in this release using an optional filter function that may return an error.
+func (r *GithubRelease) openIssues(ctx context.Context, filter func(*github.Issue) (bool, error)) ([]*github.Issue, error) {
 	milestone, err := r.getMilestone(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving milestone for version %s: %w", r.Version, err)
 	}
 	opts := &github.IssueListByRepoOptions{
 		Milestone: strconv.Itoa(milestone.GetNumber()),
-		State:     string(closedState),
+		State:     string(openState),
 		ListOptions: github.ListOptions{
 			PerPage: 100,
 		},
@@ -341,15 +340,25 @@ func (r *GithubRelease) collectReleaseNotes(ctx context.Context, local bool) (*R
 }
 
 // Helper function to list GitHub issues based on the provided options and optional filter function.
-func githubIssues(ctx context.Context, client *github.Client, org, repo string, opts *github.IssueListByRepoOptions, filter func(*github.Issue) bool) ([]*github.Issue, error) {
+// The filter may return an error which will be propagated to the caller.
+func githubIssues(ctx context.Context, client *github.Client, org, repo string, opts *github.IssueListByRepoOptions, filter func(*github.Issue) (bool, error)) ([]*github.Issue, error) {
 	issues := []*github.Issue{}
+	errs := []error{}
 	for {
 		pageIssues, resp, err := client.Issues.ListByRepo(ctx, org, repo, opts)
 		if err != nil {
-			return nil, err
+			errs = append(errs, err)
+			break
 		}
 		for _, issue := range pageIssues {
-			if filter == nil || filter(issue) {
+			if filter == nil {
+				issues = append(issues, issue)
+				continue
+			}
+			if ok, ferr := filter(issue); ferr != nil {
+				errs = append(errs, ferr)
+				continue
+			} else if ok {
 				issues = append(issues, issue)
 			}
 		}
@@ -357,6 +366,9 @@ func githubIssues(ctx context.Context, client *github.Client, org, repo string, 
 			break
 		}
 		opts.Page = resp.NextPage
+	}
+	if len(errs) > 0 {
+		return issues, fmt.Errorf("%+v", errs)
 	}
 	return issues, nil
 }
@@ -442,18 +454,17 @@ func manageStreamMilestone(ctx context.Context, githubToken string) error {
 	if err != nil {
 		return fmt.Errorf("error creating next milestone %s: %w", nextVersion, err)
 	}
-	var filter func(*github.Issue) bool
+	var filter func(*github.Issue) (bool, error)
 	if headBranch := ctx.Value(headBranchCtxKey).(string); headBranch != "" {
-		filter = func(issue *github.Issue) bool {
+		filter = func(issue *github.Issue) (bool, error) {
 			if !issue.IsPullRequest() {
-				return true
+				return true, nil
 			}
 			pr, _, err := r.githubClient.PullRequests.Get(ctx, r.Org, r.Repo, issue.GetNumber())
 			if err != nil {
-				logrus.WithField("issue", issue.GetNumber()).WithError(err).Error("Error retrieving PR for issue")
-				return false
+				return false, fmt.Errorf("error retrieving PR for issue %d: %w", issue.GetNumber(), err)
 			}
-			return pr.Base.GetRef() != headBranch
+			return pr.Base.GetRef() != headBranch, nil
 		}
 	}
 	issues, err := r.openIssues(ctx, filter)

@@ -206,7 +206,7 @@ var (
 		Usage:    "The Calico Enterprise version to use for the release",
 		Sources:  cli.EnvVars("ENTERPRISE_VERSION"),
 		Action: func(ctx context.Context, c *cli.Command, s string) error {
-			if valid, err := isReleaseVersionFormat(s); err != nil {
+			if valid, err := isEnterpriseReleaseVersionFormat(s); err != nil {
 				return fmt.Errorf("error validating Enterprise version format: %w", err)
 			} else if !valid {
 				return fmt.Errorf("version %q is not a valid Enterprise release version", s)

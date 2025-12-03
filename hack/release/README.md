@@ -23,7 +23,7 @@ make hack/bin/release
 
 ## Usage
 
-To start, familarize yourself with the tool
+To start, familiarize yourself with the tool
 
 ```sh
 release --help

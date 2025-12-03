@@ -15,11 +15,14 @@
 
 ## Installation
 
-To install `release`, use the following command:
+To install:
 
 ```bash
 make hack/bin/release
 ```
+
+  > [!TIP]
+  > Add `hack/bin` to your `PATH` to allow running the tool using `release` command.
 
 ## Usage
 

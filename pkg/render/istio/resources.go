@@ -77,19 +77,19 @@ func (r *ResourceOpts) GetResources(scheme *runtime.Scheme) (*IstioResources, er
 
 	baseChart, err := loader.LoadArchive(bytes.NewReader(baseTgz))
 	if err != nil {
-		return nil, fmt.Errorf("Failed to load istio-base chart: %w", err)
+		return nil, fmt.Errorf("failed to load istio-base chart: %w", err)
 	}
 	istiodChart, err := loader.LoadArchive(bytes.NewReader(istiodTgz))
 	if err != nil {
-		return nil, fmt.Errorf("Failed to load istiod chart: %w", err)
+		return nil, fmt.Errorf("failed to load istiod chart: %w", err)
 	}
 	cniChart, err := loader.LoadArchive(bytes.NewReader(cniTgz))
 	if err != nil {
-		return nil, fmt.Errorf("Failed to load istio-cni chart: %w", err)
+		return nil, fmt.Errorf("failed to load istio-cni chart: %w", err)
 	}
 	ztunnelChart, err := loader.LoadArchive(bytes.NewReader(ztunnelTgz))
 	if err != nil {
-		return nil, fmt.Errorf("Failed to load ztunnel chart: %w", err)
+		return nil, fmt.Errorf("failed to load ztunnel chart: %w", err)
 	}
 
 	client := action.NewInstall(actionConfig)

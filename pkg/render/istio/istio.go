@@ -137,7 +137,7 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 func (c *IstioComponent) patchImages() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("Failed to patch Images with panic value: %v", r)
+			err = fmt.Errorf("failed to patch Images with panic value: %v", r)
 		}
 	}()
 
@@ -161,7 +161,7 @@ func (c *IstioComponent) patchImages() (err error) {
 	}
 	mapData := c.resources.IstioSidecarInjectorConfigMap.Data
 	for k, v := range mapData {
-		mapData[k] = strings.Replace(v, istioFakeImageProxyv2, c.IstioProxyv2Image, -1)
+		mapData[k] = strings.ReplaceAll(v, istioFakeImageProxyv2, c.IstioProxyv2Image)
 	}
 	return nil
 }

@@ -33,7 +33,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	v1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -253,14 +252,14 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	return reconcile.Result{}, nil
 }
 
-func updateDefaults(istio *v1.Istio) {
+func updateDefaults(istio *operatorv1.Istio) {
 	if istio.Spec.DSCPMark == nil {
 		dscpMark := numorstring.DSCPFromInt(23)
 		istio.Spec.DSCPMark = &dscpMark
 	}
 }
 
-func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, instance *v1.Istio, fc *crdv1.FelixConfiguration, remove bool) (bool, error) {
+func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, instance *operatorv1.Istio, fc *crdv1.FelixConfiguration, remove bool) (bool, error) {
 	// Handle Istio Ambient Mode configuration
 	if err := r.configureIstioAmbientMode(fc, remove); err != nil {
 		return false, err
@@ -304,7 +303,7 @@ func (r *ReconcileIstio) configureIstioAmbientMode(fc *crdv1.FelixConfiguration,
 	return nil
 }
 
-func (r *ReconcileIstio) configureIstioDSCPMark(instance *v1.Istio, fc *crdv1.FelixConfiguration, remove bool) error {
+func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *crdv1.FelixConfiguration, remove bool) error {
 	var annotationDSCP *numorstring.DSCP
 	if fc.Annotations[istio.IstioOperatorAnnotationDSCP] != "" {
 		value, err := strconv.ParseUint(fc.Annotations[istio.IstioOperatorAnnotationDSCP], 10, 32)
@@ -335,9 +334,9 @@ func (r *ReconcileIstio) configureIstioDSCPMark(instance *v1.Istio, fc *crdv1.Fe
 	return nil
 }
 
-func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *v1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
+func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *operatorv1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
 	// Executing clean up on finalizing
-	if !instance.ObjectMeta.DeletionTimestamp.IsZero() {
+	if !instance.DeletionTimestamp.IsZero() {
 		if _, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *crdv1.FelixConfiguration) (bool, error) {
 			return r.setIstioFelixConfiguration(ctx, instance, fc, true)
 		}); err != nil {

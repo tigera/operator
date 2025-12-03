@@ -21,7 +21,7 @@ type GlobalConfig struct {
 	OperatorManageWebhooks bool             `json:"operatorManageWebhooks,omitempty"`
 	Proxy                  *ProxyConfig     `json:"proxy,omitempty"`
 	ProxyInit              *ProxyInitConfig `json:"proxy_init,omitempty"`
-	Platform               string           `json:"platform,omitemtpy"`
+	Platform               string           `json:"platform,omitempty"`
 }
 
 type ProxyConfig struct {

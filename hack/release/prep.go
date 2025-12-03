@@ -228,7 +228,11 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	}
 	logrus.WithField("PR", pr).Info("Created PR")
 
+	// Skip milestone management if requested or if using a forked repo
 	if c.Bool(skipMilestoneFlag.Name) {
+		return nil
+	} else if c.String(gitRepoFlag.Name) != mainRepo {
+		logrus.Warn("Cannot manage milestones when using a forked repo, skipping milestone management")
 		return nil
 	}
 	return manageStreamMilestone(ctx, c.String(githubTokenFlag.Name))

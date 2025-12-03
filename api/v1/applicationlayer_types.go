@@ -129,6 +129,7 @@ type ApplicationLayerStatus struct {
 // +kubebuilder:resource:scope=Cluster
 
 // ApplicationLayer is the Schema for the applicationlayers API
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'default'", message="ApplicationLayer resource must be named 'default'"
 type ApplicationLayer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

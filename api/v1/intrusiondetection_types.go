@@ -81,7 +81,6 @@ type DPIDaemonsetInitContainer struct {
 }
 
 type AnomalyDetectionSpec struct {
-
 	// StorageClassName is now deprecated, and configuring it has no effect.
 	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
@@ -104,6 +103,8 @@ type IntrusionDetectionStatus struct {
 
 // IntrusionDetection installs the components required for Tigera intrusion detection. At most one instance
 // of this resource is supported. It must be named "tigera-secure".
+//
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'",message="resource name must be 'tigera-secure'"
 type IntrusionDetection struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -140,7 +141,6 @@ type IntrusionDetectionComponentResource struct {
 
 // IntrusionDetectionControllerDeployment is the configuration for the IntrusionDetectionController Deployment.
 type IntrusionDetectionControllerDeployment struct {
-
 	// Spec is the specification of the IntrusionDetectionController Deployment.
 	// +optional
 	Spec *IntrusionDetectionControllerDeploymentSpec `json:"spec,omitempty"`
@@ -148,7 +148,6 @@ type IntrusionDetectionControllerDeployment struct {
 
 // IntrusionDetectionControllerDeploymentSpec defines configuration for the IntrusionDetectionController Deployment.
 type IntrusionDetectionControllerDeploymentSpec struct {
-
 	// Template describes the IntrusionDetectionController Deployment pod that will be created.
 	// +optional
 	Template *IntrusionDetectionControllerDeploymentPodTemplateSpec `json:"template,omitempty"`
@@ -156,7 +155,6 @@ type IntrusionDetectionControllerDeploymentSpec struct {
 
 // IntrusionDetectionControllerDeploymentPodTemplateSpec is the IntrusionDetectionController Deployment's PodTemplateSpec
 type IntrusionDetectionControllerDeploymentPodTemplateSpec struct {
-
 	// Spec is the IntrusionDetectionController Deployment's PodSpec.
 	// +optional
 	Spec *IntrusionDetectionControllerDeploymentPodSpec `json:"spec,omitempty"`

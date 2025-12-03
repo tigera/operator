@@ -34,6 +34,8 @@ type NonClusterHostSpec struct {
 
 // NonClusterHost installs the components required for non-cluster host log collection.
 // At most one instance of this resource is supported. It must be named "tigera-secure".
+//
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'",message="resource name must be 'tigera-secure'"
 type NonClusterHost struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

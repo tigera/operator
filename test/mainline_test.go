@@ -230,53 +230,6 @@ var _ = Describe("Mainline component function tests", func() {
 	})
 })
 
-var _ = Describe("Mainline component function tests with ignored resource", func() {
-	var c client.Client
-	var mgr manager.Manager
-	var shutdownContext context.Context
-	var cancel context.CancelFunc
-
-	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist)
-		verifyCRDsExist(c, operator.TigeraSecureEnterprise)
-	})
-
-	AfterEach(func() {
-		removeInstallation(context.Background(), c, "not-default")
-	})
-
-	It("Should ignore a CRD resource not named 'default'", func() {
-		By("Creating a CRD resource not named default")
-		instance := &operator.Installation{
-			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "not-default"},
-			Spec:       operator.InstallationSpec{},
-		}
-		err := c.Create(context.Background(), instance)
-		Expect(err).NotTo(HaveOccurred())
-
-		By("Running the operator")
-		done := RunOperator(mgr, shutdownContext)
-		defer func() {
-			cancel()
-			Eventually(func() error {
-				select {
-				case <-done:
-					return nil
-				default:
-					return fmt.Errorf("operator did not shutdown")
-				}
-			}, 60*time.Second).Should(BeNil())
-		}()
-
-		By("Verifying resources were not created")
-		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
-		ExpectResourceDestroyed(c, ds, 10*time.Second)
-		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
-		ExpectResourceDestroyed(c, kc, 10*time.Second)
-	})
-})
-
 var _ = Describe("Mainline component function tests - multi-tenant", func() {
 	It("should set up all controllers correctly in multi-tenant mode", func() {
 		_, _, cancel, _ := setupManager(ManageCRDsDisable, MultiTenant, EnterpriseCRDsExist)

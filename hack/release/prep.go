@@ -218,15 +218,14 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 		}...)
 	}
 	logrus.WithField("args", strings.Join(args, " ")).Debug("Creating PR for release preparation")
-	pr, err := runCommandInDir(repoRootDir, "hack/bin/gh", args, nil)
-	if err != nil {
-		if strings.Contains(err.Error(), "already exists") {
-			logrus.Warnf("PR already exists. Find PR at: https://github.com/%s/%s/pulls?q=is%%3Aopen+head%%3A%s", githubOrg, githubRepo, prepBranch)
-			return nil
+	if pr, err := runCommandInDir(repoRootDir, "hack/bin/gh", args, nil); err != nil {
+		if !strings.Contains(err.Error(), "already exists") {
+			return fmt.Errorf("failed to create PR: %w", err)
 		}
-		return fmt.Errorf("failed to create PR: %w", err)
+		logrus.Warnf("PR already exists. Find PR at: https://github.com/%s/%s/pulls?q=is%%3Aopen+head%%3A%s", githubOrg, githubRepo, prepBranch)
+	} else {
+		logrus.WithField("PR", pr).Info("Created PR")
 	}
-	logrus.WithField("PR", pr).Info("Created PR")
 
 	// Skip milestone management if requested or if using a forked repo
 	if c.Bool(skipMilestoneFlag.Name) {

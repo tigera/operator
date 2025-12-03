@@ -34,7 +34,7 @@ var excludedComponentsPatterns = []string{
 }
 
 // Command to prepare repo for a new release.
-var releasePrepCommand = &cli.Command{
+var prepCommand = &cli.Command{
 	Name:  "prep",
 	Usage: "Prepare for a new release",
 	Description: `This involves updating version configuration files, creating a new git branch with the changes,
@@ -53,12 +53,12 @@ to point to local repositories for Calico and Enterprise respectively.`,
 		githubTokenFlag,
 		localFlag,
 	},
-	Before: releasePrepBefore,
-	Action: releasePrepAction,
+	Before: prepBefore,
+	Action: prepAction,
 }
 
 // Pre-action for release prep command.
-var releasePrepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
+var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	configureLogging(c)
 
 	// Extract repo information from CLI repo flag into context
@@ -103,7 +103,7 @@ var releasePrepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command)
 })
 
 // Action executed for release prep command.
-var releasePrepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
+var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
 	// get current branch to switch back to later
 	baseBranch, err := git("branch", "--show-current")
 	if err != nil {

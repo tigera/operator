@@ -30,6 +30,8 @@ const (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+//
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'default'", message="resource name must be 'default'"
 type Whisker struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

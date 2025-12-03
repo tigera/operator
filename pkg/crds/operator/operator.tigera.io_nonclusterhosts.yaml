@@ -57,5 +57,8 @@ spec:
                 - endpoint
               type: object
           type: object
+          x-kubernetes-validations:
+            - message: resource name must be 'tigera-secure'
+              rule: self.metadata.name == 'tigera-secure'
       served: true
       storage: true

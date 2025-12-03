@@ -498,6 +498,21 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantANamespace}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a-id"}))
 
+			roleBinding := rtest.GetResource(tenantAResources, render.PolicyRecommendationManagedClustersWatchRoleBindingName, tenantANamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+			Expect(roleBinding.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
+			Expect(roleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      render.PolicyRecommendationName,
+					Namespace: tenantANamespace,
+				},
+				{
+					Kind:      "ServiceAccount",
+					Name:      "tigera-policy-recommendation",
+					Namespace: "tigera-policy-recommendation",
+				},
+			}))
+
 			cfg.Namespace = tenantBNamespace
 			cfg.Tenant = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{

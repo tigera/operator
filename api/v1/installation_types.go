@@ -977,6 +977,8 @@ type InstallationStatus struct {
 // Installation configures an installation of Calico or Calico Enterprise. At most one instance
 // of this resource is supported. It must be named "default". The Installation API installs core networking
 // and network policy components, and provides general install-time configuration.
+//
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'default' || self.metadata.name == 'tigera-secure'", message="resource name must be 'default' or 'tigera-secure'"
 type Installation struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

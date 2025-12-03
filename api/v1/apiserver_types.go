@@ -52,6 +52,7 @@ type APIServerStatus struct {
 // of this resource is supported. It must be named "default" or "tigera-secure".
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'default' || self.metadata.name == 'tigera-secure'",message="APIServer resource must be named 'default' or 'tigera-secure'"
 type APIServer struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -5496,5 +5496,8 @@ spec:
                   type: object
               type: object
           type: object
+          x-kubernetes-validations:
+            - message: resource must be named 'default'
+              rule: self.metadata.name == 'default'
       served: true
       storage: true

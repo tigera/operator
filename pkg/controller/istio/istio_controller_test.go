@@ -25,19 +25,24 @@ import (
 	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/render/istio"
 	"github.com/tigera/operator/test"
 )
 
@@ -48,7 +53,7 @@ var _ = Describe("Istio controller tests", func() {
 		ctx                 context.Context
 		mockStatus          *status.MockStatus
 		installation        *operatorv1.Installation
-		istio               *operatorv1.Istio
+		istioCR             *operatorv1.Istio
 		objTrackerWithCalls test.ObjectTrackerWithCalls
 		replicas            int32
 	)
@@ -61,6 +66,7 @@ var _ = Describe("Istio controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(admregv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(autoscalingv2.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(crdv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
 		objTrackerWithCalls = test.NewObjectTrackerWithCalls(scheme)
@@ -101,7 +107,7 @@ var _ = Describe("Istio controller tests", func() {
 			},
 		}
 
-		istio = &operatorv1.Istio{
+		istioCR = &operatorv1.Istio{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "default",
 			},
@@ -113,7 +119,7 @@ var _ = Describe("Istio controller tests", func() {
 	createResources := func() {
 		// Clear any existing resourceVersion to avoid creation conflicts
 		Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
-		Expect(cli.Create(ctx, istio)).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, istioCR)).NotTo(HaveOccurred())
 	}
 
 	Context("Reconcile tests", func() {
@@ -137,7 +143,7 @@ var _ = Describe("Istio controller tests", func() {
 		})
 
 		It("should handle missing Installation resource", func() {
-			Expect(cli.Create(ctx, istio)).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, istioCR)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
 				Client:   cli,
@@ -191,7 +197,7 @@ var _ = Describe("Istio controller tests", func() {
 			})
 
 			It("should handle Istiod deployment customization", func() {
-				istio.Spec.IstiodDeployment = &operatorv1.IstiodDeployment{
+				istioCR.Spec.IstiodDeployment = &operatorv1.IstiodDeployment{
 					Spec: &operatorv1.IstiodDeploymentSpec{
 						Template: &operatorv1.IstiodDeploymentSpecTemplate{
 							Spec: &operatorv1.IstiodDeploymentPodSpec{
@@ -202,7 +208,7 @@ var _ = Describe("Istio controller tests", func() {
 						},
 					},
 				}
-				Expect(cli.Update(ctx, istio)).NotTo(HaveOccurred())
+				Expect(cli.Update(ctx, istioCR)).NotTo(HaveOccurred())
 
 				r := &ReconcileIstio{
 					Client:   cli,
@@ -217,7 +223,7 @@ var _ = Describe("Istio controller tests", func() {
 			})
 
 			It("should handle Istio CNI daemonset customization", func() {
-				istio.Spec.IstioCNIDaemonset = &operatorv1.IstioCNIDaemonset{
+				istioCR.Spec.IstioCNIDaemonset = &operatorv1.IstioCNIDaemonset{
 					Spec: &operatorv1.IstioCNIDaemonsetSpec{
 						Template: &operatorv1.IstioCNIDaemonsetSpecTemplate{
 							Spec: &operatorv1.IstioCNIDaemonsetPodSpec{
@@ -228,7 +234,7 @@ var _ = Describe("Istio controller tests", func() {
 						},
 					},
 				}
-				Expect(cli.Update(ctx, istio)).NotTo(HaveOccurred())
+				Expect(cli.Update(ctx, istioCR)).NotTo(HaveOccurred())
 
 				r := &ReconcileIstio{
 					Client:   cli,
@@ -302,5 +308,478 @@ var _ = Describe("Istio controller tests", func() {
 			Entry("EKS provider", operatorv1.ProviderEKS),
 			Entry("OpenShift provider", operatorv1.ProviderOpenShift),
 		)
+	})
+
+	Context("Finalizer management tests", func() {
+		BeforeEach(func() {
+			createResources()
+		})
+
+		It("should add finalizer on initial reconciliation", func() {
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Get the Istio CR and verify finalizer was added
+			updatedIstio := &operatorv1.Istio{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedIstio)).NotTo(HaveOccurred())
+			Expect(updatedIstio.Finalizers).To(ContainElement(istio.IstioFinalizer))
+		})
+
+		It("should handle deletion and remove finalizer", func() {
+			// Create FelixConfiguration for cleanup test
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			// First reconcile to add finalizer
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Get the Istio CR and verify finalizer was added
+			updatedIstio := &operatorv1.Istio{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedIstio)).NotTo(HaveOccurred())
+			Expect(updatedIstio.Finalizers).To(ContainElement(istio.IstioFinalizer))
+
+			// Delete the Istio CR - this will set DeletionTimestamp
+			Expect(cli.Delete(ctx, updatedIstio)).NotTo(HaveOccurred())
+
+			// Reconcile again to handle deletion - this should remove the finalizer
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify the object still exists (finalizer removed but object not fully deleted yet in fake client)
+			// or it's already gone - either is acceptable
+			finalIstio := &operatorv1.Istio{}
+			err = cli.Get(ctx, types.NamespacedName{Name: "default"}, finalIstio)
+			if err == nil {
+				// Object still exists - verify finalizer was removed
+				Expect(finalIstio.Finalizers).NotTo(ContainElement(istio.IstioFinalizer))
+			} else {
+				// Object is gone - that's also fine, means deletion completed
+				Expect(errors.IsNotFound(err)).To(BeTrue())
+			}
+		})
+	})
+
+	Context("Default value tests", func() {
+		It("should set default DSCPMark to 23", func() {
+			// Create Istio without DSCPMark
+			istioNoDSCP := &operatorv1.Istio{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, istioNoDSCP)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify DSCPMark was set to 23
+			updatedIstio := &operatorv1.Istio{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedIstio)).NotTo(HaveOccurred())
+			Expect(updatedIstio.Spec.DSCPMark).NotTo(BeNil())
+			Expect(updatedIstio.Spec.DSCPMark.ToUint8()).To(Equal(uint8(23)))
+		})
+
+		It("should preserve existing DSCPMark value", func() {
+			// Create Istio with custom DSCPMark
+			customDSCP := numorstring.DSCPFromInt(10)
+			istioCustomDSCP := &operatorv1.Istio{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Spec: operatorv1.IstioSpec{
+					DSCPMark: &customDSCP,
+				},
+			}
+			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, istioCustomDSCP)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify DSCPMark was preserved
+			updatedIstio := &operatorv1.Istio{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedIstio)).NotTo(HaveOccurred())
+			Expect(updatedIstio.Spec.DSCPMark).NotTo(BeNil())
+			Expect(updatedIstio.Spec.DSCPMark.ToUint8()).To(Equal(uint8(10)))
+		})
+	})
+
+	Context("FelixConfiguration patching tests", func() {
+		BeforeEach(func() {
+			createResources()
+		})
+
+		It("should patch FelixConfiguration with IstioAmbientMode", func() {
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify FelixConfiguration was patched
+			updatedFC := &crdv1.FelixConfiguration{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedFC)).NotTo(HaveOccurred())
+			Expect(updatedFC.Spec.IstioAmbientMode).NotTo(BeNil())
+			Expect(*updatedFC.Spec.IstioAmbientMode).To(Equal("Enabled"))
+			Expect(updatedFC.Annotations).To(HaveKey(istio.IstioOperatorAnnotationMode))
+			Expect(updatedFC.Annotations[istio.IstioOperatorAnnotationMode]).To(Equal("Enabled"))
+		})
+
+		It("should patch FelixConfiguration with IstioDSCPMark", func() {
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+			dscpMark := numorstring.DSCPFromInt(23)
+			istioCR.Spec.DSCPMark = &dscpMark
+			Expect(cli.Update(ctx, istioCR)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify FelixConfiguration was patched with DSCP mark
+			updatedFC := &crdv1.FelixConfiguration{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedFC)).NotTo(HaveOccurred())
+			Expect(updatedFC.Spec.IstioDSCPMark).NotTo(BeNil())
+			Expect(updatedFC.Spec.IstioDSCPMark.ToUint8()).To(Equal(uint8(23)))
+			Expect(updatedFC.Annotations).To(HaveKey(istio.IstioOperatorAnnotationDSCP))
+			Expect(updatedFC.Annotations[istio.IstioOperatorAnnotationDSCP]).To(Equal("23"))
+		})
+
+		It("should handle custom DSCPMark value", func() {
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+			}
+			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+			customDSCP := numorstring.DSCPFromInt(10)
+			istioCR.Spec.DSCPMark = &customDSCP
+			Expect(cli.Update(ctx, istioCR)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify FelixConfiguration has custom DSCP mark
+			updatedFC := &crdv1.FelixConfiguration{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedFC)).NotTo(HaveOccurred())
+			Expect(updatedFC.Spec.IstioDSCPMark).NotTo(BeNil())
+			Expect(updatedFC.Spec.IstioDSCPMark.ToUint8()).To(Equal(uint8(10)))
+			Expect(updatedFC.Annotations[istio.IstioOperatorAnnotationDSCP]).To(Equal("10"))
+		})
+
+		It("should detect user modification of IstioAmbientMode in FelixConfiguration", func() {
+			// Create FelixConfiguration with mismatched annotation and spec
+			userModifiedMode := "UserModified"
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+					Annotations: map[string]string{
+						istio.IstioOperatorAnnotationMode: "Enabled",
+					},
+				},
+				Spec: crdv1.FelixConfigurationSpec{
+					IstioAmbientMode: &userModifiedMode,
+				},
+			}
+			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("felixconfig IstioAmbientMode modified by user"))
+		})
+
+		It("should detect user modification of IstioDSCPMark in FelixConfiguration", func() {
+			// Create FelixConfiguration with mismatched annotation and spec
+			userModifiedDSCP := numorstring.DSCPFromInt(50)
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+					Annotations: map[string]string{
+						istio.IstioOperatorAnnotationDSCP: "23",
+					},
+				},
+				Spec: crdv1.FelixConfigurationSpec{
+					IstioDSCPMark: &userModifiedDSCP,
+				},
+			}
+			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("felixconfig IstioDSCPMark modified by user"))
+		})
+
+		It("should clear FelixConfiguration on deletion", func() {
+			// Create FelixConfiguration with Istio settings
+			istioMode := "Enabled"
+			dscpMark := numorstring.DSCPFromInt(23)
+			fc := &crdv1.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+					Annotations: map[string]string{
+						istio.IstioOperatorAnnotationMode: "Enabled",
+						istio.IstioOperatorAnnotationDSCP: "23",
+					},
+				},
+				Spec: crdv1.FelixConfigurationSpec{
+					IstioAmbientMode: &istioMode,
+					IstioDSCPMark:    &dscpMark,
+				},
+			}
+			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			// First reconcile to add finalizer
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Get the Istio CR and delete it
+			updatedIstio := &operatorv1.Istio{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedIstio)).NotTo(HaveOccurred())
+
+			// Delete the Istio CR - this will set DeletionTimestamp
+			Expect(cli.Delete(ctx, updatedIstio)).NotTo(HaveOccurred())
+
+			// Reconcile again to handle deletion and clear FelixConfiguration
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify FelixConfiguration was cleared
+			clearedFC := &crdv1.FelixConfiguration{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, clearedFC)).NotTo(HaveOccurred())
+			Expect(clearedFC.Spec.IstioAmbientMode).To(BeNil())
+			Expect(clearedFC.Spec.IstioDSCPMark).To(BeNil())
+			Expect(clearedFC.Annotations).NotTo(HaveKey(istio.IstioOperatorAnnotationMode))
+			Expect(clearedFC.Annotations).NotTo(HaveKey(istio.IstioOperatorAnnotationDSCP))
+		})
+	})
+
+	Context("Error handling tests", func() {
+		It("should handle missing variant gracefully", func() {
+			// Create installation without variant
+			installationNoVariant := &operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+				},
+				Spec: operatorv1.InstallationSpec{
+					Variant: "",
+				},
+			}
+			Expect(cli.Create(ctx, installationNoVariant)).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, istioCR)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result.Requeue).To(BeTrue())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", mock.Anything, mock.Anything)
+		})
+
+		It("should handle TigeraStatus update in reconciliation", func() {
+			createResources()
+
+			// Create TigeraStatus
+			ts := &operatorv1.TigeraStatus{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: IstioName,
+				},
+				Status: operatorv1.TigeraStatusStatus{
+					Conditions: []operatorv1.TigeraStatusCondition{
+						{
+							Type:   operatorv1.ComponentAvailable,
+							Status: operatorv1.ConditionTrue,
+						},
+					},
+				},
+			}
+			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: IstioName}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify Istio status conditions were updated
+			updatedIstio := &operatorv1.Istio{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedIstio)).NotTo(HaveOccurred())
+			Expect(updatedIstio.Status.Conditions).NotTo(BeEmpty())
+		})
+	})
+
+	Context("Pull secrets tests", func() {
+		It("should handle pull secrets correctly", func() {
+			// Create pull secret
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "tigera-pull-secret",
+					Namespace: common.OperatorNamespace(),
+				},
+				Data: map[string][]byte{
+					".dockerconfigjson": []byte(`{"auths":{"registry.example.com":{"auth":"dGVzdDp0ZXN0"}}}`),
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+			}
+			Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
+
+			installation.Spec.ImagePullSecrets = []corev1.LocalObjectReference{
+				{Name: "tigera-pull-secret"},
+			}
+			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, istioCR)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+		})
+	})
+
+	Context("Resource rendering tests", func() {
+		BeforeEach(func() {
+			createResources()
+		})
+
+		It("should render Istio components successfully", func() {
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify status was marked ready
+			mockStatus.AssertCalled(GinkgoT(), "ClearDegraded")
+		})
+
+		It("should handle ImageSet application", func() {
+			// Create ImageSet with all required Istio images
+			imageSet := &operatorv1.ImageSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "calico-master",
+				},
+				Spec: operatorv1.ImageSetSpec{
+					Images: []operatorv1.Image{
+						{Image: "tigera/istio-pilot", Digest: "sha256:pilot123"},
+						{Image: "tigera/istio-install-cni", Digest: "sha256:cni123"},
+						{Image: "tigera/istio-ztunnel", Digest: "sha256:ztunnel123"},
+						{Image: "tigera/istio-proxyv2", Digest: "sha256:proxyv2123"},
+					},
+				},
+			}
+			Expect(cli.Create(ctx, imageSet)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:   cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+		})
 	})
 })

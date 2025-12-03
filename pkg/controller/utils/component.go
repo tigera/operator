@@ -284,6 +284,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			delete(labels, common.MultipleOwnersLabel)
 			om.GetObjectMeta().SetLabels(labels)
 		}
+
 		err = c.create(ctx, obj)
 		if err != nil {
 			logCtx.WithValues("key", key).Error(err, "Failed to create object.")

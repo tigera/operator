@@ -179,7 +179,6 @@ var (
 		Category: calicoFlagCategory,
 		Usage:    "The Calico version to use for the release",
 		Sources:  cli.EnvVars("CALICO_VERSION"),
-		Required: true,
 		Action: func(ctx context.Context, c *cli.Command, s string) error {
 			if valid, err := isReleaseVersionFormat(s); err != nil {
 				return fmt.Errorf("error validating Calico version format: %w", err)
@@ -206,7 +205,6 @@ var (
 		Category: enterpriseFlagCategory,
 		Usage:    "The Calico Enterprise version to use for the release",
 		Sources:  cli.EnvVars("ENTERPRISE_VERSION"),
-		Required: true,
 		Action: func(ctx context.Context, c *cli.Command, s string) error {
 			if valid, err := isReleaseVersionFormat(s); err != nil {
 				return fmt.Errorf("error validating Enterprise version format: %w", err)

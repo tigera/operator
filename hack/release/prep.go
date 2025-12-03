@@ -79,6 +79,11 @@ var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (conte
 		return ctx, err
 	}
 
+	// One of Calico or Enterprise version must be specified.
+	if c.String(calicoVersionFlag.Name) == "" && c.String(enterpriseVersionFlag.Name) == "" {
+		return ctx, fmt.Errorf("at least one of %s or %s must be specified", calicoVersionFlag.Name, enterpriseVersionFlag.Name)
+	}
+
 	// If Calico is not passed in, check the version in calico_versions.yml is a released version.
 	// An operator release must always include a released Calico version.
 	calicoVersion := c.String(calicoVersionFlag.Name)
@@ -130,9 +135,6 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	if _, err := gitInDir(repoRootDir, "add", calicoConfig, enterpriseConfig, "pkg/components", "pkg/crds"); err != nil {
 		return fmt.Errorf("error staging git changes: %w", err)
 	}
-	if _, err := git("commit", "-m", fmt.Sprintf("build: %s release", version)); err != nil {
-		return fmt.Errorf("error committing git changes: %w", err)
-	}
 
 	// Modify config versions files
 	if calico := c.String(calicoVersionFlag.Name); calico != "" {
@@ -158,6 +160,11 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	// Run make target to ensure files are formatted correctly and generated files are up to date.
 	if _, err := makeInDir(repoRootDir, "fix gen-versions"); err != nil {
 		return fmt.Errorf("error running \"make fix gen-versions\": %w", err)
+	}
+
+	// Commit changes
+	if _, err := git("commit", "-m", fmt.Sprintf("build: %s release", version)); err != nil {
+		return fmt.Errorf("error committing git changes: %w", err)
 	}
 
 	// If local flag is set, skip pushing prep branch and creating PR

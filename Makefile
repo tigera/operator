@@ -638,7 +638,7 @@ ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
 endif
 
-release-prep: hack/bin/release hack/bin/gh var-require-all-VERSION-CALICO_VERSION-ENTERPRISE_VERSION
+release-prep: hack/bin/release hack/bin/gh var-require-all-VERSION var-require-one-of-CALICO_VERSION-ENTERPRISE_VERSION
 	@REPO=$(REPO) hack/bin/release prep
 
 ###############################################################################

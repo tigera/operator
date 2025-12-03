@@ -1,0 +1,367 @@
+// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package istio
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
+	"github.com/go-logr/logr"
+	"github.com/tigera/api/pkg/lib/numorstring"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/gatewayapi"
+	"github.com/tigera/operator/pkg/render/istio"
+)
+
+const IstioName = "istio"
+
+var (
+	// blank assignment to verify that ReconcileIstio implements reconcile.Reconciler
+	_ reconcile.Reconciler = &ReconcileIstio{}
+
+	log = logf.Log.WithName("controller_istio")
+)
+
+// Add creates a new Istio Controller and adds it to the Manager. The Manager will set fields on the Controller
+// and Start it when the Manager is Started.
+//
+// Start Watches within the Add function for any resources that this controller creates or monitors. This will trigger
+// calls to Reconcile() when an instance of one of the watched resources is modified.
+func Add(mgr manager.Manager, opts options.AddOptions) error {
+	r := newReconciler(mgr, opts)
+
+	c, err := ctrlruntime.NewController("istio-controller", mgr, controller.Options{Reconciler: r})
+	if err != nil {
+		return fmt.Errorf("failed to create istio-controller: %w", err)
+	}
+
+	// Watch for changes to TigeraStatus.
+	if err = utils.AddTigeraStatusWatch(c, IstioName); err != nil {
+		return fmt.Errorf("istio-controller failed to watch calico Tigerastatus: %w", err)
+	}
+
+	// Watch for changes to primary resource Istio
+	err = c.WatchObject(&operatorv1.Istio{}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("istio-controller failed to watch primary resource: %v", err)
+	}
+
+	if err = utils.AddInstallationWatch(c); err != nil {
+		return fmt.Errorf("istio-controller failed to watch Installation resource: %v", err)
+	}
+
+	err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("istio-controller failed to watch FelixConfiguration resource: %w", err)
+	}
+
+	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("istio-controller failed to create periodic reconcile watch: %w", err)
+	}
+
+	return nil
+}
+
+// newReconciler returns a new reconcile.Reconciler
+func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileIstio {
+	r := &ReconcileIstio{
+		Client:   mgr.GetClient(),
+		scheme:   mgr.GetScheme(),
+		status:   status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
+		provider: opts.DetectedProvider,
+	}
+
+	r.status.Run(opts.ShutdownContext)
+	return r
+}
+
+// ReconcileIstio reconciles a Istio object
+type ReconcileIstio struct {
+	client.Client
+	scheme   *runtime.Scheme
+	status   status.StatusManager
+	provider operatorv1.Provider
+}
+
+func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+	reqLogger.V(1).Info("Reconciling Istio")
+
+	// Get the Istio CR.
+	instance := &operatorv1.Istio{}
+	err := r.Get(ctx, utils.DefaultInstanceKey, instance)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			reqLogger.Info("Istio object not found")
+			r.status.OnCRNotFound()
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError,
+			fmt.Sprintf("Error querying for Istio CR: failed to get Istio %q", utils.DefaultInstanceKey),
+			err,
+			reqLogger,
+		)
+		return reconcile.Result{}, err
+	}
+
+	if res, err, finished := r.maintainFinalizer(ctx, instance, reqLogger); err != nil || finished {
+		return res, err
+	}
+
+	r.status.OnCRFound()
+
+	// SetMetaData in the TigeraStatus such as observedGenerations.
+	defer r.status.SetMetaData(&instance.ObjectMeta)
+
+	// Changes for updating Istio status conditions.
+	if request.Name == IstioName && request.Namespace == "" {
+		ts := &operatorv1.TigeraStatus{}
+		err := r.Get(ctx, types.NamespacedName{Name: IstioName}, ts)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		instance.Status.Conditions = status.UpdateStatusCondition(instance.Status.Conditions, ts.Status.Conditions)
+		if err := r.Status().Update(ctx, instance); err != nil {
+			log.WithValues("reason", err).Info("Failed to update Istio status conditions.")
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Set defaults
+	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
+	updateDefaults(instance)
+	if err := r.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Get the Installation, for k8s provider info.
+	variant, installation, err := utils.GetInstallation(ctx, r)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if variant == "" {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", nil, reqLogger)
+		return reconcile.Result{Requeue: true}, nil
+	}
+
+	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Get the Kubernetes Gateway API CRDs.
+	essentialCRDs, optionalCRDs := gatewayapi.K8SGatewayAPICRDs(installation.KubernetesProvider)
+
+	// Check CRDs are present and only create it if not
+	handler := utils.NewComponentHandler(log, r, r.scheme, nil)
+	handler.SetCreateOnly()
+	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(essentialCRDs...), nil)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating gateway API CRDs", err, log)
+		return reconcile.Result{}, err
+	}
+	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(optionalCRDs...), nil)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		reqLogger.Info("Could not render all optional gateway API CRDs", "err", err)
+	}
+
+	// Render resources for Istio support
+	istioCfg := &istio.Configuration{
+		Installation:   installation,
+		PullSecrets:    pullSecrets,
+		Istio:          instance,
+		IstioNamespace: istio.IstioNamespace,
+		Scheme:         r.scheme,
+	}
+	istioComponentCRDs, istioComponent, err := istio.Istio(istioCfg)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error initializing Istio components", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Apply the image set
+	if err = imageset.ApplyImageSet(ctx, r.Client, installation.Variant, istioComponent); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error with ImageSet", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Deploy Istio CRDs
+	err = handler.CreateOrUpdateOrDelete(ctx, istioComponentCRDs, nil)
+	if err != nil && !errors.IsAlreadyExists(err) {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Calico Istio CRDs", err, log)
+		return reconcile.Result{}, err
+	}
+
+	// Deploy Istio components, passing the Istio CR for the owner this time.
+	err = utils.NewComponentHandler(log, r, r.scheme, instance).CreateOrUpdateOrDelete(ctx, istioComponent, r.status)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Calico Istio resources", err, log)
+		return reconcile.Result{}, err
+	}
+
+	_, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+		return r.setIstioFelixConfiguration(ctx, instance, fc, false)
+	})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error patching felix configuration with Istio settings", err, log)
+		return reconcile.Result{}, err
+	}
+
+	// Clear the degraded bit if we've reached this far.
+	r.status.ClearDegraded()
+
+	return reconcile.Result{}, nil
+}
+
+func updateDefaults(istio *operatorv1.Istio) {
+	if istio.Spec.DSCPMark == nil {
+		dscpMark := numorstring.DSCPFromInt(23)
+		istio.Spec.DSCPMark = &dscpMark
+	}
+}
+
+func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, instance *operatorv1.Istio, fc *crdv1.FelixConfiguration, remove bool) (bool, error) {
+	// Handle Istio Ambient Mode configuration
+	if err := r.configureIstioAmbientMode(fc, remove); err != nil {
+		return false, err
+	}
+
+	// Handle Istio DSCP Mark configuration
+	if err := r.configureIstioDSCPMark(instance, fc, remove); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (r *ReconcileIstio) configureIstioAmbientMode(fc *crdv1.FelixConfiguration, remove bool) error {
+	var annotationMode *string
+	if fc.Annotations[istio.IstioOperatorAnnotationMode] != "" {
+		value := fc.Annotations[istio.IstioOperatorAnnotationMode]
+		annotationMode = &value
+	}
+
+	// If the annotation does not match the spec value (ignoring both nil), it indicates a misconfiguration.
+	match := annotationMode == nil && fc.Spec.IstioAmbientMode == nil ||
+		annotationMode != nil && fc.Spec.IstioAmbientMode != nil && *annotationMode == *fc.Spec.IstioAmbientMode
+
+	if !match {
+		return fmt.Errorf("felixconfig IstioAmbientMode modified by user")
+	}
+
+	if remove {
+		delete(fc.Annotations, istio.IstioOperatorAnnotationMode)
+		fc.Spec.IstioAmbientMode = nil
+	} else {
+		istioModeDesired := "Enabled"
+		fc.Spec.IstioAmbientMode = &istioModeDesired
+		if fc.Annotations == nil {
+			fc.Annotations = make(map[string]string)
+		}
+		fc.Annotations[istio.IstioOperatorAnnotationMode] = istioModeDesired
+	}
+
+	return nil
+}
+
+func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *crdv1.FelixConfiguration, remove bool) error {
+	var annotationDSCP *numorstring.DSCP
+	if fc.Annotations[istio.IstioOperatorAnnotationDSCP] != "" {
+		value, err := strconv.ParseUint(fc.Annotations[istio.IstioOperatorAnnotationDSCP], 10, 6)
+		if err != nil {
+			return err
+		}
+		dscp := numorstring.DSCPFromInt(uint8(value))
+		annotationDSCP = &dscp
+	}
+
+	// Return an error if it appears that FelixConfiguration has been modified out of band.
+	match := annotationDSCP == nil && fc.Spec.IstioDSCPMark == nil ||
+		annotationDSCP != nil && fc.Spec.IstioDSCPMark != nil && annotationDSCP.ToUint8() == fc.Spec.IstioDSCPMark.ToUint8()
+
+	if !match {
+		return fmt.Errorf("felixconfig IstioDSCPMark modified by user")
+	}
+
+	if remove || instance.Spec.DSCPMark == nil {
+		delete(fc.Annotations, istio.IstioOperatorAnnotationDSCP)
+		fc.Spec.IstioDSCPMark = nil
+	} else {
+		istioDSCPMarkDesired := *instance.Spec.DSCPMark
+		fc.Spec.IstioDSCPMark = &istioDSCPMarkDesired
+		fc.Annotations[istio.IstioOperatorAnnotationDSCP] = strconv.FormatUint(uint64(istioDSCPMarkDesired.ToUint8()), 10)
+	}
+
+	return nil
+}
+
+func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *operatorv1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
+	// Executing clean up on finalizing
+	if !instance.DeletionTimestamp.IsZero() {
+		if _, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+			return r.setIstioFelixConfiguration(ctx, instance, fc, true)
+		}); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error cleaning up felix configuration", err, reqLogger)
+			return
+		}
+		patchFrom := client.MergeFrom(instance.DeepCopy())
+		instance.Finalizers = stringsutil.RemoveStringInSlice(istio.IstioFinalizer, instance.Finalizers)
+		if err = r.Patch(ctx, instance, patchFrom); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error removing finalizer on Istio", err, reqLogger)
+			return
+		}
+
+		r.status.ClearDegraded()
+		return res, nil, true
+	}
+
+	if !stringsutil.StringInSlice(istio.IstioFinalizer, instance.Finalizers) {
+		patchFrom := client.MergeFrom(instance.DeepCopy())
+		instance.Finalizers = append(instance.Finalizers, istio.IstioFinalizer)
+		if err = r.Patch(ctx, instance, patchFrom); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Istio", err, reqLogger)
+			return
+		}
+	}
+
+	return
+}

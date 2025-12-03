@@ -6,22 +6,6 @@
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
 
-define yq_cmd
-	$(shell yq --version | grep v$1.* >/dev/null && which yq || echo docker run --rm --user="root" -i -v "$(shell pwd)":/workdir mikefarah/yq:$1 $(if $(shell [ $1 -lt 4 ] && echo "true"), yq,))
-endef
-YQ_V4 = $(call yq_cmd,4)
-
-GIT_CMD   = git
-CURL_CMD  = curl -fL
-
-ifdef CONFIRM
-GIT       = $(GIT_CMD)
-CURL      = $(CURL_CMD)
-else
-GIT       = echo [DRY RUN] $(GIT_CMD)
-CURL      = echo [DRY RUN] $(CURL_CMD)
-endif
-
 # These values are used for fetching tools to run as part of the build process
 # and shouldn't vary based on the target we're building for
 NATIVE_ARCH := $(shell bash -c 'if [[ "$(shell uname -m)" == "x86_64" ]]; then echo amd64; else uname -m; fi')
@@ -329,7 +313,7 @@ clean:
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
 	rm -rf .crds
-	rm -f *-release-notes.md
+	find . -type f -name 'release-*.log' -delete -o  -name '*release-notes.md' -delete
 	docker rmi -f $(shell docker images -f "reference=$(BUILD_IMAGE):latest*" -q) > /dev/null 2>&1 || true
 
 ###############################################################################
@@ -570,9 +554,8 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release-github VERSION=$(RELEASE_TAG)
 
 
-release-notes: var-require-all-VERSION-GITHUB_TOKEN
-	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .
-	@docker run --rm -v $(CURDIR):/workdir -e	GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) tigera/release-notes
+release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
+	REPO=$(REPO) hack/bin/release notes
 
 ## Tags and builds a release from start to finish.
 release: release-prereqs
@@ -630,14 +613,21 @@ hack/bin/gh:
 	chmod +x $@
 	rm hack/bin/gh.tgz
 
-hack/bin/release-from: $(shell find ./hack/release-from -type f)
+hack/bin/release: $(shell find ./hack/release -type f)
 	mkdir -p hack/bin
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -buildvcs=false -o hack/bin/release-from ./hack/release-from'
+	go build -buildvcs=false -o hack/bin/release ./hack/release'
 
-release-from: hack/bin/release-from var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
-	hack/bin/release-from
+hack/release/ut:
+	mkdir -p report/release
+	$(CONTAINERIZED) $(CALICO_BUILD) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	gotestsum --format=testname --junitfile report/release/ut.xml $(PACKAGE_NAME)/hack/release'
+
+
+release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
+	hack/bin/release from
 
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:
@@ -648,51 +638,8 @@ ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
 endif
 
-check-milestone: hack/bin/gh var-require-all-VERSION-GITHUB_TOKEN
-	@gh extension install valeriobelli/gh-milestone
-	@echo "Checking milestone $(VERSION) exists"
-	$(eval MILESTONE_NUMBER := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state all --json title --jq '.[0].title' | grep $(VERSION)))
-	$(if $(MILESTONE_NUMBER),,$(error Milestone $(VERSION) does not exist))
-	@echo "Checking $(VERSION) milestone has no open PRs"
-	$(eval OPEN_PRS := $(shell gh search prs --milestone $(VERSION) --repo $(REPO) --state open --json number --jq '.[].number'))
-	$(if $(OPEN_PRS),$(error Milestone $(VERSION) has open PRs))
-	@echo "Checking milestone $(VERSION) is closed"
-	$(eval CLOSED_MILESTONE := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json title --jq '.[0].title' | grep $(VERSION)))
-	$(if $(CLOSED_MILESTONE),,$(error Milestone $(VERSION) is not closed))
-
-release-prep: check-milestone var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
-	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
-	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
-	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
-	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
-	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-pr-labels
-
-GIT_REMOTE?=origin
-ifneq ($(if $(GIT_REPO_SLUG),$(shell dirname $(GIT_REPO_SLUG)),), $(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`))
-GIT_FORK_USER:=$(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`)
-endif
-GIT_PR_BRANCH_BASE?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_BRANCH),)
-GIT_REPO_SLUG?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_REPO_SLUG),)
-RELEASE_UPDATE_BRANCH?=$(if $(SEMAPHORE),semaphore-,)auto-build-updates-$(VERSION)
-GIT_PR_BRANCH_HEAD?=$(if $(GIT_FORK_USER),$(GIT_FORK_USER):$(RELEASE_UPDATE_BRANCH),$(RELEASE_UPDATE_BRANCH))
-release-prep/create-and-push-branch:
-ifeq ($(shell git rev-parse --abbrev-ref HEAD),$(RELEASE_UPDATE_BRANCH))
-	$(error Current branch is pull request head, cannot set it up.)
-endif
-	-git branch -D $(RELEASE_UPDATE_BRANCH)
-	-$(GIT) push $(GIT_REMOTE) --delete $(RELEASE_UPDATE_BRANCH)
-	git checkout -b $(RELEASE_UPDATE_BRANCH)
-	$(GIT) add config/*_versions.yml hack/gen-versions/main.go pkg/components/* pkg/crds/*
-	$(GIT) commit -m "Automatic version updates for $(VERSION) release"
-	$(GIT) push $(GIT_REMOTE) $(RELEASE_UPDATE_BRANCH)
-
-release-prep/create-pr:
-	$(call github_pr_create,$(GIT_REPO_SLUG),[$(GIT_PR_BRANCH_BASE)] $(if $(SEMAPHORE), Semaphore,) Auto Release Update for $(VERSION),$(GIT_PR_BRANCH_HEAD),$(GIT_PR_BRANCH_BASE))
-	echo 'Created release update pull request for $(VERSION): $(PR_NUMBER)'
-
-release-prep/set-pr-labels:
-	$(call github_pr_add_comment,$(GIT_REPO_SLUG),$(PR_NUMBER),/merge-when-ready release-note-not-required docs-not-required delete-branch)
-	echo "Added labels to pull request $(PR_NUMBER): merge-when-ready, release-note-not-required, docs-not-required & delete-branch"
+release-prep: hack/bin/release hack/bin/gh var-require-all-VERSION var-require-one-of-CALICO_VERSION-ENTERPRISE_VERSION
+	@REPO=$(REPO) hack/bin/release prep
 
 ###############################################################################
 # Utilities
@@ -1037,34 +984,6 @@ var-require-all-%:
 # must be set you would call var-require-all-FOO-BAR.
 var-require-one-of-%:
 	$(MAKE) var-require REQUIRED_VARS=$*
-
-GITHUB_API_EXIT_ON_FAILURE?=1
-# Call the github API. $(1) is the http method type for the https request, $(2) is the repo slug, and is $(3) is for json
-# data (if omitted then no data is set for the request). If GITHUB_API_EXIT_ON_FAILURE is set then the macro exits with 1
-# on failure. On success, the ENV variable GITHUB_API_RESPONSE will contain the response from github
-define github_call_api
-	$(eval CMD := $(CURL) -X $(1) \
-		-H "Content-Type: application/json"\
-		-H "Authorization: Bearer ${GITHUB_TOKEN}"\
-		https://api.github.com/repos/$(2) $(if $(3),--data '$(3)',))
-	$(eval GITHUB_API_RESPONSE := $(shell $(CMD) | sed -e 's/#/\\\#/g'))
-	$(if $(GITHUB_API_EXIT_ON_FAILURE), $(if $(GITHUB_API_RESPONSE),,exit 1),)
-endef
-
-# Create the pull request. $(1) is the repo slug, $(2) is the title, $(3) is the head branch and $(4) is the base branch.
-# If the call was successful then the ENV variable PR_NUMBER will contain the pull request number of the created pull request.
-define github_pr_create
-	$(eval JSON := {"title": "$(2)", "head": "$(3)", "base": "$(4)"})
-	$(call github_call_api,POST,$(1)/pulls,$(JSON))
-	$(eval PR_NUMBER := $(filter-out null,$(shell echo '$(GITHUB_API_RESPONSE)' | jq '.number')))
-endef
-
-# Create a comment on a pull request. $(1) is the repo slug, $(2) is the pull request number, and $(3) is the comment
-# body.
-define github_pr_add_comment
-	$(eval JSON := {"body":"$(3)"})
-	$(call github_call_api,POST,$(1)/issues/$(2)/comments,$(JSON))
-endef
 
 #####################################
 #####################################

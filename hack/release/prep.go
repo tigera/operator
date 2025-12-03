@@ -120,6 +120,8 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 		}
 	}()
 
+	makeTargets := []string{"fix"}
+
 	repoRootDir, err := gitDir()
 	if err != nil {
 		return fmt.Errorf("error getting git directory: %w", err)
@@ -138,12 +140,14 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 
 	// Modify config versions files
 	if calico := c.String(calicoVersionFlag.Name); calico != "" {
+		makeTargets = append(makeTargets, "gen-versions-calico")
 		if err := updateConfigVersions(repoRootDir, calicoConfig, calico); err != nil {
 			return fmt.Errorf("error modifying Calico config: %w", err)
 		}
 	}
 	enterprise := c.String(enterpriseVersionFlag.Name)
 	if enterprise != "" {
+		makeTargets = append(makeTargets, "gen-versions-enterprise")
 		if err := updateConfigVersions(repoRootDir, enterpriseConfig, enterprise); err != nil {
 			return fmt.Errorf("error modifying Enterprise config: %w", err)
 		}
@@ -158,7 +162,7 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	}
 
 	// Run make target to ensure files are formatted correctly and generated files are up to date.
-	if _, err := makeInDir(repoRootDir, "fix gen-versions"); err != nil {
+	if _, err := makeInDir(repoRootDir, strings.Join(makeTargets, " ")); err != nil {
 		return fmt.Errorf("error running \"make fix gen-versions\": %w", err)
 	}
 

@@ -306,7 +306,7 @@ func (r *ReconcileIstio) configureIstioAmbientMode(fc *crdv1.FelixConfiguration,
 func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *crdv1.FelixConfiguration, remove bool) error {
 	var annotationDSCP *numorstring.DSCP
 	if fc.Annotations[istio.IstioOperatorAnnotationDSCP] != "" {
-		value, err := strconv.ParseUint(fc.Annotations[istio.IstioOperatorAnnotationDSCP], 10, 32)
+		value, err := strconv.ParseUint(fc.Annotations[istio.IstioOperatorAnnotationDSCP], 10, 6)
 		if err != nil {
 			return err
 		}

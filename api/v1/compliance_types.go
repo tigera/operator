@@ -22,7 +22,6 @@ import (
 
 // ComplianceSpec defines the desired state of Tigera compliance reporting capabilities.
 type ComplianceSpec struct {
-
 	// ComplianceControllerDeployment configures the Compliance Controller Deployment.
 	// +optional
 	ComplianceControllerDeployment *ComplianceControllerDeployment `json:"complianceControllerDeployment,omitempty"`
@@ -46,7 +45,6 @@ type ComplianceSpec struct {
 
 // ComplianceStatus defines the observed state of Tigera compliance reporting capabilities.
 type ComplianceStatus struct {
-
 	// State provides user-readable status.
 	State string `json:"state,omitempty"`
 
@@ -62,6 +60,8 @@ type ComplianceStatus struct {
 
 // Compliance installs the components required for Tigera compliance reporting. At most one instance
 // of this resource is supported. It must be named "tigera-secure".
+//
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'", message="resource name must be 'tigera-secure'"
 type Compliance struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -116,6 +116,8 @@ type MonitorStatus struct {
 
 // Monitor is the Schema for the monitor API. At most one instance
 // of this resource is supported. It must be named "tigera-secure".
+//
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'",message="resource name must be 'tigera-secure'"
 type Monitor struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -143,7 +145,6 @@ type PrometheusSpec struct {
 	CommonPrometheusFields *CommonPrometheusFields `json:"commonPrometheusFields,omitempty"`
 }
 type CommonPrometheusFields struct {
-
 	// Containers is a list of Prometheus containers.
 	// If specified, this overrides the specified Prometheus Deployment containers.
 	// If omitted, the Prometheus Deployment will use its default values for its containers.
@@ -179,7 +180,6 @@ type AlertManagerSpec struct {
 }
 
 func (c *Prometheus) GetContainers() []corev1.Container {
-
 	if c.PrometheusSpec != nil {
 		if c.PrometheusSpec.CommonPrometheusFields != nil {
 			if c.PrometheusSpec.CommonPrometheusFields.Containers != nil {

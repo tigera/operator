@@ -184,7 +184,7 @@ func (r *ResourceOpts) parseManifest(scheme *runtime.Scheme, manifest string, is
 			switch typedObj.Name {
 			case "values":
 				break
-			case "istio-sidecar-injector":
+			case IstioSidecarInjectorConfigMapName:
 				istRes.IstioSidecarInjectorConfigMap = typedObj
 			}
 			objs = append(objs, typedObj)

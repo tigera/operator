@@ -21,13 +21,18 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
+	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -36,6 +41,70 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/istio"
 )
+
+// getTestImageSet returns a standard imageSet for testing
+func getTestImageSet() *operatorv1.ImageSet {
+	return &operatorv1.ImageSet{
+		Spec: operatorv1.ImageSetSpec{
+			Images: []operatorv1.Image{
+				{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
+				{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
+				{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
+				{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
+			},
+		},
+	}
+}
+
+// getCommonExpectedResources returns the list of resources expected for standard platforms
+func getCommonExpectedResources() []client.Object {
+	return []client.Object{
+		// NetworkPolicies
+		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: istio.IstioIstiodPolicyName, Namespace: istio.IstioNamespace}},
+		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: istio.IstioCNIPolicyName, Namespace: istio.IstioNamespace}},
+		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: istio.IstioZTunnelPolicyName, Namespace: istio.IstioNamespace}},
+		// Workloads
+		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: istio.IstioIstiodDeploymentName, Namespace: istio.IstioNamespace}},
+		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: istio.IstioCNIDaemonSetName, Namespace: istio.IstioNamespace}},
+		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: istio.IstioZTunnelDaemonSetName, Namespace: istio.IstioNamespace}},
+		// ServiceAccounts
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "istio-reader-service-account", Namespace: istio.IstioNamespace}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "istiod", Namespace: istio.IstioNamespace}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni", Namespace: istio.IstioNamespace}},
+		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "ztunnel", Namespace: istio.IstioNamespace}},
+		// ClusterRoles
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "istiod-clusterrole-calico-system"}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "istiod-gateway-controller-calico-system"}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "istio-reader-clusterrole-calico-system"}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni"}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni-repair-role"}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni-ambient"}},
+		// ClusterRoleBindings
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "istiod-clusterrole-calico-system"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "istiod-gateway-controller-calico-system"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "istio-reader-clusterrole-calico-system"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni-repair-rolebinding"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni-ambient"}},
+		// ConfigMaps
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "values", Namespace: istio.IstioNamespace}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "istio", Namespace: istio.IstioNamespace}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "istio-sidecar-injector", Namespace: istio.IstioNamespace}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni-config", Namespace: istio.IstioNamespace}},
+		// Service
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "istiod", Namespace: istio.IstioNamespace}},
+		// Role & RoleBinding
+		&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "istiod", Namespace: istio.IstioNamespace}},
+		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "istiod", Namespace: istio.IstioNamespace}},
+		// ValidatingWebhookConfigurations
+		&admregv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "istiod-default-validator"}},
+		&admregv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "istio-validator-calico-system"}},
+		// PodDisruptionBudget
+		&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "istiod", Namespace: istio.IstioNamespace}},
+		// HorizontalPodAutoscaler
+		&autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: "istiod", Namespace: istio.IstioNamespace}},
+	}
+}
 
 var _ = Describe("Istio Component Rendering", func() {
 	var (
@@ -62,7 +131,7 @@ var _ = Describe("Istio Component Rendering", func() {
 					Name: "default",
 				},
 				Spec: operatorv1.IstioSpec{
-					DSCPMark: func() *numorstring.DSCP { d := numorstring.DSCPFromInt(0); return &d }(),
+					DSCPMark: func() *numorstring.DSCP { d := numorstring.DSCPFromInt(11); return &d }(),
 				},
 			},
 			IstioNamespace: istio.IstioNamespace,
@@ -70,43 +139,7 @@ var _ = Describe("Istio Component Rendering", func() {
 		}
 	})
 
-	Describe("Component Initialization", func() {
-		It("should successfully create Istio components", func() {
-			crds, component, err := istio.Istio(cfg)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(crds).NotTo(BeNil())
-			Expect(component).NotTo(BeNil())
-		})
-
-		It("should set GKE platform when provider is GKE", func() {
-			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
-			crds, component, err := istio.Istio(cfg)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(crds).NotTo(BeNil())
-			Expect(component).NotTo(BeNil())
-		})
-	})
-
 	Describe("ResolveImages", func() {
-		It("should resolve all images correctly", func() {
-			_, component, err := istio.Istio(cfg)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			imageSet := &operatorv1.ImageSet{
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
-						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
-						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-					},
-				},
-			}
-
-			err = component.ResolveImages(imageSet)
-			Expect(err).ShouldNot(HaveOccurred())
-		})
-
 		It("should fail when required images are missing", func() {
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -123,43 +156,67 @@ var _ = Describe("Istio Component Rendering", func() {
 	})
 
 	Describe("Objects", func() {
-		var (
-			crds      *istio.IstioComponentCRDs
-			component *istio.IstioComponent
-			err       error
-		)
-
-		BeforeEach(func() {
-			crds, component, err = istio.Istio(cfg)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			imageSet := &operatorv1.ImageSet{
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
-						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
-						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-					},
-				},
-			}
-			err = component.ResolveImages(imageSet)
-			Expect(err).ShouldNot(HaveOccurred())
-		})
-
 		It("should return CRDs", func() {
+			crds, _, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
 			objsToCreate, objsToDelete := crds.Objects()
-			Expect(objsToCreate).NotTo(BeEmpty())
 			Expect(objsToDelete).To(BeEmpty())
+
+			// Verify we have exactly 14 Istio CRDs
+			Expect(objsToCreate).To(HaveLen(14))
+
+			// Check that all returned objects are actually CRDs
+			for _, obj := range objsToCreate {
+				_, ok := obj.(*apiextv1.CustomResourceDefinition)
+				Expect(ok).To(BeTrue(), "Expected all objects to be CRDs")
+			}
+
+			// Verify all key Istio CRDs are present
+			crdNames := make([]string, 0, len(objsToCreate))
+			for _, obj := range objsToCreate {
+				if crd, ok := obj.(*apiextv1.CustomResourceDefinition); ok {
+					crdNames = append(crdNames, crd.Name)
+				}
+			}
+
+			// Verify all expected Istio CRDs
+			Expect(crdNames).To(ConsistOf(
+				"wasmplugins.extensions.istio.io",
+				"destinationrules.networking.istio.io",
+				"envoyfilters.networking.istio.io",
+				"gateways.networking.istio.io",
+				"proxyconfigs.networking.istio.io",
+				"serviceentries.networking.istio.io",
+				"sidecars.networking.istio.io",
+				"virtualservices.networking.istio.io",
+				"workloadentries.networking.istio.io",
+				"workloadgroups.networking.istio.io",
+				"authorizationpolicies.security.istio.io",
+				"peerauthentications.security.istio.io",
+				"requestauthentications.security.istio.io",
+				"telemetries.telemetry.istio.io",
+			))
 		})
 
 		It("should return objects to create", func() {
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
 			objsToCreate, objsToDelete := component.Objects()
-			Expect(objsToCreate).NotTo(BeEmpty())
+
+			Expect(objsToCreate).To(HaveLen(33))
 			Expect(objsToDelete).To(BeEmpty())
+
+			expectedResources := getCommonExpectedResources()
+
+			rtest.ExpectResources(objsToCreate, expectedResources)
 		})
 
-		It("should include network policies", func() {
+		It("should render network policies with correct tier, selector, and ingress/egress rules", func() {
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
 			objsToCreate, _ := component.Objects()
 
 			// Verify istiod policy
@@ -167,163 +224,66 @@ var _ = Describe("Istio Component Rendering", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(istiodPolicy.Spec.Tier).To(Equal(networkpolicy.TigeraComponentTierName))
 			Expect(istiodPolicy.Spec.Selector).To(Equal(networkpolicy.KubernetesAppSelector(istio.IstioIstiodDeploymentName)))
+			Expect(istiodPolicy.Spec.Ingress).To(HaveLen(1))
+			Expect(istiodPolicy.Spec.Ingress[0].Destination.Ports).To(ContainElements(
+				numorstring.SinglePort(15012),
+				numorstring.SinglePort(15017),
+			))
+			Expect(istiodPolicy.Spec.Egress).To(HaveLen(1))
+			Expect(istiodPolicy.Spec.Egress[0].Action).To(Equal(v3.Allow))
 
 			// Verify istio-cni policy
 			cniPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioCNIPolicyName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(cniPolicy.Spec.Tier).To(Equal(networkpolicy.TigeraComponentTierName))
 			Expect(cniPolicy.Spec.Selector).To(Equal(networkpolicy.KubernetesAppSelector(istio.IstioCNIDaemonSetName)))
+			Expect(cniPolicy.Spec.Egress).To(HaveLen(1))
+			Expect(cniPolicy.Spec.Egress[0].Action).To(Equal(v3.Allow))
 
 			// Verify ztunnel policy
 			ztunnelPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioZTunnelPolicyName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ztunnelPolicy.Spec.Tier).To(Equal(networkpolicy.TigeraComponentTierName))
 			Expect(ztunnelPolicy.Spec.Selector).To(Equal(networkpolicy.KubernetesAppSelector(istio.IstioZTunnelDaemonSetName)))
-		})
-
-		It("should include Istiod deployment", func() {
-			objsToCreate, _ := component.Objects()
-
-			deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, istio.IstioIstiodDeploymentName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(deployment.Name).To(Equal(istio.IstioIstiodDeploymentName))
-			Expect(deployment.Namespace).To(Equal(istio.IstioNamespace))
-		})
-
-		It("should include CNI DaemonSet", func() {
-			objsToCreate, _ := component.Objects()
-
-			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(daemonset.Name).To(Equal(istio.IstioCNIDaemonSetName))
-			Expect(daemonset.Namespace).To(Equal(istio.IstioNamespace))
-		})
-
-		It("should include ZTunnel DaemonSet", func() {
-			objsToCreate, _ := component.Objects()
-
-			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioZTunnelDaemonSetName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(daemonset.Name).To(Equal(istio.IstioZTunnelDaemonSetName))
-			Expect(daemonset.Namespace).To(Equal(istio.IstioNamespace))
-		})
-
-		It("should set TRANSPARENT_NETWORK_POLICIES env var on ztunnel", func() {
-			objsToCreate, _ := component.Objects()
-
-			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioZTunnelDaemonSetName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			foundEnvVar := false
-			for _, container := range daemonset.Spec.Template.Spec.Containers {
-				if container.Name == "istio-proxy" {
-					for _, env := range container.Env {
-						if env.Name == "TRANSPARENT_NETWORK_POLICIES" {
-							Expect(env.Value).To(Equal("true"))
-							foundEnvVar = true
-							break
-						}
-					}
-				}
-			}
-			Expect(foundEnvVar).To(BeTrue(), "TRANSPARENT_NETWORK_POLICIES env var not found")
-		})
-
-		It("should set MAGIC_DSCP_MARK env var on CNI", func() {
-			objsToCreate, _ := component.Objects()
-
-			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			foundEnvVar := false
-			for _, container := range daemonset.Spec.Template.Spec.Containers {
-				if container.Name == "install-cni" {
-					for _, env := range container.Env {
-						if env.Name == "MAGIC_DSCP_MARK" {
-							Expect(env.Value).To(Equal("0"))
-							foundEnvVar = true
-							break
-						}
-					}
-				}
-			}
-			Expect(foundEnvVar).To(BeTrue(), "MAGIC_DSCP_MARK env var not found")
-		})
-	})
-
-	Describe("Network Policy Rules", func() {
-		var (
-			component *istio.IstioComponent
-			err       error
-		)
-
-		BeforeEach(func() {
-			_, component, err = istio.Istio(cfg)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			imageSet := &operatorv1.ImageSet{
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
-						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
-						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-					},
-				},
-			}
-			err = component.ResolveImages(imageSet)
-			Expect(err).ShouldNot(HaveOccurred())
-		})
-
-		It("should have correct ingress rules for istiod", func() {
-			objsToCreate, _ := component.Objects()
-
-			policy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioIstiodPolicyName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			Expect(policy.Spec.Ingress).To(HaveLen(1))
-			Expect(policy.Spec.Ingress[0].Destination.Ports).To(ContainElements(
-				numorstring.SinglePort(15012),
-				numorstring.SinglePort(15017),
-			))
-		})
-
-		It("should have correct egress rules for istiod", func() {
-			objsToCreate, _ := component.Objects()
-
-			policy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioIstiodPolicyName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			Expect(policy.Spec.Egress).To(HaveLen(1))
-			Expect(policy.Spec.Egress[0].Action).To(Equal(v3.Allow))
-		})
-
-		It("should have correct egress rules for CNI", func() {
-			objsToCreate, _ := component.Objects()
-
-			policy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioCNIPolicyName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			Expect(policy.Spec.Egress).To(HaveLen(1))
-			Expect(policy.Spec.Egress[0].Action).To(Equal(v3.Allow))
-		})
-
-		It("should have correct egress rules for ztunnel", func() {
-			objsToCreate, _ := component.Objects()
-
-			policy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioZTunnelPolicyName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			// At least one egress rule for connecting to istiod
-			Expect(policy.Spec.Egress).NotTo(BeEmpty())
+			Expect(ztunnelPolicy.Spec.Egress).NotTo(BeEmpty())
 			foundIstiodRule := false
-			for _, rule := range policy.Spec.Egress {
+			for _, rule := range ztunnelPolicy.Spec.Egress {
 				if rule.Destination.Selector != "" {
 					foundIstiodRule = true
 					break
 				}
 			}
 			Expect(foundIstiodRule).To(BeTrue(), "Expected egress rule for istiod service")
+		})
+
+		It("should set TRANSPARENT_NETWORK_POLICIES env var on ztunnel", func() {
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, _ := component.Objects()
+
+			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioZTunnelDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(daemonset.Spec.Template.Spec.Containers[0].Env).To(ContainElements(corev1.EnvVar{
+				Name:  "TRANSPARENT_NETWORK_POLICIES",
+				Value: "true",
+			}))
+		})
+
+		It("should set MAGIC_DSCP_MARK env var on CNI", func() {
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, _ := component.Objects()
+
+			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(daemonset.Spec.Template.Spec.Containers[0].Env).To(ContainElements(corev1.EnvVar{
+				Name:  "MAGIC_DSCP_MARK",
+				Value: "11",
+			}))
 		})
 	})
 
@@ -338,19 +298,6 @@ var _ = Describe("Istio Component Rendering", func() {
 			cfg.PullSecrets = []*corev1.Secret{pullSecret}
 
 			_, component, err := istio.Istio(cfg)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			imageSet := &operatorv1.ImageSet{
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
-						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
-						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-					},
-				},
-			}
-			err = component.ResolveImages(imageSet)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			objsToCreate, _ := component.Objects()
@@ -376,19 +323,6 @@ var _ = Describe("Istio Component Rendering", func() {
 		DescribeTable("Istiod Deployment Overrides", func(overrides *operatorv1.IstiodDeployment, verify func(*appsv1.Deployment)) {
 			cfg.Istio.Spec.IstiodDeployment = overrides
 			_, component, err := istio.Istio(cfg)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			imageSet := &operatorv1.ImageSet{
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
-						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
-						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-					},
-				},
-			}
-			err = component.ResolveImages(imageSet)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			objsToCreate, _ := component.Objects()
@@ -508,19 +442,6 @@ var _ = Describe("Istio Component Rendering", func() {
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			imageSet := &operatorv1.ImageSet{
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
-						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
-						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-					},
-				},
-			}
-			err = component.ResolveImages(imageSet)
-			Expect(err).ShouldNot(HaveOccurred())
-
 			objsToCreate, _ := component.Objects()
 			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -572,19 +493,6 @@ var _ = Describe("Istio Component Rendering", func() {
 		DescribeTable("ZTunnel DaemonSet Overrides", func(overrides *operatorv1.ZTunnelDaemonset, verify func(*appsv1.DaemonSet)) {
 			cfg.Istio.Spec.ZTunnelDaemonset = overrides
 			_, component, err := istio.Istio(cfg)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			imageSet := &operatorv1.ImageSet{
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
-						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
-						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-					},
-				},
-			}
-			err = component.ResolveImages(imageSet)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			objsToCreate, _ := component.Objects()
@@ -649,19 +557,6 @@ var _ = Describe("Istio Component Rendering", func() {
 			cfg.Istio.Spec.DSCPMark = &dscpMark
 
 			_, component, err := istio.Istio(cfg)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			imageSet := &operatorv1.ImageSet{
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
-						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
-						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-					},
-				},
-			}
-			err = component.ResolveImages(imageSet)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			objsToCreate, _ := component.Objects()
@@ -796,18 +691,7 @@ var _ = Describe("Istio Component Rendering", func() {
 		It("should patch ConfigMap with proxyv2 image", func() {
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
-
-			imageSet := &operatorv1.ImageSet{
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
-						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
-						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-					},
-				},
-			}
-			err = component.ResolveImages(imageSet)
+			err = component.ResolveImages(getTestImageSet())
 			Expect(err).ShouldNot(HaveOccurred())
 
 			objsToCreate, _ := component.Objects()
@@ -823,33 +707,33 @@ var _ = Describe("Istio Component Rendering", func() {
 		})
 	})
 
-	Describe("Resource Ordering", func() {
-		It("should return resources in correct order", func() {
-			_, component, err := istio.Istio(cfg)
+	Describe("GKE Platform Configuration", func() {
+		var (
+			component *istio.IstioComponent
+		)
+
+		BeforeEach(func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+
+			_, comp, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
+			component = comp
+		})
 
-			imageSet := &operatorv1.ImageSet{
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
-						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
-						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-					},
-				},
-			}
-			err = component.ResolveImages(imageSet)
-			Expect(err).ShouldNot(HaveOccurred())
+		It("should render all workloads successfully on GKE", func() {
+			objsToCreate, objsToDelete := component.Objects()
 
-			objsToCreate, _ := component.Objects()
+			Expect(objsToCreate).To(HaveLen(34))
+			Expect(objsToDelete).To(BeEmpty())
 
-			// Verify network policies are at the beginning
-			Expect(objsToCreate[0]).To(BeAssignableToTypeOf(&v3.NetworkPolicy{}))
-			Expect(objsToCreate[1]).To(BeAssignableToTypeOf(&v3.NetworkPolicy{}))
-			Expect(objsToCreate[2]).To(BeAssignableToTypeOf(&v3.NetworkPolicy{}))
+			// Start with common resources and append GKE-specific ones
+			expectedResources := getCommonExpectedResources()
+			expectedResources = append(expectedResources,
+				// ResourceQuota (GKE specific)
+				&corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni-resource-quota", Namespace: istio.IstioNamespace}},
+			)
 
-			// Resources should follow: Base, Istiod, CNI, ZTunnel
-			// This is important for proper installation order
+			rtest.ExpectResources(objsToCreate, expectedResources)
 		})
 	})
 })

@@ -61,18 +61,19 @@ type IstioComponentCRDs struct {
 }
 
 const (
-	IstioNamespace              = common.CalicoNamespace
-	IstioReleaseName            = "calico-istio"
-	IstioIstiodDeploymentName   = "istiod"
-	IstioCNIDaemonSetName       = "istio-cni-node"
-	IstioZTunnelDaemonSetName   = "ztunnel"
-	IstioOperatorAnnotationMode = "operator.tigera.io/istioAmbientMode"
-	IstioOperatorAnnotationDSCP = "operator.tigera.io/istioDSCPMark"
-	IstioFinalizer              = "operator.tigera.io/calico-istio"
-	IstioIstiodPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + IstioIstiodDeploymentName
-	IstioCNIPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + IstioCNIDaemonSetName
-	IstioZTunnelPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + IstioZTunnelDaemonSetName
-	IstioIstiodServiceName      = "istiod"
+	IstioNamespace                    = common.CalicoNamespace
+	IstioReleaseName                  = "calico-istio"
+	IstioIstiodDeploymentName         = "istiod"
+	IstioCNIDaemonSetName             = "istio-cni-node"
+	IstioZTunnelDaemonSetName         = "ztunnel"
+	IstioSidecarInjectorConfigMapName = "istio-sidecar-injector"
+	IstioOperatorAnnotationMode       = "operator.tigera.io/istioAmbientMode"
+	IstioOperatorAnnotationDSCP       = "operator.tigera.io/istioDSCPMark"
+	IstioFinalizer                    = "operator.tigera.io/calico-istio"
+	IstioIstiodPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + IstioIstiodDeploymentName
+	IstioCNIPolicyName                = networkpolicy.TigeraComponentPolicyPrefix + IstioCNIDaemonSetName
+	IstioZTunnelPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + IstioZTunnelDaemonSetName
+	IstioIstiodServiceName            = "istiod"
 
 	istioFakeImageProxyv2 = "fake.io/fakeimg/proxyv2:faketag"
 )

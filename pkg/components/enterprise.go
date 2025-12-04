@@ -338,6 +338,34 @@ var (
 		Image:    "tigera/envoy-ratelimit",
 		Registry: "",
 	}
+
+	ComponentCalicoIstioPilot = Component{
+		Version:  "master",
+		Image:    "istio-pilot",
+		Registry: "",
+		variant:  enterpriseVariant,
+	}
+
+	ComponentCalicoIstioInstallCNI = Component{
+		Version:  "master",
+		Image:    "istio-install-cni",
+		Registry: "",
+		variant:  enterpriseVariant,
+	}
+
+	ComponentCalicoIstioZTunnel = Component{
+		Version:  "master",
+		Image:    "istio-ztunnel",
+		Registry: "",
+		variant:  enterpriseVariant,
+	}
+
+	ComponentCalicoIstioProxyv2 = Component{
+		Version:  "master",
+		Image:    "istio-proxyv2",
+		Registry: "",
+		variant:  enterpriseVariant,
+	}
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
@@ -390,5 +418,9 @@ var (
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,
+		ComponentCalicoIstioPilot,
+		ComponentCalicoIstioInstallCNI,
+		ComponentCalicoIstioZTunnel,
+		ComponentCalicoIstioProxyv2,
 	}
 )

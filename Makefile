@@ -230,6 +230,20 @@ else
   GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)
 endif
 
+# To update the Istio version, see "Updating the bundled version of Istio" in docs/common_tasks.md.
+ISTIO_HELM_REPO ?= https://istio-release.storage.googleapis.com/charts
+ISTIO_VERSION ?= 1.27.3
+ISTIO_RESOURCES_DIR = pkg/render/istio
+ISTIO_CHARTS = base istiod cni ztunnel
+ISTIO_CHART_FILES = $(addprefix $(ISTIO_RESOURCES_DIR)/,$(addsuffix .tgz,$(ISTIO_CHARTS)))
+
+.PHONY: istio_charts
+istio_charts: $(ISTIO_CHART_FILES)
+
+$(ISTIO_RESOURCES_DIR)/%.tgz:
+	@echo "Downloading Istio chart $* version $(ISTIO_VERSION)..."
+	@curl -fsSL -o $@ $(ISTIO_HELM_REPO)/$*-$(ISTIO_VERSION).tgz
+
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
@@ -262,7 +276,7 @@ $(HELM_BUILDARCH_VERSIONED_BINARY): | $(HACK_BIN)
 
 
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES)
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
@@ -309,6 +323,7 @@ $(BINDIR)/kind:
 
 clean:
 	rm -rf $(BUILD_DIR)
+	rm -rf $(ISTIO_CHARTS)
 	rm -rf build/init/bin
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
@@ -325,14 +340,14 @@ GINKGO_ARGS?= -v -trace -r
 GINKGO_FOCUS?=.*
 
 .PHONY: ut
-ut: $(ENVOY_GATEWAY_RESOURCES)
+ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs: $(ENVOY_GATEWAY_RESOURCES)
+run-fvs: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'

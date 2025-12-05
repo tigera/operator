@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -201,6 +201,8 @@ type LogStorageComponentResource struct {
 // LogStorage installs the components required for Tigera flow and DNS log storage. At most one instance
 // of this resource is supported. It must be named "tigera-secure". When created, this installs an Elasticsearch cluster for use by
 // Calico Enterprise.
+//
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'",message="resource name must be 'tigera-secure'"
 type LogStorage struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

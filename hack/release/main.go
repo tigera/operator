@@ -16,48 +16,47 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
 )
 
 func main() {
-	cmd := &cli.Command{
-		Name:  "operator-from",
-		Usage: "CLI tool for releasing operator using a previous release",
+	version, err := gitVersion()
+	if err != nil {
+		logrus.WithError(err).Fatal("Could not determine git version")
+	}
+
+	cmd := app(version)
+
+	// Run the app.
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
+		logrus.WithError(err).Fatal("Error running command")
+	}
+}
+
+// Create the CLI app with the given version.
+func app(version string) *cli.Command {
+	return &cli.Command{
+		Name:    "release",
+		Usage:   "CLI tool for releasing operator",
+		Version: version,
+		Commands: []*cli.Command{
+			prepCommand,
+			releaseNotesCommand,
+			releaseFromCommand,
+		},
 		Flags: []cli.Flag{
-			baseOperatorFlag,
-			versionFlag,
-			exceptCalicoFlag,
-			exceptEnterpriseFlag,
-			publishFlag,
-			archFlag,
 			gitRemoteFlag,
-			registryFlag,
-			imageFlag,
-			devTagSuffixFlag,
+			gitRepoFlag,
 			debugFlag,
 		},
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			if c.Bool(debugFlag.Name) {
 				logrus.SetLevel(logrus.DebugLevel)
 			}
-			// check if git repo is dirty
-			if version, err := gitVersion(); err != nil {
-				return ctx, fmt.Errorf("error getting git version: %s", err)
-			} else if strings.Contains(version, "dirty") {
-				return ctx, fmt.Errorf("git repo is dirty, please commit changes before releasing")
-			}
 			return ctx, nil
 		},
-		Action: releaseFrom,
-	}
-
-	// Run the app.
-	if err := cmd.Run(context.Background(), os.Args); err != nil {
-		logrus.WithError(err).Fatal("Error building new operator")
 	}
 }

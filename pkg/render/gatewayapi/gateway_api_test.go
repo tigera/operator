@@ -15,6 +15,7 @@
 package gatewayapi
 
 import (
+	"encoding/json"
 	"fmt"
 
 	. "github.com/onsi/ginkgo"
@@ -454,6 +455,9 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter", Namespace: "tigera-gateway"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "l7-log-collector", Namespace: "tigera-gateway"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "l7-log-collector"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "l7-log-collector"}},
 			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
@@ -1043,5 +1047,174 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(envoyDeployment.Pod.Volumes[4].Name).To(Equal("felix-sync"))
 		Expect(envoyDeployment.Pod.Volumes[4].CSI.Driver).To(Equal("csi.tigera.io"))
 		Expect(proxy.Spec.Telemetry.AccessLog.Settings).To(Equal(AccessLogSettings))
+	})
+
+	It("should create separate L7 log collector RBAC resources for Enterprise", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Verify L7 log collector ServiceAccount exists
+		sa, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "l7-log-collector", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sa.Name).To(Equal("l7-log-collector"))
+		Expect(sa.Namespace).To(Equal("tigera-gateway"))
+
+		// Verify L7 log collector ClusterRole exists with correct permissions
+		cr, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, "l7-log-collector", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(cr.Name).To(Equal("l7-log-collector"))
+		Expect(cr.Rules).To(HaveLen(2))
+
+		// Check Gateway API resources permissions
+		Expect(cr.Rules[0].APIGroups).To(ConsistOf("gateway.networking.k8s.io"))
+		Expect(cr.Rules[0].Resources).To(ConsistOf("gateways", "httproutes", "grpcroutes"))
+		Expect(cr.Rules[0].Verbs).To(ConsistOf("get", "list", "watch"))
+
+		// Check core resources permissions
+		Expect(cr.Rules[1].APIGroups).To(ConsistOf(""))
+		Expect(cr.Rules[1].Resources).To(ConsistOf("pods", "services"))
+		Expect(cr.Rules[1].Verbs).To(ConsistOf("get", "list", "watch"))
+
+		// Verify L7 log collector ClusterRoleBinding exists
+		crb, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "l7-log-collector", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(crb.Name).To(Equal("l7-log-collector"))
+		Expect(crb.RoleRef.APIGroup).To(Equal("rbac.authorization.k8s.io"))
+		Expect(crb.RoleRef.Kind).To(Equal("ClusterRole"))
+		Expect(crb.RoleRef.Name).To(Equal("l7-log-collector"))
+		Expect(crb.Subjects).To(HaveLen(1))
+		Expect(crb.Subjects[0].Kind).To(Equal("ServiceAccount"))
+		Expect(crb.Subjects[0].Name).To(Equal("l7-log-collector"))
+		Expect(crb.Subjects[0].Namespace).To(Equal("tigera-gateway"))
+	})
+
+	It("should NOT create L7 log collector RBAC resources for OSS", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.Calico,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Verify L7 log collector ServiceAccount does NOT exist
+		_, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "l7-log-collector", "tigera-gateway")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("not found"))
+
+		// Verify L7 log collector ClusterRole does NOT exist
+		_, err = rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, "l7-log-collector", "")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("not found"))
+
+		// Verify L7 log collector ClusterRoleBinding does NOT exist
+		_, err = rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "l7-log-collector", "")
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("not found"))
+	})
+
+	It("should use l7-log-collector service account in EnvoyProxy for Enterprise", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify the service account patch is set correctly
+		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch).NotTo(BeNil())
+		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Value.Raw).NotTo(BeEmpty())
+
+		// Parse the patch and verify it sets l7-log-collector service account
+		var patch map[string]interface{}
+		err = json.Unmarshal(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Patch.Value.Raw, &patch)
+		Expect(err).NotTo(HaveOccurred())
+
+		spec, ok := patch["spec"].(map[string]interface{})
+		Expect(ok).To(BeTrue())
+		template, ok := spec["template"].(map[string]interface{})
+		Expect(ok).To(BeTrue())
+		templateSpec, ok := template["spec"].(map[string]interface{})
+		Expect(ok).To(BeTrue())
+
+		Expect(templateSpec["serviceAccountName"]).To(Equal("l7-log-collector"))
+		Expect(templateSpec["automountServiceAccountToken"]).To(Equal(true))
+	})
+
+	It("should have separate RBAC for L7 log collector and WAF HTTP Filter", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Verify WAF HTTP Filter RBAC resources exist
+		wafSA, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		wafCR, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, "waf-http-filter", "")
+		Expect(err).NotTo(HaveOccurred())
+		wafCRB, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter", "")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify L7 log collector RBAC resources exist
+		l7SA, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "l7-log-collector", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		l7CR, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, "l7-log-collector", "")
+		Expect(err).NotTo(HaveOccurred())
+		l7CRB, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "l7-log-collector", "")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Verify they are distinct resources
+		Expect(wafSA.Name).NotTo(Equal(l7SA.Name))
+		Expect(wafCR.Name).NotTo(Equal(l7CR.Name))
+		Expect(wafCRB.Name).NotTo(Equal(l7CRB.Name))
+
+		// Verify L7 log collector has different permissions than WAF HTTP Filter
+		// L7 log collector should have Gateway API and core resource permissions
+		Expect(l7CR.Rules).To(HaveLen(2))
+		Expect(l7CR.Rules[0].APIGroups).To(ConsistOf("gateway.networking.k8s.io"))
+		Expect(l7CR.Rules[1].APIGroups).To(ConsistOf(""))
+
+		// WAF HTTP Filter permissions should be different
+		Expect(wafCR.Rules).NotTo(Equal(l7CR.Rules))
 	})
 })

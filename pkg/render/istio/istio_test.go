@@ -25,7 +25,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
-	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -99,8 +98,6 @@ func getCommonExpectedResources() []client.Object {
 		// ValidatingWebhookConfigurations
 		&admregv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "istiod-default-validator"}},
 		&admregv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "istio-validator-calico-system"}},
-		// PodDisruptionBudget
-		&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "istiod", Namespace: istio.IstioNamespace}},
 		// HorizontalPodAutoscaler
 		&autoscalingv2.HorizontalPodAutoscaler{ObjectMeta: metav1.ObjectMeta{Name: "istiod", Namespace: istio.IstioNamespace}},
 	}
@@ -205,7 +202,7 @@ var _ = Describe("Istio Component Rendering", func() {
 
 			objsToCreate, objsToDelete := component.Objects()
 
-			Expect(objsToCreate).To(HaveLen(33))
+			Expect(objsToCreate).To(HaveLen(32))
 			Expect(objsToDelete).To(BeEmpty())
 
 			expectedResources := getCommonExpectedResources()
@@ -723,7 +720,7 @@ var _ = Describe("Istio Component Rendering", func() {
 		It("should render all workloads successfully on GKE", func() {
 			objsToCreate, objsToDelete := component.Objects()
 
-			Expect(objsToCreate).To(HaveLen(34))
+			Expect(objsToCreate).To(HaveLen(33))
 			Expect(objsToDelete).To(BeEmpty())
 
 			// Start with common resources and append GKE-specific ones

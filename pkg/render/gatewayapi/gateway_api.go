@@ -111,6 +111,26 @@ var (
 			},
 		},
 	}
+
+	// Owning Gateway name and namespace are exposed via pod labels set by EnvoyProxy.
+	// These allow the l7-log-collector to know which Gateway it is collecting logs for
+	// without needing to query the Kubernetes API.
+	OwningGatewayNameEnvVar = corev1.EnvVar{
+		Name: "OWNING_GATEWAY_NAME",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.labels['gateway.envoyproxy.io/owning-gateway-name']",
+			},
+		},
+	}
+	OwningGatewayNamespaceEnvVar = corev1.EnvVar{
+		Name: "OWNING_GATEWAY_NAMESPACE",
+		ValueFrom: &corev1.EnvVarSource{
+			FieldRef: &corev1.ObjectFieldSelector{
+				FieldPath: "metadata.labels['gateway.envoyproxy.io/owning-gateway-namespace']",
+			},
+		},
+	}
 )
 
 func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
@@ -791,6 +811,9 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						Name:  "ENVOY_ACCESS_LOG_PATH",
 						Value: "/access_logs/access.log",
 					},
+					// Owning Gateway info from pod labels (set by EnvoyProxy)
+					OwningGatewayNameEnvVar,
+					OwningGatewayNamespaceEnvVar,
 				},
 				RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
 				VolumeMounts: []corev1.VolumeMount{

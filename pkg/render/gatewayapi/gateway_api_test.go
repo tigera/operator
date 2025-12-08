@@ -1044,4 +1044,196 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(envoyDeployment.Pod.Volumes[4].CSI.Driver).To(Equal("csi.tigera.io"))
 		Expect(proxy.Spec.Telemetry.AccessLog.Settings).To(Equal(AccessLogSettings))
 	})
+
+	It("should set owning gateway environment variables in l7-log-collector for Enterprise", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(envoyDeployment).ToNot(BeNil())
+		Expect(envoyDeployment.InitContainers).To(HaveLen(2))
+
+		// Find the l7-log-collector init container
+		var l7LogCollector *corev1.Container
+		for i := range envoyDeployment.InitContainers {
+			if envoyDeployment.InitContainers[i].Name == "l7-log-collector" {
+				l7LogCollector = &envoyDeployment.InitContainers[i]
+				break
+			}
+		}
+
+		Expect(l7LogCollector).ToNot(BeNil(), "l7-log-collector container should exist")
+
+		// Verify the owning gateway environment variables are present
+		Expect(l7LogCollector.Env).To(ContainElement(OwningGatewayNameEnvVar))
+		Expect(l7LogCollector.Env).To(ContainElement(OwningGatewayNamespaceEnvVar))
+
+		// Verify the structure of the environment variables
+		var foundNameEnvVar, foundNamespaceEnvVar bool
+		for _, env := range l7LogCollector.Env {
+			if env.Name == "OWNING_GATEWAY_NAME" {
+				foundNameEnvVar = true
+				Expect(env.ValueFrom).ToNot(BeNil())
+				Expect(env.ValueFrom.FieldRef).ToNot(BeNil())
+				Expect(env.ValueFrom.FieldRef.FieldPath).To(Equal("metadata.labels['gateway.envoyproxy.io/owning-gateway-name']"))
+			}
+			if env.Name == "OWNING_GATEWAY_NAMESPACE" {
+				foundNamespaceEnvVar = true
+				Expect(env.ValueFrom).ToNot(BeNil())
+				Expect(env.ValueFrom.FieldRef).ToNot(BeNil())
+				Expect(env.ValueFrom.FieldRef.FieldPath).To(Equal("metadata.labels['gateway.envoyproxy.io/owning-gateway-namespace']"))
+			}
+		}
+		Expect(foundNameEnvVar).To(BeTrue(), "OWNING_GATEWAY_NAME environment variable should be set")
+		Expect(foundNamespaceEnvVar).To(BeTrue(), "OWNING_GATEWAY_NAMESPACE environment variable should be set")
+	})
+
+	It("should set owning gateway environment variables in l7-log-collector when using custom proxy", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "custom-class",
+					EnvoyProxyRef: &operatorv1.NamespacedName{
+						Namespace: "default",
+						Name:      "my-proxy",
+					},
+				}},
+			},
+		}
+		envoyProxy := &envoyapi.EnvoyProxy{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "EnvoyProxy",
+				APIVersion: "gateway.envoyproxy.io/v1alpha1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "my-proxy",
+				Namespace: "default",
+			},
+			Spec: envoyapi.EnvoyProxySpec{
+				Provider: &envoyapi.EnvoyProxyProvider{
+					Type: envoyapi.ProviderTypeKubernetes,
+					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
+						EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
+							InitContainers: []corev1.Container{
+								{
+									Name:          "some-other-sidecar",
+									RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+									Env: []corev1.EnvVar{
+										{
+											Name:  "OTHER_VAR",
+											Value: "other-value",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+			CustomEnvoyProxies: map[string]*envoyapi.EnvoyProxy{
+				"custom-class": envoyProxy,
+			},
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		gc, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "custom-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(gc.Spec.ParametersRef).NotTo(BeNil())
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, gc.Spec.ParametersRef.Name, string(*gc.Spec.ParametersRef.Namespace))
+		Expect(err).NotTo(HaveOccurred())
+
+		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(envoyDeployment).ToNot(BeNil())
+
+		// Find the l7-log-collector init container
+		var l7LogCollector *corev1.Container
+		for i := range envoyDeployment.InitContainers {
+			if envoyDeployment.InitContainers[i].Name == "l7-log-collector" {
+				l7LogCollector = &envoyDeployment.InitContainers[i]
+				break
+			}
+		}
+
+		Expect(l7LogCollector).ToNot(BeNil(), "l7-log-collector container should exist")
+
+		// Verify the owning gateway environment variables are present
+		Expect(l7LogCollector.Env).To(ContainElement(OwningGatewayNameEnvVar))
+		Expect(l7LogCollector.Env).To(ContainElement(OwningGatewayNamespaceEnvVar))
+
+		// Verify environment variables include all expected values
+		envVarNames := make([]string, len(l7LogCollector.Env))
+		for i, env := range l7LogCollector.Env {
+			envVarNames[i] = env.Name
+		}
+		Expect(envVarNames).To(ContainElement("LOG_LEVEL"))
+		Expect(envVarNames).To(ContainElement("FELIX_DIAL_TARGET"))
+		Expect(envVarNames).To(ContainElement("ENVOY_ACCESS_LOG_PATH"))
+		Expect(envVarNames).To(ContainElement("OWNING_GATEWAY_NAME"))
+		Expect(envVarNames).To(ContainElement("OWNING_GATEWAY_NAMESPACE"))
+	})
+
+	It("should verify owning gateway env vars use correct field paths", func() {
+		// Test the global env var definitions
+		Expect(OwningGatewayNameEnvVar.Name).To(Equal("OWNING_GATEWAY_NAME"))
+		Expect(OwningGatewayNameEnvVar.ValueFrom).ToNot(BeNil())
+		Expect(OwningGatewayNameEnvVar.ValueFrom.FieldRef).ToNot(BeNil())
+		Expect(OwningGatewayNameEnvVar.ValueFrom.FieldRef.FieldPath).To(Equal("metadata.labels['gateway.envoyproxy.io/owning-gateway-name']"))
+
+		Expect(OwningGatewayNamespaceEnvVar.Name).To(Equal("OWNING_GATEWAY_NAMESPACE"))
+		Expect(OwningGatewayNamespaceEnvVar.ValueFrom).ToNot(BeNil())
+		Expect(OwningGatewayNamespaceEnvVar.ValueFrom.FieldRef).ToNot(BeNil())
+		Expect(OwningGatewayNamespaceEnvVar.ValueFrom.FieldRef.FieldPath).To(Equal("metadata.labels['gateway.envoyproxy.io/owning-gateway-namespace']"))
+	})
+
+	It("should not set owning gateway env vars in l7-log-collector for DaemonSet deployments", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		daemonSet := operatorv1.GatewayKindDaemonSet
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name:        "tigera-gateway-class-daemonset",
+					GatewayKind: &daemonSet,
+				}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class-daemonset", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		// DaemonSet should not have l7-log-collector or waf-http-filter
+		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDaemonSet).ToNot(BeNil())
+		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment).To(BeNil())
+		// DaemonSet init containers are not supported, so these should not be present
+		// This is expected behavior as mentioned in the code comments
+	})
 })

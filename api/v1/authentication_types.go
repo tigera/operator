@@ -29,20 +29,6 @@ const (
 	EmailVerificationTypeSkip   EmailVerificationType = "InsecureSkip"
 )
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:path=authentications,scope=Cluster
-
-// Authentication is the Schema for the authentications API
-// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'", message="resource name must be 'tigera-secure'"
-type Authentication struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	Spec   AuthenticationSpec   `json:"spec,omitempty"`
-	Status AuthenticationStatus `json:"status,omitempty"`
-}
-
 // AuthenticationSpec defines the desired state of Authentication
 type AuthenticationSpec struct {
 	// ManagerDomain is the domain name of the Manager
@@ -244,6 +230,18 @@ type UserMatch struct {
 }
 
 // +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:path=authentications,scope=Cluster
+
+// Authentication is the Schema for the authentications API
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'", message="resource name must be 'tigera-secure'"
+type Authentication struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   AuthenticationSpec   `json:"spec,omitempty"`
+	Status AuthenticationStatus `json:"status,omitempty"`
+}
 
 // AuthenticationList contains a list of Authentication
 type AuthenticationList struct {

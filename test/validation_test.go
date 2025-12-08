@@ -30,7 +30,7 @@ import (
 
 var c client.Client
 
-func testSetup(t *testing.T) func() {
+func testSetup(t *testing.T) {
 	err := apis.AddToScheme(scheme.Scheme)
 	require.NoError(t, err, "failed to add APIs to scheme")
 
@@ -39,8 +39,6 @@ func testSetup(t *testing.T) func() {
 
 	c, err = client.New(cfg, client.Options{})
 	require.NoError(t, err, "failed to create k8s client")
-
-	return func() {}
 }
 
 // TestNameValidation verifies that name validation logic works as expected, and that CRs with invalid names are rejected.
@@ -102,7 +100,7 @@ func TestNameValidation(t *testing.T) {
 		}
 
 		t.Run(name, func(t *testing.T) {
-			defer testSetup(t)()
+			testSetup(t)
 
 			err := c.Create(context.TODO(), tc.cr)
 			if tc.err != "" {

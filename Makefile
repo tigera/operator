@@ -248,7 +248,7 @@ endif
 
 # To update the Istio version, see "Updating the bundled version of Istio" in docs/common_tasks.md.
 ISTIO_HELM_REPO ?= https://istio-release.storage.googleapis.com/charts
-ISTIO_VERSION ?= 1.27.3
+ISTIO_VERSION ?= 1.28.1
 ISTIO_RESOURCES_DIR = pkg/render/istio
 ISTIO_CHARTS = base istiod cni ztunnel
 ISTIO_CHART_FILES = $(addprefix $(ISTIO_RESOURCES_DIR)/,$(addsuffix .tgz,$(ISTIO_CHARTS)))
@@ -339,7 +339,7 @@ $(BINDIR)/kind:
 
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -rf $(ISTIO_CHARTS)
+	rm -rf $(ISTIO_CHART_FILES)
 	rm -rf build/init/bin
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache

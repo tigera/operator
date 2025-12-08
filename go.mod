@@ -4,6 +4,7 @@ go 1.25.3
 
 require (
 	github.com/aws/aws-sdk-go v1.55.5
+	github.com/blang/semver/v4 v4.0.0
 	github.com/cloudflare/cfssl v1.6.5
 	github.com/containernetworking/cni v1.2.3
 	github.com/corazawaf/coraza-coreruleset/v4 v4.7.0
@@ -12,6 +13,7 @@ require (
 	github.com/go-ldap/ldap v3.0.3+incompatible
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
+	github.com/google/go-github/v53 v53.2.0
 	github.com/hashicorp/go-version v1.7.0
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/onsi/ginkgo v1.16.5
@@ -24,6 +26,7 @@ require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1
 	github.com/r3labs/diff/v2 v2.15.1
 	github.com/sirupsen/logrus v1.9.3
+	github.com/snowzach/rotatefilehook v0.0.0-20220211133110-53752135082d
 	github.com/stretchr/testify v1.10.0
 	github.com/tigera/api v0.0.0-20251017180206-9d7c2da4f711
 	github.com/tigera/operator/api v0.0.0-20250718195010-e4328952af47
@@ -59,12 +62,13 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/Masterminds/squirrel v1.5.4 // indirect
+	github.com/ProtonMail/go-crypto v0.0.0-20230217124315-7d5c6f04bbb8 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.2 // indirect
+	github.com/cloudflare/circl v1.3.3 // indirect
 	github.com/containerd/containerd v1.7.27 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
@@ -93,6 +97,7 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gnostic-models v0.7.0 // indirect
+	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -172,6 +177,7 @@ require (
 	google.golang.org/protobuf v1.36.6 // indirect
 	gopkg.in/asn1-ber.v1 v1.0.0-20181015200546-f715ec2f112d // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	howett.net/plist v1.0.1 // indirect
 	k8s.io/cli-runtime v0.33.3 // indirect

@@ -99,3 +99,6 @@ ut/
 
 # Tar files created as part of running FVs
 *.tar
+
+# Logs
+*.log

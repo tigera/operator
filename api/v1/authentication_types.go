@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -234,6 +234,7 @@ type UserMatch struct {
 // +kubebuilder:resource:path=authentications,scope=Cluster
 
 // Authentication is the Schema for the authentications API
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'", message="resource name must be 'tigera-secure'"
 type Authentication struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -241,8 +242,6 @@ type Authentication struct {
 	Spec   AuthenticationSpec   `json:"spec,omitempty"`
 	Status AuthenticationStatus `json:"status,omitempty"`
 }
-
-// +kubebuilder:object:root=true
 
 // AuthenticationList contains a list of Authentication
 type AuthenticationList struct {

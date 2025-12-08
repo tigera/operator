@@ -1098,7 +1098,9 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterServiceAccount() *core
 	}
 }
 
-// wafHttpFilterClusterRole creates the ClusterRole for WAF HTTP Filter
+// wafHttpFilterClusterRole creates the ClusterRole for WAF HTTP Filter and L7 Log Collector.
+// The L7 Log Collector sidecar shares this ServiceAccount and needs additional permissions
+// to watch Gateway API resources for log enrichment.
 func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -1115,6 +1117,18 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.
 				APIGroups: []string{"authentication.k8s.io"},
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
+			},
+			// Gateway API resources for L7 Log Collector enrichment
+			{
+				APIGroups: []string{"gateway.networking.k8s.io"},
+				Resources: []string{"gateways", "httproutes", "grpcroutes"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			// Core resources for L7 Log Collector to resolve pod/service ownership
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods", "services"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
 		},
 	}

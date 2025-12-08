@@ -243,6 +243,8 @@ type Authentication struct {
 	Status AuthenticationStatus `json:"status,omitempty"`
 }
 
+// +kubebuilder:object:root=true
+//
 // AuthenticationList contains a list of Authentication
 type AuthenticationList struct {
 	metav1.TypeMeta `json:",inline"`

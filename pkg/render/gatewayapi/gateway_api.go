@@ -1116,6 +1116,21 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
+			{
+				APIGroups: []string{"applicationlayer.tigera.io"},
+				Resources: []string{"gatewaywafs"},
+				Verbs:     []string{"get", "list", "update"},
+			},
+			{
+				APIGroups: []string{"gateway.networking.k8s.io"},
+				Resources: []string{"gateways", "httproutes"},
+				Verbs:     []string{"get", "list", "update"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"get", "list"},
+			},
 		},
 	}
 }

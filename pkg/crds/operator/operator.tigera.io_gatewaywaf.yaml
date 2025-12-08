@@ -3,9 +3,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: gatewaywafs..operator.tigera.io
+  name: gatewaywafs.applicationlayer.tigera.io
 spec:
-  group: operator.tigera.io
+  group: applicationlayer.tigera.io
   names:
     kind: GatewayWAF
     listKind: GatewayWAFList

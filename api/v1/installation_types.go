@@ -26,6 +26,25 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:scope=Cluster
+
+// Installation configures an installation of Calico or Calico Enterprise. At most one instance
+// of this resource is supported. It must be named "default". The Installation API installs core networking
+// and network policy components, and provides general install-time configuration.
+//
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'default' || self.metadata.name == 'tigera-secure' || self.metadata.name == 'overlay'", message="resource name must be 'default', 'tigera-secure', or 'overlay'"
+type Installation struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	// Specification of the desired state for the Calico or Calico Enterprise installation.
+	Spec InstallationSpec `json:"spec,omitempty"`
+	// Most recently observed state for the Calico or Calico Enterprise installation.
+	Status InstallationStatus `json:"status,omitempty"`
+}
+
 // InstallationSpec defines configuration for a Calico or Calico Enterprise installation.
 type InstallationSpec struct {
 	// Variant is the product to install - one of Calico or TigeraSecureEnterprise
@@ -968,23 +987,6 @@ type InstallationStatus struct {
 	// Ready, Progressing, Degraded or other customer types.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
-}
-
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:scope=Cluster
-
-// Installation configures an installation of Calico or Calico Enterprise. At most one instance
-// of this resource is supported. It must be named "default". The Installation API installs core networking
-// and network policy components, and provides general install-time configuration.
-type Installation struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-
-	// Specification of the desired state for the Calico or Calico Enterprise installation.
-	Spec InstallationSpec `json:"spec,omitempty"`
-	// Most recently observed state for the Calico or Calico Enterprise installation.
-	Status InstallationStatus `json:"status,omitempty"`
 }
 
 // BPFEnabled is an extension method that returns true if the Installation resource

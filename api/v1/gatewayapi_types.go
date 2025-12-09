@@ -132,6 +132,7 @@ type GatewayClassSpec struct {
 //+kubebuilder:object:root=true
 //+kubebuilder:resource:scope=Cluster
 
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'default' || self.metadata.name == 'tigera-secure'", message="resource name must be 'default'"
 type GatewayAPI struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

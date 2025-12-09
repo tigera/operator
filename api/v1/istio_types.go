@@ -162,6 +162,7 @@ type IstioStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'default'", message="resource name must be 'default'"
 
 // Istio is the Schema for the istios API
 type Istio struct {

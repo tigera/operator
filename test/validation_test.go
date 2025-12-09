@@ -71,6 +71,7 @@ func TestNameValidation(t *testing.T) {
 		{cr: &v1.GatewayAPI{ObjectMeta: metav1.ObjectMeta{Name: "default"}}},
 		{cr: &v1.PolicyRecommendation{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}},
 		{cr: &v1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}},
+		{cr: &v1.Istio{ObjectMeta: metav1.ObjectMeta{Name: "default"}}},
 
 		// Invalid test cases.
 		{cr: &v1.Installation{ObjectMeta: metav1.ObjectMeta{Name: "invalidname"}}, err: "name must be"},
@@ -90,6 +91,7 @@ func TestNameValidation(t *testing.T) {
 		{cr: &v1.GatewayAPI{ObjectMeta: metav1.ObjectMeta{Name: "invalidname"}}, err: "name must be"},
 		{cr: &v1.PolicyRecommendation{ObjectMeta: metav1.ObjectMeta{Name: "invalidname"}}, err: "name must be"},
 		{cr: &v1.Compliance{ObjectMeta: metav1.ObjectMeta{Name: "invalidname"}}, err: "name must be"},
+		{cr: &v1.Istio{ObjectMeta: metav1.ObjectMeta{Name: "invalidname"}}, err: "name must be"},
 	}
 
 	for _, tc := range testCases {

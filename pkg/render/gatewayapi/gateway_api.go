@@ -347,10 +347,8 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 
 var GatewayAPIResources = GatewayAPIResourcesGetter()
 
-func GatewayAPICRDs(provider operatorv1.Provider) ([]client.Object, []client.Object) {
+func K8SGatewayAPICRDs(provider operatorv1.Provider) (essentialCRDs, optionalCRDs []client.Object) {
 	resources := GatewayAPIResources()
-	essentialCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
-	optionalCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
 	for _, crd := range resources.k8sCRDs {
 		if provider.IsOpenShift() {
 			// OpenShift 4.19+ restricts the Gateway CRDs that we can install, so report
@@ -367,6 +365,14 @@ func GatewayAPICRDs(provider operatorv1.Provider) ([]client.Object, []client.Obj
 			essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
 		}
 	}
+	return
+}
+
+// GatewayAPICRDs returns the k8s GatewayAPI CRDs and the Envoy CRDs together,
+// necessary for the deployment of Calico Gateway API.
+func GatewayAPICRDs(provider operatorv1.Provider) (essentialCRDs, optionalCRDs []client.Object) {
+	resources := GatewayAPIResources()
+	essentialCRDs, optionalCRDs = K8SGatewayAPICRDs(provider)
 	for _, crd := range resources.envoyCRDs {
 		essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
 	}

@@ -58,6 +58,10 @@ var defaultImages = map[string]string{
 	"tigera/envoy-gateway":       "tigera/envoy-gateway",
 	"tigera/envoy-proxy":         "tigera/envoy-proxy",
 	"tigera/envoy-ratelimit":     "tigera/envoy-ratelimit",
+	"istio-pilot":                "tigera/istio-pilot",
+	"istio-install-cni":          "tigera/istio-install-cni",
+	"istio-ztunnel":              "tigera/istio-ztunnel",
+	"istio-proxyv2":              "tigera/istio-proxyv2",
 }
 
 var ignoredImages = map[string]struct{}{

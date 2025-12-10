@@ -4,7 +4,7 @@ go 1.23.5
 
 require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1
-	github.com/tigera/api v0.0.0-20251017180206-9d7c2da4f711
+	github.com/tigera/api v0.0.0-20230406222214-ca74195900cb
 	k8s.io/api v0.33.5
 	k8s.io/apimachinery v0.33.5
 	sigs.k8s.io/controller-runtime v0.20.2

@@ -25,7 +25,7 @@ require (
 	github.com/r3labs/diff/v2 v2.15.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
-	github.com/tigera/api v0.0.0-20251017180206-9d7c2da4f711
+	github.com/tigera/api v0.0.0-20250916150902-b8353932c447
 	github.com/tigera/operator/api v0.0.0-20250718195010-e4328952af47
 	github.com/urfave/cli/v3 v3.0.0-beta1
 	go.uber.org/zap v1.27.0

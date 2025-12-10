@@ -29,6 +29,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -109,6 +110,7 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 		IstioCNIOpts: IstioCNIOpts{
 			Global: &GlobalConfig{
 				IstioNamespace: IstioNamespace,
+				NativeNftables: ptr.BoolToPtr(true),
 			},
 			Ambient: &AmbientConfig{
 				Enabled:                    true,

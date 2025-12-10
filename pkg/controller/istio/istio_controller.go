@@ -59,6 +59,9 @@ var (
 // Start Watches within the Add function for any resources that this controller creates or monitors. This will trigger
 // calls to Reconcile() when an instance of one of the watched resources is modified.
 func Add(mgr manager.Manager, opts options.AddOptions) error {
+	if !opts.EnterpriseCRDExists {
+		return nil
+	}
 	r := newReconciler(mgr, opts)
 
 	c, err := ctrlruntime.NewController("istio-controller", mgr, controller.Options{Reconciler: r})

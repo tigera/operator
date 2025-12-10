@@ -39,3 +39,11 @@ components:
     version: v3.31.2
   calico/guardian:
     version: v3.31.2
+  istio-pilot:
+    version: v3.31.2
+  istio-install-cni:
+    version: v3.31.2
+  istio-ztunnel:
+    version: v3.31.2
+  istio-proxyv2:
+    version: v3.31.2

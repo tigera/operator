@@ -11,6 +11,7 @@ resources:
 - operator_v1_imageset.yaml
 - operator_v1_installation.yaml
 - operator_v1_intrusiondetection.yaml
+- operator_v1_istio.yaml
 - operator_v1_logcollector.yaml
 - operator_v1_logstorage.yaml
 - operator_v1_managementclusterconnection.yaml

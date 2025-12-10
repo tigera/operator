@@ -999,6 +999,7 @@ func (c *fluentdComponent) fluentdClusterRole() *rbacv1.ClusterRole {
 					"bgplogs",
 					"waflogs",
 					"runtimereports",
+					"policyactivity",
 				},
 				Verbs: []string{"create"},
 			},

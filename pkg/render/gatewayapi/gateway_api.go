@@ -91,6 +91,7 @@ const (
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 	wafFilterName                       = "waf-http-filter"
+	l7LogCollectorName                  = "l7-log-collector"
 )
 
 var (
@@ -537,6 +538,16 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		)
 	}
 
+	// Add L7 Log Collector RBAC resources for Enterprise variant
+	// These are separate from WAF HTTP Filter to follow least-privilege principle
+	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		objs = append(objs,
+			pr.l7LogCollectorServiceAccount(),
+			pr.l7LogCollectorClusterRole(),
+			pr.l7LogCollectorClusterRoleBinding(),
+		)
+	}
+
 	// Prepare EnvoyGateway config, either from upstream or from a custom EnvoyGatewayConfigRef
 	// provided by the user.
 	envoyGatewayConfig := pr.cfg.CustomEnvoyGateway
@@ -968,13 +979,14 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, AccessLogsVolume...)
 			}
 
-			// Configure service account for WAF HTTP Filter license client
-			// Use EnvoyProxy patch mechanism to set serviceAccountName and automountServiceAccountToken
+			// Configure service account for L7 Log Collector sidecar.
+			// Use EnvoyProxy patch mechanism to set serviceAccountName and automountServiceAccountToken.
+			// The l7-log-collector needs permissions to watch Gateway API resources for log enrichment.
 			serviceAccountPatch := map[string]interface{}{
 				"spec": map[string]interface{}{
 					"template": map[string]interface{}{
 						"spec": map[string]interface{}{
-							"serviceAccountName":           wafFilterName,
+							"serviceAccountName":           l7LogCollectorName,
 							"automountServiceAccountToken": true,
 						},
 					},
@@ -1159,6 +1171,66 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRoleBinding() *
 			{
 				Kind:      "ServiceAccount",
 				Name:      wafFilterName,
+				Namespace: "tigera-gateway",
+			},
+		},
+	}
+}
+
+// l7LogCollectorServiceAccount creates the ServiceAccount for L7 Log Collector sidecar.
+// This is separate from WAF HTTP Filter to follow least-privilege principle.
+func (pr *gatewayAPIImplementationComponent) l7LogCollectorServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      l7LogCollectorName,
+			Namespace: "tigera-gateway",
+		},
+	}
+}
+
+// l7LogCollectorClusterRole creates the ClusterRole for L7 Log Collector sidecar.
+// The L7 Log Collector watches Gateway API resources to enrich access logs with
+// Gateway context information (gateway name, route status, listener details, etc.).
+func (pr *gatewayAPIImplementationComponent) l7LogCollectorClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: l7LogCollectorName,
+		},
+		Rules: []rbacv1.PolicyRule{
+			// Gateway API resources for log enrichment
+			{
+				APIGroups: []string{"gateway.networking.k8s.io"},
+				Resources: []string{"gateways", "httproutes", "grpcroutes"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			// Core resources to resolve pod/service ownership for enrichment
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods", "services"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		},
+	}
+}
+
+// l7LogCollectorClusterRoleBinding creates the ClusterRoleBinding for L7 Log Collector
+func (pr *gatewayAPIImplementationComponent) l7LogCollectorClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: l7LogCollectorName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     l7LogCollectorName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      l7LogCollectorName,
 				Namespace: "tigera-gateway",
 			},
 		},

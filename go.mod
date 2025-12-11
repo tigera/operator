@@ -8,7 +8,7 @@ require (
 	github.com/containernetworking/cni v1.2.3
 	github.com/corazawaf/coraza-coreruleset/v4 v4.7.0
 	github.com/elastic/cloud-on-k8s/v2 v2.0.0-20250129010100-648f902d9807
-	github.com/envoyproxy/gateway v1.5.0
+	github.com/envoyproxy/gateway v1.5.6
 	github.com/go-ldap/ldap v3.0.3+incompatible
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
@@ -116,7 +116,7 @@ require (
 	golang.org/x/tools v0.40.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/protobuf v1.36.6 // indirect
+	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/asn1-ber.v1 v1.0.0-20181015200546-f715ec2f112d // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect

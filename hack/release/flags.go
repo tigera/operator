@@ -68,6 +68,26 @@ var (
 			return nil
 		},
 	}
+	createGithubReleaseFlag = &cli.BoolFlag{
+		Name:     "create-github-release",
+		Category: githubFlagCategory,
+		Usage:    "Create a GitHub release",
+		Sources:  cli.EnvVars("CREATE_GITHUB_RELEASE"),
+		Value:    false,
+		Action: func(ctx context.Context, c *cli.Command, b bool) error {
+			if b && c.String(githubTokenFlag.Name) == "" {
+				return fmt.Errorf("github-token is required to create GitHub releases")
+			}
+			return nil
+		},
+	}
+	draftGithubReleaseFlag = &cli.BoolFlag{
+		Name:     "draft-github-release",
+		Category: githubFlagCategory,
+		Usage:    fmt.Sprintf("Create the GitHub release as a draft. Only applicable if --%s is set.", createGithubReleaseFlag.Name),
+		Sources:  cli.EnvVars("DRAFT_GITHUB_RELEASE"),
+		Value:    true,
+	}
 )
 
 // Operator flags

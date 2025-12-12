@@ -565,8 +565,7 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	fi
 
 	$(MAKE) release VERSION=$(RELEASE_TAG)
-	$(MAKE) release-publish VERSION=$(RELEASE_TAG)
-	$(MAKE) release-github VERSION=$(RELEASE_TAG)
+	REPO=$(REPO) CREATE_GITHUB_RELEASE=true $(MAKE) release-publish VERSION=$(RELEASE_TAG)
 
 
 release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
@@ -601,17 +600,12 @@ release-check-image-exists: release-prereqs
 		echo "Image tag check passed; image does not already exist"; \
 	fi
 
-release-publish: hack/bin/release
+release-publish: hack/bin/release var-require-all-VERSION
 	hack/bin/release publish
 
 release-publish-images: release-prereqs release-check-image-exists var-require-all-VERSION
 	# Push images.
 	$(MAKE) push-all push-manifests push-non-manifests IMAGETAG=$(VERSION)
-
-release-github: release-notes hack/bin/gh
-	@echo "Creating github release for $(VERSION)"
-	hack/bin/gh release create $(VERSION) --title $(VERSION) --draft --notes-file $(VERSION)-release-notes.md
-	@echo "$(VERSION) GitHub release created in draft state. Please review and publish: https://github.com/tigera/operator/releases/tag/$(VERSION) ."
 
 GITHUB_CLI_VERSION?=2.62.0
 hack/bin/gh:

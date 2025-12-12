@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -44,6 +45,8 @@ const (
 	openState   = "open"
 	allState    = "all"
 )
+
+var ErrGitHubReleaseExists = errors.New("GitHub release already exists")
 
 type issueKind string
 
@@ -75,6 +78,11 @@ type GithubRelease struct {
 	Version      string            // Release version
 	githubClient *github.Client    // GitHub API client
 	milestone    *github.Milestone // Cached milestone for the release version
+}
+
+// Get the URL to edit this release on GitHub.
+func (r *GithubRelease) EditURL() string {
+	return fmt.Sprintf("https://github.com/%s/%s/releases/edit/%s", r.Org, r.Repo, r.Version)
 }
 
 // Setup the GitHub client for this release using the provided token.
@@ -131,6 +139,10 @@ func (r *GithubRelease) closeMilestone(ctx context.Context) error {
 	return nil
 }
 
+func releaseNotesFilePath(outputDir, version string) string {
+	return fmt.Sprintf("%s/%s-release-notes.md", outputDir, version)
+}
+
 // Generate release notes for this release and write them to the specified output directory.
 // If outputDir is empty, write to stdout.
 // If useLocal is true, generate release notes based on local versions files
@@ -147,7 +159,7 @@ func (r *GithubRelease) GenerateNotes(ctx context.Context, outputDir string, use
 			logrus.WithError(err).Errorf("Failed to create release notes folder %s", outputDir)
 			return err
 		}
-		f, err := os.Create(fmt.Sprintf("%s/%s-release-notes.md", outputDir, r.Version))
+		f, err := os.Create(releaseNotesFilePath(outputDir, r.Version))
 		if err != nil {
 			logrus.WithError(err).Errorf("Failed to create release notes file in %s", outputDir)
 			return err
@@ -337,6 +349,47 @@ func (r *GithubRelease) collectReleaseNotes(ctx context.Context, local bool) (*R
 	}
 
 	return data, nil
+}
+
+// Create a new GitHub release.
+func (r *GithubRelease) Create(ctx context.Context, isDraft, isPrerelease bool) error {
+	// Check if release already exists
+	release, resp, err := r.githubClient.Repositories.GetReleaseByTag(ctx, r.Org, r.Repo, r.Version)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode == 200 && release != nil {
+		return ErrGitHubReleaseExists
+	}
+
+	// Generate release notes
+	tmpDir := fmt.Sprintf(os.TempDir(), fmt.Sprintf("operator-%s", r.Version))
+	if err := r.GenerateNotes(ctx, tmpDir, false); err != nil {
+		return fmt.Errorf("generating release notes for %s: %w", r.Version, err)
+	}
+	relNotesBytes, err := os.ReadFile(releaseNotesFilePath(tmpDir, r.Version))
+	if err != nil {
+		return fmt.Errorf("reading release notes file for %s: %w", r.Version, err)
+	}
+
+	release = &github.RepositoryRelease{
+		TagName:    github.String(r.Version),
+		Name:       github.String(r.Version),
+		Body:       github.String(string(relNotesBytes)),
+		Draft:      github.Bool(isDraft),
+		Prerelease: github.Bool(isPrerelease),
+	}
+	release, _, err = r.githubClient.Repositories.CreateRelease(ctx, r.Org, r.Repo, release)
+	if err != nil {
+		return fmt.Errorf("creating GitHub release for %s: %w", r.Version, err)
+	}
+	log := logrus.WithField("version", r.Version)
+	if isDraft {
+		log.Infof("GitHub release created in draft state, review and publish it manually on GitHub: %s", r.EditURL())
+		return nil
+	}
+	log.Infof("GitHub release created: %s", release.GetHTMLURL())
+	return nil
 }
 
 // Helper function to list GitHub issues based on the provided options and optional filter function.

@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -39,6 +40,9 @@ var publishCommand = &cli.Command{
 		registryFlag,
 		hashreleaseFlag,
 		skipValidationFlag,
+		createGithubReleaseFlag,
+		githubTokenFlag,
+		draftGithubReleaseFlag,
 	},
 	Before: publishBefore,
 	Action: publishAction,
@@ -49,10 +53,31 @@ var publishCommand = &cli.Command{
 var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	configureLogging(c)
 
+	var err error
+	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
+	if err != nil {
+		return ctx, err
+	}
+
 	// Skip validations if requested
 	if c.Bool(skipValidationFlag.Name) {
 		logrus.Warnf("Skipping %s validation as requested.", c.Name)
 		return ctx, nil
+	}
+
+	// If building a hashrelease, publishGithubRelease must be false
+	if c.Bool(hashreleaseFlag.Name) && c.Bool(createGithubReleaseFlag.Name) {
+		return ctx, fmt.Errorf("cannot publish GitHub release for hashrelease builds")
+	}
+
+	// If publishing a GitHub release, ideally it should be in draft mode with a token provided.
+	if c.Bool(createGithubReleaseFlag.Name) {
+		if c.Bool(draftGithubReleaseFlag.Name) {
+			logrus.Warnf("Publishing GitHub release in non-draft mode.")
+		}
+		if c.String(githubTokenFlag.Name) == "" {
+			return ctx, fmt.Errorf("GitHub token must be provided via --%s flag or GITHUB_TOKEN environment variable", githubTokenFlag.Name)
+		}
 	}
 
 	// If not a hashrelease build, ensure version format is valid
@@ -99,6 +124,11 @@ var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) err
 		logrus.Error(out)
 		return fmt.Errorf("error publishing images: %w", err)
 	}
+
+	if !c.Bool(hashreleaseFlag.Name) {
+		return publishGithubRelease(ctx, c, repoRootDir)
+	}
+
 	return nil
 })
 
@@ -135,4 +165,34 @@ func operatorImagePublished(c *cli.Command) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func publishGithubRelease(ctx context.Context, c *cli.Command, repoRootDir string) error {
+	if !c.Bool(createGithubReleaseFlag.Name) {
+		return nil
+	}
+
+	prerelease, err := isPrereleaseEnterpriseVersion(repoRootDir)
+	if err != nil {
+		return fmt.Errorf("error determining if version is prerelease: %w", err)
+	}
+
+	r := &GithubRelease{
+		Org:     ctx.Value(githubOrgCtxKey).(string),
+		Repo:    ctx.Value(githubRepoCtxKey).(string),
+		Version: c.String(versionFlag.Name),
+	}
+	if err := r.setupClient(ctx, c.String(githubTokenFlag.Name)); err != nil {
+		return fmt.Errorf("error setting up GitHub client: %s", err)
+	}
+
+	// Create the GitHub release in draft mode. If it is a prerelease, mark it as such.
+	if err := r.Create(ctx, c.Bool(draftGithubReleaseFlag.Name), prerelease); errors.Is(err, ErrGitHubReleaseExists) {
+		logrus.Warnf("GitHub release for version %s already exists", c.String(versionFlag.Name))
+		logrus.Infof("To update the release, please edit it manually on GitHub: %s", r.EditURL())
+	} else if err != nil {
+		return fmt.Errorf("error publishing GitHub release: %s", err)
+	}
+
+	return nil
 }

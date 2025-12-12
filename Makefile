@@ -563,7 +563,7 @@ release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
 	REPO=$(REPO) hack/bin/release notes
 
 ## Build a release from start to finish.
-release: clean hack/bin/release
+release: clean hack/bin/release var-require-all-VERSION
 	hack/bin/release build
 
 ## Produces a clean build of release artifacts at the specified version.

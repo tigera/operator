@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
+	"github.com/tigera/operator/pkg/components"
 
 	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -98,10 +99,10 @@ var _ = Describe("Istio controller tests", func() {
 			},
 			Spec: operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
-				Variant:              operatorv1.Calico,
+				Variant:              operatorv1.TigeraSecureEnterprise,
 			},
 			Status: operatorv1.InstallationStatus{
-				Variant: operatorv1.Calico,
+				Variant: operatorv1.TigeraSecureEnterprise,
 				Conditions: []metav1.Condition{
 					{Type: string(operatorv1.ComponentAvailable), Status: metav1.ConditionTrue},
 				},
@@ -699,9 +700,7 @@ var _ = Describe("Istio controller tests", func() {
 		It("should handle ImageSet application", func() {
 			// Create ImageSet with all required Istio images
 			imageSet := &operatorv1.ImageSet{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "calico-master",
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/istio-pilot", Digest: "sha256:pilot123"},

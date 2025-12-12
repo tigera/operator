@@ -18,7 +18,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -171,28 +173,30 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 	}
 
 	version := c.String(versionFlag.Name)
-	log := logrus.WithField("version", version)
+	buildLog := logrus.WithField("version", version)
 
 	// Prepare build environment variables
 	buildEnv := append(os.Environ(), fmt.Sprintf("VERSION=%s", version))
 	if arches := c.StringSlice(archFlag.Name); len(arches) > 0 {
-		log = log.WithField("arches", arches)
+		buildLog = buildLog.WithField("arches", arches)
 		buildEnv = append(buildEnv, fmt.Sprintf("ARCHES=%s", strings.Join(arches, " ")))
 	}
-	if image := c.String(imageFlag.Name); image != defaultImageName {
-		log = log.WithField("image", image)
+	image := c.String(imageFlag.Name)
+	if image != defaultImageName {
+		buildLog = buildLog.WithField("image", image)
 		buildEnv = append(buildEnv,
 			fmt.Sprintf("BUILD_IMAGE=%s", image),
 			fmt.Sprintf("BUILD_INIT_IMAGE=%s-init", image))
 	}
-	if registry := c.String(registryFlag.Name); registry != "" && registry != quayRegistry {
-		log = log.WithField("registry", registry)
+	registry := c.String(registryFlag.Name)
+	if registry != "" && registry != quayRegistry {
+		buildLog = buildLog.WithField("registry", registry)
 		buildEnv = append(buildEnv,
 			fmt.Sprintf("IMAGE_REGISTRY=%s", registry),
 			fmt.Sprintf("PUSH_IMAGE_PREFIXES=%s", addTrailingSlash(registry)))
 	}
 	if c.Bool(hashreleaseFlag.Name) {
-		log = log.WithField("hashrelease", true)
+		buildLog = buildLog.WithField("hashrelease", true)
 		buildEnv = append(buildEnv, fmt.Sprintf("GIT_VERSION=%s", c.String(versionFlag.Name)))
 		resetFn, err := hashreleaseBuildConfig(ctx, c, repoRootDir)
 		defer resetFn()
@@ -200,19 +204,55 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 			return fmt.Errorf("preparing hashrelease build environment: %w", err)
 		}
 	} else {
-		log = log.WithField("release", true)
+		buildLog = buildLog.WithField("release", true)
 		buildEnv = append(buildEnv, "RELEASE=true")
 	}
 
 	// Build the Operator and verify the build
-	log.Info("Building Operator")
+	buildLog.Info("Building Operator")
 	if out, err := makeInDir(repoRootDir, "release-build", buildEnv...); err != nil {
-		log.Error(out)
+		buildLog.Error(out)
 		return fmt.Errorf("building Operator: %w", err)
 	}
-
+	if err := assertOperatorImageVersion(registry, image, version); err != nil {
+		return fmt.Errorf("asserting operator image version: %w", err)
+	}
+	listImages(registry, image, version)
 	return nil
 })
+
+func listImages(registry, image, version string) {
+	fqImage := fmt.Sprintf("%s:%s-%s", path.Join(registry, image), version, runtime.GOARCH)
+	out, err := runCommand("docker", []string{"run", "--rm", fqImage, "--print-images", "list"}, nil)
+	if err != nil {
+		logrus.Error(out)
+		logrus.Errorf("listing images: %v", err)
+		return
+	}
+	logrus.Debug(out)
+}
+
+func assertOperatorImageVersion(registry, image, expectedVersion string) error {
+	fqImage := fmt.Sprintf("%s:%s-%s", path.Join(registry, image), expectedVersion, runtime.GOARCH)
+	out, err := runCommand("docker", []string{"run", "--rm", fqImage, "--version"}, nil)
+	if err != nil {
+		logrus.Error(out)
+		return fmt.Errorf("getting operator image version: %w", err)
+	}
+	logrus.Info(out)
+	var imageVersion string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if strings.HasPrefix(line, "Operator:") {
+			parts := strings.SplitAfterN(line, ":", 2)
+			imageVersion = strings.TrimSpace(parts[1])
+			break
+		}
+	}
+	if imageVersion != expectedVersion {
+		return fmt.Errorf("built operator version %s does not match expected version %s", imageVersion, expectedVersion)
+	}
+	return nil
+}
 
 func hashreleaseBuildConfig(ctx context.Context, c *cli.Command, repoRootDir string) (func(), error) {
 	repoReset := func() {

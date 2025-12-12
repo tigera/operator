@@ -104,8 +104,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
-		log.V(5).Info("Failed to create network watch", "err", err)
-		return fmt.Errorf("applicationlayer-controller failed to watch Tigera network resource: %v", err)
+		return fmt.Errorf("applicationlayer-controller failed to watch Installation resource: %v", err)
 	}
 
 	// Watch for configmap changes in tigera-operator namespace; the cm contains config for Coraza library:

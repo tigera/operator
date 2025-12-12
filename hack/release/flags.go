@@ -57,12 +57,12 @@ var (
 	skipMilestoneFlag = &cli.BoolFlag{
 		Name:     "skip-milestone",
 		Category: githubFlagCategory,
-		Usage:    "Skip updating GitHub milestones",
+		Usage:    "Skip updating GitHub milestones (development and testing purposes only)",
 		Sources:  cli.EnvVars("SKIP_MILESTONE"),
 		Value:    false,
 		Action: func(ctx context.Context, c *cli.Command, skipMilestone bool) error {
-			// If not on the main repo, skip-milestone must be true
-			if c.String(gitRepoFlag.Name) != mainRepo && !skipMilestone {
+			// If not on the main repo, skip-milestone must be true if skip-git-repo-check is not set
+			if c.String(gitRepoFlag.Name) != mainRepo && !skipMilestone && !c.Bool(skipRepoCheckFlag.Name) {
 				return fmt.Errorf("skip-milestone is required when using a forked repo")
 			}
 			return nil
@@ -193,7 +193,7 @@ var localFlag = &cli.BoolFlag{
 
 var skipValidationFlag = &cli.BoolFlag{
 	Name:    "skip-validation",
-	Usage:   "Skip validation",
+	Usage:   "Skip various validation steps (development and testing purposes only)",
 	Sources: cli.EnvVars("SKIP_VALIDATION"),
 	Value:   false,
 }
@@ -300,7 +300,7 @@ var (
 	calicoCRDsDirFlag = &cli.StringFlag{
 		Name:     "calico-crds-dir",
 		Category: calicoFlagCategory,
-		Usage:    "The directory containing the Calico CRDs to bundle with the operator",
+		Usage:    "The directory containing the Calico CRDs to bundle with the operator (development and testing purposes only)",
 		Sources:  cli.EnvVars("CALICO_DIR"),
 		Action:   dirFlagCheck,
 	}
@@ -363,7 +363,7 @@ var (
 	enterpriseCRDsDirFlag = &cli.StringFlag{
 		Name:     "enterprise-crds-dir",
 		Category: enterpriseFlagCategory,
-		Usage:    "The directory containing the Enterprise CRDs to bundle with the operator",
+		Usage:    "The directory containing the Enterprise CRDs to bundle with the operator (development and testing purposes only)",
 		Sources:  cli.EnvVars("ENTERPRISE_DIR"),
 		Action:   dirFlagCheck,
 	}
@@ -385,5 +385,12 @@ var hashreleaseFlag = &cli.BoolFlag{
 	Name:    "hashrelease",
 	Usage:   "Indicates if this is a hashrelease",
 	Sources: cli.EnvVars("HASHRELEASE"),
+	Value:   false,
+}
+
+var skipRepoCheckFlag = &cli.BoolFlag{
+	Name:    "skip-repo-check",
+	Usage:   fmt.Sprintf("Skip checking that the git repository is %s (development and testing purposes only)", mainRepo),
+	Sources: cli.EnvVars("SKIP_REPO_CHECK"),
 	Value:   false,
 }

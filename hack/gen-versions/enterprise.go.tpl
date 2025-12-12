@@ -397,7 +397,6 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
-		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "istio-install-cni" }}
@@ -405,7 +404,6 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
-		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "istio-ztunnel" }}
@@ -413,7 +411,6 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
-		variant:  enterpriseVariant,
 	}
 {{- end }}
 {{ with index .Components "istio-proxyv2" }}
@@ -421,7 +418,6 @@ var (
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
-		variant:  enterpriseVariant,
 	}
 {{- end }}
 	// Only components that correspond directly to images should be included in this list,

@@ -340,26 +340,26 @@ var (
 	}
 
 	ComponentCalicoIstioPilot = Component{
-		Version:  "master",
-		Image:    "istio-pilot",
+		Version:  "v3.22.0-2.0",
+		Image:    "tigera/istio-pilot",
 		Registry: "",
 	}
 
 	ComponentCalicoIstioInstallCNI = Component{
-		Version:  "master",
-		Image:    "istio-install-cni",
+		Version:  "v3.22.0-2.0",
+		Image:    "tigera/istio-install-cni",
 		Registry: "",
 	}
 
 	ComponentCalicoIstioZTunnel = Component{
-		Version:  "master",
-		Image:    "istio-ztunnel",
+		Version:  "v3.22.0-2.0",
+		Image:    "tigera/istio-ztunnel",
 		Registry: "",
 	}
 
 	ComponentCalicoIstioProxyv2 = Component{
-		Version:  "master",
-		Image:    "istio-proxyv2",
+		Version:  "v3.22.0-2.0",
+		Image:    "tigera/istio-proxyv2",
 		Registry: "",
 	}
 	// Only components that correspond directly to images should be included in this list,

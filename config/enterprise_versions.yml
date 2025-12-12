@@ -169,3 +169,15 @@ components:
   gateway-api-envoy-ratelimit:
     image: tigera/envoy-ratelimit
     version: v3.22.0-2.0
+  istio-pilot:
+    image: tigera/istio-pilot
+    version: v3.22.0-2.0
+  istio-install-cni:
+    image: tigera/istio-install-cni
+    version: v3.22.0-2.0
+  istio-ztunnel:
+    image: tigera/istio-ztunnel
+    version: v3.22.0-2.0
+  istio-proxyv2:
+    image: tigera/istio-proxyv2
+    version: v3.22.0-2.0

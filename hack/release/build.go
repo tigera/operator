@@ -145,15 +145,19 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 	}
 	if calicoBuildOk {
 		if calicoBuildType == versionBuild && c.String(calicoCRDsDirFlag.Name) == "" {
-			return ctx, fmt.Errorf("Calico CRDs directory must be specified for hashrelease builds using calico-version flag")
+			return ctx, fmt.Errorf("Calico directory must be specified for hashrelease builds using calico-version flag")
 		}
-		logrus.Warn("Calico CRDs directory not specified for hashrelease build, default CRDs may not be appropriate")
+		if c.String(calicoCRDsDirFlag.Name) == "" {
+			logrus.Warn("Calico directory not specified for hashrelease build, getting CRDs from default location may not be appropriate")
+		}
 	}
 	if enterpriseBuildOk {
 		if enterpriseBuildType == versionBuild && c.String(enterpriseCRDsDirFlag.Name) == "" {
-			return ctx, fmt.Errorf("Enterprise CRDs directory must be specified for hashrelease builds using enterprise-version flag")
+			return ctx, fmt.Errorf("Enterprise directory must be specified for hashrelease builds using enterprise version")
 		}
-		logrus.Warn("Enterprise CRDs directory not specified for hashrelease build, default CRDs may not be appropriate")
+		if c.String(enterpriseCRDsDirFlag.Name) == "" {
+			logrus.Warn("Enterprise directory not specified for hashrelease build, getting CRDs from default location may not be appropriate")
+		}
 	}
 
 	return ctx, nil

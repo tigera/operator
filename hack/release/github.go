@@ -395,12 +395,20 @@ func (r *GithubRelease) Create(ctx context.Context, isDraft, isPrerelease bool) 
 		return nil, fmt.Errorf("reading release notes file for %s: %w", r.Version, err)
 	}
 
+	latest := "false"
+	// Have GitHub determine if this is the latest release only if it is not a draft or prerelease
+	// by using "legacy" option. See https://docs.github.com/en/rest/releases/releases#create-a-release
+	if !isDraft && !isPrerelease {
+		latest = "legacy"
+	}
+
 	release, _, err := r.githubClient.Repositories.CreateRelease(ctx, r.Org, r.Repo, &github.RepositoryRelease{
 		TagName:    github.String(r.Version),
 		Name:       github.String(r.Version),
 		Body:       github.String(string(relNotesBytes)),
 		Draft:      github.Bool(isDraft),
 		Prerelease: github.Bool(isPrerelease),
+		MakeLatest: github.String(latest),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("creating GitHub release for %s: %w", r.Version, err)

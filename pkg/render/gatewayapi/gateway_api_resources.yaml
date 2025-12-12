@@ -17980,8 +17980,7 @@ spec:
                               Defaults to 200 only
                             items:
                               description: HTTPStatus defines the http status code.
-                              exclusiveMaximum: true
-                              maximum: 600
+                              maximum: 599
                               minimum: 100
                               type: integer
                             type: array
@@ -19336,8 +19335,7 @@ spec:
                           The retriable-status-codes trigger must also be configured for these status codes to trigger a retry.
                         items:
                           description: HTTPStatus defines the http status code.
-                          exclusiveMaximum: true
-                          maximum: 600
+                          maximum: 599
                           minimum: 100
                           type: integer
                         type: array
@@ -21885,8 +21883,7 @@ spec:
                                       items:
                                         description: HTTPStatus defines the http status
                                           code.
-                                        exclusiveMaximum: true
-                                        maximum: 600
+                                        maximum: 599
                                         minimum: 100
                                         type: integer
                                       type: array
@@ -22396,8 +22393,7 @@ spec:
                                   items:
                                     description: HTTPStatus defines the http status
                                       code.
-                                    exclusiveMaximum: true
-                                    maximum: 600
+                                    maximum: 599
                                     minimum: 100
                                     type: integer
                                   type: array
@@ -24572,7 +24568,7 @@ spec:
                                 x-kubernetes-validations:
                                 - message: Image must include a tag and allowed characters
                                     only (e.g., 'repo:tag').
-                                  rule: self.matches('^[a-zA-Z0-9._/-]+(:[a-zA-Z0-9._-]+)?(@sha256:[a-z0-9]+)?$')
+                                  rule: self.matches('^[a-zA-Z0-9._-]+(:[0-9]+)?(/[a-zA-Z0-9._/-]+)?(:[a-zA-Z0-9._-]+)?(@sha256:[a-z0-9]+)?$')
                               imageRepository:
                                 description: |-
                                   ImageRepository specifies the container image repository to be used without specifying a tag.
@@ -28417,7 +28413,7 @@ spec:
                                 x-kubernetes-validations:
                                 - message: Image must include a tag and allowed characters
                                     only (e.g., 'repo:tag').
-                                  rule: self.matches('^[a-zA-Z0-9._/-]+(:[a-zA-Z0-9._-]+)?(@sha256:[a-z0-9]+)?$')
+                                  rule: self.matches('^[a-zA-Z0-9._-]+(:[0-9]+)?(/[a-zA-Z0-9._/-]+)?(:[a-zA-Z0-9._-]+)?(@sha256:[a-z0-9]+)?$')
                               imageRepository:
                                 description: |-
                                   ImageRepository specifies the container image repository to be used without specifying a tag.
@@ -34935,8 +34931,7 @@ spec:
                                                           description: HTTPStatus
                                                             defines the http status
                                                             code.
-                                                          exclusiveMaximum: true
-                                                          maximum: 600
+                                                          maximum: 599
                                                           minimum: 100
                                                           type: integer
                                                         type: array
@@ -35495,8 +35490,7 @@ spec:
                                                     items:
                                                       description: HTTPStatus defines
                                                         the http status code.
-                                                      exclusiveMaximum: true
-                                                      maximum: 600
+                                                      maximum: 599
                                                       minimum: 100
                                                       type: integer
                                                     type: array
@@ -36048,8 +36042,7 @@ spec:
                                                           description: HTTPStatus
                                                             defines the http status
                                                             code.
-                                                          exclusiveMaximum: true
-                                                          maximum: 600
+                                                          maximum: 599
                                                           minimum: 100
                                                           type: integer
                                                         type: array
@@ -36608,8 +36601,7 @@ spec:
                                                     items:
                                                       description: HTTPStatus defines
                                                         the http status code.
-                                                      exclusiveMaximum: true
-                                                      maximum: 600
+                                                      maximum: 599
                                                       minimum: 100
                                                       type: integer
                                                     type: array
@@ -37265,8 +37257,7 @@ spec:
                                                   items:
                                                     description: HTTPStatus defines
                                                       the http status code.
-                                                    exclusiveMaximum: true
-                                                    maximum: 600
+                                                    maximum: 599
                                                     minimum: 100
                                                     type: integer
                                                   type: array
@@ -37800,8 +37791,7 @@ spec:
                                               items:
                                                 description: HTTPStatus defines the
                                                   http status code.
-                                                exclusiveMaximum: true
-                                                maximum: 600
+                                                maximum: 599
                                                 minimum: 100
                                                 type: integer
                                               type: array
@@ -38382,8 +38372,7 @@ spec:
                                             items:
                                               description: HTTPStatus defines the
                                                 http status code.
-                                              exclusiveMaximum: true
-                                              maximum: 600
+                                              maximum: 599
                                               minimum: 100
                                               type: integer
                                             type: array
@@ -38913,8 +38902,7 @@ spec:
                                         items:
                                           description: HTTPStatus defines the http
                                             status code.
-                                          exclusiveMaximum: true
-                                          maximum: 600
+                                          maximum: 599
                                           minimum: 100
                                           type: integer
                                         type: array
@@ -40346,8 +40334,7 @@ spec:
                                         items:
                                           description: HTTPStatus defines the http
                                             status code.
-                                          exclusiveMaximum: true
-                                          maximum: 600
+                                          maximum: 599
                                           minimum: 100
                                           type: integer
                                         type: array
@@ -40866,8 +40853,7 @@ spec:
                                     items:
                                       description: HTTPStatus defines the http status
                                         code.
-                                      exclusiveMaximum: true
-                                      maximum: 600
+                                      maximum: 599
                                       minimum: 100
                                       type: integer
                                     type: array
@@ -41355,8 +41341,7 @@ spec:
                                         items:
                                           description: HTTPStatus defines the http
                                             status code.
-                                          exclusiveMaximum: true
-                                          maximum: 600
+                                          maximum: 599
                                           minimum: 100
                                           type: integer
                                         type: array
@@ -41875,8 +41860,7 @@ spec:
                                     items:
                                       description: HTTPStatus defines the http status
                                         code.
-                                      exclusiveMaximum: true
-                                      maximum: 600
+                                      maximum: 599
                                       minimum: 100
                                       type: integer
                                     type: array
@@ -42559,8 +42543,7 @@ spec:
                                               items:
                                                 description: HTTPStatus defines the
                                                   http status code.
-                                                exclusiveMaximum: true
-                                                maximum: 600
+                                                maximum: 599
                                                 minimum: 100
                                                 type: integer
                                               type: array
@@ -43092,8 +43075,7 @@ spec:
                                           items:
                                             description: HTTPStatus defines the http
                                               status code.
-                                            exclusiveMaximum: true
-                                            maximum: 600
+                                            maximum: 599
                                             minimum: 100
                                             type: integer
                                           type: array
@@ -43333,7 +43315,6 @@ spec:
                       By default, its unset.
                     properties:
                       sameSite:
-                        default: Strict
                         enum:
                         - Lax
                         - Strict
@@ -43823,8 +43804,7 @@ spec:
                                         items:
                                           description: HTTPStatus defines the http
                                             status code.
-                                          exclusiveMaximum: true
-                                          maximum: 600
+                                          maximum: 599
                                           minimum: 100
                                           type: integer
                                         type: array
@@ -44343,8 +44323,7 @@ spec:
                                     items:
                                       description: HTTPStatus defines the http status
                                         code.
-                                      exclusiveMaximum: true
-                                      maximum: 600
+                                      maximum: 599
                                       minimum: 100
                                       type: integer
                                     type: array
@@ -45006,10 +44985,10 @@ metadata:
   name: envoy-gateway
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 ---
 # Source: gateway-helm/templates/envoy-gateway-config.yaml
@@ -45019,10 +44998,10 @@ metadata:
   name: envoy-gateway-config
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 data:
   envoy-gateway.yaml: |
@@ -45038,7 +45017,7 @@ data:
       kubernetes:
         rateLimitDeployment:
           container:
-            image: docker.io/envoyproxy/ratelimit:3e085e5b
+            image: docker.io/envoyproxy/ratelimit:e74a664a
           patch:
             type: StrategicMerge
             value:
@@ -45049,7 +45028,7 @@ data:
                     - imagePullPolicy: IfNotPresent
                       name: envoy-ratelimit
         shutdownManager:
-          image: docker.io/envoyproxy/gateway:v1.5.0
+          image: docker.io/envoyproxy/gateway:v1.5.6
       type: Kubernetes
 ---
 # Source: gateway-helm/templates/envoy-gateway-rbac.yaml
@@ -45205,10 +45184,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -45264,10 +45243,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-role
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -45309,10 +45288,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -45330,10 +45309,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-rolebinding
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -45352,10 +45331,10 @@ metadata:
   namespace: 'tigera-gateway'
   labels:
     control-plane: envoy-gateway
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 spec:
   selector:
@@ -45387,10 +45366,10 @@ metadata:
   namespace: 'tigera-gateway'
   labels:
     control-plane: envoy-gateway
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 spec:
   replicas: 1
@@ -45421,7 +45400,7 @@ spec:
               fieldPath: metadata.namespace
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: cluster.local
-        image: docker.io/envoyproxy/gateway:v1.5.0
+        image: docker.io/envoyproxy/gateway:v1.5.6
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -45490,10 +45469,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45505,10 +45484,10 @@ kind: ClusterRole
 metadata:
   name: 'tigera-gateway-api-gateway-helm-certgen:tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45538,10 +45517,10 @@ kind: ClusterRoleBinding
 metadata:
   name: 'tigera-gateway-api-gateway-helm-certgen:tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45562,10 +45541,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45587,10 +45566,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45611,10 +45590,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45639,7 +45618,7 @@ spec:
               fieldPath: metadata.namespace
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: cluster.local
-        image: docker.io/envoyproxy/gateway:v1.5.0
+        image: docker.io/envoyproxy/gateway:v1.5.6
         imagePullPolicy: IfNotPresent
         name: envoy-gateway-certgen
         securityContext:
@@ -45669,10 +45648,10 @@ metadata:
     "helm.sh/hook-weight": "-1"
   labels:
     app.kubernetes.io/component: topology-injector
-    helm.sh/chart: gateway-helm-v1.5.0
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.0"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 webhooks:
   - name: topology.webhook.gateway.envoyproxy.io

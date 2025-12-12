@@ -51,6 +51,7 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 
 	// Skip validations if requested
 	if c.Bool(skipValidationFlag.Name) {
+		logrus.Warnf("Skipping %s validation as requested.", c.Name)
 		return ctx, nil
 	}
 

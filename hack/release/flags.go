@@ -53,7 +53,6 @@ var (
 		Category: githubFlagCategory,
 		Usage:    "GitHub token to use for interacting with the GitHub API",
 		Sources:  cli.EnvVars("GITHUB_TOKEN"),
-		Required: true,
 	}
 	skipMilestoneFlag = &cli.BoolFlag{
 		Name:     "skip-milestone",

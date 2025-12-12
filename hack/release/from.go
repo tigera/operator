@@ -52,7 +52,7 @@ var releaseFromBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command)
 	configureLogging(c)
 
 	if c.Bool(skipValidationFlag.Name) {
-		logrus.Warn("Skipping pre-release validation as requested.")
+		logrus.Warnf("Skipping %s validation as requested.", c.Name)
 		return ctx, nil
 	}
 

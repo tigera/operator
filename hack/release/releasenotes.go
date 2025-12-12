@@ -35,6 +35,7 @@ Otherwise, use --local flag to generate release notes based on local versions fi
 		versionFlag,
 		githubTokenFlag,
 		localFlag,
+		skipValidationFlag,
 	},
 	Before: releaseNotesBefore,
 	Action: releaseNotesAction,
@@ -48,6 +49,15 @@ var releaseNotesBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command
 	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
 	if err != nil {
 		return ctx, err
+	}
+
+	if c.Bool(skipValidationFlag.Name) {
+		logrus.Warnf("Skipping %s validation as requested.", c.Name)
+		return ctx, nil
+	}
+
+	if token := c.String(githubTokenFlag.Name); token == "" {
+		return ctx, fmt.Errorf("GitHub token must be provided via --%s flag or GITHUB_TOKEN environment variable", githubTokenFlag.Name)
 	}
 	return ctx, nil
 })

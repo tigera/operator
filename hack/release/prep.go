@@ -77,6 +77,7 @@ var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (conte
 
 	// Skip validations if requested
 	if c.Bool(skipValidationFlag.Name) {
+		logrus.Warnf("Skipping %s validation as requested.", c.Name)
 		return ctx, nil
 	}
 
@@ -84,6 +85,10 @@ var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (conte
 	ctx, err = checkGitClean(ctx)
 	if err != nil {
 		return ctx, err
+	}
+
+	if token := c.String(githubTokenFlag.Name); token == "" && !c.Bool(localFlag.Name) {
+		return ctx, fmt.Errorf("GitHub token must be provided via --%s flag or GITHUB_TOKEN environment variable", githubTokenFlag.Name)
 	}
 
 	// One of Calico or Enterprise version must be specified.

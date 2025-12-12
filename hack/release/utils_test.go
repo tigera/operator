@@ -53,7 +53,7 @@ func TestCalicoConfigVersions(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected error reading nonexistent file, got nil")
 		}
-		if !strings.Contains(err.Error(), "error reading version file") {
+		if !strings.Contains(err.Error(), "reading version file") {
 			t.Fatalf("unexpected error message: %v", err)
 		}
 	})
@@ -72,7 +72,7 @@ func TestCalicoConfigVersions(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected unmarshal error, got nil")
 		}
-		if !strings.Contains(err.Error(), "error unmarshaling version file") {
+		if !strings.Contains(err.Error(), "unmarshaling version file") {
 			t.Fatalf("unexpected error message: %v", err)
 		}
 	})
@@ -87,7 +87,7 @@ func TestReleaseVersions(t *testing.T) {
 		enterpriseVer := "v3.25.0-1.0"
 		dir := fakeOperatorRepo(t, calicoVer, enterpriseVer)
 
-		versions, err := calicoVersions(dir, "v1.2.3", true)
+		versions, err := calicoVersions(mainRepo, dir, "v1.2.3", true)
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -97,7 +97,7 @@ func TestReleaseVersions(t *testing.T) {
 	t.Run("local with no rootDir", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := calicoVersions("", "v1.2.3", true)
+		_, err := calicoVersions(mainRepo, "", "v1.2.3", true)
 		if err == nil {
 			t.Fatalf("expected error for missing rootDir, got nil")
 		}
@@ -110,7 +110,7 @@ func TestReleaseVersions(t *testing.T) {
 		t.Parallel()
 		dir := fakeOperatorRepo(t, "master", "master")
 
-		_, err := calicoVersions(dir, "v1.2.3", true)
+		_, err := calicoVersions(mainRepo, dir, "v1.2.3", true)
 		if err == nil {
 			t.Fatalf("expected error for invalid calico version, got nil")
 		}
@@ -125,7 +125,7 @@ func TestReleaseVersions(t *testing.T) {
 		enterpriseVer := "release-calient-v3.20"
 		dir := fakeOperatorRepo(t, calicoVer, enterpriseVer)
 
-		versions, err := calicoVersions(dir, "v1.2.3", true)
+		versions, err := calicoVersions(mainRepo, dir, "v1.2.3", true)
 		if err != nil {
 			t.Fatalf("expected no error when enterprise missing, got: %v", err)
 		}

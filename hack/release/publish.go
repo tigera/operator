@@ -72,7 +72,7 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 
 	// If publishing a GitHub release, ideally it should be in draft mode with a token provided.
 	if c.Bool(createGithubReleaseFlag.Name) {
-		if c.Bool(draftGithubReleaseFlag.Name) {
+		if !c.Bool(draftGithubReleaseFlag.Name) {
 			logrus.Warnf("Publishing GitHub release in non-draft mode.")
 		}
 		if c.String(githubTokenFlag.Name) == "" {
@@ -89,40 +89,13 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 })
 
 var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
-	// Check if images are already published
-	if published, err := operatorImagePublished(c); err != nil {
-		return fmt.Errorf("error checking if images are already published: %w", err)
-	} else if published {
-		logrus.Infof("Images for version %s are already published", c.String(versionFlag.Name))
-		return nil
-	}
-
 	repoRootDir, err := gitDir()
 	if err != nil {
-		return fmt.Errorf("error getting git directory: %w", err)
+		return fmt.Errorf("getting git directory: %w", err)
 	}
 
-	// Set up environment variables for publish
-	publishEnv := append(os.Environ(),
-		fmt.Sprintf("VERSION=%s", c.String(versionFlag.Name)),
-	)
-	arches := c.StringSlice(archFlag.Name)
-	if len(arches) > 0 {
-		publishEnv = append(publishEnv, fmt.Sprintf("ARCHES=%s", strings.Join(arches, " ")))
-	}
-	if c.Bool(hashreleaseFlag.Name) {
-		hashreleaseEnv, err := hashreleasePublishEnv(c)
-		if err != nil {
-			return fmt.Errorf("error preparing hashrelease publish: %w", err)
-		}
-		publishEnv = append(publishEnv, hashreleaseEnv...)
-	} else {
-		publishEnv = append(publishEnv, "RELEASE=true")
-	}
-
-	if out, err := makeInDir(repoRootDir, "release-publish-images", publishEnv...); err != nil {
-		logrus.Error(out)
-		return fmt.Errorf("error publishing images: %w", err)
+	if err := publishImages(c, repoRootDir); err != nil {
+		return err
 	}
 
 	if !c.Bool(hashreleaseFlag.Name) {
@@ -132,21 +105,51 @@ var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) err
 	return nil
 })
 
-func hashreleasePublishEnv(c *cli.Command) ([]string, error) {
-	publishEnv := []string{fmt.Sprintf("GIT_VERSION=%s", c.String(versionFlag.Name))}
+func publishImages(c *cli.Command, repoRootDir string) error {
+	version := c.String(versionFlag.Name)
+	log := logrus.WithField("version", version)
+	// Check if images are already published
+	if published, err := operatorImagePublished(c); err != nil {
+		return fmt.Errorf("checking if images are already published: %w", err)
+	} else if published {
+		log.Warn("Images are already published")
+		return nil
+	}
 
-	image := c.String(imageFlag.Name)
-	if image != defaultImageName {
+	// Set up environment variables for publish
+	publishEnv := append(os.Environ(),
+		fmt.Sprintf("VERSION=%s", version),
+	)
+	if arches := c.StringSlice(archFlag.Name); len(arches) > 0 {
+		log = log.WithField("arches", arches)
+		publishEnv = append(publishEnv, fmt.Sprintf("ARCHES=%s", strings.Join(arches, " ")))
+	}
+	if image := c.String(imageFlag.Name); image != defaultImageName {
+		log = log.WithField("image", image)
 		publishEnv = append(publishEnv, fmt.Sprintf("BUILD_IMAGE=%s", image))
 		publishEnv = append(publishEnv, fmt.Sprintf("BUILD_INIT_IMAGE=%s-init", image))
 	}
-	registry := c.String(registryFlag.Name)
-	if registry != "" && registry != quayRegistry {
+	if registry := c.String(registryFlag.Name); registry != "" && registry != quayRegistry {
+		log = log.WithField("registry", registry)
 		publishEnv = append(publishEnv,
 			fmt.Sprintf("IMAGE_REGISTRY=%s", registry),
 			fmt.Sprintf("PUSH_IMAGE_PREFIXES=%s", addTrailingSlash(registry)))
 	}
-	return publishEnv, nil
+	if c.Bool(hashreleaseFlag.Name) {
+		log = log.WithField("hashrelease", true)
+		publishEnv = append(publishEnv, fmt.Sprintf("GIT_VERSION=%s", version))
+	} else {
+		log = log.WithField("release", true)
+		publishEnv = append(publishEnv, "RELEASE=true")
+	}
+
+	log.Info("Publishing Operator images")
+	if out, err := makeInDir(repoRootDir, "release-publish-images", publishEnv...); err != nil {
+		log.Error(out)
+		return fmt.Errorf("publishing images: %w", err)
+	}
+	log.Info("Successfully published Operator images")
+	return nil
 }
 
 func operatorImagePublished(c *cli.Command) (bool, error) {
@@ -172,26 +175,28 @@ func publishGithubRelease(ctx context.Context, c *cli.Command, repoRootDir strin
 		return nil
 	}
 
+	version := c.String(versionFlag.Name)
+	log := logrus.WithField("version", version)
+
 	prerelease, err := isPrereleaseEnterpriseVersion(repoRootDir)
 	if err != nil {
-		return fmt.Errorf("error determining if version is prerelease: %w", err)
+		return fmt.Errorf("determining if version is prerelease: %w", err)
 	}
 
 	r := &GithubRelease{
 		Org:     ctx.Value(githubOrgCtxKey).(string),
 		Repo:    ctx.Value(githubRepoCtxKey).(string),
-		Version: c.String(versionFlag.Name),
+		Version: version,
 	}
 	if err := r.setupClient(ctx, c.String(githubTokenFlag.Name)); err != nil {
-		return fmt.Errorf("error setting up GitHub client: %s", err)
+		return fmt.Errorf("setting up GitHub client: %s", err)
 	}
 
 	// Create the GitHub release in draft mode. If it is a prerelease, mark it as such.
-	if err := r.Create(ctx, c.Bool(draftGithubReleaseFlag.Name), prerelease); errors.Is(err, ErrGitHubReleaseExists) {
-		logrus.Warnf("GitHub release for version %s already exists", c.String(versionFlag.Name))
-		logrus.Infof("To update the release, please edit it manually on GitHub: %s", r.EditURL())
+	if release, err := r.Create(ctx, c.Bool(draftGithubReleaseFlag.Name), prerelease); errors.Is(err, ErrGitHubReleaseExists) {
+		log.Warnf("GitHub release already exists, update manually: %s", *release.HTMLURL)
 	} else if err != nil {
-		return fmt.Errorf("error publishing GitHub release: %s", err)
+		return fmt.Errorf("publishing GitHub release: %s", err)
 	}
 
 	return nil

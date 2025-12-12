@@ -21,7 +21,6 @@ import (
 	"html/template"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -81,11 +80,6 @@ type GithubRelease struct {
 	milestone    *github.Milestone // Cached milestone for the release version
 }
 
-// Get the URL to edit this release on GitHub.
-func (r *GithubRelease) EditURL() string {
-	return fmt.Sprintf("https://github.com/%s/%s/releases/edit/%s", r.Org, r.Repo, r.Version)
-}
-
 // Setup the GitHub client for this release using the provided token.
 func (r *GithubRelease) setupClient(ctx context.Context, token string) error {
 	if r.githubClient != nil {
@@ -135,12 +129,12 @@ func (r *GithubRelease) closeMilestone(ctx context.Context) error {
 		State: github.String(closedState),
 	})
 	if err != nil {
-		return fmt.Errorf("error closing %s milestone (%d): %w", milestone.GetTitle(), milestone.GetNumber(), err)
+		return fmt.Errorf("closing %s milestone (%d): %w", milestone.GetTitle(), milestone.GetNumber(), err)
 	}
 	return nil
 }
 
-func releaseNotesFilePath(outputDir, version string) string {
+func ReleaseNotesFilePath(outputDir, version string) string {
 	return fmt.Sprintf("%s/%s-release-notes.md", outputDir, version)
 }
 
@@ -160,7 +154,7 @@ func (r *GithubRelease) GenerateNotes(ctx context.Context, outputDir string, use
 			logrus.WithError(err).Errorf("Failed to create release notes folder %s", outputDir)
 			return err
 		}
-		f, err := os.Create(releaseNotesFilePath(outputDir, r.Version))
+		f, err := os.Create(ReleaseNotesFilePath(outputDir, r.Version))
 		if err != nil {
 			logrus.WithError(err).Errorf("Failed to create release notes file in %s", outputDir)
 			return err
@@ -171,7 +165,7 @@ func (r *GithubRelease) GenerateNotes(ctx context.Context, outputDir string, use
 	}
 	noteData, err := r.collectReleaseNotes(ctx, useLocal)
 	if err != nil {
-		return fmt.Errorf("error collecting release notes: %s", err)
+		return fmt.Errorf("collecting release notes: %s", err)
 	}
 	tmpl, err := template.New("release-note").Parse(releaseNoteTemplate)
 	if err != nil {
@@ -183,8 +177,6 @@ func (r *GithubRelease) GenerateNotes(ctx context.Context, outputDir string, use
 		logrus.WithError(err).Error("Failed to execute release note template")
 		return err
 	}
-	writeLogger.Info("Review release notes for accuracy and format appropriately")
-	logrus.Infof("Visit https://github.com/%s/%s/releases/new?tag=%s to publish", r.Org, r.Repo, r.Version)
 	return nil
 }
 
@@ -192,7 +184,7 @@ func (r *GithubRelease) GenerateNotes(ctx context.Context, outputDir string, use
 func (r *GithubRelease) releaseNoteIssues(ctx context.Context) ([]*github.Issue, error) {
 	milestone, err := r.getMilestone(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving milestone for version %s: %w", r.Version, err)
+		return nil, fmt.Errorf("retrieving milestone for version %s: %w", r.Version, err)
 	}
 	if milestone.GetState() != string(closedState) {
 		logrus.WithField("milestone", milestone.GetTitle()).Warn("Milestone is not closed")
@@ -211,13 +203,13 @@ func (r *GithubRelease) releaseNoteIssues(ctx context.Context) ([]*github.Issue,
 		}
 		pr, _, err := r.githubClient.PullRequests.Get(ctx, r.Org, r.Repo, issue.GetNumber())
 		if err != nil {
-			return false, fmt.Errorf("error retrieving PR for issue %d: %w", issue.GetNumber(), err)
+			return false, fmt.Errorf("retrieving PR for issue %d: %w", issue.GetNumber(), err)
 		}
 		return pr.Merged != nil && *pr.Merged, nil
 	}
 	relIssues, err := githubIssues(ctx, r.githubClient, r.Org, r.Repo, opts, filter)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving release note issues: %w", err)
+		return nil, fmt.Errorf("retrieving release note issues: %w", err)
 	}
 	return relIssues, nil
 }
@@ -226,7 +218,7 @@ func (r *GithubRelease) releaseNoteIssues(ctx context.Context) ([]*github.Issue,
 func (r *GithubRelease) openIssues(ctx context.Context, filter func(*github.Issue) (bool, error)) ([]*github.Issue, error) {
 	milestone, err := r.getMilestone(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving milestone for version %s: %w", r.Version, err)
+		return nil, fmt.Errorf("retrieving milestone for version %s: %w", r.Version, err)
 	}
 	opts := &github.IssueListByRepoOptions{
 		Milestone: strconv.Itoa(milestone.GetNumber()),
@@ -300,11 +292,11 @@ func (r *GithubRelease) collectReleaseNotes(ctx context.Context, local bool) (*R
 	}
 	dir, err := gitDir()
 	if err != nil {
-		return data, fmt.Errorf("error getting git directory: %s", err)
+		return data, fmt.Errorf("getting git directory: %s", err)
 	}
-	versions, err := calicoVersions(dir, r.Version, local)
+	versions, err := calicoVersions(fmt.Sprintf("%s/%s", r.Org, r.Repo), dir, r.Version, local)
 	if err != nil {
-		return data, fmt.Errorf("error retrieving release versions: %s", err)
+		return data, fmt.Errorf("retrieving release versions: %s", err)
 	}
 	data.Versions = versions
 	log := logrus.WithField("org", r.Org).WithField("repo", r.Repo).WithField("version", r.Version)
@@ -352,48 +344,74 @@ func (r *GithubRelease) collectReleaseNotes(ctx context.Context, local bool) (*R
 	return data, nil
 }
 
+// Check if a GitHub release already exists for this version.
+// Since the release could already exist in draft, it uses the ListReleases instead of GetReleaseByTag.
+func (r *GithubRelease) repoRelease(ctx context.Context) (*github.RepositoryRelease, error) {
+	opts := &github.ListOptions{PerPage: 100}
+	for {
+		release, resp, err := r.githubClient.Repositories.ListReleases(ctx, r.Org, r.Repo, opts)
+		if err != nil {
+			return nil, fmt.Errorf("listing releases: %w", err)
+		}
+		for _, rel := range release {
+			if rel.GetTagName() == r.Version {
+				return rel, nil
+			}
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return nil, nil
+}
+
 // Create a new GitHub release.
-func (r *GithubRelease) Create(ctx context.Context, isDraft, isPrerelease bool) error {
+func (r *GithubRelease) Create(ctx context.Context, isDraft, isPrerelease bool) (*github.RepositoryRelease, error) {
 	// Check if release already exists
-	release, resp, err := r.githubClient.Repositories.GetReleaseByTag(ctx, r.Org, r.Repo, r.Version)
-	if err != nil {
-		return err
+	if got, err := r.repoRelease(ctx); err != nil {
+		return nil, fmt.Errorf("checking if release exists: %w", err)
+	} else if got != nil {
+		return got, ErrGitHubReleaseExists
 	}
-	if resp.StatusCode == 200 && release != nil {
-		return ErrGitHubReleaseExists
-	}
+
+	logrus.WithFields(logrus.Fields{
+		"version":    r.Version,
+		"draft":      isDraft,
+		"prerelease": isPrerelease,
+	}).Info("Creating GitHub release")
 
 	// Generate release notes
-	tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("operator-%s", r.Version))
-	if err := os.MkdirAll(tmpDir, os.ModePerm); err != nil {
-		return fmt.Errorf("creating temporary directory for release notes: %w", err)
-	}
-	if err := r.GenerateNotes(ctx, tmpDir, false); err != nil {
-		return fmt.Errorf("generating release notes for %s: %w", r.Version, err)
-	}
-	relNotesBytes, err := os.ReadFile(releaseNotesFilePath(tmpDir, r.Version))
+	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("operator-%s-*", r.Version))
 	if err != nil {
-		return fmt.Errorf("reading release notes file for %s: %w", r.Version, err)
+		return nil, fmt.Errorf("creating temporary directory for release notes: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+	if err := r.GenerateNotes(ctx, tmpDir, false); err != nil {
+		return nil, fmt.Errorf("generating release notes for %s: %w", r.Version, err)
+	}
+	relNotesBytes, err := os.ReadFile(ReleaseNotesFilePath(tmpDir, r.Version))
+	if err != nil {
+		return nil, fmt.Errorf("reading release notes file for %s: %w", r.Version, err)
 	}
 
-	release = &github.RepositoryRelease{
+	release, _, err := r.githubClient.Repositories.CreateRelease(ctx, r.Org, r.Repo, &github.RepositoryRelease{
 		TagName:    github.String(r.Version),
 		Name:       github.String(r.Version),
 		Body:       github.String(string(relNotesBytes)),
 		Draft:      github.Bool(isDraft),
 		Prerelease: github.Bool(isPrerelease),
-	}
-	release, _, err = r.githubClient.Repositories.CreateRelease(ctx, r.Org, r.Repo, release)
+	})
 	if err != nil {
-		return fmt.Errorf("creating GitHub release for %s: %w", r.Version, err)
+		return nil, fmt.Errorf("creating GitHub release for %s: %w", r.Version, err)
 	}
-	log := logrus.WithField("version", r.Version)
+	log := logrus.WithField("release", r.Version).WithField("url", release.GetHTMLURL())
 	if isDraft {
-		log.Infof("GitHub release created in draft state, review and publish it manually on GitHub: %s", r.EditURL())
-		return nil
+		log.Info("GitHub release created in draft state, review and publish it manually")
+		return release, nil
 	}
-	log.Infof("GitHub release created: %s", release.GetHTMLURL())
-	return nil
+	log.Info("GitHub release created")
+	return release, nil
 }
 
 // Helper function to list GitHub issues based on the provided options and optional filter function.
@@ -437,7 +455,7 @@ func newGithubMilestone(ctx context.Context, githubClient *github.Client, org, r
 		State: github.String(openState),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("error creating next milestone %s: %w", name, err)
+		return nil, fmt.Errorf("creating next milestone %s: %w", name, err)
 	}
 	logrus.Debugf("Created new milestone %s (%d)", milestone.GetTitle(), milestone.GetNumber())
 	return milestone, nil
@@ -491,25 +509,25 @@ func manageStreamMilestone(ctx context.Context, githubToken string) error {
 		Version: version,
 	}
 	if err := r.setupClient(ctx, githubToken); err != nil {
-		return fmt.Errorf("error setting up GitHub client: %w", err)
+		return fmt.Errorf("setting up GitHub client: %w", err)
 	}
 
 	// Get milestone for the release version
 	milestone, err := r.getMilestone(ctx)
 	if err != nil {
-		return fmt.Errorf("error retrieving milestone for version %s: %w", version, err)
+		return fmt.Errorf("retrieving milestone for version %s: %w", version, err)
 	}
 	semVersion, err := semver.Parse(strings.TrimPrefix(version, "v"))
 	if err != nil {
-		return fmt.Errorf("error parsing semantic version from %s: %w", version, err)
+		return fmt.Errorf("parsing semantic version from %s: %w", version, err)
 	}
 	if err := semVersion.IncrementPatch(); err != nil {
-		return fmt.Errorf("error getting next version for %s: %w", version, err)
+		return fmt.Errorf("getting next version for %s: %w", version, err)
 	}
 	nextVersion := fmt.Sprintf("v%s", semVersion.String())
 	nextMilestone, err := newGithubMilestone(ctx, r.githubClient, r.Org, r.Repo, nextVersion)
 	if err != nil {
-		return fmt.Errorf("error creating next milestone %s: %w", nextVersion, err)
+		return fmt.Errorf("creating next milestone %s: %w", nextVersion, err)
 	}
 	var filter func(*github.Issue) (bool, error)
 	if headBranch := ctx.Value(headBranchCtxKey).(string); headBranch != "" {
@@ -519,14 +537,14 @@ func manageStreamMilestone(ctx context.Context, githubToken string) error {
 			}
 			pr, _, err := r.githubClient.PullRequests.Get(ctx, r.Org, r.Repo, issue.GetNumber())
 			if err != nil {
-				return false, fmt.Errorf("error retrieving PR for issue %d: %w", issue.GetNumber(), err)
+				return false, fmt.Errorf("retrieving PR for issue %d: %w", issue.GetNumber(), err)
 			}
 			return pr.Head.GetRef() != headBranch, nil
 		}
 	}
 	issues, err := r.openIssues(ctx, filter)
 	if err != nil {
-		return fmt.Errorf("error retrieving open issues in %s milestone: %w", milestone.GetTitle(), err)
+		return fmt.Errorf("retrieving open issues in %s milestone: %w", milestone.GetTitle(), err)
 	}
 	if len(issues) == 0 {
 		return r.closeMilestone(ctx)
@@ -534,7 +552,7 @@ func manageStreamMilestone(ctx context.Context, githubToken string) error {
 	if err := updateGitHubIssues(ctx, r.githubClient, r.Org, r.Repo, issues, &github.IssueRequest{
 		Milestone: github.Int(nextMilestone.GetNumber()),
 	}); err != nil {
-		return fmt.Errorf("error moving issues from milestone %s to %s: %w", milestone.GetTitle(), nextMilestone.GetTitle(), err)
+		return fmt.Errorf("moving issues from milestone %s to %s: %w", milestone.GetTitle(), nextMilestone.GetTitle(), err)
 	}
 	return r.closeMilestone(ctx)
 }

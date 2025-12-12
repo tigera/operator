@@ -80,5 +80,12 @@ var releaseNotesAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command
 	if err != nil {
 		return fmt.Errorf("error getting git root directory: %s", err)
 	}
-	return release.GenerateNotes(ctx, repoRootDir, c.Bool(localFlag.Name))
+	if err := release.GenerateNotes(ctx, repoRootDir, c.Bool(localFlag.Name)); err != nil {
+		return fmt.Errorf("error generating release notes: %s", err)
+	}
+
+	logrus.WithField("release-notes-file", ReleaseNotesFilePath(repoRootDir, ver)).Info("Review release notes for accuracy and format appropriately")
+	logrus.Infof("Visit https://github.com/%s/%s/releases/new?tag=%s to create a new release", release.Org, release.Repo, release.Version)
+
+	return nil
 })

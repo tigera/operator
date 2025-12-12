@@ -481,6 +481,11 @@ spec:
                     a packet capture. [Default: 3600]"
                   minimum: 1
                   type: integer
+                cgroupV2Path:
+                  description:
+                    CgroupV2Path overrides the default location where to
+                    find the cgroup hierarchy.
+                  type: string
                 chainInsertMode:
                   description: |-
                     ChainInsertMode controls whether Felix hooks the kernel's top-level iptables chains by inserting a rule
@@ -735,6 +740,15 @@ spec:
                     health.  Only Egress Gateways with a named "health" port will be polled in this way.  Egress Gateways that
                     fail the health check will be taken our of use as if they have been deleted.
                   pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
+                  type: string
+                egressIPHostIfacePattern:
+                  description: |-
+                    EgressIPHostIfacePattern is a comma-separated list of interface names which might send and receive egress traffic
+                    across the cluster boundary, after it has left an Egress Gateway pod. Felix will ensure `src_valid_mark` sysctl flags
+                    are set correctly for matching interfaces.
+                    To target multiple interfaces with a single string, the list supports regular expressions.
+                    For regular expressions, wrap the value with `/`.
+                    Example: `/^bond/,eth0` will match all interfaces that begin with `bond` and also the interface `eth0`. [Default: ""]
                   type: string
                 egressIPRoutingRulePriority:
                   description:
@@ -1306,6 +1320,22 @@ spec:
                     IPv6Support controls whether Felix enables support for
                     IPv6 (if supported by the in-use dataplane).
                   type: boolean
+                istioAmbientMode:
+                  description: |-
+                    IstioAmbientMode configures Felix to work together with Tigera's Istio distribution.
+                    [Default: Disabled]
+                  enum:
+                    - Enabled
+                    - Disabled
+                  type: string
+                istioDSCPMark:
+                  description: |-
+                    IstioDSCPMark sets the value to use when directing traffic to Istio ZTunnel, when Istio is enabled. The mark is set only on
+                    SYN packets at the final hop to avoid interference with other protocols. This value is reserved by Calico and must not be used
+                    with other Istio installation. [Default: 23]
+                  pattern: ^.*
+                  type: integer
+                  x-kubernetes-int-or-string: true
                 kubeMasqueradeBit:
                   description: |-
                     KubeMasqueradeBit should be set to the same value as --iptables-masquerade-bit of kube-proxy

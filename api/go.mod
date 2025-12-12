@@ -1,10 +1,10 @@
 module github.com/tigera/operator/api
 
-go 1.23.5
+go 1.24.6
 
 require (
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.80.1
-	github.com/tigera/api v0.0.0-20230406222214-ca74195900cb
+	github.com/tigera/api v0.0.0-20250916150902-b8353932c447
 	k8s.io/api v0.33.5
 	k8s.io/apimachinery v0.33.5
 	sigs.k8s.io/controller-runtime v0.20.2

@@ -171,7 +171,7 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 		buildEnv = append(buildEnv, fmt.Sprintf("ARCHES=%s", strings.Join(arches, " ")))
 	}
 	if c.Bool(hashreleaseFlag.Name) {
-		hashreleaseEnv, resetFn, err := hashrеleaseBuildConfig(ctx, c, repoRootDir)
+		hashreleaseEnv, resetFn, err := hashreleaseBuildConfig(ctx, c, repoRootDir)
 		defer resetFn()
 		if err != nil {
 			return fmt.Errorf("error preparing hashrelease build environment: %w", err)
@@ -190,7 +190,7 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 	return nil
 })
 
-func hashrеleaseBuildConfig(ctx context.Context, c *cli.Command, repoRootDir string) ([]string, func(), error) {
+func hashreleaseBuildConfig(ctx context.Context, c *cli.Command, repoRootDir string) ([]string, func(), error) {
 	repoReset := func() {
 		if out, err := gitInDir(repoRootDir, append([]string{"checkout", "-f"}, changedFiles...)...); err != nil {
 			logrus.WithError(err).Errorf("error resetting git state: %s", out)

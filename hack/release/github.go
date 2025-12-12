@@ -21,6 +21,7 @@ import (
 	"html/template"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -363,7 +364,10 @@ func (r *GithubRelease) Create(ctx context.Context, isDraft, isPrerelease bool) 
 	}
 
 	// Generate release notes
-	tmpDir := fmt.Sprintf(os.TempDir(), fmt.Sprintf("operator-%s", r.Version))
+	tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("operator-%s", r.Version))
+	if err := os.MkdirAll(tmpDir, os.ModePerm); err != nil {
+		return fmt.Errorf("creating temporary directory for release notes: %w", err)
+	}
 	if err := r.GenerateNotes(ctx, tmpDir, false); err != nil {
 		return fmt.Errorf("generating release notes for %s: %w", r.Version, err)
 	}

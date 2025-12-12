@@ -553,25 +553,16 @@ endif
 ###############################################################################
 # Release
 ###############################################################################
-VERSION_REGEX := ^v[0-9]+\.[0-9]+\.[0-9]+$$
+## Create a release for the specified RELEASE_TAG.
 release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
-	$(eval VALID_TAG := $(shell echo $(RELEASE_TAG) | grep -Eq "$(VERSION_REGEX)" && echo true))
-	$(if $(VALID_TAG),,$(error $(RELEASE_TAG) is not a valid version. Please use a version in the format vX.Y.Z))
-
-# Skip releasing if the image already exists.
-	@if !$(MAKE) VERSION=$(RELEASE_TAG) release-check-image-exists; then \
-		echo "Images for $(RELEASE_TAG) already exists"; \
-		exit 0; \
-	fi
-
 	$(MAKE) release VERSION=$(RELEASE_TAG)
 	REPO=$(REPO) CREATE_GITHUB_RELEASE=true $(MAKE) release-publish VERSION=$(RELEASE_TAG)
 
-
+## Generate release notes for the specified VERSION.
 release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
 	REPO=$(REPO) hack/bin/release notes
 
-## Tags and builds a release from start to finish.
+## Build a release from start to finish.
 release: clean hack/bin/release
 	hack/bin/release build
 

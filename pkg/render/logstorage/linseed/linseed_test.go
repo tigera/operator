@@ -489,6 +489,10 @@ var _ = Describe("Linseed rendering tests", func() {
 							BaseIndexName: "calico_waflogs_standard",
 							DataType:      "WAFLogs",
 						},
+						{
+							BaseIndexName: "calico_policy_activity_standard",
+							DataType:      "PolicyActivity",
+						},
 					},
 				},
 			}
@@ -593,6 +597,7 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_THREAT_FEEDS_DOMAIN_SET_BASE_INDEX_NAME", Value: "calico_threat_feeds_domain_set_standard"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_THREAT_FEEDS_IP_SET_BASE_INDEX_NAME", Value: "calico_threat_feeds_ip_set_standard"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_WAF_LOGS_BASE_INDEX_NAME", Value: "calico_waflogs_standard"}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_POLICY_ACTIVITY_BASE_INDEX_NAME", Value: "calico_policy_activity"}))
 		})
 
 		Describe("product variant", func() {

@@ -456,6 +456,7 @@ func (es *esClient) listILMPolicies(ls *operatorv1.LogStorage) map[string]policy
 		"tigera_secure_ee_compliance_reports": buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, int(*ls.Spec.Retention.ComplianceReports), true),
 		"tigera_secure_ee_benchmark_results":  buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, 91, true),
 		"tigera_secure_ee_events":             buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, 91, false),
+		"tigera_secure_ee_policy_activity":    buildILMPolicy(totalEsStorage, minorPctOfTotalDisk, pctOfDisk, 91, false),
 	}
 }
 

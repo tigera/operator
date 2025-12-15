@@ -1386,6 +1386,7 @@ spec:
                           - ThreatFeedsDomainSet
                           - ThreatFeedsIPSet
                           - WAFLogs
+                          - PolicyActivity
                         type: string
                     required:
                       - baseIndexName

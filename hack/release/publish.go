@@ -81,7 +81,9 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 	}
 
 	// If not a hashrelease build, ensure version format is valid
-	if valid, _ := isReleaseVersionFormat(c.String(versionFlag.Name)); !valid && !c.Bool(hashreleaseFlag.Name) {
+	if valid, err := isReleaseVersionFormat(c.String(versionFlag.Name)); err != nil {
+		return ctx, fmt.Errorf("checking release version format: %w", err)
+	} else if !valid && !c.Bool(hashreleaseFlag.Name) {
 		return ctx, fmt.Errorf("for non-release builds, the %s flag must be set", hashreleaseFlag.Name)
 	}
 
@@ -176,10 +178,11 @@ func publishGithubRelease(ctx context.Context, c *cli.Command, repoRootDir strin
 		return nil
 	}
 	version := c.String(versionFlag.Name)
-	prerelease, err := isPrereleaseEnterpriseVersion(repoRootDir)
+	isPrerelease, err := isPrereleaseVersion(repoRootDir)
 	if err != nil {
-		return fmt.Errorf("determining if version is prerelease: %w", err)
+		return fmt.Errorf("determining if this is a prerelease: %w", err)
 	}
+
 	r := &GithubRelease{
 		Org:     ctx.Value(githubOrgCtxKey).(string),
 		Repo:    ctx.Value(githubRepoCtxKey).(string),
@@ -189,7 +192,7 @@ func publishGithubRelease(ctx context.Context, c *cli.Command, repoRootDir strin
 		return fmt.Errorf("setting up GitHub client: %s", err)
 	}
 	// Create the GitHub release in draft mode. If it is a prerelease, mark it as such.
-	if err := r.Create(ctx, c.Bool(draftGithubReleaseFlag.Name), prerelease); errors.Is(err, ErrGitHubReleaseExists) {
+	if err := r.Create(ctx, c.Bool(draftGithubReleaseFlag.Name), isPrerelease); errors.Is(err, ErrGitHubReleaseExists) {
 		// Do not error out if the release already exists.
 		return nil
 	} else if err != nil {

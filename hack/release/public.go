@@ -65,10 +65,11 @@ var publicAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) erro
 	if err != nil {
 		return fmt.Errorf("getting repo root dir: %w", err)
 	}
-	prerelease, err := isPrereleaseEnterpriseVersion(repoRootDir)
+	isPrerelease, err := isPrereleaseVersion(repoRootDir)
 	if err != nil {
-		return fmt.Errorf("determining if version is prerelease: %w", err)
+		return fmt.Errorf("determining if this is a prerelease: %w", err)
 	}
+
 	r := &GithubRelease{
 		Org:     ctx.Value(githubOrgCtxKey).(string),
 		Repo:    ctx.Value(githubRepoCtxKey).(string),
@@ -78,9 +79,9 @@ var publicAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) erro
 		return fmt.Errorf("setting up GitHub client: %s", err)
 	}
 
-	if err := r.Update(ctx, c.Bool(draftGithubReleasePublicFlag.Name), prerelease); err != nil && errors.Is(err, ErrNoGitHubReleaseExists) {
+	if err := r.Update(ctx, c.Bool(draftGithubReleasePublicFlag.Name), isPrerelease); err != nil && errors.Is(err, ErrNoGitHubReleaseExists) {
 		// If the release does not exist, create it.
-		return r.Create(ctx, c.Bool(draftGithubReleasePublicFlag.Name), prerelease)
+		return r.Create(ctx, c.Bool(draftGithubReleasePublicFlag.Name), isPrerelease)
 	} else if err != nil {
 		return fmt.Errorf("updating GitHub release: %w", err)
 	}

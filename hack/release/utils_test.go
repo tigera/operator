@@ -303,7 +303,7 @@ func TestIsPrereleaseEnterpriseVersion(t *testing.T) {
 		},
 		{
 			version: "v3.25.0",
-			want:    true,
+			want:    false,
 		},
 		{
 			version: "v3.25.0-rc1",
@@ -320,13 +320,13 @@ func TestIsPrereleaseEnterpriseVersion(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.version, func(t *testing.T) {
-			t.Parallel()
-			got, err := isEnterpriseReleaseVersionFormat(tc.version)
+			// t.Parallel()
+			got, err := isPrereleaseEnterpriseVersion(tc.version)
 			if err != nil {
-				t.Fatalf("isEnterpriseReleaseVersionFormat(%q) unexpected error: %v", tc.version, err)
+				t.Fatalf("isPrereleaseEnterpriseVersion(%q) unexpected error: %v", tc.version, err)
 			}
 			if got != tc.want {
-				t.Fatalf("isEnterpriseReleaseVersionFormat(%q) = %v, want %v", tc.version, got, tc.want)
+				t.Fatalf("isPrereleaseEnterpriseVersion(%q) = %v, want %v", tc.version, got, tc.want)
 			}
 		})
 	}

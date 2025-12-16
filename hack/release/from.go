@@ -333,11 +333,11 @@ func retrieveBaseVersionConfig(repo, baseVersion, repoRootDir string) error {
 
 	for _, configFilePath := range []string{calicoConfig, enterpriseConfig} {
 		localFilePath := fmt.Sprintf("%s/%s", repoRootDir, configFilePath)
-		url := strings.NewReplacer([]string{
+		url := strings.NewReplacer(
 			"{gitRepo}", repo,
 			"{gitHashOrTag}", gitHashOrTag,
 			"{filePath}", configFilePath,
-		}...).Replace(tmplGithubFileURL)
+		).Replace(tmplGithubFileURL)
 		logrus.WithFields(logrus.Fields{
 			"file":         configFilePath,
 			"localPath":    localFilePath,

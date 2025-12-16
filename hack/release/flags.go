@@ -224,7 +224,7 @@ func dirFlagCheck(_ context.Context, _ *cli.Command, path string) error {
 	return nil
 }
 
-// Flag Action to check value is a valid directory.
+// Flag Action to check value is a valid file.
 func fileFlagCheck(_ context.Context, _ *cli.Command, path string) error {
 	if path == "" {
 		return nil

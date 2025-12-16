@@ -127,7 +127,9 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 	isHashrelease := c.Bool(hashreleaseFlag.Name)
 
 	// If not a hashrelease build, ensure version format is valid
-	if valid, _ := isReleaseVersionFormat(c.String(versionFlag.Name)); !valid && !isHashrelease {
+	if valid, err := isReleaseVersionFormat(c.String(versionFlag.Name)); err != nil {
+		return ctx, fmt.Errorf("checking version format: %w", err)
+	} else if !valid && !isHashrelease {
 		return ctx, fmt.Errorf("for non-release builds, the %s flag must be set", hashreleaseFlag.Name)
 	}
 
@@ -147,7 +149,7 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 	}
 	if calicoBuildOk {
 		if calicoBuildType == versionBuild && c.String(calicoCRDsDirFlag.Name) == "" {
-			return ctx, fmt.Errorf("Calico directory must be specified for hashrelease builds using calico-version flag")
+			return ctx, fmt.Errorf("directory to calico repo must be specified for hashreleases built from calico version using %s flag", calicoCRDsDirFlag.Name)
 		}
 		if c.String(calicoCRDsDirFlag.Name) == "" {
 			logrus.Warn("Calico directory not specified for hashrelease build, getting CRDs from default location may not be appropriate")
@@ -155,7 +157,7 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 	}
 	if enterpriseBuildOk {
 		if enterpriseBuildType == versionBuild && c.String(enterpriseCRDsDirFlag.Name) == "" {
-			return ctx, fmt.Errorf("Enterprise directory must be specified for hashrelease builds using enterprise version")
+			return ctx, fmt.Errorf("directory to enterprise repo must be specified for hashreleases built from enterprise version using %s flag", enterpriseCRDsDirFlag.Name)
 		}
 		if c.String(enterpriseCRDsDirFlag.Name) == "" {
 			logrus.Warn("Enterprise directory not specified for hashrelease build, getting CRDs from default location may not be appropriate")
@@ -342,7 +344,7 @@ func modifyComponentImageConfig(repoRootDir, configKey, newValue string) error {
 
 	logrus.WithField("repoDir", repoRootDir).WithField(configKey, newValue).Infof("Updating %s in %s", desc, componentImageConfigRelPath)
 
-	if out, err := runCommandInDir(repoRootDir, "sed", []string{"-i", fmt.Sprintf(`s|%[1]s.*=.*".*"|%[1]s = "%[2]s"|`, configKey, regexp.QuoteMeta(newValue)), componentImageConfigRelPath}, nil); err != nil {
+	if out, err := runCommandInDir(repoRootDir, "sed", []string{"-i", fmt.Sprintf(`s|%[1]s.*=.*".*"|%[1]s = "%[2]s"|`, regexp.QuoteMeta(configKey), regexp.QuoteMeta(newValue)), componentImageConfigRelPath}, nil); err != nil {
 		logrus.Error(out)
 		return fmt.Errorf("failed to update %s in %s: %w", desc, componentImageConfigRelPath, err)
 	}

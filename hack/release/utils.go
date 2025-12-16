@@ -208,24 +208,28 @@ func isEnterpriseReleaseVersionFormat(version string) (bool, error) {
 	return releaseRegex.MatchString(version), nil
 }
 
-// Check if the Enterprise version is a prerelease.
-// First, it checks if the version matches the release format.
-// If it does, it then checks if there is a prerelease segment in the version.
-func isPrereleaseEnterpriseVersion(rootDir string) (bool, error) {
+func isPrereleaseVersion(rootDir string) (bool, error) {
 	enterpriseVer, err := calicoConfigVersions(rootDir, enterpriseConfig)
 	if err != nil {
 		return false, fmt.Errorf("retrieving Enterprise version: %s", err)
 	}
-	release, err := isEnterpriseReleaseVersionFormat(enterpriseVer.Title)
+	return isPrereleaseEnterpriseVersion(enterpriseVer.Title)
+}
+
+// Check if the Enterprise version is a prerelease version.
+// First, it has to be in the release format, otherwise it returns false.
+// Then it converts to semver and returns true if there is a prerelease component.
+func isPrereleaseEnterpriseVersion(enterpriseVer string) (bool, error) {
+	release, err := isEnterpriseReleaseVersionFormat(enterpriseVer)
 	if err != nil {
 		return false, fmt.Errorf("checking Enterprise version format: %s", err)
 	}
 	if !release {
 		return false, nil
 	}
-	ver, err := semver.NewVersion(enterpriseVer.Title)
+	ver, err := semver.NewVersion(enterpriseVer)
 	if err != nil {
-		return false, fmt.Errorf("parsing Enterprise version (%s): %s", enterpriseVer.Title, err)
+		return false, fmt.Errorf("parsing Enterprise version (%s): %s", enterpriseVer, err)
 	}
 	return ver.Prerelease() != "", nil
 }

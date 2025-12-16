@@ -53,7 +53,7 @@ func TestCalicoConfigVersions(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected error reading nonexistent file, got nil")
 		}
-		if !strings.Contains(err.Error(), "error reading version file") {
+		if !strings.Contains(err.Error(), "reading version file") {
 			t.Fatalf("unexpected error message: %v", err)
 		}
 	})
@@ -72,7 +72,7 @@ func TestCalicoConfigVersions(t *testing.T) {
 		if err == nil {
 			t.Fatalf("expected unmarshal error, got nil")
 		}
-		if !strings.Contains(err.Error(), "error unmarshaling version file") {
+		if !strings.Contains(err.Error(), "unmarshaling version file") {
 			t.Fatalf("unexpected error message: %v", err)
 		}
 	})
@@ -87,7 +87,7 @@ func TestReleaseVersions(t *testing.T) {
 		enterpriseVer := "v3.25.0-1.0"
 		dir := fakeOperatorRepo(t, calicoVer, enterpriseVer)
 
-		versions, err := calicoVersions(dir, "v1.2.3", true)
+		versions, err := calicoVersions(mainRepo, dir, "v1.2.3", true)
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -97,7 +97,7 @@ func TestReleaseVersions(t *testing.T) {
 	t.Run("local with no rootDir", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := calicoVersions("", "v1.2.3", true)
+		_, err := calicoVersions(mainRepo, "", "v1.2.3", true)
 		if err == nil {
 			t.Fatalf("expected error for missing rootDir, got nil")
 		}
@@ -110,7 +110,7 @@ func TestReleaseVersions(t *testing.T) {
 		t.Parallel()
 		dir := fakeOperatorRepo(t, "master", "master")
 
-		_, err := calicoVersions(dir, "v1.2.3", true)
+		_, err := calicoVersions(mainRepo, dir, "v1.2.3", true)
 		if err == nil {
 			t.Fatalf("expected error for invalid calico version, got nil")
 		}
@@ -125,7 +125,7 @@ func TestReleaseVersions(t *testing.T) {
 		enterpriseVer := "release-calient-v3.20"
 		dir := fakeOperatorRepo(t, calicoVer, enterpriseVer)
 
-		versions, err := calicoVersions(dir, "v1.2.3", true)
+		versions, err := calicoVersions(mainRepo, dir, "v1.2.3", true)
 		if err != nil {
 			t.Fatalf("expected no error when enterprise missing, got: %v", err)
 		}
@@ -256,5 +256,78 @@ func checkReleaseVersions(t testing.TB, got map[string]string, wantCalicoVer, wa
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Fatalf("releaseVersions() mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestAddTrailingSlash(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"docker.io", "docker.io/"},
+		{"quay.io/", "quay.io/"},
+		{"gcr.io/some-repo", "gcr.io/some-repo/"},
+		{"", ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+			got := addTrailingSlash(tc.input)
+			if got != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, got)
+			}
+		})
+	}
+}
+
+func TestIsPrereleaseEnterpriseVersion(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		version string
+		want    bool
+	}{
+		{
+			version: "master",
+			want:    false,
+		},
+		{
+			version: "release-v3.25",
+			want:    false,
+		},
+		{
+			version: "release-calient-v3.25",
+			want:    false,
+		},
+		{
+			version: "v3.25.0",
+			want:    true,
+		},
+		{
+			version: "v3.25.0-rc1",
+			want:    false,
+		},
+		{
+			version: "v3.25.0-1.0",
+			want:    true,
+		},
+		{
+			version: "v3.25.0-2.0",
+			want:    true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.version, func(t *testing.T) {
+			t.Parallel()
+			got, err := isEnterpriseReleaseVersionFormat(tc.version)
+			if err != nil {
+				t.Fatalf("isEnterpriseReleaseVersionFormat(%q) unexpected error: %v", tc.version, err)
+			}
+			if got != tc.want {
+				t.Fatalf("isEnterpriseReleaseVersionFormat(%q) = %v, want %v", tc.version, got, tc.want)
+			}
+		})
 	}
 }

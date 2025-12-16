@@ -35,6 +35,10 @@ func PatchFelixConfiguration(ctx context.Context, c client.Client, patchFn func(
 	// Create a base state for the upcoming patch operation.
 	patchFrom := client.MergeFrom(fc.DeepCopy())
 
+	if err = RestoreV3Metadata(fc); err != nil {
+		return nil, err
+	}
+
 	// Apply desired changes to the FelixConfiguration.
 	updated, err := patchFn(fc)
 	if err != nil {

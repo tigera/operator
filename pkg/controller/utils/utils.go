@@ -16,6 +16,7 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -1117,6 +1118,22 @@ func AllPodsTerminated(ctx context.Context, c client.Client, obj client.Object) 
 		return false, err
 	}
 	return len(podList.Items) == 0, nil
+}
+
+func RestoreV3Metadata(obj client.Object) error {
+	if v3metaJSON, ok := obj.GetAnnotations()["projectcalico.org/metadata"]; ok {
+		v3meta := metav1.ObjectMeta{}
+		err := json.Unmarshal([]byte(v3metaJSON), &v3meta)
+		if err != nil {
+			return err
+		}
+
+		// Restore the v3 metadata we care about.
+		obj.SetLabels(v3meta.Labels)
+		obj.SetAnnotations(v3meta.Annotations)
+		log.V(1).Info("Restored v3 resource metadata", "labels", v3meta.Labels, "annotations", v3meta.Annotations)
+	}
+	return nil
 }
 
 // getMatchLabels extracts the matchLabels from the given workload object.

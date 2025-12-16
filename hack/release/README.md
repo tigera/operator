@@ -14,8 +14,10 @@
       - [Examples](#examples-2)
     - [release notes](#release-notes)
       - [Examples](#examples-3)
-    - [release from](#release-from)
+    - [release github](#release-github)
       - [Examples](#examples-4)
+    - [release from](#release-from)
+      - [Examples](#examples-5)
 
 ## Installation
 
@@ -203,6 +205,31 @@ To get the versions file from the local working directory instead of the tagged 
 
     ```sh
     release notes --version v1.36.0 --local
+    ```
+
+### release github
+
+This command creates or updates a GitHub release for a specific operator version.
+To create or update a GitHub release, use the following command:
+
+```sh
+release github --version <operator version>
+```
+
+By default, the GitHub release is not created in draft mode. To create a draft release, use the `--draft` flag.
+
+#### Examples
+
+1. To create or update a GitHub release for operator version `v1.36.0`
+
+    ```sh
+    release github --version v1.36.0
+    ```
+
+1. To create or update a draft GitHub release for operator version `v1.36.0`
+
+    ```sh
+    release github --version v1.36.0 --draft
     ```
 
 ### release from

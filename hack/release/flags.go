@@ -73,7 +73,7 @@ var (
 		Category: githubFlagCategory,
 		Usage:    "Create a GitHub release",
 		Sources:  cli.EnvVars("CREATE_GITHUB_RELEASE"),
-		Value:    false,
+		Value:    true,
 		Action: func(ctx context.Context, c *cli.Command, b bool) error {
 			if b && c.String(githubTokenFlag.Name) == "" {
 				return fmt.Errorf("github-token is required to create GitHub releases")
@@ -81,12 +81,22 @@ var (
 			return nil
 		},
 	}
+	// Draft GitHub release flag for publish command. It defaults to true.
 	draftGithubReleaseFlag = &cli.BoolFlag{
 		Name:     "draft-github-release",
 		Category: githubFlagCategory,
-		Usage:    fmt.Sprintf("Create the GitHub release as a draft. Only applicable if --%s is set.", createGithubReleaseFlag.Name),
+		Usage:    "Whether to create the GitHub release in draft mode",
 		Sources:  cli.EnvVars("DRAFT_GITHUB_RELEASE"),
 		Value:    true,
+	}
+	// Draft GitHub release flag for public command. It defaults to false.
+	draftGithubReleasePublicFlag = &cli.BoolFlag{
+		Name:     "draft",
+		Aliases:  []string{draftGithubReleaseFlag.Name},
+		Category: draftGithubReleaseFlag.Category,
+		Usage:    draftGithubReleaseFlag.Usage,
+		Sources:  draftGithubReleaseFlag.Sources,
+		Value:    false,
 	}
 )
 

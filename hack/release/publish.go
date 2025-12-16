@@ -93,16 +93,17 @@ var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) err
 	if err != nil {
 		return fmt.Errorf("getting git directory: %w", err)
 	}
-
 	if err := publishImages(c, repoRootDir); err != nil {
 		return err
 	}
-
-	if !c.Bool(hashreleaseFlag.Name) {
-		return publishGithubRelease(ctx, c, repoRootDir)
+	if c.Bool(hashreleaseFlag.Name) {
+		return nil
 	}
-
-	return nil
+	if !c.Bool(createGithubReleaseFlag.Name) {
+		logrus.Warnf("Skipping GitHub release creation. Either use %q to create a GitHub release or create manually.", publicCommand.FullName())
+		return nil
+	}
+	return publishGithubRelease(ctx, c, repoRootDir)
 })
 
 func publishImages(c *cli.Command, repoRootDir string) error {
@@ -174,15 +175,11 @@ func publishGithubRelease(ctx context.Context, c *cli.Command, repoRootDir strin
 	if !c.Bool(createGithubReleaseFlag.Name) {
 		return nil
 	}
-
 	version := c.String(versionFlag.Name)
-	log := logrus.WithField("version", version)
-
 	prerelease, err := isPrereleaseEnterpriseVersion(repoRootDir)
 	if err != nil {
 		return fmt.Errorf("determining if version is prerelease: %w", err)
 	}
-
 	r := &GithubRelease{
 		Org:     ctx.Value(githubOrgCtxKey).(string),
 		Repo:    ctx.Value(githubRepoCtxKey).(string),
@@ -191,13 +188,12 @@ func publishGithubRelease(ctx context.Context, c *cli.Command, repoRootDir strin
 	if err := r.setupClient(ctx, c.String(githubTokenFlag.Name)); err != nil {
 		return fmt.Errorf("setting up GitHub client: %s", err)
 	}
-
 	// Create the GitHub release in draft mode. If it is a prerelease, mark it as such.
-	if release, err := r.Create(ctx, c.Bool(draftGithubReleaseFlag.Name), prerelease); errors.Is(err, ErrGitHubReleaseExists) {
-		log.Warnf("GitHub release already exists, update manually: %s", *release.HTMLURL)
+	if err := r.Create(ctx, c.Bool(draftGithubReleaseFlag.Name), prerelease); errors.Is(err, ErrGitHubReleaseExists) {
+		// Do not error out if the release already exists.
+		return nil
 	} else if err != nil {
 		return fmt.Errorf("publishing GitHub release: %s", err)
 	}
-
 	return nil
 }

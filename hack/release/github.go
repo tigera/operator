@@ -46,7 +46,10 @@ const (
 	allState    = "all"
 )
 
-var ErrGitHubReleaseExists = errors.New("GitHub release already exists")
+var (
+	ErrGitHubReleaseExists   = errors.New("GitHub release already exists")
+	ErrNoGitHubReleaseExists = errors.New("GitHub release does not exist")
+)
 
 type issueKind string
 
@@ -73,11 +76,12 @@ type ReleaseNoteData struct {
 
 // GithubRelease represents a GitHub-hosted release of the operator.
 type GithubRelease struct {
-	Org          string            // GitHub organization
-	Repo         string            // GitHub repository
-	Version      string            // Release version
-	githubClient *github.Client    // GitHub API client
-	milestone    *github.Milestone // Cached milestone for the release version
+	Org               string                    // GitHub organization
+	Repo              string                    // GitHub repository
+	Version           string                    // Release version
+	githubClient      *github.Client            // GitHub API client
+	githubRepoRelease *github.RepositoryRelease // Cached GitHub release
+	milestone         *github.Milestone         // Cached GitHub milestone
 }
 
 // Setup the GitHub client for this release using the provided token.
@@ -346,7 +350,11 @@ func (r *GithubRelease) collectReleaseNotes(ctx context.Context, local bool) (*R
 
 // Check if a GitHub release already exists for this version.
 // Since the release could already exist in draft, it uses the ListReleases instead of GetReleaseByTag.
+// Cache the result for future calls.
 func (r *GithubRelease) repoRelease(ctx context.Context) (*github.RepositoryRelease, error) {
+	if r.githubRepoRelease != nil {
+		return r.githubRepoRelease, nil
+	}
 	opts := &github.ListOptions{PerPage: 100}
 	for {
 		release, resp, err := r.githubClient.Repositories.ListReleases(ctx, r.Org, r.Repo, opts)
@@ -355,7 +363,8 @@ func (r *GithubRelease) repoRelease(ctx context.Context) (*github.RepositoryRele
 		}
 		for _, rel := range release {
 			if rel.GetTagName() == r.Version {
-				return rel, nil
+				r.githubRepoRelease = rel
+				break
 			}
 		}
 		if resp.NextPage == 0 {
@@ -363,16 +372,17 @@ func (r *GithubRelease) repoRelease(ctx context.Context) (*github.RepositoryRele
 		}
 		opts.Page = resp.NextPage
 	}
-	return nil, nil
+	return r.githubRepoRelease, nil
 }
 
 // Create a new GitHub release.
-func (r *GithubRelease) Create(ctx context.Context, isDraft, isPrerelease bool) (*github.RepositoryRelease, error) {
+func (r *GithubRelease) Create(ctx context.Context, isDraft, isPrerelease bool) error {
 	// Check if release already exists
 	if got, err := r.repoRelease(ctx); err != nil {
-		return nil, fmt.Errorf("checking if release exists: %w", err)
+		return fmt.Errorf("checking if release exists: %w", err)
 	} else if got != nil {
-		return got, ErrGitHubReleaseExists
+		logrus.Warnf("GitHub release already exists, update manually: %s", got.GetHTMLURL())
+		return ErrGitHubReleaseExists
 	}
 
 	logrus.WithFields(logrus.Fields{
@@ -384,22 +394,15 @@ func (r *GithubRelease) Create(ctx context.Context, isDraft, isPrerelease bool) 
 	// Generate release notes
 	tmpDir, err := os.MkdirTemp("", fmt.Sprintf("operator-%s-*", r.Version))
 	if err != nil {
-		return nil, fmt.Errorf("creating temporary directory for release notes: %w", err)
+		return fmt.Errorf("creating temporary directory for release notes: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 	if err := r.GenerateNotes(ctx, tmpDir, false); err != nil {
-		return nil, fmt.Errorf("generating release notes for %s: %w", r.Version, err)
+		return fmt.Errorf("generating release notes for %s: %w", r.Version, err)
 	}
 	relNotesBytes, err := os.ReadFile(ReleaseNotesFilePath(tmpDir, r.Version))
 	if err != nil {
-		return nil, fmt.Errorf("reading release notes file for %s: %w", r.Version, err)
-	}
-
-	latest := "false"
-	// Have GitHub determine if this is the latest release only if it is not a draft or prerelease
-	// by using "legacy" option. See https://docs.github.com/en/rest/releases/releases#create-a-release
-	if !isDraft && !isPrerelease {
-		latest = "legacy"
+		return fmt.Errorf("reading release notes file for %s: %w", r.Version, err)
 	}
 
 	release, _, err := r.githubClient.Repositories.CreateRelease(ctx, r.Org, r.Repo, &github.RepositoryRelease{
@@ -408,18 +411,53 @@ func (r *GithubRelease) Create(ctx context.Context, isDraft, isPrerelease bool) 
 		Body:       github.String(string(relNotesBytes)),
 		Draft:      github.Bool(isDraft),
 		Prerelease: github.Bool(isPrerelease),
-		MakeLatest: github.String(latest),
+		MakeLatest: makeLatest(isDraft, isPrerelease),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("creating GitHub release for %s: %w", r.Version, err)
+		return fmt.Errorf("creating GitHub release for %s: %w", r.Version, err)
 	}
 	log := logrus.WithField("release", r.Version).WithField("url", release.GetHTMLURL())
 	if isDraft {
 		log.Info("GitHub release created in draft state, review and publish it manually")
-		return release, nil
+		return nil
 	}
 	log.Info("GitHub release created")
-	return release, nil
+	return nil
+}
+
+// Helper function to determine the value for MakeLatest option for GitHub releases.
+// Ideally, we want GitHub to determine if this is the latest release only if it is not a draft or prerelease
+// using "legacy" option. See https://docs.github.com/en/rest/releases/releases#create-a-release
+func makeLatest(isDraft, isPrerelease bool) *string {
+	latest := "false"
+	if !isDraft && !isPrerelease {
+		latest = "legacy"
+	}
+	return github.String(latest)
+}
+
+// Update an existing GitHub release.
+func (r *GithubRelease) Update(ctx context.Context, isDraft, isPrerelease bool) error {
+	if rel, err := r.repoRelease(ctx); err != nil {
+		return fmt.Errorf("checking if release exists: %w", err)
+	} else if rel == nil {
+		return ErrNoGitHubReleaseExists
+	}
+	release, _, err := r.githubClient.Repositories.EditRelease(ctx, r.Org, r.Repo, r.githubRepoRelease.GetID(), &github.RepositoryRelease{
+		Draft:      github.Bool(isDraft),
+		Prerelease: github.Bool(isPrerelease),
+		MakeLatest: makeLatest(isDraft, isPrerelease),
+	})
+	if err != nil {
+		return fmt.Errorf("updating GitHub release for %s: %w", r.Version, err)
+	}
+	log := logrus.WithField("release", r.Version).WithField("url", release.GetHTMLURL())
+	if isDraft {
+		log.Info("GitHub release updated in draft state, review and publish it manually")
+		return nil
+	}
+	log.Info("GitHub release updated")
+	return nil
 }
 
 // Helper function to list GitHub issues based on the provided options and optional filter function.

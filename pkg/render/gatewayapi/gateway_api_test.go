@@ -1259,7 +1259,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(clusterRole.Name).To(Equal("waf-http-filter"))
 
 		// Verify the ClusterRole has the correct rules
-		Expect(clusterRole.Rules).To(HaveLen(4))
+		Expect(clusterRole.Rules).To(HaveLen(3))
 
 		// Check license key access for WAF
 		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{

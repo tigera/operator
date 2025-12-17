@@ -1282,13 +1282,6 @@ var _ = Describe("Gateway API rendering tests", func() {
 			Verbs:     []string{"get", "list", "watch"},
 		}))
 
-		// Check core resources for L7 Log Collector to resolve pod/service ownership
-		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups: []string{""},
-			Resources: []string{"pods", "services"},
-			Verbs:     []string{"get", "list", "watch"},
-		}))
-
 		// Verify ClusterRoleBinding exists
 		clusterRoleBinding, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter", "")
 		Expect(err).NotTo(HaveOccurred())

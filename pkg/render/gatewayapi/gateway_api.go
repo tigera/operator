@@ -1147,12 +1147,6 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.
 				Resources: []string{"gateways", "httproutes", "grpcroutes"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
-			// Core resources for L7 Log Collector to resolve pod/service ownership
-			{
-				APIGroups: []string{""},
-				Resources: []string{"pods", "services"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
 		},
 	}
 }

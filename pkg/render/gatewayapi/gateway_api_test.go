@@ -1236,4 +1236,63 @@ var _ = Describe("Gateway API rendering tests", func() {
 		// DaemonSet init containers are not supported, so these should not be present
 		// This is expected behavior as mentioned in the code comments
 	})
+
+	It("should create correct RBAC for L7 log collector enrichment", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.TigeraSecureEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Verify ClusterRole exists
+		clusterRole, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, "waf-http-filter", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clusterRole.Name).To(Equal("waf-http-filter"))
+
+		// Verify the ClusterRole has the correct rules
+		Expect(clusterRole.Rules).To(HaveLen(3))
+
+		// Check license key access for WAF
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"licensekeys"},
+			Verbs:     []string{"get", "watch"},
+		}))
+
+		// Check token review permissions for WAF
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"authentication.k8s.io"},
+			Resources: []string{"tokenreviews"},
+			Verbs:     []string{"create"},
+		}))
+
+		// Check Gateway API resources for L7 Log Collector enrichment
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes", "grpcroutes"},
+			Verbs:     []string{"get", "list", "watch"},
+		}))
+
+		// Verify ClusterRoleBinding exists
+		clusterRoleBinding, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(clusterRoleBinding.Name).To(Equal("waf-http-filter"))
+		Expect(clusterRoleBinding.RoleRef.Name).To(Equal("waf-http-filter"))
+		Expect(clusterRoleBinding.RoleRef.Kind).To(Equal("ClusterRole"))
+
+		// Verify ServiceAccount exists
+		serviceAccount, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(serviceAccount.Name).To(Equal("waf-http-filter"))
+		Expect(serviceAccount.Namespace).To(Equal("tigera-gateway"))
+	})
 })

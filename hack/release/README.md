@@ -1,17 +1,23 @@
 # release
 
-`release` is a tool designed to streamline the process of creating and releasing a new operator version.
+`release` is a tool designed to streamline the process of creating and releasing a new operator.
 
 - [release](#release)
   - [Installation](#installation)
   - [Usage](#usage)
   - [Commands](#commands)
-    - [release prep](#release-prep)
+    - [release build](#release-build)
       - [Examples](#examples)
-    - [release notes](#release-notes)
-      - [Examples](#examples-1)
-    - [release from](#release-from)
+    - [release publish](#release-publish)
+    - [Examples](#examples-1)
+    - [release prep](#release-prep)
       - [Examples](#examples-2)
+    - [release notes](#release-notes)
+      - [Examples](#examples-3)
+    - [release github](#release-github)
+      - [Examples](#examples-4)
+    - [release from](#release-from)
+      - [Examples](#examples-5)
 
 ## Installation
 
@@ -34,6 +40,96 @@ release --help
 
 ## Commands
 
+### release build
+
+This command builds the operator image for a specific operator version.
+
+To build the operator image, use the following command:
+
+```sh
+release build --version <operator version>
+```
+
+For hashrelease, use the `--hashrelease` flag and provide either the Calico or Calico Enterprise version or versions file.
+
+```sh
+release build --version <operator version> --hashrelease \
+  [--calico-version <calico version> | --calico-versions <path to calico version file> |--enterprise-version <enterprise version> | --enterprise-versions <path to enterprise version file>]
+```
+
+#### Examples
+
+1. To build the operator image for operator version `v1.36.0`
+
+    ```sh
+    release build --version v1.36.0
+    ```
+
+1. To build hashrelease operator image for Calico v3.30
+
+   1. Using Calico versions file
+
+         ```sh
+         release build --hashrelease --version v1.36.0-0.dev-259-g25c811f78fbd-v3.30.0-0.dev-338-gca80474016a5 --calico-versions hashrelease-versions.yaml
+         ```
+
+   1. Specifying version directly
+
+       ```sh
+       release build --hashrelease --version v1.36.0-0.dev-259-g25c811f78fbd-v3.30.0-0.dev-338-gca80474016a5 --calico-version v3.30.0-0.dev-338-gca80474016a5
+       ```
+
+1. To build hashrelease operator image for Calico Enterprise v3.22
+
+   1. Using Enterprise versions file
+
+         ```sh
+         release build --hashrelease --version v1.36.0-0.dev-259-g25c811f78fbd-v3.22.0-calient-0.dev-100-gabcdef123456 --enterprise-versions hashrelease-versions.yaml
+         ```
+
+   1. Specifying version directly
+
+       ```sh
+       release build --hashrelease --version v1.36.0-0.dev-259-g25c811f78fbd-v3.22.0-calient-0.dev-100-gabcdef123456 --enterprise-version v3.22.0-calient-0.dev-100-gabcdef123456
+       ```
+
+### release publish
+
+This commands publishes the operator image for a specific operator version to a container registry.
+
+```sh
+release publish --version <operator version>
+```
+
+For hashrelease, use the `--hashrelease` flag
+
+```sh
+release publish --version <operator version> --hashrelease
+```
+
+If this is a release version (i.e. vX.Y.Z) and the `--create-github-release` flag is set to true,
+it creates a draft release on the [Releases](https://github.com/tigera/operator/releases) page.
+
+### Examples
+
+1. To publish the operator version `v1.36.0`
+
+    ```sh
+    release publish --version v1.36.0
+    ```
+
+1. To publish the hashrelease operator image for operator version `v1.36.0-0.dev-259-g25c811f78fbd-v3.30.0-0.dev-338-gca80474016a5`
+
+    ```sh
+    release publish --version v1.36.0-0.dev-259-g25c811f78fbd-v3.30.0-0.dev-338-gca80474016a5 --hashrelease
+    ```
+
+1. To publish the operator version `v1.36.0` and create a GitHub release
+
+    ```sh
+    release publish --version v1.36.0 --create-github-release
+    ```
+
 ### release prep
 
 This command prepares the repo for a new release.
@@ -46,8 +142,8 @@ which involves creating a new milestone for the next patch version and closing t
 for the release version. All open issues and pull requests associated with the current milestone
 are moved to the new milestone.
 
-  > [!NOTE]
-  > At least one of Calico or Calico Enterprise version must be specified.
+  > [!IMPORTANT]
+  > One of Calico or Calico Enterprise version must be specified.
 
 To prepare for a new release, use the following command:
 
@@ -109,6 +205,31 @@ To get the versions file from the local working directory instead of the tagged 
 
     ```sh
     release notes --version v1.36.0 --local
+    ```
+
+### release github
+
+This command creates or updates a GitHub release for a specific operator version.
+To create or update a GitHub release, use the following command:
+
+```sh
+release github --version <operator version>
+```
+
+By default, the GitHub release is not created in draft mode. To create a draft release, use the `--draft` flag.
+
+#### Examples
+
+1. To create or update a GitHub release for operator version `v1.36.0`
+
+    ```sh
+    release github --version v1.36.0
+    ```
+
+1. To create or update a draft GitHub release for operator version `v1.36.0`
+
+    ```sh
+    release github --version v1.36.0 --draft
     ```
 
 ### release from

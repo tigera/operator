@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/cloudflare/cfssl/log"
 	authv1 "k8s.io/api/authentication/v1"
@@ -29,9 +30,8 @@ import (
 
 var serviceAccount = ""
 
-func init() {
-	serviceAccount = getServiceAccount()
-}
+// once ensures that serviceAccount is initialized only once.
+var once sync.Once
 
 // OperatorServiceAccount returns the ServiceAccount name the operator is running in.
 // The value returned is based on the following priority (these are evaluated at startup):
@@ -41,6 +41,9 @@ func init() {
 //	then the contents is returned.
 //	The default "tigera-operator" is returned.
 func OperatorServiceAccount() string {
+	once.Do(func() {
+		serviceAccount = getServiceAccount()
+	})
 	return serviceAccount
 }
 

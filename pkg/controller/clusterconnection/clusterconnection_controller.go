@@ -294,7 +294,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(render.GuardianDeploymentName, r.cli,
 		common.OperatorNamespace(), includeSystem,
-		render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName, goldmane.GoldmaneKeyPairSecret)
+		render.CalicoAPIServerTLSSecretName, render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName, goldmane.GoldmaneKeyPairSecret)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
 	}

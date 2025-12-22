@@ -234,6 +234,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		"telemetry.optIn": false,
 		// Setting this to false will prevent it from connecting to endpoints outside of this cluster.
 		"xpack.fleet.agents.enabled": false,
+		// Even after disabling fleet we still need to set this to true to prevent further egress checks.
+		"xpack.fleet.isAirGapped": true,
 		// Setting this to false will prevent it from connecting to endpoints outside of this cluster.
 		// See: https://www.elastic.co/guide/en/kibana/8.19/settings.html
 		"newsfeed.enabled": false,

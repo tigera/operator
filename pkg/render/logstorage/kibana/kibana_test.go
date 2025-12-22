@@ -147,6 +147,7 @@ var _ = Describe("Kibana rendering tests", func() {
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.lifespan"]).To(Equal("8h"))
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.idleTimeout"]).To(Equal("30m"))
 			Expect(resultKB.Spec.Config.Data["xpack.fleet.agents.enabled"]).To(BeFalse())
+			Expect(resultKB.Spec.Config.Data["xpack.fleet.isAirGapped"]).To(BeTrue())
 			Expect(resultKB.Spec.Config.Data["newsfeed.enabled"]).To(BeFalse())
 		})
 

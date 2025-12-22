@@ -146,6 +146,7 @@ var _ = Describe("Kibana rendering tests", func() {
 				"kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.lifespan"]).To(Equal("8h"))
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.idleTimeout"]).To(Equal("30m"))
+			Expect(resultKB.Spec.Config.Data["xpack.fleet.isAirGapped"]).To(BeTrue())
 
 		})
 

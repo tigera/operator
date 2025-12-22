@@ -232,6 +232,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		// Telemetry is unwanted for the majority of our customers and if enabled can cause blocked flows. This flag
 		// can still be overwritten in the Kibana Settings if the user desires it.
 		"telemetry.optIn": false,
+		// Setting this to true will prevent it from connecting to endpoints outside of this cluster.
+		"xpack.fleet.isAirGapped": true,
 	}
 
 	var initContainers []corev1.Container

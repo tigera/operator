@@ -18,7 +18,7 @@
 package components
 
 var (
-	EnterpriseRelease string = "release-calient-v3.22"
+	EnterpriseRelease string = "v3.22.0-3.0"
 
 	ComponentAPIServer = Component{
 		Version:  "release-calient-v3.22",

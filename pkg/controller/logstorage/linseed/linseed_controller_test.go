@@ -315,6 +315,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 				{BaseIndexName: "calico_threat_feeds_domain_name_set", DataType: operatorv1.DataTypeThreatFeedsDomainSet},
 				{BaseIndexName: "calico_threat_feeds_ip_set", DataType: operatorv1.DataTypeThreatFeedsIPSet},
 				{BaseIndexName: "calico_waf", DataType: operatorv1.DataTypeWAFLogs},
+				{BaseIndexName: "calico_policy_activity", DataType: operatorv1.DataTypePolicyActivity},
 			}
 			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
 
@@ -398,6 +399,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 				{BaseIndexName: "calico_threat_feeds_domain_name_set", DataType: operatorv1.DataTypeThreatFeedsDomainSet},
 				{BaseIndexName: "calico_threat_feeds_ip_set", DataType: operatorv1.DataTypeThreatFeedsIPSet},
 				{BaseIndexName: "calico_waf", DataType: "Bogus"},
+				{BaseIndexName: "calico_policy_activity", DataType: operatorv1.DataTypePolicyActivity},
 			}
 			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
 			// Create the reconciler for the test.

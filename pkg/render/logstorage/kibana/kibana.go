@@ -232,6 +232,13 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		// Telemetry is unwanted for the majority of our customers and if enabled can cause blocked flows. This flag
 		// can still be overwritten in the Kibana Settings if the user desires it.
 		"telemetry.optIn": false,
+		// Setting this to false will prevent it from connecting to endpoints outside of this cluster.
+		"xpack.fleet.agents.enabled": false,
+		// Even after disabling fleet we still need to set this to true to prevent further egress checks.
+		"xpack.fleet.isAirGapped": true,
+		// Setting this to false will prevent it from connecting to endpoints outside of this cluster.
+		// See: https://www.elastic.co/guide/en/kibana/8.19/settings.html
+		"newsfeed.enabled": false,
 	}
 
 	var initContainers []corev1.Container

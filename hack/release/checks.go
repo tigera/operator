@@ -59,8 +59,8 @@ var checkVersionMatchesGitVersion = func(ctx context.Context, c *cli.Command) (c
 	checkLog.WithField("git-version", gitVer).Debug("Checking version matches git version")
 	checkLog.Info("Using versions")
 	if version != gitVer {
-		return ctx, fmt.Errorf("provided version %s does not match git version %s. "+
-			"If building a hashrelease, use either the --%s flag or set %s environment variable to true", version, gitVer, hashreleaseFlag.Name, hashreleaseFlagEnvVar)
+		return ctx, fmt.Errorf("provided version %s does not match git version %s. This is required for releases. \n"+
+			"If building a hashrelease, use either the --%s flag or set environment variable %s=true", version, gitVer, hashreleaseFlag.Name, hashreleaseFlagEnvVar)
 	}
 	return ctx, nil
 }

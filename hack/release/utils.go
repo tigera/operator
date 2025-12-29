@@ -123,7 +123,7 @@ func runCommandInDir(dir, name string, args, env []string) (string, error) {
 		if dir != "" {
 			errDesc += fmt.Sprintf(" in directory %s", dir)
 		}
-		err = fmt.Errorf("%s: %w: %s", errDesc, err, strings.TrimSpace(errb.String()))
+		err = fmt.Errorf("%s: %w \n%s", errDesc, err, strings.TrimSpace(errb.String()))
 	}
 	return strings.TrimSpace(outb.String()), err
 }

@@ -90,6 +90,7 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 	return ctx, nil
 })
 
+// Action for publish command.
 var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
 	repoRootDir, err := gitDir()
 	if err != nil {
@@ -120,6 +121,8 @@ var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) err
 	return publishGithubRelease(ctx, c, repoRootDir)
 })
 
+// Publish the operator images to the specified registry.
+// If the images are already published, it skips publishing.
 func publishImages(c *cli.Command, repoRootDir string) error {
 	version := c.String(versionFlag.Name)
 	log := logrus.WithField("version", version)
@@ -167,6 +170,7 @@ func publishImages(c *cli.Command, repoRootDir string) error {
 	return nil
 }
 
+// Check if the operator image is already published.
 func operatorImagePublished(c *cli.Command) (bool, error) {
 	registry := c.String(registryFlag.Name)
 	if registry == "" {
@@ -185,6 +189,7 @@ func operatorImagePublished(c *cli.Command) (bool, error) {
 	return true, nil
 }
 
+// Publish a GitHub release for the operator if requested.
 func publishGithubRelease(ctx context.Context, c *cli.Command, repoRootDir string) error {
 	if !c.Bool(createGithubReleaseFlag.Name) {
 		return nil

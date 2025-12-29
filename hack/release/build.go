@@ -203,7 +203,9 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 	if c.Bool(hashreleaseFlag.Name) {
 		buildLog = buildLog.WithField("hashrelease", true)
 		buildEnv = append(buildEnv, fmt.Sprintf("GIT_VERSION=%s", c.String(versionFlag.Name)))
-		resetFn, err := hashreleaseBuildConfig(ctx, c, repoRootDir)
+		resetFn, err := setupHashreleaseBuild(ctx, c, repoRootDir)
+		// Ensure git state is reset after build.
+		// If there was an error preparing the build, reset any partial changes first before returning the error.
 		defer resetFn()
 		if err != nil {
 			return fmt.Errorf("preparing hashrelease build environment: %w", err)
@@ -226,6 +228,7 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 	return nil
 })
 
+// List images in the built operator image for debugging purposes.
 func listImages(registry, image, version string) {
 	fqImage := fmt.Sprintf("%s:%s-%s", path.Join(registry, image), version, runtime.GOARCH)
 	out, err := runCommand("docker", []string{"run", "--rm", fqImage, "--print-images", "list"}, nil)
@@ -237,6 +240,7 @@ func listImages(registry, image, version string) {
 	logrus.Debug(out)
 }
 
+// Verify that the built operator image contains the expected version.
 func assertOperatorImageVersion(registry, image, expectedVersion string) error {
 	fqImage := fmt.Sprintf("%s:%s-%s", path.Join(registry, image), expectedVersion, runtime.GOARCH)
 	out, err := runCommand("docker", []string{"run", "--rm", fqImage, "--version"}, nil)
@@ -259,7 +263,9 @@ func assertOperatorImageVersion(registry, image, expectedVersion string) error {
 	return nil
 }
 
-func hashreleaseBuildConfig(ctx context.Context, c *cli.Command, repoRootDir string) (func(), error) {
+// Modify component images config and versions for hashrelease builds as needed.
+// Returns a function to reset the git state and any error encountered.
+func setupHashreleaseBuild(ctx context.Context, c *cli.Command, repoRootDir string) (func(), error) {
 	repoReset := func() {
 		if out, err := gitInDir(repoRootDir, append([]string{"checkout", "-f"}, changedFiles...)...); err != nil {
 			logrus.WithError(err).Errorf("resetting git state: %s", out)

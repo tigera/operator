@@ -40,6 +40,10 @@ func configureLogging(c *cli.Command) {
 	logrus.SetFormatter(&logrus.TextFormatter{
 		DisableLevelTruncation: true,
 		CallerPrettyfier:       logPrettifier,
+		ForceColors:            true,
+		PadLevelText:           true,
+		DisableQuote:           true,
+		DisableSorting:         true,
 	})
 
 	filename := strings.ReplaceAll(c.FullName(), " ", "-") + ".log"
@@ -54,6 +58,7 @@ func configureLogging(c *cli.Command) {
 			DisableColors:          true,
 			DisableLevelTruncation: true,
 			CallerPrettyfier:       logPrettifier,
+			DisableSorting:         true,
 		},
 	})
 	if err != nil {

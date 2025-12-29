@@ -35,6 +35,7 @@ Otherwise, use --local flag to generate release notes based on local versions fi
 		versionFlag,
 		githubTokenFlag,
 		localFlag,
+		skipValidationFlag,
 	},
 	Before: releaseNotesBefore,
 	Action: releaseNotesAction,
@@ -48,6 +49,15 @@ var releaseNotesBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command
 	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
 	if err != nil {
 		return ctx, err
+	}
+
+	if c.Bool(skipValidationFlag.Name) {
+		logrus.Warnf("Skipping %s validation as requested.", c.Name)
+		return ctx, nil
+	}
+
+	if token := c.String(githubTokenFlag.Name); token == "" {
+		return ctx, fmt.Errorf("GitHub token must be provided via --%s flag or GITHUB_TOKEN environment variable", githubTokenFlag.Name)
 	}
 	return ctx, nil
 })
@@ -70,5 +80,12 @@ var releaseNotesAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command
 	if err != nil {
 		return fmt.Errorf("error getting git root directory: %s", err)
 	}
-	return release.GenerateNotes(ctx, repoRootDir, c.Bool(localFlag.Name))
+	if err := release.GenerateNotes(ctx, repoRootDir, c.Bool(localFlag.Name)); err != nil {
+		return fmt.Errorf("error generating release notes: %s", err)
+	}
+
+	logrus.WithField("release-notes-file", ReleaseNotesFilePath(repoRootDir, ver)).Info("Review release notes for accuracy and format appropriately")
+	logrus.Infof("Visit https://github.com/%s/%s/releases/new?tag=%s to create a new release", release.Org, release.Repo, release.Version)
+
+	return nil
 })

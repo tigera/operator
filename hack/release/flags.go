@@ -16,7 +16,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -50,21 +53,50 @@ var (
 		Category: githubFlagCategory,
 		Usage:    "GitHub token to use for interacting with the GitHub API",
 		Sources:  cli.EnvVars("GITHUB_TOKEN"),
-		Required: true,
 	}
 	skipMilestoneFlag = &cli.BoolFlag{
 		Name:     "skip-milestone",
 		Category: githubFlagCategory,
-		Usage:    "Skip updating GitHub milestones",
+		Usage:    "Skip updating GitHub milestones (development and testing purposes only)",
 		Sources:  cli.EnvVars("SKIP_MILESTONE"),
 		Value:    false,
 		Action: func(ctx context.Context, c *cli.Command, skipMilestone bool) error {
-			// If not on the main repo, skip-milestone must be true
-			if c.String(gitRepoFlag.Name) != mainRepo && !skipMilestone {
+			// If not on the main repo, skip-milestone must be true if skip-git-repo-check is not set
+			if c.String(gitRepoFlag.Name) != mainRepo && !skipMilestone && !c.Bool(skipRepoCheckFlag.Name) {
 				return fmt.Errorf("skip-milestone is required when using a forked repo")
 			}
 			return nil
 		},
+	}
+	createGithubReleaseFlag = &cli.BoolFlag{
+		Name:     "create-github-release",
+		Category: githubFlagCategory,
+		Usage:    "Create a GitHub release",
+		Sources:  cli.EnvVars("CREATE_GITHUB_RELEASE"),
+		Value:    true,
+		Action: func(ctx context.Context, c *cli.Command, b bool) error {
+			if b && c.String(githubTokenFlag.Name) == "" {
+				return fmt.Errorf("github-token is required to create GitHub releases")
+			}
+			return nil
+		},
+	}
+	// Draft GitHub release flag for publish command. It defaults to true.
+	draftGithubReleaseFlag = &cli.BoolFlag{
+		Name:     "draft-github-release",
+		Category: githubFlagCategory,
+		Usage:    "Whether to create the GitHub release in draft mode",
+		Sources:  cli.EnvVars("DRAFT_GITHUB_RELEASE"),
+		Value:    true,
+	}
+	// Draft GitHub release flag for public command. It defaults to false.
+	draftGithubReleasePublicFlag = &cli.BoolFlag{
+		Name:     "draft",
+		Aliases:  []string{draftGithubReleaseFlag.Name},
+		Category: draftGithubReleaseFlag.Category,
+		Usage:    draftGithubReleaseFlag.Usage,
+		Sources:  draftGithubReleaseFlag.Sources,
+		Value:    false,
 	}
 )
 
@@ -85,6 +117,10 @@ var (
 		Sources:  cli.EnvVars("OPERATOR_VERSION", "VERSION"),
 		Required: true,
 		Action: func(ctx context.Context, c *cli.Command, s string) error {
+			if c.Bool(hashreleaseFlag.Name) {
+				// No need to validate version for hashrelease
+				return nil
+			}
 			if valid, err := isReleaseVersionFormat(s); err != nil {
 				return fmt.Errorf("error validating version format: %w", err)
 			} else if !valid {
@@ -167,11 +203,44 @@ var localFlag = &cli.BoolFlag{
 
 var skipValidationFlag = &cli.BoolFlag{
 	Name:    "skip-validation",
-	Usage:   "Skip validation",
+	Usage:   "Skip various validation steps (development and testing purposes only)",
 	Sources: cli.EnvVars("SKIP_VALIDATION"),
 	Value:   false,
 }
 
+// Flag Action to check value is a valid directory.
+func dirFlagCheck(_ context.Context, _ *cli.Command, path string) error {
+	if path == "" {
+		return nil
+	}
+	// Check if the directory exists
+	info, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("directory %q does not exist", path)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%q is not a directory", path)
+	}
+	return nil
+}
+
+// Flag Action to check value is a valid file.
+func fileFlagCheck(_ context.Context, _ *cli.Command, path string) error {
+	if path == "" {
+		return nil
+	}
+	// Check if the file exists
+	info, err := os.Stat(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("file %q does not exist", path)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("%q is a directory, expected a file", path)
+	}
+	return nil
+}
+
+// Calico related flags.
 var (
 	calicoFlagCategory = "Calico Options"
 	calicoVersionFlag  = &cli.StringFlag{
@@ -180,6 +249,10 @@ var (
 		Usage:    "The Calico version to use for the release",
 		Sources:  cli.EnvVars("CALICO_VERSION"),
 		Action: func(ctx context.Context, c *cli.Command, s string) error {
+			if c.Bool(hashreleaseFlag.Name) {
+				// No need to validate Calico version for hashrelease
+				return nil
+			}
 			if valid, err := isReleaseVersionFormat(s); err != nil {
 				return fmt.Errorf("error validating Calico version format: %w", err)
 			} else if !valid {
@@ -195,6 +268,52 @@ var (
 		Sources:  cli.EnvVars("OS_IMAGES_VERSIONS"),
 		Action:   validateOverrides,
 	}
+	calicoRegistryFlag = &cli.StringFlag{
+		Name:     "calico-registry",
+		Category: calicoFlagCategory,
+		Usage:    "The registry Calico images are hosted in.",
+		Sources:  cli.EnvVars("CALICO_REGISTRY"),
+		Action: func(ctx context.Context, c *cli.Command, s string) error {
+			if s != "" && !c.Bool(hashreleaseFlag.Name) {
+				return fmt.Errorf("calico-registry can only be set for hashreleases")
+			}
+			return nil
+		},
+	}
+	calicoImagePathFlag = &cli.StringFlag{
+		Name:     "calico-image-path",
+		Category: calicoFlagCategory,
+		Usage:    "The path to the Calico images file.",
+		Sources:  cli.EnvVars("CALICO_IMAGE_PATH"),
+		Action: func(ctx context.Context, c *cli.Command, s string) error {
+			if s != "" && !c.Bool(hashreleaseFlag.Name) {
+				return fmt.Errorf("calico-image-path can only be set for hashreleases")
+			}
+			return nil
+		},
+	}
+	calicoVersionsConfigFlag = &cli.StringFlag{
+		Name:     "calico-versions",
+		Category: calicoFlagCategory,
+		Usage:    "The path to the Calico versions config file.",
+		Sources:  cli.EnvVars("CALICO_VERSIONS"),
+		Action: func(ctx context.Context, c *cli.Command, s string) error {
+			if s != "" && !c.Bool(hashreleaseFlag.Name) {
+				return fmt.Errorf("calico-versions can only be set for hashreleases")
+			}
+			if s != "" && c.String(calicoVersionFlag.Name) != "" {
+				return fmt.Errorf("calico-versions and calico-version cannot both be set")
+			}
+			return fileFlagCheck(ctx, c, s)
+		},
+	}
+	calicoCRDsDirFlag = &cli.StringFlag{
+		Name:     "calico-crds-dir",
+		Category: calicoFlagCategory,
+		Usage:    "The directory containing the Calico CRDs to bundle with the operator (development and testing purposes only)",
+		Sources:  cli.EnvVars("CALICO_DIR"),
+		Action:   dirFlagCheck,
+	}
 )
 
 // Enterprise related flags.
@@ -206,6 +325,10 @@ var (
 		Usage:    "The Calico Enterprise version to use for the release",
 		Sources:  cli.EnvVars("ENTERPRISE_VERSION"),
 		Action: func(ctx context.Context, c *cli.Command, s string) error {
+			if c.Bool(hashreleaseFlag.Name) {
+				// No need to validate Enterprise version for hashrelease
+				return nil
+			}
 			if valid, err := isEnterpriseReleaseVersionFormat(s); err != nil {
 				return fmt.Errorf("error validating Enterprise version format: %w", err)
 			} else if !valid {
@@ -219,7 +342,40 @@ var (
 		Category: enterpriseFlagCategory,
 		Usage:    "The registry Enterprise images are hosted in.",
 		Sources:  cli.EnvVars("ENTERPRISE_REGISTRY"),
-		Value:    quayRegistry,
+	}
+	enterpriseImagePathFlag = &cli.StringFlag{
+		Name:     "enterprise-image-path",
+		Category: enterpriseFlagCategory,
+		Usage:    "The path to the Enterprise images file.",
+		Sources:  cli.EnvVars("ENTERPRISE_IMAGE_PATH"),
+		Action: func(ctx context.Context, c *cli.Command, s string) error {
+			if s != "" && !c.Bool(hashreleaseFlag.Name) {
+				return fmt.Errorf("enterprise-image-path can only be set for hashreleases")
+			}
+			return nil
+		},
+	}
+	enterpriseVersionsConfigFlag = &cli.StringFlag{
+		Name:     "enterprise-versions",
+		Category: enterpriseFlagCategory,
+		Usage:    "The path to the Enterprise versions config file.",
+		Sources:  cli.EnvVars("ENTERPRISE_VERSIONS"),
+		Action: func(ctx context.Context, c *cli.Command, s string) error {
+			if s != "" && !c.Bool(hashreleaseFlag.Name) {
+				return fmt.Errorf("enterprise-versions can only be set for hashreleases")
+			}
+			if s != "" && c.String(enterpriseVersionFlag.Name) != "" {
+				return fmt.Errorf("enterprise-versions and enterprise-version cannot both be set")
+			}
+			return fileFlagCheck(ctx, c, s)
+		},
+	}
+	enterpriseCRDsDirFlag = &cli.StringFlag{
+		Name:     "enterprise-crds-dir",
+		Category: enterpriseFlagCategory,
+		Usage:    "The directory containing the Enterprise CRDs to bundle with the operator (development and testing purposes only)",
+		Sources:  cli.EnvVars("ENTERPRISE_DIR"),
+		Action:   dirFlagCheck,
 	}
 	exceptEnterpriseFlag = &cli.StringSliceFlag{
 		Name:     "except-calico-enterprise",
@@ -228,9 +384,26 @@ var (
 		Sources:  cli.EnvVars("EE_IMAGES_VERSIONS"),
 		Action: func(ctx context.Context, c *cli.Command, values []string) error {
 			if len(values) == 0 && len(c.StringSlice("except-calico")) == 0 {
-				return fmt.Errorf("at least one of --except-calico or --except-enterprise must be set")
+				return fmt.Errorf("at least one of --except-calico or --except-calico-enterprise must be set")
 			}
 			return validateOverrides(ctx, c, values)
 		},
 	}
 )
+
+var (
+	hashreleaseFlagEnvVar = "HASHRELEASE"
+	hashreleaseFlag       = &cli.BoolFlag{
+		Name:    "hashrelease",
+		Usage:   "Indicates if this is a hashrelease",
+		Sources: cli.EnvVars(hashreleaseFlagEnvVar),
+		Value:   false,
+	}
+)
+
+var skipRepoCheckFlag = &cli.BoolFlag{
+	Name:    "skip-repo-check",
+	Usage:   fmt.Sprintf("Skip checking that the git repository is %s (development and testing purposes only)", mainRepo),
+	Sources: cli.EnvVars("SKIP_REPO_CHECK"),
+	Value:   false,
+}

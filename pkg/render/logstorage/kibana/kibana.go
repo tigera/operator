@@ -232,13 +232,22 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		// Telemetry is unwanted for the majority of our customers and if enabled can cause blocked flows. This flag
 		// can still be overwritten in the Kibana Settings if the user desires it.
 		"telemetry.optIn": false,
-		// Setting this to false will prevent it from connecting to endpoints outside of this cluster.
+		// Disabling all the fleet egress is a difficult task. It does not seem to adhere to the doocumented settings.
+		// A combination of settings is required.
 		"xpack.fleet.agents.enabled": false,
-		// Even after disabling fleet we still need to set this to true to prevent further egress checks.
-		"xpack.fleet.isAirGapped": true,
+		"xpack.fleet.isAirGapped":    true,
+		"xpack.fleet.enabled":        false,
+		"xpack.fleet.packages":       []string{},
+		"xpack.fleet.registryUrl":    "http://localhost:5601",
 		// Setting this to false will prevent it from connecting to endpoints outside of this cluster.
 		// See: https://www.elastic.co/guide/en/kibana/8.19/settings.html
 		"newsfeed.enabled": false,
+		// Setting this to localhost will prevent AI features from connecting to endpoints outside of this cluster.
+		// No other way of disabling AI is possible at this time. We will still get this log, but at least it
+		// prevents us from seeing denied traffic in the service graph:
+		// "[INFO ][plugins.observabilityAIAssistant] Knowledge base index does not exist. Aborting updating index assets"
+		// "[ERROR][plugins.taskManager] Failed to poll for work: Response aborted while reading the body"
+		"xpack.productDocBase.artifactRepositoryUrl": "http://localhost:5601",
 	}
 
 	var initContainers []corev1.Container

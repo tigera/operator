@@ -124,17 +124,14 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 		return ctx, err
 	}
 
-	isHashrelease := c.Bool(hashreleaseFlag.Name)
-
-	// If not a hashrelease build, ensure version format is valid
-	if valid, err := isReleaseVersionFormat(c.String(versionFlag.Name)); err != nil {
-		return ctx, fmt.Errorf("checking version format: %w", err)
-	} else if !valid && !isHashrelease {
-		return ctx, fmt.Errorf("for non-release builds, the %s flag must be set", hashreleaseFlag.Name)
+	// Ensure that provided version matches git version for release
+	ctx, err = checkVersionMatchesGitVersion(ctx, c)
+	if err != nil {
+		return ctx, err
 	}
 
 	// No further checks for release builds
-	if !isHashrelease {
+	if !c.Bool(hashreleaseFlag.Name) {
 		return ctx, nil
 	}
 
@@ -176,6 +173,12 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 
 	version := c.String(versionFlag.Name)
 	buildLog := logrus.WithField("version", version)
+
+	// Sanity check to ensure that provided version matches git version for release in case validations were skipped.
+	ctx, err = checkVersionMatchesGitVersion(ctx, c)
+	if err != nil {
+		return err
+	}
 
 	// Prepare build environment variables
 	buildEnv := append(os.Environ(), fmt.Sprintf("VERSION=%s", version))

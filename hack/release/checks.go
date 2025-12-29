@@ -18,9 +18,16 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli/v3"
 )
 
-// checkGitClean ensures that the git working tree is clean.
+const (
+	checkedVersionCtxKey contextKey = "checked-version"
+)
+
+// check that the git working tree is clean.
 var checkGitClean = func(ctx context.Context) (context.Context, error) {
 	version, err := gitVersion()
 	if err != nil {
@@ -28,6 +35,32 @@ var checkGitClean = func(ctx context.Context) (context.Context, error) {
 	}
 	if strings.Contains(version, "dirty") {
 		return ctx, fmt.Errorf("git working tree is dirty, please commit or stash changes before proceeding")
+	}
+	return ctx, nil
+}
+
+// check that the provided version matches the git version.
+// This is required for releases, but skipped for hashreleases.
+var checkVersionMatchesGitVersion = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	if val, ok := ctx.Value(checkedVersionCtxKey).(bool); ok && val {
+		return ctx, nil
+	}
+	ctx = context.WithValue(ctx, checkedVersionCtxKey, true)
+	version := c.String(versionFlag.Name)
+	checkLog := logrus.WithField("version", version)
+	if c.Bool(hashreleaseFlag.Name) {
+		checkLog.Debug("Skipping version check for hashrelease")
+		return ctx, nil
+	}
+	gitVer, err := gitVersion()
+	if err != nil {
+		return ctx, fmt.Errorf("getting git version: %w", err)
+	}
+	checkLog.WithField("git-version", gitVer).Debug("Checking version matches git version")
+	checkLog.Info("Using versions")
+	if version != gitVer {
+		return ctx, fmt.Errorf("provided version %s does not match git version %s. "+
+			"If building a hashrelease, use either the --%s flag or set %s environment variable to true", version, gitVer, hashreleaseFlag.Name, hashreleaseFlagEnvVar)
 	}
 	return ctx, nil
 }

@@ -119,7 +119,11 @@ func runCommandInDir(dir, name string, args, env []string) (string, error) {
 	}).Debugf("Running %s command", name)
 	err := cmd.Run()
 	if err != nil {
-		err = fmt.Errorf("%s: %s", err, strings.TrimSpace(errb.String()))
+		errDesc := fmt.Sprintf(`running command "%s %s"`, name, strings.Join(args, " "))
+		if dir != "" {
+			errDesc += fmt.Sprintf(" in directory %s", dir)
+		}
+		err = fmt.Errorf("%s: %w: %s", errDesc, err, strings.TrimSpace(errb.String()))
 	}
 	return strings.TrimSpace(outb.String()), err
 }

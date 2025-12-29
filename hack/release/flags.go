@@ -391,12 +391,15 @@ var (
 	}
 )
 
-var hashreleaseFlag = &cli.BoolFlag{
-	Name:    "hashrelease",
-	Usage:   "Indicates if this is a hashrelease",
-	Sources: cli.EnvVars("HASHRELEASE"),
-	Value:   false,
-}
+var (
+	hashreleaseFlagEnvVar = "HASHRELEASE"
+	hashreleaseFlag       = &cli.BoolFlag{
+		Name:    "hashrelease",
+		Usage:   "Indicates if this is a hashrelease",
+		Sources: cli.EnvVars(hashreleaseFlagEnvVar),
+		Value:   false,
+	}
+)
 
 var skipRepoCheckFlag = &cli.BoolFlag{
 	Name:    "skip-repo-check",

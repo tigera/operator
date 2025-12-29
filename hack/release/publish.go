@@ -65,26 +65,26 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 		return ctx, nil
 	}
 
+	// Ensure that provided version matches git version for release builds
+	ctx, err = checkVersionMatchesGitVersion(ctx, c)
+	if err != nil {
+		return ctx, err
+	}
+
 	// If building a hashrelease, publishGithubRelease must be false
 	if c.Bool(hashreleaseFlag.Name) && c.Bool(createGithubReleaseFlag.Name) {
 		return ctx, fmt.Errorf("cannot publish GitHub release for hashrelease builds")
 	}
 
 	// If publishing a GitHub release, ideally it should be in draft mode with a token provided.
-	if c.Bool(createGithubReleaseFlag.Name) {
-		if !c.Bool(draftGithubReleaseFlag.Name) {
-			logrus.Warnf("Publishing GitHub release in non-draft mode.")
-		}
-		if c.String(githubTokenFlag.Name) == "" {
-			return ctx, fmt.Errorf("GitHub token must be provided via --%s flag or GITHUB_TOKEN environment variable", githubTokenFlag.Name)
-		}
+	if !c.Bool(createGithubReleaseFlag.Name) {
+		return ctx, nil
 	}
-
-	// If not a hashrelease build, ensure version format is valid
-	if valid, err := isReleaseVersionFormat(c.String(versionFlag.Name)); err != nil {
-		return ctx, fmt.Errorf("checking release version format: %w", err)
-	} else if !valid && !c.Bool(hashreleaseFlag.Name) {
-		return ctx, fmt.Errorf("for non-release builds, the %s flag must be set", hashreleaseFlag.Name)
+	if !c.Bool(draftGithubReleaseFlag.Name) {
+		logrus.Warnf("Publishing GitHub release in non-draft mode.")
+	}
+	if c.String(githubTokenFlag.Name) == "" {
+		return ctx, fmt.Errorf("GitHub token must be provided via --%s flag or GITHUB_TOKEN environment variable", githubTokenFlag.Name)
 	}
 
 	return ctx, nil
@@ -95,12 +95,24 @@ var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) err
 	if err != nil {
 		return fmt.Errorf("getting git directory: %w", err)
 	}
+
+	// Sanity check to ensure that provided version matches git version for release incase validations were skipped.
+	ctx, err = checkVersionMatchesGitVersion(ctx, c)
+	if err != nil {
+		return err
+	}
+
+	// Publish images
 	if err := publishImages(c, repoRootDir); err != nil {
 		return err
 	}
+
+	// Only images are published for hashrelease builds.
 	if c.Bool(hashreleaseFlag.Name) {
 		return nil
 	}
+
+	// Publish GitHub release if requested
 	if !c.Bool(createGithubReleaseFlag.Name) {
 		logrus.Warnf("Skipping GitHub release creation. Either use %q to create a GitHub release or create manually.", publicCommand.FullName())
 		return nil

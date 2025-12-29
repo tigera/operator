@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -151,6 +151,7 @@ var _ = Describe("Tenant controller", func() {
 			{BaseIndexName: "calico_threat_feeds_domain_name_set", DataType: operatorv1.DataTypeThreatFeedsDomainSet},
 			{BaseIndexName: "calico_threat_feeds_ip_set", DataType: operatorv1.DataTypeThreatFeedsIPSet},
 			{BaseIndexName: "calico_waf", DataType: operatorv1.DataTypeWAFLogs},
+			{BaseIndexName: "calico_policy_activity", DataType: operatorv1.DataTypePolicyActivity},
 		}
 		Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
 

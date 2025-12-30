@@ -234,7 +234,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR)
+	ch := utils.NewComponentHandler(log, r.cli, r.scheme, whiskerCR, &variant)
 	cfg := &whisker.Configuration{
 		PullSecrets:           pullSecrets,
 		OpenShift:             r.provider.IsOpenShift(),

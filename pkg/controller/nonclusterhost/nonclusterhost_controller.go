@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -118,7 +119,17 @@ func (r *ReconcileNonClusterHost) Reconcile(ctx context.Context, request reconci
 	}
 	component := nonclusterhost.NonClusterHost(config)
 
-	ch := utils.NewComponentHandler(logc, r.client, r.scheme, instance)
+	variant, _, err := utils.GetInstallation(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, logc)
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, logc)
+		return reconcile.Result{}, err
+	}
+
+	ch := utils.NewComponentHandler(logc, r.client, r.scheme, instance, &variant)
 	if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
 		return reconcile.Result{}, err

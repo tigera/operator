@@ -44,6 +44,7 @@ var _ = Describe("NonClusterHost controller tests", func() {
 		r              ReconcileNonClusterHost
 		scheme         *runtime.Scheme
 		nonclusterhost *operatorv1.NonClusterHost
+		installation   *operatorv1.Installation
 	)
 
 	BeforeEach(func() {
@@ -77,6 +78,13 @@ var _ = Describe("NonClusterHost controller tests", func() {
 				TyphaEndpoint: "1.2.3.4:5473",
 			},
 		}
+		installation = &operatorv1.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operatorv1.InstallationSpec{
+				Variant: operatorv1.TigeraSecureEnterprise,
+			},
+		}
 	})
 
 	AfterEach(func() {
@@ -93,6 +101,7 @@ var _ = Describe("NonClusterHost controller tests", func() {
 
 		It("should render NonClusterHost resources", func() {
 			Expect(cli.Create(ctx, nonclusterhost)).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())

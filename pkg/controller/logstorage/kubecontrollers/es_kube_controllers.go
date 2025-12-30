@@ -278,7 +278,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
+	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage, &variant)
 
 	// Get the Authentication resource.
 	authentication, err := utils.GetAuthentication(ctx, r.client)

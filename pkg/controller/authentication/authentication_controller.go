@@ -383,7 +383,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	dexCfg := render.NewDexConfig(install.CertificateManagement, authentication, idpSecret, secretProviderClass, r.clusterDomain)
 
 	// Create a component handler to manage the rendered component.
-	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication)
+	hlr := utils.NewComponentHandler(log, r.client, r.scheme, authentication, &variant)
 
 	dexComponentCfg := &render.DexComponentConfiguration{
 		PullSecrets:    pullSecrets,

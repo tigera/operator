@@ -340,7 +340,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	// Create a component handler to manage the rendered component.
-	defaultHandler := utils.NewComponentHandler(log, r.client, r.scheme, policyRecommendation)
+	defaultHandler := utils.NewComponentHandler(log, r.client, r.scheme, policyRecommendation, &variant)
 
 	// Determine the namespaces to which we must bind the cluster role.
 	// For multi-tenant, the cluster role will be bind to the service account in the tenant namespace

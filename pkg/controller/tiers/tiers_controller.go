@@ -160,7 +160,17 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 
 	component := tiers.Tiers(tiersConfig)
 
-	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	variant, _, err := utils.GetInstallation(ctx, r.client)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil, &variant)
 	err = componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

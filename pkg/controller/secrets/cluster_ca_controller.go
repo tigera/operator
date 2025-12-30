@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -82,7 +82,7 @@ func (r *ClusterCAController) Reconcile(ctx context.Context, request reconcile.R
 	logc := r.log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	// Get Installation resource.
-	_, instance, err := utils.GetInstallation(ctx, r.client)
+	variant, instance, err := utils.GetInstallation(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			logc.Info("Installation not found")
@@ -116,7 +116,7 @@ func (r *ClusterCAController) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	hdler := utils.NewComponentHandler(logc, r.client, r.scheme, ownerResource)
+	hdler := utils.NewComponentHandler(logc, r.client, r.scheme, ownerResource, &variant)
 	if err = hdler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 		return reconcile.Result{}, err
 	}

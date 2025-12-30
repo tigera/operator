@@ -123,7 +123,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	}
 	r.status.OnCRFound()
 
-	_, install, err := utils.GetInstallation(context.Background(), r.client)
+	variant, install, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -156,7 +156,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	flowShards := logstoragecommon.CalculateFlowShards(ls.Spec.Nodes, logstoragecommon.DefaultElasticsearchShards)
 	clusterConfig := relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
-	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
+	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls, &variant)
 	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets, r.multiTenant)
 	for _, component := range []render.Component{externalElasticsearch} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {

@@ -609,7 +609,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Create a component handler to manage the rendered component.
-	defaultHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	defaultHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance, &variant)
 
 	// Set replicas to 1 for management or managed clusters.
 	// TODO Remove after MCM tigera-manager HA deployment is supported.

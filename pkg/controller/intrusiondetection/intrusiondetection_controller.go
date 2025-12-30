@@ -436,7 +436,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Create a component handler to manage the rendered component.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance, &variant)
 
 	// Determine the namespaces to which we must bind the cluster role.
 	namespaces, err := helper.TenantNamespaces(r.client)
@@ -567,7 +567,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	setupHandler := handler
 	if tenant.MultiTenant() {
 		// In standard installs, the IntrusionDetection CR owns all the objects. For multi-tenant, pull secrets are owned by the Tenant instance.
-		setupHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant)
+		setupHandler = utils.NewComponentHandler(log, r.client, r.scheme, tenant, &variant)
 	}
 	if err := setupHandler.CreateOrUpdateOrDelete(ctx, setUp, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

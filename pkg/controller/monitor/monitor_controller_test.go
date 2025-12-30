@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -259,7 +259,14 @@ var _ = Describe("Monitor controller tests", func() {
 
 				Expect(serviceMonitor.Spec.Endpoints).To(HaveLen(1))
 				// Verify that the default settings are propagated.
-				Expect(serviceMonitor.Labels).To(Equal(map[string]string{render.AppLabelName: monitor.TigeraExternalPrometheus}))
+				Expect(serviceMonitor.Labels).To(Equal(map[string]string{
+					render.AppLabelName:            monitor.TigeraExternalPrometheus,
+					"app.kubernetes.io/instance":   "tigera-secure",
+					"app.kubernetes.io/managed-by": "tigera-operator",
+					"app.kubernetes.io/name":       "tigera-external-prometheus",
+					"app.kubernetes.io/part-of":    "TigeraSecureEnterprise",
+					"app.kubernetes.io/component":  "Monitor.operator.tigera.io",
+				}))
 				Expect(serviceMonitor.Spec.Endpoints[0]).To(Equal(monitoringv1.Endpoint{
 					Params: map[string][]string{"match[]": {"{__name__=~\".+\"}"}},
 					Port:   "web",

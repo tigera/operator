@@ -2299,7 +2299,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
 				tierWatchReady:       ready,
-				newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, *operator.ProductVariant) utils.ComponentHandler {
 					return componentHandler
 				},
 			}

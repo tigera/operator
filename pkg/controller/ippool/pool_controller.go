@@ -364,7 +364,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// will remain even though all other Calico resources will be deleted. This is intentional - deleting IP pools requires the Calico API server to be
 	// running, and we don't want to block the deletion of the Installation on the API server being available, as it introduces too many ways for
 	// things to go wrong upon deleting the Installation API. Users can manually delete the IP pools if they are no longer needed.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil, &installation.Spec.Variant)
 
 	passThru := render.NewPassthroughWithLog(log, toCreateOrUpdate...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, passThru, nil); err != nil {

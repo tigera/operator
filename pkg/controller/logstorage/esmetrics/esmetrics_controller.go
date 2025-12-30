@@ -244,7 +244,7 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
+	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage, &variant)
 
 	if err = hdler.CreateOrUpdateOrDelete(ctx, esMetricsComponent, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

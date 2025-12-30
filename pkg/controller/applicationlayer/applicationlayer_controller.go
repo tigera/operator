@@ -283,7 +283,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 	component := applicationlayer.ApplicationLayer(config)
 
-	ch := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	ch := utils.NewComponentHandler(log, r.client, r.scheme, instance, &variant)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)

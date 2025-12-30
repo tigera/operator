@@ -229,7 +229,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	ch := utils.NewComponentHandler(log, r.cli, r.scheme, goldmaneCR)
+	ch := utils.NewComponentHandler(log, r.cli, r.scheme, goldmaneCR, &variant)
 	cfg := &goldmane.Configuration{
 		PullSecrets:                 pullSecrets,
 		OpenShift:                   r.provider.IsOpenShift(),

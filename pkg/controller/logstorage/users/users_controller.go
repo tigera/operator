@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -283,12 +283,22 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 	credentialComponent := render.NewPassthrough(credentialSecrets...)
 
+	variant, _, err := utils.GetInstallation(context.Background(), r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// In standard installs, the LogStorage owns the secret. For multi-tenant, it's owned by the tenant.
 	var hdler utils.ComponentHandler
 	if r.multiTenant {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant, &variant)
 	} else {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage, &variant)
 	}
 	if err = hdler.CreateOrUpdateOrDelete(ctx, credentialComponent, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating Linseed user secret", err, reqLogger)

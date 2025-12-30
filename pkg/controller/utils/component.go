@@ -968,13 +968,13 @@ func setStandardSelectorAndLabels(obj client.Object, customResource metav1.Objec
 	addInstanceLabel(obj, customResource)
 	addComponentLabel(obj, customResource)
 	addPartOfLabel(obj, variant)
-	addManagedByLabel(obj, obj.GetName())
+	addManagedByLabel(obj)
 	var podTemplate *v1.PodTemplateSpec
 	var name string
 	switch obj := obj.(type) {
 	case *apps.Deployment:
 		d := obj
-		name = d.Name
+		name = sanitizeLabel(d.Name)
 		if d.Labels == nil {
 			d.Labels = make(map[string]string)
 		}
@@ -990,7 +990,7 @@ func setStandardSelectorAndLabels(obj client.Object, customResource metav1.Objec
 		podTemplate = &d.Spec.Template
 	case *apps.DaemonSet:
 		d := obj
-		name = d.Name
+		name = sanitizeLabel(d.Name)
 		if d.Spec.Selector == nil {
 			d.Spec.Selector = &metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -1013,7 +1013,7 @@ func setStandardSelectorAndLabels(obj client.Object, customResource metav1.Objec
 	addInstanceLabel(podTemplate, customResource)
 	addComponentLabel(podTemplate, customResource)
 	addPartOfLabel(podTemplate, variant)
-	addManagedByLabel(podTemplate, obj.GetName())
+	addManagedByLabel(podTemplate)
 }
 
 // sanitizeLabel cleans an input string to conform to the validation for labels. A valid label must be an empty string
@@ -1067,7 +1067,7 @@ func addPartOfLabel(obj metav1.Object, variant *operatorv1.ProductVariant) {
 
 // addManagedByLabel sets the tool being used to manage the operation of an application.
 // For more on recommended labels see: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
-func addManagedByLabel(obj metav1.Object, version string) {
+func addManagedByLabel(obj metav1.Object) {
 	if obj.GetLabels()["app.kubernetes.io/managed-by"] == "" {
 		obj.GetLabels()["app.kubernetes.io/managed-by"] = sanitizeLabel(common.OperatorName())
 	}

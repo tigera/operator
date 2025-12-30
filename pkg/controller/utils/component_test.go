@@ -1922,6 +1922,20 @@ var _ = Describe("Component handler tests", func() {
 			Expect(d.Spec.Template.GetLabels()).To(Equal(expectedLabels))
 			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
 		})
+		DescribeTable("should sanitize common labels so that they pass regexp validation", func(in string) {
+			Expect(sanitizeLabel(in)).To(MatchRegexp(`(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?`))
+		},
+			Entry("Valid, should remain unchanged", "My-Test_String.123"),
+			Entry("Invalid start/end, should be trimmed", "__My-Test_String.123.."),
+			Entry("Invalid characters (spaces)", "String with spaces"),
+			Entry("Invalid characters", "special-chars!@#$%^&*"),
+			Entry("Invalid start/end", "-leading-and-trailing-"),
+			Entry("Invalid start/end (multiple)", "____-leading-and-trailing-____"),
+			Entry("Empty string, should remain empty", ""),
+			Entry("Invalid, should become empty", "."),
+			Entry("Valid single character", "a"),
+			Entry("Valid", "a-b_c.d"),
+			Entry("Valid", "1.2.3.4"))
 	})
 	Context("services account updates should not result in removal of data", func() {
 		It("preserves secrets and image pull secrets that were present before object updates", func() {

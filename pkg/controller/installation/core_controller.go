@@ -378,7 +378,7 @@ type ReconcileInstallation struct {
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
-	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
+	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, variant *operatorv1.ProductVariant) utils.ComponentHandler
 }
 
 // getActivePools returns the full set of enabled IP pools in the cluster.
@@ -1235,7 +1235,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
+	handler := r.newComponentHandler(log, r.client, r.scheme, instance, &instance.Spec.Variant)
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
 	namespaceCfg := &render.NamespaceConfiguration{
@@ -2109,7 +2109,7 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant)...)...)
 	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
 	// Installation CR will not remove the CRDs.
-	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
+	handler := r.newComponentHandler(log, r.client, r.scheme, nil, &variant)
 	if err := handler.CreateOrUpdateOrDelete(ctx, crdComponent, nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating CRD resource", err, log)
 		return err

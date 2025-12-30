@@ -150,7 +150,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// If there are no Egress Gateway resources, return.
-	ch := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	ch := utils.NewComponentHandler(log, r.client, r.scheme, nil, nil)
 	if len(egws) == 0 {
 		var objects []client.Object
 		if r.provider.IsOpenShift() {
@@ -395,7 +395,7 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 	}
 
 	component := egressgateway.EgressGateway(config)
-	ch := utils.NewComponentHandler(log, r.client, r.scheme, egw)
+	ch := utils.NewComponentHandler(log, r.client, r.scheme, egw, &variant)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
 		reqLogger.Error(err, "Error with images from ImageSet")

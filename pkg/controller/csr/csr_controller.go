@@ -215,7 +215,7 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		}
 	}
 
-	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, instance, &instance.Spec.Variant)
 	var passthrough render.Component
 	if needsCSRRole {
 		// This controller creates the cluster role for any pod in the cluster that requires certificate management.

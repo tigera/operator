@@ -204,7 +204,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	r.status.OnCRFound()
 
 	// Get Installation resource.
-	_, install, err := utils.GetInstallation(context.Background(), r.client)
+	variant, install, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -247,7 +247,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Before we can create secrets, we need to ensure the tigera-elasticsearch namespace exists.
-	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
+	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls, &variant)
 	components := []render.Component{render.NewSetup(&render.SetUpConfiguration{
 		OpenShift:       r.provider.IsOpenShift(),
 		Installation:    install,

@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -137,7 +137,7 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 	// Get Installation resource.
-	_, installation, err := utils.GetInstallation(context.Background(), r.client)
+	variant, installation, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, logc)
@@ -207,7 +207,7 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 		TrustedBundle:  trustedBundleWithSystemCAs,
 	})
 
-	hdler := utils.NewComponentHandler(logc, r.client, r.scheme, tenant)
+	hdler := utils.NewComponentHandler(logc, r.client, r.scheme, tenant, &variant)
 	if err = hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
 		return reconcile.Result{}, err

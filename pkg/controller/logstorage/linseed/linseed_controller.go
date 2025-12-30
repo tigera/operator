@@ -458,9 +458,9 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	// In standard installs, the LogStorage owns Linseed. For multi-tenant, it's owned by the Tenant instance.
 	var hdler utils.ComponentHandler
 	if r.multiTenant {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant, &variant)
 	} else {
-		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
+		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage, &variant)
 	}
 	for _, component := range []render.Component{setup, linseedComponent} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -1015,14 +1016,22 @@ func setStandardSelectorAndLabels(obj client.Object, customResource metav1.Objec
 	addManagedByLabel(podTemplate, obj.GetName())
 }
 
+// sanitizeLabel cleans an input string to conform to the validation for labels. A valid label must be an empty string
+// or consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character and it
+// is validated with regex '(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?'.
+func sanitizeLabel(input string) string {
+	sanitized := regexp.MustCompile(`[^a-zA-Z0-9_.-]`).ReplaceAllString(input, "_")
+	return strings.Trim(sanitized, "-_.")
+}
+
 // addNameLabel sets the name of the application.
 // For more on recommended labels see: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
 func addNameLabel(obj metav1.Object, name string) {
 	if obj.GetLabels()["app.kubernetes.io/name"] == "" {
-		obj.GetLabels()["app.kubernetes.io/name"] = name
+		obj.GetLabels()["app.kubernetes.io/name"] = sanitizeLabel(name)
 	}
 	if obj.GetLabels()["k8s-app"] == "" {
-		obj.GetLabels()["k8s-app"] = name
+		obj.GetLabels()["k8s-app"] = sanitizeLabel(name)
 	}
 }
 
@@ -1031,7 +1040,7 @@ func addNameLabel(obj metav1.Object, name string) {
 // For more on recommended labels see: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
 func addInstanceLabel(obj metav1.Object, cr metav1.Object) {
 	if obj.GetLabels()["app.kubernetes.io/instance"] == "" && cr != nil {
-		obj.GetLabels()["app.kubernetes.io/instance"] = cr.GetName()
+		obj.GetLabels()["app.kubernetes.io/instance"] = sanitizeLabel(cr.GetName())
 	}
 }
 
@@ -1042,7 +1051,7 @@ func addComponentLabel(obj metav1.Object, cr metav1.Object) {
 	if obj.GetLabels()["app.kubernetes.io/component"] == "" && cr != nil {
 		owner, ok := cr.(runtime.Object)
 		if ok && owner.GetObjectKind() != nil && owner.GetObjectKind() != nil {
-			obj.GetLabels()["app.kubernetes.io/component"] = owner.GetObjectKind().GroupVersionKind().GroupKind().String()
+			obj.GetLabels()["app.kubernetes.io/component"] = sanitizeLabel(owner.GetObjectKind().GroupVersionKind().GroupKind().String())
 
 		}
 	}
@@ -1052,7 +1061,7 @@ func addComponentLabel(obj metav1.Object, cr metav1.Object) {
 // For more on recommended labels see: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
 func addPartOfLabel(obj metav1.Object, variant *operatorv1.ProductVariant) {
 	if obj.GetLabels()["app.kubernetes.io/part-of"] == "" && variant != nil {
-		obj.GetLabels()["app.kubernetes.io/part-of"] = string(*variant)
+		obj.GetLabels()["app.kubernetes.io/part-of"] = sanitizeLabel(string(*variant))
 	}
 }
 
@@ -1060,7 +1069,7 @@ func addPartOfLabel(obj metav1.Object, variant *operatorv1.ProductVariant) {
 // For more on recommended labels see: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
 func addManagedByLabel(obj metav1.Object, version string) {
 	if obj.GetLabels()["app.kubernetes.io/managed-by"] == "" {
-		obj.GetLabels()["app.kubernetes.io/managed-by"] = common.OperatorName()
+		obj.GetLabels()["app.kubernetes.io/managed-by"] = sanitizeLabel(common.OperatorName())
 	}
 }
 

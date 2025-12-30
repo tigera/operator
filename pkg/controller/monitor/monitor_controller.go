@@ -357,7 +357,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Create a component handler to manage the rendered component.
-	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance, &variant)
 
 	alertmanagerConfigSecret, createInOperatorNamespace, err := r.readAlertmanagerConfigSecret(ctx)
 	if err != nil {

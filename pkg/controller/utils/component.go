@@ -964,11 +964,16 @@ func setStandardSelectorAndLabels(obj client.Object, customResource metav1.Objec
 	if obj.GetLabels() == nil {
 		obj.SetLabels(make(map[string]string))
 	}
-	addNameLabel(obj, obj.GetName())
-	addInstanceLabel(obj, customResource)
-	addComponentLabel(obj, customResource)
-	addPartOfLabel(obj, variant)
-	addManagedByLabel(obj)
+	if customResource != nil {
+		// We do not want to set these labels on objects without a CR. They are usually deliberately not getting an
+		// owner ref and are not controlled by our operator.
+		addNameLabel(obj, obj.GetName())
+		addInstanceLabel(obj, customResource)
+		addComponentLabel(obj, customResource)
+		addPartOfLabel(obj, variant)
+		addManagedByLabel(obj)
+	}
+
 	var podTemplate *v1.PodTemplateSpec
 	var name string
 	switch obj := obj.(type) {
@@ -1009,11 +1014,16 @@ func setStandardSelectorAndLabels(obj client.Object, customResource metav1.Objec
 	if podTemplate.Labels["k8s-app"] == "" {
 		podTemplate.Labels["k8s-app"] = name
 	}
-	addNameLabel(podTemplate, obj.GetName())
-	addInstanceLabel(podTemplate, customResource)
-	addComponentLabel(podTemplate, customResource)
-	addPartOfLabel(podTemplate, variant)
-	addManagedByLabel(podTemplate)
+	if customResource != nil {
+		// We do not want to set these labels on objects without a CR. They are usually deliberately not getting an
+		// owner ref and are not controlled by our operator.
+		addNameLabel(podTemplate, obj.GetName())
+		addInstanceLabel(podTemplate, customResource)
+		addComponentLabel(podTemplate, customResource)
+		addPartOfLabel(podTemplate, variant)
+		addManagedByLabel(podTemplate)
+	}
+
 }
 
 // sanitizeLabel cleans an input string to conform to the validation for labels. A valid label must be an empty string

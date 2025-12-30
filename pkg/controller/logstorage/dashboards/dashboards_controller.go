@@ -360,9 +360,9 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	// In standard installs, the LogStorage owns the dashboards. For multi-tenant, it's owned by the Tenant instance.
 	var hdler utils.ComponentHandler
 	if d.multiTenant {
-		hdler = utils.NewComponentHandler(reqLogger, d.client, d.scheme, tenant)
+		hdler = utils.NewComponentHandler(reqLogger, d.client, d.scheme, tenant, &variant)
 	} else {
-		hdler = utils.NewComponentHandler(reqLogger, d.client, d.scheme, logStorage)
+		hdler = utils.NewComponentHandler(reqLogger, d.client, d.scheme, logStorage, &variant)
 	}
 	if err := hdler.CreateOrUpdateOrDelete(ctx, dashboardsComponent, d.status); err != nil {
 		d.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating / deleting resource", err, reqLogger)

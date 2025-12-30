@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -139,7 +139,7 @@ func (r *LogStorageManagedClusterController) Reconcile(ctx context.Context, requ
 		Installation:  install,
 	}
 	component := render.NewManagedClusterLogStorage(cfg)
-	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)
+	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection, &variant)
 	if err := hdler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 		return reconcile.Result{}, err
 	}

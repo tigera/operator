@@ -264,7 +264,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query for the installation object.
-	_, installationSpec, err := utils.GetInstallation(context.Background(), r.client)
+	variant, installationSpec, err := utils.GetInstallation(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -443,7 +443,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Create a component handler to manage the rendered component.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance, &variant)
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")

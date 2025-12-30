@@ -407,7 +407,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := utils.NewComponentHandler(logw, r.client, r.scheme, instance)
+	handler := utils.NewComponentHandler(logw, r.client, r.scheme, instance, &instance.Spec.Variant)
 	if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err

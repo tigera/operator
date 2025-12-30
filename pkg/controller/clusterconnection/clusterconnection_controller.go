@@ -450,7 +450,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	}
 
-	ch := utils.NewComponentHandler(log, r.cli, r.scheme, managementClusterConnection)
+	ch := utils.NewComponentHandler(log, r.cli, r.scheme, managementClusterConnection, &variant)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,
 		PodProxies:                  r.resolvedPodProxies,

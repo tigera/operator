@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -259,7 +259,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	operatorSigner.AddToStatusManager(r.status, render.ElasticsearchNamespace)
 
 	// Provision secrets and the trusted bundle into the cluster.
-	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
+	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls, &install.Variant)
 
 	// Internal ES modes:
 	// - Zero-tenant: everything installed in tigera-elasticsearch/tigera-kibana Namespaces. We need a single trusted bundle in each.

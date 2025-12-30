@@ -489,7 +489,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
+	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls, &variant)
 
 	components := []render.Component{
 		eck.ECK(&eck.Configuration{

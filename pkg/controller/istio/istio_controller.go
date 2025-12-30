@@ -192,7 +192,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	essentialCRDs, optionalCRDs := gatewayapi.K8SGatewayAPICRDs(installation.KubernetesProvider)
 
 	// Check CRDs are present and only create it if not
-	handler := utils.NewComponentHandler(log, r, r.scheme, nil)
+	handler := utils.NewComponentHandler(log, r, r.scheme, nil, nil)
 	handler.SetCreateOnly()
 	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(essentialCRDs...), nil)
 	if err != nil && !errors.IsAlreadyExists(err) {
@@ -232,7 +232,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Deploy Istio components, passing the Istio CR for the owner this time.
-	err = utils.NewComponentHandler(log, r, r.scheme, instance).CreateOrUpdateOrDelete(ctx, istioComponent, r.status)
+	err = utils.NewComponentHandler(log, r, r.scheme, instance, &variant).CreateOrUpdateOrDelete(ctx, istioComponent, r.status)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Calico Istio resources", err, log)
 		return reconcile.Result{}, err

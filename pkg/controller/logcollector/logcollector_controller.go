@@ -581,7 +581,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Create a component handler to manage the rendered component.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance, &variant)
 
 	fluentdCfg := &render.FluentdConfiguration{
 		LogCollector:           instance,
@@ -683,7 +683,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 
 		// Create a component handler to manage the rendered component.
-		handler = utils.NewComponentHandler(log, r.client, r.scheme, instance)
+		handler = utils.NewComponentHandler(log, r.client, r.scheme, instance, &variant)
 
 		if err := handler.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

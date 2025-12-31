@@ -26,6 +26,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
@@ -40,7 +41,7 @@ const (
 	mainRepo         = "tigera/operator"
 	defaultImageName = "tigera/operator"
 
-	sourceGitHubURL = `https://github.com/` + mainRepo + `/raw/%s/%s`
+	tmplGithubFileURL = `https://github.com/{gitRepo}/raw/{gitHashOrTag}/{filePath}`
 
 	configDir        = "config"
 	calicoConfig     = configDir + "/calico_versions.yml"
@@ -118,7 +119,11 @@ func runCommandInDir(dir, name string, args, env []string) (string, error) {
 	}).Debugf("Running %s command", name)
 	err := cmd.Run()
 	if err != nil {
-		err = fmt.Errorf("%s: %s", err, strings.TrimSpace(errb.String()))
+		errDesc := fmt.Sprintf(`running command "%s %s"`, name, strings.Join(args, " "))
+		if dir != "" {
+			errDesc += fmt.Sprintf(" in directory %s", dir)
+		}
+		err = fmt.Errorf("%s: %w \n%s", errDesc, err, strings.TrimSpace(errb.String()))
 	}
 	return strings.TrimSpace(outb.String()), err
 }
@@ -140,38 +145,39 @@ func calicoConfigVersions(dir, filePath string) (CalicoVersion, error) {
 	fullPath := fmt.Sprintf("%s/%s", dir, filePath)
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
-		return CalicoVersion{}, fmt.Errorf("error reading version file %s: %w", fullPath, err)
+		return CalicoVersion{}, fmt.Errorf("reading version file %s: %w", fullPath, err)
 	}
 	var version CalicoVersion
 	if err := yaml.Unmarshal(data, &version); err != nil {
-		return CalicoVersion{}, fmt.Errorf("error unmarshaling version file %s: %w", fullPath, err)
+		return CalicoVersion{}, fmt.Errorf("unmarshaling version file %s: %w", fullPath, err)
 	}
 	return version, nil
 }
 
 // Retrieves the Calico and Calico Enterprise versions included in this release.
-func calicoVersions(rootDir, operatorVersion string, local bool) (map[string]string, error) {
+func calicoVersions(repo, rootDir, operatorVersion string, local bool) (map[string]string, error) {
 	versions := make(map[string]string)
 
 	if local && rootDir == "" {
 		return versions, fmt.Errorf("rootDir must be specified when using local flag")
 	} else if !local {
-		rootDir = filepath.Join(os.TempDir(), fmt.Sprintf("operator-%s", operatorVersion))
-		err := os.MkdirAll(filepath.Join(rootDir, configDir), os.ModePerm)
+		tmpDir, err := os.MkdirTemp("", fmt.Sprintf("operator-%s-*", operatorVersion))
 		if err != nil {
-			return versions, fmt.Errorf("error creating config directory: %s", err)
+			return versions, fmt.Errorf("creating temp directory: %s", err)
 		}
-		defer func() {
-			_ = os.RemoveAll(rootDir)
-		}()
-		if err := retrieveBaseVersionConfig(operatorVersion, rootDir); err != nil {
-			return versions, fmt.Errorf("error retrieving version config: %s", err)
+		defer func() { _ = os.RemoveAll(tmpDir) }()
+		if err := os.MkdirAll(filepath.Join(tmpDir, configDir), os.ModePerm); err != nil {
+			return versions, fmt.Errorf("creating config directory (%s) in %s: %w", configDir, tmpDir, err)
+		}
+		rootDir = tmpDir
+		if err := retrieveBaseVersionConfig(repo, operatorVersion, rootDir); err != nil {
+			return versions, fmt.Errorf("retrieving version config: %s", err)
 		}
 	}
 
 	calicoVer, err := calicoConfigVersions(rootDir, calicoConfig)
 	if err != nil {
-		return versions, fmt.Errorf("error retrieving Calico version: %s", err)
+		return versions, fmt.Errorf("retrieving Calico version: %s", err)
 	}
 	if isReleaseVersion, err := isReleaseVersionFormat(calicoVer.Title); err == nil && isReleaseVersion {
 		versions["Calico"] = calicoVer.Title
@@ -180,7 +186,7 @@ func calicoVersions(rootDir, operatorVersion string, local bool) (map[string]str
 	}
 	enterpriseVer, err := calicoConfigVersions(rootDir, enterpriseConfig)
 	if err != nil {
-		return versions, fmt.Errorf("error retrieving Enterprise version: %s", err)
+		return versions, fmt.Errorf("retrieving Enterprise version: %s", err)
 	}
 	if isReleaseVersion, err := isEnterpriseReleaseVersionFormat(enterpriseVer.Title); err == nil && isReleaseVersion {
 		versions["Calico Enterprise"] = enterpriseVer.Title
@@ -192,7 +198,7 @@ func calicoVersions(rootDir, operatorVersion string, local bool) (map[string]str
 func isReleaseVersionFormat(version string) (bool, error) {
 	releaseRegex, err := regexp.Compile(releaseFormat)
 	if err != nil {
-		return false, fmt.Errorf("error compiling release regex: %s", err)
+		return false, fmt.Errorf("compiling release regex: %s", err)
 	}
 	return releaseRegex.MatchString(version), nil
 }
@@ -201,7 +207,44 @@ func isReleaseVersionFormat(version string) (bool, error) {
 func isEnterpriseReleaseVersionFormat(version string) (bool, error) {
 	releaseRegex, err := regexp.Compile(enterpriseReleaseFormat)
 	if err != nil {
-		return false, fmt.Errorf("error compiling release regex: %s", err)
+		return false, fmt.Errorf("compiling release regex: %s", err)
 	}
 	return releaseRegex.MatchString(version), nil
+}
+
+func isPrereleaseVersion(rootDir string) (bool, error) {
+	enterpriseVer, err := calicoConfigVersions(rootDir, enterpriseConfig)
+	if err != nil {
+		return false, fmt.Errorf("retrieving Enterprise version: %s", err)
+	}
+	return isPrereleaseEnterpriseVersion(enterpriseVer.Title)
+}
+
+// Check if the Enterprise version is a prerelease version.
+// First, it has to be in the release format, otherwise it returns false.
+// Then it converts to semver and returns true if there is a prerelease component.
+func isPrereleaseEnterpriseVersion(enterpriseVer string) (bool, error) {
+	release, err := isEnterpriseReleaseVersionFormat(enterpriseVer)
+	if err != nil {
+		return false, fmt.Errorf("checking Enterprise version format: %s", err)
+	}
+	if !release {
+		return false, nil
+	}
+	ver, err := semver.NewVersion(enterpriseVer)
+	if err != nil {
+		return false, fmt.Errorf("parsing Enterprise version (%s): %s", enterpriseVer, err)
+	}
+	return ver.Prerelease() != "", nil
+}
+
+// Ensure string ends with a slash, if empty string returns empty string.
+func addTrailingSlash(registry string) string {
+	if registry == "" {
+		return ""
+	}
+	if strings.HasSuffix(registry, "/") {
+		return registry
+	}
+	return registry + "/"
 }

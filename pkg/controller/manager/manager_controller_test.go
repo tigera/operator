@@ -435,7 +435,6 @@ var _ = Describe("Manager controller tests", func() {
 		var mockStatus *status.MockStatus
 		var licenseKey *v3.LicenseKey
 		var compliance *operatorv1.Compliance
-		var certificateManager certificatemanager.CertificateManager
 		var installation *operatorv1.Installation
 
 		BeforeEach(func() {
@@ -512,6 +511,7 @@ var _ = Describe("Manager controller tests", func() {
 		})
 
 		Context("single-tenant", func() {
+			var certificateManager certificatemanager.CertificateManager
 			BeforeEach(func() {
 				mockStatus.On("AddDaemonsets", mock.Anything).Return()
 				mockStatus.On("AddDeployments", mock.Anything).Return()
@@ -1485,6 +1485,180 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(tenantARoutes.Data).ToNot(BeEmpty())
 
 				Expect(kerror.IsNotFound(test.GetResource(c, &tenantBRoutes))).Should(BeTrue())
+			})
+		})
+
+		Context("TSL route misconfiguration", func() {
+			var certificateManager certificatemanager.CertificateManager
+			BeforeEach(func() {
+				mockStatus.On("AddDaemonsets", mock.Anything).Return()
+				mockStatus.On("AddDeployments", mock.Anything).Return()
+				mockStatus.On("AddStatefulSets", mock.Anything).Return()
+				mockStatus.On("AddCronJobs", mock.Anything)
+				mockStatus.On("IsAvailable").Return(true)
+				mockStatus.On("OnCRFound").Return()
+				mockStatus.On("ClearDegraded")
+				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
+				mockStatus.On("ReadyToMonitor")
+				mockStatus.On("SetMetaData", mock.Anything).Return()
+
+				// Mark that watches were successful.
+				r.licenseAPIReady.MarkAsReady()
+				r.tierWatchReady.MarkAsReady()
+			})
+			It("single-tenant", func() {
+				compliance = &operatorv1.Compliance{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+					Status: operatorv1.ComplianceStatus{
+						State: operatorv1.TigeraStatusReady,
+					},
+				}
+				Expect(c.Create(ctx, compliance)).NotTo(HaveOccurred())
+				// Provision certificates that the controller will query as part of the test.
+				var err error
+				certificateManager, err = certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+				Expect(err).NotTo(HaveOccurred())
+				caSecret := certificateManager.KeyPair().Secret(common.OperatorNamespace())
+				Expect(c.Create(ctx, caSecret)).NotTo(HaveOccurred())
+				complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+				pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+				promKp, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusServerTLSSecretName})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, promKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+				linseedKp, err := certificateManager.GetOrCreateKeyPair(c, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, linseedKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+				queryServerKp, err := certificateManager.GetOrCreateKeyPair(c, render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise), common.OperatorNamespace(), []string{render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise)})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, queryServerKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+				internalCertKp, err := certificateManager.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace(), []string{render.ManagerInternalTLSSecretName})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, internalCertKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+				Expect(c.Create(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, &operatorv1.Manager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+				})).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, &operatorv1.TLSTerminatedRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "tigera-manager",
+						Name:      "route",
+					},
+					Spec: operatorv1.TLSTerminatedRouteSpec{
+						CABundle: &corev1.ConfigMapKeySelector{
+							Key: "tigera-ca-bundle.crt",
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "non-existent-configmap",
+							},
+						},
+						Destination: "https://internal.foo.svc",
+						PathMatch: &operatorv1.PathMatch{
+							Path: "/foo/",
+						},
+						Target: "UI",
+					},
+				})).NotTo(HaveOccurred())
+
+				// Expect a degraded status to be set since the CABundle does not exist
+				mockStatus.On("SetDegraded", operatorv1.InternalServerError, "Failed to create Voltron Route Configuration", mock.Anything, mock.Anything).Return()
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).To(HaveOccurred())
+
+				deployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-manager",
+						Namespace: render.ManagerNamespace,
+					},
+				}
+				// Ensure a deployment was created for the manager
+				err = test.GetResource(c, &deployment)
+				Expect(err).NotTo(HaveOccurred())
+			})
+			It("Tenant configuration", func() {
+				tenantANamespace := "tenant-a"
+				r.multiTenant = true
+
+				Expect(c.Create(ctx, &operatorv1.TLSTerminatedRoute{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: tenantANamespace,
+						Name:      "tenant-a-route",
+					},
+					Spec: operatorv1.TLSTerminatedRouteSpec{
+						CABundle: &corev1.ConfigMapKeySelector{
+							Key: "tigera-ca-bundle.crt",
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "non-existent-configmap",
+							},
+						},
+						Destination: "https://internal.foo.svc",
+						PathMatch: &operatorv1.PathMatch{
+							Path: "/foo/",
+						},
+						Target: "UI",
+					},
+				})).NotTo(HaveOccurred())
+
+				// Create the Tenant resources for tenant-a and tenant-b.
+				tenantA := &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "default",
+						Namespace: tenantANamespace,
+					},
+					Spec: operatorv1.TenantSpec{ID: "tenant-a"},
+				}
+				Expect(c.Create(ctx, tenantA)).NotTo(HaveOccurred())
+
+				managementCluster := &operatorv1.ManagementCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+				}
+				Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
+
+				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
+				managerTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantANamespace, []string{render.ManagerInternalTLSSecretName})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, managerTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
+				bundleA, err := certificateManagerTenantA.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
+				Expect(err).NotTo(HaveOccurred())
+				Expect(c.Create(ctx, bundleA.ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
+
+				err = c.Create(ctx, &operatorv1.Manager{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-secure",
+						Namespace: tenantANamespace,
+					},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Expect a degraded status to be set since the CABundle does not exist
+				mockStatus.On("SetDegraded", operatorv1.InternalServerError, "Failed to create Voltron Route Configuration", mock.Anything, mock.Anything).Return()
+				_, err = r.Reconcile(ctx, reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: tenantANamespace,
+					},
+				})
+				Expect(err).To(HaveOccurred())
+
+				deployment := appsv1.Deployment{
+					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "tigera-manager",
+						Namespace: tenantANamespace,
+					},
+				}
+				// Ensure a deployment was created for the manager
+				err = test.GetResource(c, &deployment)
+				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 	})

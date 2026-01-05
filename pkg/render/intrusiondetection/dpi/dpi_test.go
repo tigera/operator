@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 package dpi_test
 
 import (
-	"fmt"
-
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
@@ -840,37 +838,8 @@ var _ = Describe("DPI rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: "https://tigera-linseed.tigera-elasticsearch.svc"}))
 		})
 
-		It("should set LINSEED_URL correctly for multi-tenant management cluster", func() {
-			tenantANamespace := "tenantANamespace"
-			multiTenantCfg := &dpi.DPIConfig{
-				IntrusionDetection: ids,
-				Installation:       installation,
-				TyphaNodeTLS:       typhaNodeTLS,
-				PullSecrets:        pullSecrets,
-				OpenShift:          false,
-				HasNoLicense:       false,
-				HasNoDPIResource:   false,
-				ClusterDomain:      dns.DefaultClusterDomain,
-				DPICertSecret:      dpiCertSecret,
-				ManagedCluster:     false,
-				ManagementCluster:  true,
-				Tenant: &operatorv1.Tenant{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "tenantA",
-						Namespace: tenantANamespace,
-					},
-					Spec: operatorv1.TenantSpec{
-						ID: "tenant-a-id",
-					},
-				},
-			}
-			component := dpi.DPI(multiTenantCfg)
-			resources, _ := component.Objects()
-
-			ds := rtest.GetResource(resources, dpi.DeepPacketInspectionName, dpi.DeepPacketInspectionNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-			envs := ds.Spec.Template.Spec.Containers[0].Env
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", tenantANamespace)}))
-		})
+		// No need to verify LINSEED_URL for multi-tenant management cluster as a DPI deployment does not get created on the management cluster
+		// in a multi-tenant setup. See multi-tenant tests above.
 	})
 })
 

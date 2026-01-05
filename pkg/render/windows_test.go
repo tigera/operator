@@ -386,6 +386,7 @@ var _ = Describe("Windows rendering tests", func() {
 
 				// Verify env
 				expectedNodeEnv := []corev1.EnvVar{
+					{Name: "CNI_PLUGIN_TYPE", Value: "Calico"},
 					{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 					{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 					{Name: "CALICO_MANAGE_CNI", Value: "true"},
@@ -457,6 +458,7 @@ var _ = Describe("Windows rendering tests", func() {
 
 				expectedCNIEnv := []corev1.EnvVar{
 					{Name: "SLEEP", Value: "false"},
+					{Name: "CNI_PLUGIN_TYPE", Value: "Calico"},
 					{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
 					{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 					{Name: "CNI_NET_DIR", Value: "/etc/cni/net.d"},
@@ -489,6 +491,7 @@ var _ = Describe("Windows rendering tests", func() {
 
 				expectedUninstallEnv := []corev1.EnvVar{
 					{Name: "SLEEP", Value: "false"},
+					{Name: "CNI_PLUGIN_TYPE", Value: "Calico"},
 					{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
 					{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 					{Name: "CNI_NET_DIR", Value: "/host/etc/cni/net.d"},

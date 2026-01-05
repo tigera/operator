@@ -540,6 +540,7 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 	}
 
 	windowsEnv := []corev1.EnvVar{
+		{Name: "CNI_PLUGIN_TYPE", Value: string(c.cfg.Installation.CNI.Type)},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "WAIT_FOR_DATASTORE", Value: "true"},
 		{Name: "CLUSTER_TYPE", Value: clusterType},

@@ -1640,6 +1640,32 @@ spec:
                     or in felix.cfg or the environment on each compute node), and must match the [calico]
                     openstack_region value configured in neutron.conf on each node. [Default: Empty]
                   type: string
+                policyActivityLogsFileDirectory:
+                  description: |-
+                    PolicyActivityLogsFileDirectory sets the directory where policy activity log files are stored.
+                    [Default: /var/log/calico/policy]
+                  type: string
+                policyActivityLogsFileEnabled:
+                  description: |-
+                    PolicyActivityLogsFileEnabled controls logging policy activity logs to a file. If false no policy activity logging to file will occur.
+                    [Default: true]
+                  type: boolean
+                policyActivityLogsFileMaxFileSizeMB:
+                  description: |-
+                    PolicyActivityLogsFileMaxFileSizeMB sets the max size in MB of policy activity log files before rotation.
+                    [Default: 100]
+                  type: integer
+                policyActivityLogsFileMaxFiles:
+                  description: |-
+                    PolicyActivityLogsFileMaxFiles sets the number of policy activity log files to keep.
+                    [Default: 5]
+                  type: integer
+                policyActivityLogsFlushInterval:
+                  description: |-
+                    PolicyActivityLogsFlushInterval configures the interval at which Felix exports policy activity logs.
+                    [Default: 15s]
+                  pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
+                  type: string
                 policySyncPathPrefix:
                   description: |-
                     PolicySyncPathPrefix is used to by Felix to communicate policy changes to external services,

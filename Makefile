@@ -849,7 +849,7 @@ fmt:
 	go fmt ./...'
 
 # Run go vet against code
-vet:
+vet: $(ISTIO_CHART_FILES)
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go vet ./...'

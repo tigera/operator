@@ -354,6 +354,24 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			Resources: []string{"namespaces"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
+		{
+			// The policy name migrator needs to check calico/node daemonset rollout status.
+			APIGroups:     []string{"apps"},
+			Resources:     []string{"daemonsets"},
+			Verbs:         []string{"get", "list", "watch"},
+			ResourceNames: []string{"calico-node"},
+		},
+		{
+			// The policy name migrator needs to be able to CRUD Calico NetworkPolicies.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{
+				"networkpolicies",
+				"globalnetworkpolicies",
+				"stagednetworkpolicies",
+				"stagedglobalnetworkpolicies",
+			},
+			Verbs: []string{"get", "list", "watch", "create", "update", "delete"},
+		},
 	}
 
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {

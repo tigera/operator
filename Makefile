@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+# Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 # This Makefile requires the following dependencies on the host system:
 # - go

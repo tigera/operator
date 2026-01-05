@@ -218,6 +218,7 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 
 	envVars := []corev1.EnvVar{
 		{Name: "SLEEP", Value: "false"},
+		{Name: "CNI_PLUGIN_TYPE", Value: string(c.cfg.Installation.CNI.Type)},
 		{Name: "CNI_BIN_DIR", Value: "/host/opt/cni/bin"},
 		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
 		{Name: "CNI_NET_DIR", Value: cniNetDir},

@@ -71,6 +71,13 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 	AfterEach(func() {
 		cancel()
+
+		nodes, err := c.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		for _, n := range nodes.Items {
+			err = c.CoreV1().Nodes().Delete(context.Background(), n.Name, metav1.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+		}
 	})
 
 	It("should initialize an autoscaler", func() {

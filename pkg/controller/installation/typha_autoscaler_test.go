@@ -71,6 +71,13 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 	AfterEach(func() {
 		cancel()
+
+		nodes, err := c.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+		Expect(err).NotTo(HaveOccurred())
+		for _, n := range nodes.Items {
+			err = c.CoreV1().Nodes().Delete(context.Background(), n.Name, metav1.DeleteOptions{})
+			Expect(err).NotTo(HaveOccurred())
+		}
 	})
 
 	It("should initialize an autoscaler", func() {
@@ -98,7 +105,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 		n1.Spec.Unschedulable = true
 		_, err := c.CoreV1().Nodes().Update(ctx, n1, metav1.UpdateOptions{})
-		Expect(err).To(BeNil())
+		Expect(err).NotTo(HaveOccurred())
 
 		Eventually(func() error {
 			schedulableNodes, linuxNodes := ta.getNodeCounts()
@@ -127,11 +134,11 @@ var _ = Describe("Test typha autoscaler ", func() {
 			},
 		}
 		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
-		Expect(err).To(BeNil())
+		Expect(err).NotTo(HaveOccurred())
 
 		// Create a few nodes
-		_ = CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		_ = CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
@@ -143,18 +150,18 @@ var _ = Describe("Test typha autoscaler ", func() {
 		// For three and four node clusters, we expect 2.
 		n3 := CreateNode(c, "node3", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		verifyTyphaReplicas(c, 2)
-		_ = CreateNode(c, "node4", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		CreateNode(c, "node4", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		verifyTyphaReplicas(c, 2)
 
 		// For > 4 nodes, we expect redundancy with 3 replicas.
-		_ = CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		verifyTyphaReplicas(c, 3)
 
 		// Verify that making a node unschedulable updates replicas. Should bring us back
 		// down to 4 node scale.
 		n3.Spec.Unschedulable = true
 		_, err = c.CoreV1().Nodes().Update(ctx, n3, metav1.UpdateOptions{})
-		Expect(err).To(BeNil())
+		Expect(err).NotTo(HaveOccurred())
 		verifyTyphaReplicas(c, 2)
 	})
 
@@ -174,14 +181,21 @@ var _ = Describe("Test typha autoscaler ", func() {
 			},
 		}
 		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
-		Expect(err).To(BeNil())
+		Expect(err).NotTo(HaveOccurred())
 
 		// Create five nodes, one of which is not yet migrated
-		CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"}, nil)
-		CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"}, nil)
-		CreateNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"}, nil)
-		CreateNode(c, "node4", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"}, nil)
-		CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "pre-operator"}, nil)
+		nodes := make([]*corev1.Node, 5)
+		nodes[0] = CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"}, nil)
+		nodes[1] = CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"}, nil)
+		nodes[2] = CreateNode(c, "node3", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"}, nil)
+		nodes[3] = CreateNode(c, "node4", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "migrated"}, nil)
+		nodes[4] = CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "pre-operator"}, nil)
+
+		for _, n := range nodes {
+			n.Spec.Unschedulable = false
+			_, err = c.CoreV1().Nodes().Update(ctx, n, metav1.UpdateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+		}
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
@@ -208,11 +222,18 @@ var _ = Describe("Test typha autoscaler ", func() {
 		Expect(err).To(BeNil())
 
 		// Create five nodes, one of which is a virtual-kubelet
-		CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		CreateNode(c, "node3", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		CreateNode(c, "node4", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "linux", "kubernetes.azure.com/cluster": "foo", "type": "virtual-kubelet"}, nil)
+		nodes := make([]*corev1.Node, 5)
+		nodes[0] = CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		nodes[1] = CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		nodes[2] = CreateNode(c, "node3", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		nodes[3] = CreateNode(c, "node4", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		nodes[4] = CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "linux", "kubernetes.azure.com/cluster": "foo", "type": "virtual-kubelet"}, nil)
+
+		for _, n := range nodes {
+			n.Spec.Unschedulable = false
+			_, err = c.CoreV1().Nodes().Update(ctx, n, metav1.UpdateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+		}
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
@@ -239,16 +260,23 @@ var _ = Describe("Test typha autoscaler ", func() {
 			},
 		}
 		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, typha, metav1.CreateOptions{})
-		Expect(err).To(BeNil())
+		Expect(err).NotTo(HaveOccurred())
 
 		statusManager.On("SetDegraded", operator.ResourceScalingError, "Failed to autoscale typha - not enough linux nodes to schedule typha pods on, require 3 and have 2", mock.Anything, mock.Anything)
 
 		// Create a few nodes
-		_ = CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		_ = CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
-		_ = CreateNode(c, "node3", map[string]string{"kubernetes.io/os": "windows"}, nil)
-		_ = CreateNode(c, "node4", map[string]string{"kubernetes.io/os": "windows"}, nil)
-		_ = CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "windows"}, nil)
+		nodes := make([]*corev1.Node, 5)
+		nodes[0] = CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		nodes[1] = CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		nodes[2] = CreateNode(c, "node3", map[string]string{"kubernetes.io/os": "windows"}, nil)
+		nodes[3] = CreateNode(c, "node4", map[string]string{"kubernetes.io/os": "windows"}, nil)
+		nodes[4] = CreateNode(c, "node5", map[string]string{"kubernetes.io/os": "windows"}, nil)
+
+		for _, n := range nodes {
+			n.Spec.Unschedulable = false
+			_, err = c.CoreV1().Nodes().Update(ctx, n, metav1.UpdateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+		}
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
@@ -264,7 +292,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 func verifyTyphaReplicas(c kubernetes.Interface, expectedReplicas int) {
 	EventuallyWithOffset(1, func() int32 {
 		typha, err := c.AppsV1().Deployments("calico-system").Get(context.Background(), "calico-typha", metav1.GetOptions{})
-		Expect(err).To(BeNil())
+		Expect(err).NotTo(HaveOccurred())
 		// Just return an invalid number that will never match an expected replica count.
 		if typha.Spec.Replicas == nil {
 			return -1

@@ -1037,6 +1037,13 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: helper.LinseedEntityRule(),
 		})
+		if c.cfg.ManagementCluster {
+			egressRules = append(egressRules, v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: helper.ManagerEntityRule(),
+			})
+		}
 	}
 	egressRules = append(egressRules, []v3.Rule{
 		{

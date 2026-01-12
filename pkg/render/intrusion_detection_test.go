@@ -69,10 +69,18 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		cli     client.Client
 	)
 
-	expectedIDPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_unmanaged.json")
+	expectedIDPolicyForStandalone := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_standalone.json")
 	expectedIDPolicyForManaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_managed.json")
-	expectedIDPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_unmanaged_ocp.json")
+	expectedIDPolicyForStandaloneOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_standalone_ocp.json")
 	expectedIDPolicyForManagedOCP := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/intrusion-detection-controller_managed_ocp.json")
+	expectedIDPolicyForManagement := testutils.GetExpectedPolicyFromFileWithReplacements("testutils/expected_policies/intrusion-detection-controller_management.json", map[string]string{
+		"MANAGER_NAMESPACE": render.ManagerNamespace,
+		"MANAGER_NAME":      render.ManagerName,
+	})
+	expectedIDPolicyForManagementOCP := testutils.GetExpectedPolicyFromFileWithReplacements("testutils/expected_policies/intrusion-detection-controller_management_ocp.json", map[string]string{
+		"MANAGER_NAMESPACE": render.ManagerNamespace,
+		"MANAGER_NAME":      render.ManagerName,
+	})
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
@@ -485,10 +493,14 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 			if policyName.Name == "allow-tigera.intrusion-detection-controller" {
 				return testutils.SelectPolicyByClusterTypeAndProvider(scenario,
-					expectedIDPolicyForUnmanaged,
-					expectedIDPolicyForUnmanagedOCP,
-					expectedIDPolicyForManaged,
-					expectedIDPolicyForManagedOCP,
+					map[string]*v3.NetworkPolicy{
+						"standalone":           expectedIDPolicyForStandalone,
+						"standalone-openshift": expectedIDPolicyForStandaloneOCP,
+						"managed":              expectedIDPolicyForManaged,
+						"managed-openshift":    expectedIDPolicyForManagedOCP,
+						"management":           expectedIDPolicyForManagement,
+						"management-openshift": expectedIDPolicyForManagementOCP,
+					},
 				)
 			}
 
@@ -499,6 +511,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			func(scenario testutils.AllowTigeraScenario) {
 				cfg.OpenShift = scenario.OpenShift
 				cfg.ManagedCluster = scenario.ManagedCluster
+				cfg.ManagementCluster = scenario.ManagementCluster
 				component := render.IntrusionDetection(cfg)
 				resources, _ := component.Objects()
 
@@ -508,10 +521,12 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 					Expect(policy).To(Equal(expectedPolicy))
 				}
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+			Entry("for standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false, ManagementCluster: false}),
+			Entry("for standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true, ManagementCluster: false}),
+			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false, ManagementCluster: false}),
+			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true, ManagementCluster: false}),
+			Entry("for management, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false, ManagementCluster: true}),
+			Entry("for management, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true, ManagementCluster: true}),
 		)
 	})
 

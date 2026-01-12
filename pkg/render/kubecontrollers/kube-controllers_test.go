@@ -1043,10 +1043,12 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
 				expectedPolicy := testutils.SelectPolicyByClusterTypeAndProvider(
 					scenario,
-					expectedPolicyForUnmanaged,
-					expectedPolicyForUnmanagedOCP,
-					expectedPolicyForManaged,
-					expectedPolicyForManagedOCP,
+					map[string]*v3.NetworkPolicy{
+						"unmanaged":           expectedPolicyForUnmanaged,
+						"unmanaged-openshift": expectedPolicyForUnmanagedOCP,
+						"managed":             expectedPolicyForManaged,
+						"managed-openshift":   expectedPolicyForManagedOCP,
+					},
 				)
 				Expect(policy).To(Equal(expectedPolicy))
 			},

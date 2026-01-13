@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,10 @@ import (
 	. "github.com/onsi/gomega"
 
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"k8s.io/apimachinery/pkg/types"
@@ -31,9 +33,10 @@ import (
 // AllowTigeraScenario represents valid render cases for allow-tigera policies. Render components should test that their
 // allow-tigera policies correctly adapt for each relevant potential case. Update if new scenarios arise.
 type AllowTigeraScenario struct {
-	ManagedCluster bool
-	OpenShift      bool
-	DPIEnabled     bool
+	ManagedCluster    bool
+	ManagementCluster bool
+	OpenShift         bool
+	DPIEnabled        bool
 }
 
 type IPMode string
@@ -63,12 +66,21 @@ func GetAllowTigeraGlobalPolicyFromResources(name string, resources []client.Obj
 }
 
 func GetExpectedPolicyFromFile(name string) *v3.NetworkPolicy {
+	return GetExpectedPolicyFromFileWithReplacements(name, nil)
+}
+
+func GetExpectedPolicyFromFileWithReplacements(name string, replacements map[string]string) *v3.NetworkPolicy {
 	jsonFile, err := os.Open(name)
 	Expect(err).ShouldNot(HaveOccurred())
 	defer jsonFile.Close()
 
 	byteValue, err := io.ReadAll(jsonFile)
 	Expect(err).ShouldNot(HaveOccurred())
+
+	content := string(byteValue)
+	for k, v := range replacements {
+		content = strings.ReplaceAll(content, fmt.Sprintf("<%s>", k), v)
+	}
 
 	var policy v3.NetworkPolicy
 	err = json.Unmarshal(byteValue, &policy)
@@ -92,25 +104,23 @@ func GetExpectedGlobalPolicyFromFile(name string) *v3.GlobalNetworkPolicy {
 	return &policy
 }
 
-// SelectPolicyByClusterTypeAndProvider simply selects a variant of a policy that varies depending on cluster and provider type.
-func SelectPolicyByClusterTypeAndProvider(scenario AllowTigeraScenario,
-	unmanagedNoProviderPolicy *v3.NetworkPolicy,
-	unmanagedOpenshiftPolicy *v3.NetworkPolicy,
-	managedNoProviderPolicy *v3.NetworkPolicy,
-	managedOpenshiftPolicy *v3.NetworkPolicy,
-) *v3.NetworkPolicy {
-	switch scenario {
-	case AllowTigeraScenario{ManagedCluster: false, OpenShift: false}:
-		return unmanagedNoProviderPolicy
-	case AllowTigeraScenario{ManagedCluster: false, OpenShift: true}:
-		return unmanagedOpenshiftPolicy
-	case AllowTigeraScenario{ManagedCluster: true, OpenShift: false}:
-		return managedNoProviderPolicy
-	case AllowTigeraScenario{ManagedCluster: true, OpenShift: true}:
-		return managedOpenshiftPolicy
-	default:
-		return nil
+// SelectPolicyByClusterTypeAndProvider selects a variant of a policy that varies depending on cluster and provider type.
+func SelectPolicyByClusterTypeAndProvider(scenario AllowTigeraScenario, policies map[string]*v3.NetworkPolicy) *v3.NetworkPolicy {
+	clusterType := "unmanaged"
+	if scenario.ManagementCluster {
+		clusterType = "management"
+	} else if scenario.ManagedCluster {
+		clusterType = "managed"
+	} else if _, ok := policies["standalone"]; ok {
+		clusterType = "standalone"
 	}
+
+	key := clusterType
+	if scenario.OpenShift {
+		key += "-openshift"
+	}
+
+	return policies[key]
 }
 
 // SelectPolicyByProvider simply selects a variant of a policy that varies depending on provider type only.

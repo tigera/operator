@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1040,10 +1040,12 @@ var _ = Describe("compliance rendering tests", func() {
 			if policyName.Name == "allow-tigera.compliance-access" {
 				return testutils.SelectPolicyByClusterTypeAndProvider(
 					scenario,
-					expectedCompliancePolicyForUnmanaged,
-					expectedCompliancePolicyForUnmanagedOpenshift,
-					expectedCompliancePolicyForManaged,
-					expectedCompliancePolicyForManagedOpenshift,
+					map[string]*v3.NetworkPolicy{
+						"unmanaged":           expectedCompliancePolicyForUnmanaged,
+						"unmanaged-openshift": expectedCompliancePolicyForUnmanagedOpenshift,
+						"managed":             expectedCompliancePolicyForManaged,
+						"managed-openshift":   expectedCompliancePolicyForManagedOpenshift,
+					},
 				)
 			} else if !scenario.ManagedCluster && policyName.Name == "allow-tigera.compliance-server" {
 				return testutils.SelectPolicyByProvider(scenario, expectedComplianceServerPolicy, expectedComplianceServerPolicyForOpenshift)

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -47,6 +47,8 @@ import (
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 )
 
 var _ = Describe("Rendering tests for PacketCapture API component", func() {
@@ -439,10 +441,12 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
 				expectedPolicy := testutils.SelectPolicyByClusterTypeAndProvider(
 					scenario,
-					pcPolicyForUnmanaged,
-					pcPolicyForUnmanagedOCP,
-					pcPolicyForManaged,
-					pcPolicyForManagedOCP,
+					map[string]*v3.NetworkPolicy{
+						"unmanaged":           pcPolicyForUnmanaged,
+						"unmanaged-openshift": pcPolicyForUnmanagedOCP,
+						"managed":             pcPolicyForManaged,
+						"managed-openshift":   pcPolicyForManagedOCP,
+					},
 				)
 				Expect(policy).To(Equal(expectedPolicy))
 			},

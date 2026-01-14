@@ -140,7 +140,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	ctrl.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseFlagOptions(&opts)))
 
 	if showVersion {
-		// If the following line is updated then it might be necessary to update the release-verify target in the Makefile
+		// If the following line is updated then it might be necessary to update the assertOperatorImageVersion in hack/release/build.go
 		fmt.Println("Operator:", version.VERSION)
 		fmt.Println("Calico:", components.CalicoRelease)
 		fmt.Println("Enterprise:", components.EnterpriseRelease)

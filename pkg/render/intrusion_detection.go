@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1037,6 +1037,13 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: helper.LinseedEntityRule(),
 		})
+		if c.cfg.ManagementCluster {
+			egressRules = append(egressRules, v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: helper.ManagerEntityRule(),
+			})
+		}
 	}
 	egressRules = append(egressRules, []v3.Rule{
 		{

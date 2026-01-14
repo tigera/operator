@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -353,6 +353,24 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration, kubeContr
 			APIGroups: []string{""},
 			Resources: []string{"namespaces"},
 			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			// The policy name migrator needs to check calico/node daemonset rollout status.
+			APIGroups:     []string{"apps"},
+			Resources:     []string{"daemonsets"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"calico-node"},
+		},
+		{
+			// The policy name migrator needs to be able to CRUD Calico NetworkPolicies.
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{
+				"networkpolicies",
+				"globalnetworkpolicies",
+				"stagednetworkpolicies",
+				"stagedglobalnetworkpolicies",
+			},
+			Verbs: []string{"get", "list", "watch", "create", "update", "delete"},
 		},
 	}
 

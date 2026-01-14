@@ -1474,6 +1474,19 @@ spec:
                     [Default: 300s]
                   pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                   type: string
+                logActionRateLimit:
+                  description: |-
+                    LogActionRateLimit sets the rate of hitting a Log action. The value must be in the format "N/unit",
+                    where N is a number and unit is one of: second, minute, hour, or day. For example: "10/second" or "100/hour".
+                  pattern: ^[1-9]\d{0,3}/(?:second|minute|hour|day)$
+                  type: string
+                logActionRateLimitBurst:
+                  description:
+                    LogActionRateLimitBurst sets the rate limit burst of
+                    hitting a Log action when LogActionRateLimit is enabled.
+                  maximum: 9999
+                  minimum: 0
+                  type: integer
                 logDebugFilenameRegex:
                   description: |-
                     LogDebugFilenameRegex controls which source code files have their Debug log output included in the logs.
@@ -1491,9 +1504,15 @@ spec:
                     none to disable file logging. [Default: /var/log/calico/felix.log]"
                   type: string
                 logPrefix:
-                  description:
-                    "LogPrefix is the log prefix that Felix uses when rendering
-                    LOG rules. [Default: calico-packet]"
+                  description: |-
+                    LogPrefix is the log prefix that Felix uses when rendering LOG rules. It is possible to use the following specifiers
+                    to include extra information in the log prefix.
+                    - %t: Tier name.
+                    - %k: Kind (short names).
+                    - %n: Policy or profile name.
+                    - %p: Policy or profile name (namespace/name for namespaced kinds or just name for non namespaced kinds).
+                    [Default: calico-packet]
+                  pattern: "^([a-zA-Z0-9%: /_-])*$"
                   type: string
                 logSeverityFile:
                   description:
@@ -1639,6 +1658,32 @@ spec:
                     Calico/OpenStack deployment, this must be configured somehow for each Felix (here in the datamodel,
                     or in felix.cfg or the environment on each compute node), and must match the [calico]
                     openstack_region value configured in neutron.conf on each node. [Default: Empty]
+                  type: string
+                policyActivityLogsFileDirectory:
+                  description: |-
+                    PolicyActivityLogsFileDirectory sets the directory where policy activity log files are stored.
+                    [Default: /var/log/calico/policy]
+                  type: string
+                policyActivityLogsFileEnabled:
+                  description: |-
+                    PolicyActivityLogsFileEnabled controls logging policy activity logs to a file. If false no policy activity logging to file will occur.
+                    [Default: true]
+                  type: boolean
+                policyActivityLogsFileMaxFileSizeMB:
+                  description: |-
+                    PolicyActivityLogsFileMaxFileSizeMB sets the max size in MB of policy activity log files before rotation.
+                    [Default: 100]
+                  type: integer
+                policyActivityLogsFileMaxFiles:
+                  description: |-
+                    PolicyActivityLogsFileMaxFiles sets the number of policy activity log files to keep.
+                    [Default: 5]
+                  type: integer
+                policyActivityLogsFlushInterval:
+                  description: |-
+                    PolicyActivityLogsFlushInterval configures the interval at which Felix exports policy activity logs.
+                    [Default: 15s]
+                  pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                   type: string
                 policySyncPathPrefix:
                   description: |-

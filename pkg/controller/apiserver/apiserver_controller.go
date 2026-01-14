@@ -310,7 +310,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query enterprise-only data.
-	var tunnelCAKeyPair certificatemanagement.KeyPairInterface
 	var trustedBundle certificatemanagement.TrustedBundle
 	var applicationLayer *operatorv1.ApplicationLayer
 	var managementCluster *operatorv1.ManagementCluster
@@ -360,13 +359,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			// Other cluster types do not require this secret. (Standalone configuration do not need it and multi-tenant
 			// configuration create secrets inside the tenant namespaces)
 			tunnelSecretName := managementCluster.Spec.TLS.SecretName
-			tunnelCASecret, err := utils.GetSecret(ctx, r.client, tunnelSecretName, common.OperatorNamespace())
+			_, err := utils.GetSecret(ctx, r.client, tunnelSecretName, common.OperatorNamespace())
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
 				return reconcile.Result{}, err
-			}
-			if tunnelCASecret != nil {
-				tunnelCAKeyPair = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
 			}
 		}
 
@@ -488,7 +484,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			ServiceAccounts: []string{render.APIServerServiceAccountName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(tunnelCAKeyPair, false, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),

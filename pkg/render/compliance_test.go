@@ -1023,10 +1023,12 @@ var _ = Describe("compliance rendering tests", func() {
 			if policyName.Name == "allow-tigera.compliance-access" {
 				return testutils.SelectPolicyByClusterTypeAndProvider(
 					scenario,
-					expectedCompliancePolicyForUnmanaged,
-					expectedCompliancePolicyForUnmanagedOpenshift,
-					expectedCompliancePolicyForManaged,
-					expectedCompliancePolicyForManagedOpenshift,
+					map[string]*v3.NetworkPolicy{
+						"unmanaged":           expectedCompliancePolicyForUnmanaged,
+						"unmanaged-openshift": expectedCompliancePolicyForUnmanagedOpenshift,
+						"managed":             expectedCompliancePolicyForManaged,
+						"managed-openshift":   expectedCompliancePolicyForManagedOpenshift,
+					},
 				)
 			} else if !scenario.ManagedCluster && policyName.Name == "allow-tigera.compliance-server" {
 				return testutils.SelectPolicyByProvider(scenario, expectedComplianceServerPolicy, expectedComplianceServerPolicyForOpenshift)

@@ -430,10 +430,10 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 			return testutils.SelectPolicyByClusterTypeAndProvider(
 				scenario,
-				expectedUnmanagedPolicy,
-				expectedUnmanagedPolicyForOpenshift,
-				nil,
-				nil,
+				map[string]*v3.NetworkPolicy{
+					"unmanaged":           expectedUnmanagedPolicy,
+					"unmanaged-openshift": expectedUnmanagedPolicyForOpenshift,
+				},
 			)
 		}
 

@@ -73,7 +73,7 @@ var (
 		Category: githubFlagCategory,
 		Usage:    "Create a GitHub release",
 		Sources:  cli.EnvVars("CREATE_GITHUB_RELEASE"),
-		Value:    true,
+		Value:    false,
 		Action: func(ctx context.Context, c *cli.Command, b bool) error {
 			if b && c.String(githubTokenFlag.Name) == "" {
 				return fmt.Errorf("github-token is required to create GitHub releases")
@@ -307,8 +307,8 @@ var (
 			return fileFlagCheck(ctx, c, s)
 		},
 	}
-	calicoCRDsDirFlag = &cli.StringFlag{
-		Name:     "calico-crds-dir",
+	calicoDirFlag = &cli.StringFlag{
+		Name:     "calico-dir",
 		Category: calicoFlagCategory,
 		Usage:    "The directory containing the Calico CRDs to bundle with the operator (development and testing purposes only)",
 		Sources:  cli.EnvVars("CALICO_DIR"),
@@ -370,8 +370,8 @@ var (
 			return fileFlagCheck(ctx, c, s)
 		},
 	}
-	enterpriseCRDsDirFlag = &cli.StringFlag{
-		Name:     "enterprise-crds-dir",
+	enterpriseDirFlag = &cli.StringFlag{
+		Name:     "enterprise-dir",
 		Category: enterpriseFlagCategory,
 		Usage:    "The directory containing the Enterprise CRDs to bundle with the operator (development and testing purposes only)",
 		Sources:  cli.EnvVars("ENTERPRISE_DIR"),

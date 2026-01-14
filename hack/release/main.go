@@ -55,6 +55,7 @@ func app(version string) *cli.Command {
 			gitRepoFlag,
 			debugFlag,
 		},
+		EnableShellCompletion: true,
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			if c.Bool(debugFlag.Name) {
 				logrus.SetLevel(logrus.DebugLevel)

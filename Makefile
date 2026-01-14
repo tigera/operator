@@ -593,6 +593,9 @@ release-publish-images: release-prereqs release-check-image-exists var-require-a
 	# Push images.
 	$(MAKE) push-all push-manifests push-non-manifests IMAGETAG=$(VERSION)
 
+release-github: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
+	hack/bin/release github
+
 GITHUB_CLI_VERSION?=2.62.0
 hack/bin/gh:
 	mkdir -p hack/bin

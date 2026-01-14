@@ -53,9 +53,9 @@ to point to local repositories for Calico and Enterprise respectively.`,
 	Flags: []cli.Flag{
 		versionFlag,
 		calicoVersionFlag,
-		calicoCRDsDirFlag,
+		calicoDirFlag,
 		enterpriseVersionFlag,
-		enterpriseCRDsDirFlag,
+		enterpriseDirFlag,
 		enterpriseRegistryFlag,
 		skipValidationFlag,
 		skipMilestoneFlag,
@@ -158,7 +158,7 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 			return fmt.Errorf("error modifying Calico config: %w", err)
 		}
 		// Set CALICO_CRDS_DIR if specified
-		if crdsDir := c.String(calicoCRDsDirFlag.Name); crdsDir != "" {
+		if crdsDir := c.String(calicoDirFlag.Name); crdsDir != "" {
 			logrus.Warnf("Using local Calico CRDs from %s", crdsDir)
 			prepEnv = append(prepEnv, fmt.Sprintf("CALICO_CRDS_DIR=%s", crdsDir))
 		}
@@ -177,7 +177,7 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 			}
 		}
 		// Set ENTERPRISE_CRDS_DIR if specified
-		if crdsDir := c.String(enterpriseCRDsDirFlag.Name); crdsDir != "" {
+		if crdsDir := c.String(enterpriseDirFlag.Name); crdsDir != "" {
 			logrus.Warnf("Using local Enterprise CRDs from %s", crdsDir)
 			prepEnv = append(prepEnv, fmt.Sprintf("ENTERPRISE_CRDS_DIR=%s", crdsDir))
 		}

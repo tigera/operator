@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -77,12 +77,12 @@ var buildCommand = &cli.Command{
 		calicoRegistryFlag,
 		calicoImagePathFlag,
 		calicoVersionsConfigFlag,
-		calicoCRDsDirFlag,
+		calicoDirFlag,
 		enterpriseVersionFlag,
 		enterpriseRegistryFlag,
 		enterpriseImagePathFlag,
 		enterpriseVersionsConfigFlag,
-		enterpriseCRDsDirFlag,
+		enterpriseDirFlag,
 		hashreleaseFlag,
 		skipValidationFlag,
 	},
@@ -112,6 +112,12 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 		logrus.Debug("Enterprise build using specific version selected")
 	}
 
+	// Run verison validations. This is a mandatory check.
+	ctx, err := checkVersion(ctx, c)
+	if err != nil {
+		return ctx, err
+	}
+
 	// Skip validations if requested
 	if c.Bool(skipValidationFlag.Name) {
 		logrus.Warnf("Skipping %s validation as requested.", c.Name)
@@ -119,13 +125,7 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 	}
 
 	// Ensure that git working tree is clean
-	ctx, err := checkGitClean(ctx)
-	if err != nil {
-		return ctx, err
-	}
-
-	// Ensure that provided version matches git version for release
-	ctx, err = checkVersionMatchesGitVersion(ctx, c)
+	ctx, err = checkGitClean(ctx)
 	if err != nil {
 		return ctx, err
 	}
@@ -145,18 +145,18 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 		return ctx, fmt.Errorf("for hashrelease builds, at least one of Calico or Enterprise version or versions file must be specified")
 	}
 	if calicoBuildOk {
-		if calicoBuildType == versionBuild && c.String(calicoCRDsDirFlag.Name) == "" {
-			return ctx, fmt.Errorf("directory to calico repo must be specified for hashreleases built from calico version using %s flag", calicoCRDsDirFlag.Name)
+		if calicoBuildType == versionBuild && c.String(calicoDirFlag.Name) == "" {
+			return ctx, fmt.Errorf("directory to calico repo must be specified for hashreleases built from calico version using %s flag", calicoDirFlag.Name)
 		}
-		if c.String(calicoCRDsDirFlag.Name) == "" {
+		if c.String(calicoDirFlag.Name) == "" {
 			logrus.Warn("Calico directory not specified for hashrelease build, getting CRDs from default location may not be appropriate")
 		}
 	}
 	if enterpriseBuildOk {
-		if enterpriseBuildType == versionBuild && c.String(enterpriseCRDsDirFlag.Name) == "" {
-			return ctx, fmt.Errorf("directory to enterprise repo must be specified for hashreleases built from enterprise version using %s flag", enterpriseCRDsDirFlag.Name)
+		if enterpriseBuildType == versionBuild && c.String(enterpriseDirFlag.Name) == "" {
+			return ctx, fmt.Errorf("directory to enterprise repo must be specified for hashreleases built from enterprise version using %s flag", enterpriseDirFlag.Name)
 		}
-		if c.String(enterpriseCRDsDirFlag.Name) == "" {
+		if c.String(enterpriseDirFlag.Name) == "" {
 			logrus.Warn("Enterprise directory not specified for hashrelease build, getting CRDs from default location may not be appropriate")
 		}
 	}
@@ -173,12 +173,6 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 
 	version := c.String(versionFlag.Name)
 	buildLog := logrus.WithField("version", version)
-
-	// Sanity check to ensure that provided version matches git version for release in case validations were skipped.
-	ctx, err = checkVersionMatchesGitVersion(ctx, c)
-	if err != nil {
-		return err
-	}
 
 	// Prepare build environment variables
 	buildEnv := append(os.Environ(), fmt.Sprintf("VERSION=%s", version))
@@ -308,10 +302,10 @@ func setupHashreleaseBuild(ctx context.Context, c *cli.Command, repoRootDir stri
 	// Update versions and CRDs
 	genEnv := os.Environ()
 	genMakeTargets := []string{}
-	if dir := c.String(calicoCRDsDirFlag.Name); dir != "" {
+	if dir := c.String(calicoDirFlag.Name); dir != "" {
 		genEnv = append(genEnv, fmt.Sprintf("CALICO_CRDS_DIR=%s", dir))
 	}
-	if dir := c.String(enterpriseCRDsDirFlag.Name); dir != "" {
+	if dir := c.String(enterpriseDirFlag.Name); dir != "" {
 		genEnv = append(genEnv, fmt.Sprintf("ENTERPRISE_CRDS_DIR=%s", dir))
 	}
 	if bt, ok := ctx.Value(calicoBuildCtxKey).(buildType); ok {

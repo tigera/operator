@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -59,16 +59,16 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 		return ctx, err
 	}
 
+	// Run verison validations. This is a mandatory check.
+	ctx, err = checkVersion(ctx, c)
+	if err != nil {
+		return ctx, err
+	}
+
 	// Skip validations if requested
 	if c.Bool(skipValidationFlag.Name) {
 		logrus.Warnf("Skipping %s validation as requested.", c.Name)
 		return ctx, nil
-	}
-
-	// Ensure that provided version matches git version for release builds
-	ctx, err = checkVersionMatchesGitVersion(ctx, c)
-	if err != nil {
-		return ctx, err
 	}
 
 	// If building a hashrelease, publishGithubRelease must be false
@@ -76,10 +76,11 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 		return ctx, fmt.Errorf("cannot publish GitHub release for hashrelease builds")
 	}
 
-	// If publishing a GitHub release, ideally it should be in draft mode with a token provided.
 	if !c.Bool(createGithubReleaseFlag.Name) {
 		return ctx, nil
 	}
+
+	// If publishing a GitHub release, ideally it should be in draft mode with a token provided.
 	if !c.Bool(draftGithubReleaseFlag.Name) {
 		logrus.Warnf("Publishing GitHub release in non-draft mode.")
 	}
@@ -95,12 +96,6 @@ var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) err
 	repoRootDir, err := gitDir()
 	if err != nil {
 		return fmt.Errorf("getting git directory: %w", err)
-	}
-
-	// Sanity check to ensure that provided version matches git version for release incase validations were skipped.
-	ctx, err = checkVersionMatchesGitVersion(ctx, c)
-	if err != nil {
-		return err
 	}
 
 	// Publish images

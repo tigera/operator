@@ -90,6 +90,10 @@ func gitInDir(dir string, args ...string) (string, error) {
 }
 
 func makeInDir(dir string, targets string, env ...string) (string, error) {
+	logrus.WithFields(logrus.Fields{
+		"targets": targets,
+		"dir":     dir,
+	}).Info("Running make")
 	return runCommandInDir(dir, "make", strings.Fields(targets), env)
 }
 

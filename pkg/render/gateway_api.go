@@ -457,6 +457,8 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		resources.certgenRole,
 		resources.certgenRoleBinding,
 	} {
+		// But deep-copy each one so as not to inadvertently modify the cache inside
+		// `GatewayAPIResourcesGetter`.
 		objs = append(objs, resource.DeepCopyObject().(client.Object))
 	}
 

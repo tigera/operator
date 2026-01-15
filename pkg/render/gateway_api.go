@@ -512,6 +512,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	rcomp.ApplyDeploymentOverrides(controllerDeployment, pr.cfg.GatewayAPI.Spec.GatewayControllerDeployment)
 
 	objs = append(objs, controllerDeployment)
+
 	// Deep copy the certgen job,
 	certgenJob := resources.certgenJob.DeepCopyObject().(*batchv1.Job)
 

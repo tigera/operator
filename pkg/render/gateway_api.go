@@ -429,19 +429,27 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// First add controller ServiceAccount
 	objs = append(objs, resources.controllerServiceAccount.DeepCopyObject().(client.Object))
 
+	// Add certgen ServiceAccount, Role, RoleBinding
+	objs = append(objs,
+		resources.certgenServiceAccount.DeepCopyObject().(client.Object),
+		resources.certgenRole.DeepCopyObject().(client.Object),
+		resources.certgenRoleBinding.DeepCopyObject().(client.Object),
+	)
+
 	// Add all ClusterRoles
 	for _, cr := range resources.clusterRoles {
-		objs = append(objs, cr.DeepCopyObject().(client.Object))
+		// Only include the main controller ClusterRole, not certgen
+		if strings.HasSuffix(cr.Name, "envoy-gateway-role") {
+			objs = append(objs, cr.DeepCopyObject().(client.Object))
+		}
 	}
 
 	// Add all ClusterRoleBindings
 	for _, crb := range resources.clusterRoleBindings {
-		objs = append(objs, crb.DeepCopyObject().(client.Object))
-	}
-
-	// Add MutatingWebhookConfigurations
-	for _, wh := range resources.webhookConfigurations {
-		objs = append(objs, wh.DeepCopyObject().(client.Object))
+		// Only include the main controller ClusterRoleBinding, not certgen
+		if strings.HasSuffix(crb.Name, "envoy-gateway-rolebinding") {
+			objs = append(objs, crb.DeepCopyObject().(client.Object))
+		}
 	}
 
 	for _, resource := range []client.Object{
@@ -504,25 +512,6 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	rcomp.ApplyDeploymentOverrides(controllerDeployment, pr.cfg.GatewayAPI.Spec.GatewayControllerDeployment)
 
 	objs = append(objs, controllerDeployment)
-
-	// --- certgen ServiceAccount ---
-	certSA := resources.certgenServiceAccount.DeepCopyObject().(*corev1.ServiceAccount)
-	certSA.Name = "tigera-gateway-api-gateway-helm-certgen"
-	certSA.Namespace = resources.namespace.Name
-	objs = append(objs, certSA)
-
-	// --- certgen Role ---
-	certRole := resources.certgenRole.DeepCopyObject().(*rbacv1.Role)
-	certRole.Name = "tigera-gateway-api-gateway-helm-certgen"
-	certRole.Namespace = resources.namespace.Name
-	objs = append(objs, certRole)
-
-	// --- certgen RoleBinding ---
-	certRB := resources.certgenRoleBinding.DeepCopyObject().(*rbacv1.RoleBinding)
-	certRB.Name = "tigera-gateway-api-gateway-helm-certgen"
-	certRB.Namespace = resources.namespace.Name
-	objs = append(objs, certRB)
-
 	// Deep copy the certgen job,
 	certgenJob := resources.certgenJob.DeepCopyObject().(*batchv1.Job)
 

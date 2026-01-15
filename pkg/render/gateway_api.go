@@ -217,7 +217,7 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 				case "v1/Service":
 					obj := &corev1.Service{}
 					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic("missing certgen Service from gateway API YAML")
+						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
 
 					if strings.HasSuffix(obj.Name, "certgen") {
@@ -274,9 +274,6 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 
 			if len(resources.webhookConfigurations) == 0 {
 				panic("missing MutatingWebhookConfiguration from gateway API YAML")
-			}
-			if resources.certgenService == nil {
-				panic("missing certgen Service from gateway API YAML")
 			}
 
 			if resources.role == nil {

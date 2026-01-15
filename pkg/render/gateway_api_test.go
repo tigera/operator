@@ -163,7 +163,9 @@ var _ = Describe("Gateway API rendering tests", func() {
 		})
 		objsToCreate, objsToDelete := gatewayComp.Objects()
 		Expect(objsToDelete).To(HaveLen(0))
-		rtest.ExpectResources(objsToCreate, []client.Object{
+		fmt.Println("OBJS TO CREATE:")
+		fmt.Print(objsToCreate)
+		expectedObjects := []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
@@ -182,7 +184,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "envoy-proxy-config", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
-		})
+		}
+		fmt.Println("EXPECTED OBJECTS:")
+		fmt.Println(expectedObjects)
+		rtest.ExpectResources(objsToCreate, expectedObjects)
 
 		deploy, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, "envoy-gateway", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())

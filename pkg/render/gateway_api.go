@@ -432,19 +432,8 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
 
-	// First add controller ServiceAccount
-	objs = append(objs, resources.controllerServiceAccount.DeepCopyObject().(client.Object))
-
-	// Add certgen ServiceAccount, Role, RoleBinding
-	objs = append(objs,
-		resources.certgenServiceAccount.DeepCopyObject().(client.Object),
-		resources.certgenRole.DeepCopyObject().(client.Object),
-		resources.certgenRoleBinding.DeepCopyObject().(client.Object),
-	)
-
 	// Add all ClusterRoles
 	for _, cr := range resources.clusterRoles {
-		// Only include the main controller ClusterRole, not certgen
 		if strings.HasSuffix(cr.Name, "envoy-gateway-role") {
 			objs = append(objs, cr.DeepCopyObject().(client.Object))
 		}
@@ -452,18 +441,21 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	// Add all ClusterRoleBindings
 	for _, crb := range resources.clusterRoleBindings {
-		// Only include the main controller ClusterRoleBinding, not certgen
 		if strings.HasSuffix(crb.Name, "envoy-gateway-rolebinding") {
 			objs = append(objs, crb.DeepCopyObject().(client.Object))
 		}
 	}
 
 	for _, resource := range []client.Object{
+		resources.controllerServiceAccount,
 		resources.role,
 		resources.roleBinding,
 		resources.leaderElectionRole,
 		resources.leaderElectionRoleBinding,
 		resources.controllerService,
+		resources.certgenServiceAccount,
+		resources.certgenRole,
+		resources.certgenRoleBinding,
 	} {
 		objs = append(objs, resource.DeepCopyObject().(client.Object))
 	}

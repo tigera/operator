@@ -221,8 +221,14 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 					}
 
 					if strings.HasSuffix(obj.Name, "certgen") {
+						if resources.certgenService != nil {
+							panic("already read certgen Service from gateway API YAML")
+						}
 						resources.certgenService = obj
 					} else {
+						if resources.controllerService != nil {
+							panic("already read controller Service from gateway API YAML")
+						}
 						resources.controllerService = obj
 					}
 				case "apps/v1/Deployment":

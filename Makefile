@@ -102,7 +102,9 @@ REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
 GO_BUILD_VER?=1.25.5-llvm18.1.8-k8s1.34.2
+CALICO_BASE_VER ?= ubi9-1765220429
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
+CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
 SRC_FILES+=$(shell find ./internal/ -name '*.go')
@@ -290,7 +292,11 @@ image: build $(BUILD_IMAGE)
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
 $(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
-	docker buildx build --load --platform=linux/$(ARCH) --pull -t $(BUILD_IMAGE):latest-$(ARCH) --build-arg GIT_VERSION=$(GIT_VERSION) -f build/Dockerfile .
+	docker buildx build --load --platform=linux/$(ARCH) --pull \
+		--build-arg GIT_VERSION=$(GIT_VERSION) \
+		--build-arg CALICO_BASE=$(CALICO_BASE) \
+		-t $(BUILD_IMAGE):latest-$(ARCH) \
+		-f build/Dockerfile .
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif

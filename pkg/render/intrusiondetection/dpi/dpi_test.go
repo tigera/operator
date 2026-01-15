@@ -590,10 +590,12 @@ var _ = Describe("DPI rendering tests", func() {
 		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 			return testutils.SelectPolicyByClusterTypeAndProvider(
 				scenario,
-				expectedUnmanagedPolicy,
-				expectedUnmanagedPolicyForOpenshift,
-				expectedManagedPolicy,
-				expectedManagedPolicyForOpenshift,
+				map[string]*v3.NetworkPolicy{
+					"unmanaged":           expectedUnmanagedPolicy,
+					"unmanaged-openshift": expectedUnmanagedPolicyForOpenshift,
+					"managed":             expectedManagedPolicy,
+					"managed-openshift":   expectedManagedPolicyForOpenshift,
+				},
 			)
 		}
 

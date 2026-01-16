@@ -17,6 +17,7 @@ package render
 import (
 	_ "embed"
 	"fmt"
+	"github.c
 	"strings"
 	"sync"
 
@@ -316,31 +317,17 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 
 var GatewayAPIResources = GatewayAPIResourcesGetter()
 
-func GatewayAPICRDs(provider operatorv1.Provider) ([]client.Object, []client.Object) {
+func GatewayAPICRDs(log logr.Logger) []client.Object {
 	resources := GatewayAPIResources()
-	essentialCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
-	optionalCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
+	gatewayAPICRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
 	for _, crd := range resources.k8sCRDs {
-		if provider.IsOpenShift() {
-			// OpenShift 4.19+ restricts the Gateway CRDs that we can install, so report
-			// that only some of them are essential.
-			switch strings.TrimSuffix(crd.Name, ".gateway.networking.k8s.io") {
-			case "gatewayclasses", "gateways", "httproutes", "referencegrants":
-				essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
-			default:
-				optionalCRDs = append(optionalCRDs, crd.DeepCopyObject().(client.Object))
-			}
-		} else {
-			// Other platforms do not restrict Gateway CRDs, so report them all as
-			// essential.
-			essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
-		}
+		gatewayAPICRDs = append(gatewayAPICRDs, crd.DeepCopyObject().(client.Object))
 	}
 	for _, crd := range resources.envoyCRDs {
-		essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
+		gatewayAPICRDs = append(gatewayAPICRDs, crd.DeepCopyObject().(client.Object))
 	}
 
-	return essentialCRDs, optionalCRDs
+	return gatewayAPICRDs
 }
 
 type GatewayAPIImplementationConfig struct {

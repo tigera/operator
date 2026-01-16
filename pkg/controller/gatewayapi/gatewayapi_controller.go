@@ -154,8 +154,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// the CRDs are left in place even if the GatewayAPI CR is removed again.  This is in case
 	// the customer uses a second (or more) implementation of the Gateway API in addition to the
 	// one that we are providing here.
-	crdObjs, _ := render.GatewayAPICRDs(operatorv1.ProviderNone) // or the right provider var
-	crdComponent := render.NewPassthrough(crdObjs...)
+	crdComponent := render.NewPassthrough(render.GatewayAPICRDs(log)...)
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()

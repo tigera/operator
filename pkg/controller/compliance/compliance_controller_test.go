@@ -1,10 +1,10 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
 //
-//      http://www.apache.org/licenses/LICENSE-2.0
+//     http://www.apache.org/licenses/LICENSE-2.0
 //
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
@@ -155,7 +155,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
 
 		dpl := appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{},
@@ -193,7 +193,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
 
 		By("replacing the server certs with user-supplied certs")
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
@@ -222,7 +222,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("checking that an error occurred and the cert didn't change")
 		result, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
 		assertExpectedCertDNSNames(c, oldDNSNames...)
 	})
 
@@ -230,7 +230,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
 
 		By("replacing the server certs with ones that include the expected DNS names")
 		Expect(c.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
@@ -259,7 +259,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("checking that an error occurred and the cert didn't change")
 		result, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
 		assertExpectedCertDNSNames(c, dnsNames...)
 	})
 
@@ -296,7 +296,7 @@ var _ = Describe("Compliance controller tests", func() {
 		By("reconciling when clustertype is Standalone")
 		result, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(result.Requeue).NotTo(BeTrue())
+		Expect(result.RequeueAfter).To(Equal(0 * time.Second))
 
 		By("creating a compliance-server deployment")
 		dpl := appsv1.Deployment{

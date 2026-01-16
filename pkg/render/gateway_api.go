@@ -21,15 +21,13 @@ import (
 	"sync"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
-	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 
-	admissionv1 "k8s.io/api/admissionregistration/v1"
-
+	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -54,26 +52,25 @@ type yamlKind struct {
 // This struct defines all of the resources that we expect to read from the rendered Envoy Gateway
 // helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
-	namespace                 *corev1.Namespace
-	k8sCRDs                   []*apiextenv1.CustomResourceDefinition
-	envoyCRDs                 []*apiextenv1.CustomResourceDefinition
-	controllerServiceAccount  *corev1.ServiceAccount
-	envoyGatewayConfigMap     *corev1.ConfigMap
-	envoyGatewayConfig        *envoyapi.EnvoyGateway
-	clusterRoles              []*rbacv1.ClusterRole
-	clusterRoleBindings       []*rbacv1.ClusterRoleBinding
-	certgenService            *corev1.Service
-	role                      *rbacv1.Role
-	roleBinding               *rbacv1.RoleBinding
-	leaderElectionRole        *rbacv1.Role
-	leaderElectionRoleBinding *rbacv1.RoleBinding
-	controllerService         *corev1.Service
-	controllerDeployment      *appsv1.Deployment
-	certgenServiceAccount     *corev1.ServiceAccount
-	certgenRole               *rbacv1.Role
-	certgenRoleBinding        *rbacv1.RoleBinding
-	certgenJob                *batchv1.Job
-	webhookConfigurations     []*admissionv1.MutatingWebhookConfiguration
+	namespace                     *corev1.Namespace
+	k8sCRDs                       []*apiextenv1.CustomResourceDefinition
+	envoyCRDs                     []*apiextenv1.CustomResourceDefinition
+	controllerServiceAccount      *corev1.ServiceAccount
+	envoyGatewayConfigMap         *corev1.ConfigMap
+	envoyGatewayConfig            *envoyapi.EnvoyGateway
+	clusterRoles                  []*rbacv1.ClusterRole
+	clusterRoleBindings           []*rbacv1.ClusterRoleBinding
+	role                          *rbacv1.Role
+	roleBinding                   *rbacv1.RoleBinding
+	leaderElectionRole            *rbacv1.Role
+	leaderElectionRoleBinding     *rbacv1.RoleBinding
+	controllerService             *corev1.Service
+	controllerDeployment          *appsv1.Deployment
+	certgenServiceAccount         *corev1.ServiceAccount
+	certgenRole                   *rbacv1.Role
+	certgenRoleBinding            *rbacv1.RoleBinding
+	certgenJob                    *batchv1.Job
+	mutatingWebhookConfigurations []*admissionregv1.MutatingWebhookConfiguration
 }
 
 const (
@@ -114,20 +111,13 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
-					if strings.HasSuffix(obj.Name, ".gateway.networking.k8s.io") ||
-						strings.HasSuffix(obj.Name, ".gateway.networking.x-k8s.io") {
+					if strings.HasSuffix(obj.Name, ".gateway.networking.k8s.io") || strings.HasSuffix(obj.Name, ".gateway.networking.x-k8s.io") {
 						resources.k8sCRDs = append(resources.k8sCRDs, obj)
 					} else if strings.HasSuffix(obj.Name, ".gateway.envoyproxy.io") {
 						resources.envoyCRDs = append(resources.envoyCRDs, obj)
 					} else {
 						panic(fmt.Sprintf("unhandled CRD name %v from gateway API YAML", obj.Name))
 					}
-				case "admissionregistration.k8s.io/v1/MutatingWebhookConfiguration":
-					obj := &admissionv1.MutatingWebhookConfiguration{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					resources.webhookConfigurations = append(resources.webhookConfigurations, obj)
 				case "v1/ServiceAccount":
 					obj := &corev1.ServiceAccount{}
 					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
@@ -215,21 +205,12 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 						resources.roleBinding = obj
 					}
 				case "v1/Service":
-					obj := &corev1.Service{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
+					if resources.controllerService != nil {
+						panic("already read controller Service from gateway API YAML")
 					}
-
-					if strings.HasSuffix(obj.Name, "certgen") {
-						if resources.certgenService != nil {
-							panic("already read certgen Service from gateway API YAML")
-						}
-						resources.certgenService = obj
-					} else {
-						if resources.controllerService != nil {
-							panic("already read controller Service from gateway API YAML")
-						}
-						resources.controllerService = obj
+					resources.controllerService = &corev1.Service{}
+					if err := yaml.Unmarshal([]byte(yml), resources.controllerService); err != nil {
+						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
 				case "apps/v1/Deployment":
 					if resources.controllerDeployment != nil {
@@ -247,6 +228,12 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 					if err := yaml.Unmarshal([]byte(yml), resources.certgenJob); err != nil {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
+				case "admissionregistration.k8s.io/v1/MutatingWebhookConfiguration":
+					obj := &admissionregv1.MutatingWebhookConfiguration{}
+					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
+						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
+					}
+					resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, obj)
 				case "/":
 					// No-op.  We see this when there is only a comment between
 					// two "---" delimiters.
@@ -277,11 +264,6 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 			if len(resources.clusterRoleBindings) == 0 {
 				panic("missing ClusterRoleBinding from gateway API YAML")
 			}
-
-			if len(resources.webhookConfigurations) == 0 {
-				panic("missing MutatingWebhookConfiguration from gateway API YAML")
-			}
-
 			if resources.role == nil {
 				panic("missing general Role from gateway API YAML")
 			}
@@ -334,17 +316,31 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 
 var GatewayAPIResources = GatewayAPIResourcesGetter()
 
-func GatewayAPICRDs(log logr.Logger) []client.Object {
+func GatewayAPICRDs(provider operatorv1.Provider) ([]client.Object, []client.Object) {
 	resources := GatewayAPIResources()
-	gatewayAPICRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
+	essentialCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
+	optionalCRDs := make([]client.Object, 0, len(resources.k8sCRDs)+len(resources.envoyCRDs))
 	for _, crd := range resources.k8sCRDs {
-		gatewayAPICRDs = append(gatewayAPICRDs, crd.DeepCopyObject().(client.Object))
+		if provider.IsOpenShift() {
+			// OpenShift 4.19+ restricts the Gateway CRDs that we can install, so report
+			// that only some of them are essential.
+			switch strings.TrimSuffix(crd.Name, ".gateway.networking.k8s.io") {
+			case "gatewayclasses", "gateways", "httproutes", "referencegrants":
+				essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
+			default:
+				optionalCRDs = append(optionalCRDs, crd.DeepCopyObject().(client.Object))
+			}
+		} else {
+			// Other platforms do not restrict Gateway CRDs, so report them all as
+			// essential.
+			essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
+		}
 	}
 	for _, crd := range resources.envoyCRDs {
-		gatewayAPICRDs = append(gatewayAPICRDs, crd.DeepCopyObject().(client.Object))
+		essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
 	}
 
-	return gatewayAPICRDs
+	return essentialCRDs, optionalCRDs
 }
 
 type GatewayAPIImplementationConfig struct {
@@ -431,23 +427,23 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)
 
 	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
-
-	// Add all ClusterRoles
-	for _, cr := range resources.clusterRoles {
-		if strings.HasSuffix(cr.Name, "envoy-gateway-role") {
-			objs = append(objs, cr.DeepCopyObject().(client.Object))
-		}
-	}
-
-	// Add all ClusterRoleBindings
-	for _, crb := range resources.clusterRoleBindings {
-		if strings.HasSuffix(crb.Name, "envoy-gateway-rolebinding") {
-			objs = append(objs, crb.DeepCopyObject().(client.Object))
-		}
-	}
-
 	for _, resource := range []client.Object{
 		resources.controllerServiceAccount,
+	} {
+		// But deep-copy each one so as not to inadvertently modify the cache inside
+		// `GatewayAPIResourcesGetter`.
+		objs = append(objs, resource.DeepCopyObject().(client.Object))
+	}
+	for _, cr := range resources.clusterRoles {
+		objs = append(objs, cr.DeepCopyObject().(client.Object))
+	}
+	for _, crb := range resources.clusterRoleBindings {
+		objs = append(objs, crb.DeepCopyObject().(client.Object))
+	}
+	for _, mwc := range resources.mutatingWebhookConfigurations {
+		objs = append(objs, mwc.DeepCopyObject().(client.Object))
+	}
+	for _, resource := range []client.Object{
 		resources.role,
 		resources.roleBinding,
 		resources.leaderElectionRole,

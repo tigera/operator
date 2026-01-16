@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -258,7 +258,7 @@ var _ = Describe("IP Pool controller tests", func() {
 		}
 		for _, pool := range instance.Spec.CalicoNetwork.IPPools {
 			Expect(poolsByCIDR).To(HaveKey(pool.CIDR))
-			Expect(poolsByCIDR[pool.CIDR].Labels).To(Equal(map[string]string{"app.kubernetes.io/managed-by": "tigera-operator"}))
+			Expect(poolsByCIDR[pool.CIDR].Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "tigera-operator"))
 		}
 	})
 

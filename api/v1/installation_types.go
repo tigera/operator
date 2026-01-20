@@ -397,7 +397,7 @@ const (
 // The ComponentResource struct associates a ResourceRequirements with a component by name
 type ComponentResource struct {
 	// ComponentName is an enum which identifies the component
-	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers
+	// +kubebuilder:validation:Enum=Node;Typha;KubeControllers;NodeWindows;FelixWindows;ConfdWindows
 	ComponentName ComponentName `json:"componentName"`
 
 	// ResourceRequirements allows customization of limits and requests for compute resources such as cpu and memory.

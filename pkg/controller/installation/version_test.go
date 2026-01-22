@@ -43,7 +43,7 @@ var _ = Describe("Version validation logic tests", func() {
 			fmt.Errorf("specified operator version does not meet minimum requirement")),
 		table.Entry("empty min version", "", "v1", nil),
 		table.Entry("invalid minRequiredVersion", "invalid", "v1.2",
-			fmt.Errorf("invalid version specified: Malformed version: invalid")),
+			fmt.Errorf("invalid version specified: malformed version: invalid")),
 	)
 
 	It("should not return an error if operator version is invalid", func() {

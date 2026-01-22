@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -41,7 +42,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -92,7 +92,7 @@ var _ = Describe("monitor rendering tests", func() {
 		bundle := certificateManager.CreateTrustedBundle()
 		cfg = &monitor.Config{
 			Installation: &operatorv1.InstallationSpec{
-				ControlPlaneReplicas: ptr.Int32ToPtr(3),
+				ControlPlaneReplicas: ptr.To(int32(3)),
 			},
 			PullSecrets: []*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
@@ -360,7 +360,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Name).To(Equal("calico-node-alertmanager"))
 		Expect(*prometheusObj.Spec.Alerting.Alertmanagers[0].Namespace).To(Equal("tigera-prometheus"))
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Port).To(Equal(intstr.FromString("web")))
-		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Scheme).To(Equal("HTTP"))
+		Expect(*prometheusObj.Spec.Alerting.Alertmanagers[0].Scheme).To(Equal(monitoringv1.SchemeHTTP))
 		Expect(*prometheusObj.Spec.ReloadStrategy).To(BeEquivalentTo(monitoringv1.ProcessSignalReloadStrategyType))
 		Expect(*prometheusObj.Spec.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*prometheusObj.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
@@ -507,12 +507,12 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("calico-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal("https"))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
 		Expect(servicemonitorObj.Spec.Endpoints[1].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[1].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].Port).To(Equal("calico-bgp-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(servicemonitorObj.Spec.Endpoints[1].Scheme).To(Equal("https"))
+		Expect(*servicemonitorObj.Spec.Endpoints[1].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
 
 		servicemonitorObj, ok = rtest.GetResource(toCreate, monitor.ElasticsearchMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
@@ -525,7 +525,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal("https"))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
 
 		servicemonitorObj, ok = rtest.GetResource(toCreate, "fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
@@ -545,7 +545,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("fluentd-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal("https"))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
 
 		servicemonitorObj, ok = rtest.GetResource(toCreate, "calico-api", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
@@ -558,7 +558,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("queryserver"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal("https"))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
 		//nolint:staticcheck // Ignore SA1019 deprecated
 		Expect(servicemonitorObj.Spec.Endpoints[0].BearerTokenFile).To(Equal("/var/run/secrets/kubernetes.io/serviceaccount/token"))
 
@@ -912,7 +912,7 @@ var _ = Describe("monitor rendering tests", func() {
 	})
 
 	It("Should render typha service monitor if typha metrics are enabled", func() {
-		cfg.Installation.TyphaMetricsPort = ptr.Int32ToPtr(9093)
+		cfg.Installation.TyphaMetricsPort = ptr.To(int32(9093))
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, toDelete := component.Objects()
@@ -937,7 +937,7 @@ var _ = Describe("monitor rendering tests", func() {
 						HonorLabels:   true,
 						Interval:      "5s",
 						Port:          "calico-typha-metrics",
-						Scheme:        "http",
+						Scheme:        ptr.To(monitoringv1.SchemeHTTP),
 						ScrapeTimeout: "5s",
 					},
 				},
@@ -965,17 +965,17 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("calico-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal("https"))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
 		Expect(servicemonitorObj.Spec.Endpoints[1].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[1].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].Port).To(Equal("calico-bgp-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(servicemonitorObj.Spec.Endpoints[1].Scheme).To(Equal("https"))
+		Expect(*servicemonitorObj.Spec.Endpoints[1].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
 		Expect(servicemonitorObj.Spec.Endpoints[2].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[2].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[2].Port).To(Equal("felix-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[2].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(servicemonitorObj.Spec.Endpoints[2].Scheme).To(Equal("http"))
+		Expect(*servicemonitorObj.Spec.Endpoints[2].Scheme).To(Equal(monitoringv1.SchemeHTTP))
 	})
 })
 

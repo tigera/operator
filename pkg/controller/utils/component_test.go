@@ -2316,6 +2316,10 @@ func (mc *mockClient) List(ctx context.Context, list client.ObjectList, opts ...
 	panic("List not implemented in mockClient")
 }
 
+func (mc *mockClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	panic("Apply not implemented in mockClient")
+}
+
 func (mc *mockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
 	panic("Create not implemented in mockClient")
 }

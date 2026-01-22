@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+# Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,8 +22,6 @@ ARG TARGETARCH
 
 COPY --from=ubi /etc/pki /etc/pki/
 COPY --from=ubi /usr/share/pki /usr/share/pki/
-# Used by the Helm library
-COPY --from=ubi /lib64/libdl.so.2 /lib64/libdl.so.2
 
 COPY LICENSE /licenses/LICENSE
 

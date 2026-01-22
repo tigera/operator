@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -35,7 +36,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -544,7 +544,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
-				ReloadStrategy: ptr.ToPtr(monitoringv1.ProcessSignalReloadStrategyType),
+				ReloadStrategy: ptr.To(monitoringv1.ProcessSignalReloadStrategyType),
 				PodMetadata: &monitoringv1.EmbeddedObjectMetadata{
 					Labels: map[string]string{
 						"k8s-app": TigeraPrometheusObjectName,
@@ -607,7 +607,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 						Name:      CalicoNodeAlertmanager,
 						Namespace: &promNamespace,
 						Port:      intstr.FromString("web"),
-						Scheme:    string(corev1.URISchemeHTTP),
+						Scheme:    ptr.To(monitoringv1.SchemeHTTP),
 					},
 				},
 			},
@@ -827,16 +827,24 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 			Interval:      "5s",
 			Port:          "calico-metrics-port",
 			ScrapeTimeout: "5s",
-			Scheme:        "https",
-			TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
+			Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
+			HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+				HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+					TLSConfig: mc.tlsConfig(render.CalicoNodeMetricsService),
+				},
+			},
 		},
 		{
 			HonorLabels:   true,
 			Interval:      "5s",
 			Port:          "calico-bgp-metrics-port",
 			ScrapeTimeout: "5s",
-			Scheme:        "https",
-			TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
+			Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
+			HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+				HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+					TLSConfig: mc.tlsConfig(render.CalicoNodeMetricsService),
+				},
+			},
 		},
 	}
 
@@ -846,7 +854,7 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 			Interval:      "5s",
 			Port:          "felix-metrics-port",
 			ScrapeTimeout: "5s",
-			Scheme:        "http",
+			Scheme:        ptr.To(monitoringv1.SchemeHTTP),
 		})
 	}
 
@@ -875,9 +883,11 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 
 func (mc *monitorComponent) tlsConfig(serverName string) *monitoringv1.TLSConfig {
 	return &monitoringv1.TLSConfig{
-		KeyFile:  mc.cfg.ClientTLSSecret.VolumeMountKeyFilePath(),
-		CertFile: mc.cfg.ClientTLSSecret.VolumeMountCertificateFilePath(),
-		CAFile:   mc.cfg.TrustedCertBundle.MountPath(),
+		TLSFilesConfig: monitoringv1.TLSFilesConfig{
+			KeyFile:  mc.cfg.ClientTLSSecret.VolumeMountKeyFilePath(),
+			CertFile: mc.cfg.ClientTLSSecret.VolumeMountCertificateFilePath(),
+			CAFile:   mc.cfg.TrustedCertBundle.MountPath(),
+		},
 		SafeTLSConfig: monitoringv1.SafeTLSConfig{
 			ServerName: &serverName,
 		},
@@ -901,8 +911,12 @@ func (mc *monitorComponent) serviceMonitorElasticsearch() *monitoringv1.ServiceM
 					Interval:      "5s",
 					Port:          "metrics-port",
 					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(esmetrics.ElasticsearchMetricsName),
+					Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
+					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+							TLSConfig: mc.tlsConfig(esmetrics.ElasticsearchMetricsName),
+						},
+					},
 				},
 			},
 		},
@@ -937,8 +951,12 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 					Interval:      "5s",
 					Port:          render.FluentdMetricsPortName,
 					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(render.FluentdPrometheusTLSSecretName),
+					Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
+					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+							TLSConfig: mc.tlsConfig(render.FluentdPrometheusTLSSecretName),
+						},
+					},
 				},
 			},
 		},
@@ -963,12 +981,18 @@ func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMon
 					Interval:        "5s",
 					Port:            "queryserver",
 					ScrapeTimeout:   "5s",
-					Scheme:          "https",
+					Scheme:          ptr.To(monitoringv1.SchemeHTTPS),
 					BearerTokenFile: bearerTokenFile,
-					TLSConfig: &monitoringv1.TLSConfig{
-						CAFile: mc.cfg.TrustedCertBundle.MountPath(),
-						SafeTLSConfig: monitoringv1.SafeTLSConfig{
-							ServerName: &serverName,
+					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+							TLSConfig: &monitoringv1.TLSConfig{
+								TLSFilesConfig: monitoringv1.TLSFilesConfig{
+									CAFile: mc.cfg.TrustedCertBundle.MountPath(),
+								},
+								SafeTLSConfig: monitoringv1.SafeTLSConfig{
+									ServerName: &serverName,
+								},
+							},
 						},
 					},
 				},
@@ -1341,8 +1365,12 @@ func (mc *monitorComponent) serviceMonitorCalicoKubeControllers() *monitoringv1.
 					Interval:      "5s",
 					Port:          "metrics-port",
 					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(KubeControllerMetrics),
+					Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
+					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+							TLSConfig: mc.tlsConfig(KubeControllerMetrics),
+						},
+					},
 				},
 			},
 		},
@@ -1448,23 +1476,29 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 		endpoints[i] = monitoringv1.Endpoint{
 			Port:          "web",
 			Path:          "/federate",
-			Scheme:        "https",
+			Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
 			Params:        ep.Params,
 			Interval:      ep.Interval,
 			ScrapeTimeout: ep.ScrapeTimeout,
-			TLSConfig: &monitoringv1.TLSConfig{
-				SafeTLSConfig: monitoringv1.SafeTLSConfig{
-					CA: monitoringv1.SecretOrConfigMap{
-						ConfigMap: &corev1.ConfigMapKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: TigeraExternalPrometheus,
+			HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+				HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+					TLSConfig: &monitoringv1.TLSConfig{
+						SafeTLSConfig: monitoringv1.SafeTLSConfig{
+							CA: monitoringv1.SecretOrConfigMap{
+								ConfigMap: &corev1.ConfigMapKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: TigeraExternalPrometheus,
+									},
+									Key: corev1.TLSCertKey,
+								},
 							},
-							Key: corev1.TLSCertKey,
 						},
+					},
+					HTTPConfigWithoutTLS: monitoringv1.HTTPConfigWithoutTLS{
+						BearerTokenSecret: &ep.BearerTokenSecret,
 					},
 				},
 			},
-			BearerTokenSecret:    &ep.BearerTokenSecret,
 			HonorLabels:          ep.HonorLabels,
 			HonorTimestamps:      ep.HonorTimestamps,
 			MetricRelabelConfigs: ep.MetricRelabelConfigs,
@@ -1516,7 +1550,7 @@ func (mc *monitorComponent) typhaServiceMonitor() client.Object {
 					HonorLabels:   true,
 					Interval:      "5s",
 					Port:          render.TyphaMetricsName,
-					Scheme:        "http",
+					Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
 					ScrapeTimeout: "5s",
 				},
 			},

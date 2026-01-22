@@ -706,7 +706,14 @@ func (c *apiServerComponent) authClusterRole() client.Object {
 			Resources:     []string{"securitycontextconstraints"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{securitycontextconstraints.Privileged},
-		})
+		},
+			// Starting with OCP 4.20, these permissions are required at startup when it sets up watches.
+			rbacv1.PolicyRule{
+				APIGroups: []string{"config.openshift.io"},
+				Resources: []string{"infrastructures"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		)
 	}
 
 	return &rbacv1.ClusterRole{

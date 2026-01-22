@@ -100,13 +100,12 @@ Once the PR from [the previous step](#preparing-for-the-release) is merged, foll
     git push <remote> <tag> # e.g git push origin v1.30.2
     ```
 
-1. Log in to semaphore and run the [release task](https://tigera.semaphoreci.com/projects/operator/schedulers/fcc7fc6c-fb81-4a07-b312-138befbeb111).
+  Pushing the tag should automatically run the release pipeline in CI.
 
-1. Once the semaphore run is done, go to [releases](https://github.com/tigera/operator/releases) and edit the draft release for the release tag
+1. Once the CI run is done, go to [releases](https://github.com/tigera/operator/releases) and edit the draft release *as needed* before publishing it.
 
-1. Publish the release.
-
-    > NOTE: Only mark this release as latest if it is the highest released version
+  > [!IMPORTANT]
+  > Only mark this release as latest if it is the highest released version
 
 ## Updates for new Calico CRDs
 

@@ -1404,7 +1404,7 @@ func validateTunnelSecret(voltronSecret *corev1.Secret) {
 	opts = x509.VerifyOptions{
 		DNSName:     "voltron",
 		Roots:       x509.NewCertPool(),
-		CurrentTime: time.Now().AddDate(0, 0, crypto.DefaultCACertificateLifetimeInDays+1),
+		CurrentTime: time.Now().Add(crypto.DefaultCACertificateLifetimeDuration + 24*time.Hour),
 	}
 	_, err = newCert.Verify(opts)
 	Expect(err).Should(HaveOccurred())

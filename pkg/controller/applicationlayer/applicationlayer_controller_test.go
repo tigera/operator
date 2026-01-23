@@ -32,9 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -51,13 +51,13 @@ var _ = Describe("Application layer controller tests", func() {
 	var scheme *runtime.Scheme
 	var mockStatus *status.MockStatus
 	var installation *operatorv1.Installation
-	var fc *crdv1.FelixConfiguration
+	var fc *v3.FelixConfiguration
 
 	Context("image reconciliation", func() {
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
 			scheme = runtime.NewScheme()
-			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -92,13 +92,11 @@ var _ = Describe("Application layer controller tests", func() {
 				licenseAPIReady: &utils.ReadyFlag{},
 			}
 
-			fc = &crdv1.FelixConfiguration{
+			fc = &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
-				Spec: crdv1.FelixConfigurationSpec{
-					TPROXYMode: nil,
-				},
+				Spec: v3.FelixConfigurationSpec{},
 			}
 
 			Expect(c.Create(ctx, fc)).NotTo(HaveOccurred())
@@ -137,7 +135,7 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			By("ensuring that felix configuration PolicySyncPathPrefix is set")
-			f1 := crdv1.FelixConfiguration{
+			f1 := v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
@@ -151,7 +149,7 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			By("ensuring that felix configuration PolicySyncPathPrefix is left as is, even after ALP deletion")
-			f2 := crdv1.FelixConfiguration{
+			f2 := v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
@@ -162,12 +160,11 @@ var _ = Describe("Application layer controller tests", func() {
 
 		It("should leave PolicySyncPathPrefix as is if already exists", func() {
 			Expect(c.Delete(ctx, fc)).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &crdv1.FelixConfiguration{
+			Expect(c.Create(ctx, &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
-				Spec: crdv1.FelixConfigurationSpec{
-					TPROXYMode:           nil,
+				Spec: v3.FelixConfigurationSpec{
 					PolicySyncPathPrefix: "/var/run/myfelix",
 				},
 			})).NotTo(HaveOccurred())
@@ -188,7 +185,7 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(c.Create(ctx, alSpec)).NotTo(HaveOccurred())
 
 			By("ensuring that felix configuration PolicySyncPathPrefix, if preset, is retained")
-			f1 := crdv1.FelixConfiguration{
+			f1 := v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
@@ -202,7 +199,7 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			By("ensuring that felix configuration PolicySyncPathPrefix is left as is, even after ALP deletion")
-			f2 := crdv1.FelixConfiguration{
+			f2 := v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
@@ -211,7 +208,7 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(f2.Spec.PolicySyncPathPrefix).To(Equal("/var/run/myfelix"))
 		})
 
-		It("should leave TPROXYMode as nil if log collection is disabled", func() {
+		It("should leave TPROXYMode unset if log collection is disabled", func() {
 			// This test verifies a workaround for upgrade from versions that don't support TPROXY to versions
 			// that do.  Setting an unknown felix config field causes older versions of felix to cyclicly restart,
 			// which causes a disruptive upgrade.
@@ -221,13 +218,13 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			By("ensuring that felix configuration TPROXYMode is nil")
-			fc := crdv1.FelixConfiguration{
+			fc := v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
 			}
 			Expect(test.GetResource(c, &fc)).To(BeNil())
-			Expect(fc.Spec.TPROXYMode).To(BeNil())
+			Expect(fc.Spec.TPROXYMode).To(Equal(""))
 		})
 
 		It("should render accurate resources for for log collection", func() {
@@ -280,13 +277,13 @@ var _ = Describe("Application layer controller tests", func() {
 				components.ComponentL7Collector.Image, components.ComponentL7Collector.Version)))
 
 			By("ensuring that felix configuration updated to enabled")
-			fc := crdv1.FelixConfiguration{
+			fc := v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
 			}
 			Expect(test.GetResource(c, &fc)).To(BeNil())
-			Expect(*fc.Spec.TPROXYMode).To(Equal(crdv1.TPROXYModeOptionEnabled))
+			Expect(fc.Spec.TPROXYMode).To(Equal("Enabled"))
 
 			By("deleting that ApplicationLayer CR")
 			Expect(c.Delete(ctx, &operatorv1.ApplicationLayer{
@@ -297,13 +294,13 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			By("ensuring that felix configuration updated to disabled")
-			fc = crdv1.FelixConfiguration{
+			fc = v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
 			}
 			Expect(test.GetResource(c, &fc)).To(BeNil())
-			Expect(*fc.Spec.TPROXYMode).To(Equal(crdv1.TPROXYModeOptionDisabled))
+			Expect(fc.Spec.TPROXYMode).To(Equal("Disabled"))
 		})
 
 		It("should render proper SidecarWebhook status", func() {

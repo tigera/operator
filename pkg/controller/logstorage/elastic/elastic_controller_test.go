@@ -20,6 +20,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/ptr"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/stretchr/testify/mock"
@@ -773,6 +774,20 @@ var _ = Describe("LogStorage controller", func() {
 							Name:      render.ElasticsearchName,
 							Namespace: render.ElasticsearchNamespace,
 						},
+						Spec: esv1.ElasticsearchSpec{
+							NodeSets: []esv1.NodeSet{
+								{
+									Name: "default",
+									VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+										{
+											Spec: corev1.PersistentVolumeClaimSpec{
+												StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+											},
+										},
+									},
+								},
+							},
+						},
 						Status: esv1.ElasticsearchStatus{
 							Phase: esv1.ElasticsearchReadyPhase,
 						},
@@ -894,6 +909,20 @@ var _ = Describe("LogStorage controller", func() {
 								Name:      render.ElasticsearchName,
 								Namespace: render.ElasticsearchNamespace,
 							},
+							Spec: esv1.ElasticsearchSpec{
+								NodeSets: []esv1.NodeSet{
+									{
+										Name: "default",
+										VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+											{
+												Spec: corev1.PersistentVolumeClaimSpec{
+													StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+												},
+											},
+										},
+									},
+								},
+							},
 							Status: esv1.ElasticsearchStatus{
 								Phase: esv1.ElasticsearchReadyPhase,
 							},
@@ -945,6 +974,20 @@ var _ = Describe("LogStorage controller", func() {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      render.ElasticsearchName,
 							Namespace: render.ElasticsearchNamespace,
+						},
+						Spec: esv1.ElasticsearchSpec{
+							NodeSets: []esv1.NodeSet{
+								{
+									Name: "default",
+									VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+										{
+											Spec: corev1.PersistentVolumeClaimSpec{
+												StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+											},
+										},
+									},
+								},
+							},
 						},
 					}
 					Expect(test.GetResource(cli, &escfg)).To(BeNil())
@@ -1311,7 +1354,26 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			KubernetesProvider:   operatorv1.ProviderNone,
 			Registry:             "testregistry.com/",
 		},
-		Elasticsearch:        &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
+		Elasticsearch: &esv1.Elasticsearch{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.ElasticsearchName,
+				Namespace: render.ElasticsearchNamespace,
+			},
+			Spec: esv1.ElasticsearchSpec{
+				NodeSets: []esv1.NodeSet{
+					{
+						Name: "default",
+						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+							{
+								Spec: corev1.PersistentVolumeClaimSpec{
+									StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		ClusterConfig:        relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
 		ElasticsearchKeyPair: esKeyPair,
 		TrustedBundle:        trustedBundle,

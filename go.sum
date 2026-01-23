@@ -352,8 +352,6 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/poy/onpar v1.1.2 h1:QaNrNiZx0+Nar5dLgTVp5mXkyoVFIbepjyEoGSnhbAY=
 github.com/poy/onpar v1.1.2/go.mod h1:6X8FLNoxyr9kkmnlqpK6LSoiOtrO6MICtWwEuWkLjzg=
-github.com/projectcalico/api v0.0.0-20250916150628-d4009e4d7c50 h1:uawQ+eFENhBbwlOy0ooDwnzVWN2KP6X//GuJMXauyew=
-github.com/projectcalico/api v0.0.0-20250916150628-d4009e4d7c50/go.mod h1:bUD5LQaKzGNl93fq+RcBH4CyzfIGoeq/xIRH/IxaGwI=
 github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.88.0 h1:eKVckm/elKIvnNKQAO9WXxBOudphxpkZmT9+bevtvDo=
 github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.88.0/go.mod h1:IJwk1oNs212afqGbNnE84GAB95OHtJR/BuI1rKESiYk=
 github.com/prometheus/client_golang v1.23.0 h1:ust4zpdl9r4trLY/gSjlm07PuiBq2ynaXXlptpfy8Uc=

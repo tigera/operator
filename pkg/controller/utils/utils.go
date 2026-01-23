@@ -52,7 +52,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ctrlruntime"
@@ -832,7 +831,7 @@ func AddTigeraStatusWatch(c ctrlruntime.Controller, name string) error {
 
 // GetKubeControllerMetricsPort fetches kube controller metrics port.
 func GetKubeControllerMetricsPort(ctx context.Context, client client.Client) (int, error) {
-	kubeControllersConfig := &crdv1.KubeControllersConfiguration{}
+	kubeControllersConfig := &v3.KubeControllersConfiguration{}
 	kubeControllersMetricsPort := 0
 
 	// Query the KubeControllersConfiguration object. We'll use this to help configure kube-controllers metric port.

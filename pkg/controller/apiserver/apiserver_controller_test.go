@@ -71,7 +71,7 @@ var _ = Describe("apiserver controller tests", func() {
 	BeforeEach(func() {
 		// Set up the scheme
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(admregv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -106,9 +106,7 @@ var _ = Describe("apiserver controller tests", func() {
 		certificateManager, err := certificatemanager.Create(cli, nil, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-		Expect(cli.Create(ctx, &operatorv1.APIServer{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-		})).ToNot(HaveOccurred())
+		Expect(cli.Create(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).ToNot(HaveOccurred())
 		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 		cryptoCA, err := tls.MakeCA("byo-ca")
 		Expect(err).NotTo(HaveOccurred())

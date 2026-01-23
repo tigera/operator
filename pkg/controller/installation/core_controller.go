@@ -58,9 +58,9 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	calicoclient "github.com/tigera/api/pkg/client/clientset_generated/clientset"
+	operator "github.com/tigera/operator/api/v1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -83,6 +83,7 @@ import (
 	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/tierrbac"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -192,6 +193,7 @@ func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInst
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
+		v3CRDs:               opts.UseV3CRDs,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -260,19 +262,19 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 	}
 
 	// Watch for changes to KubeControllersConfiguration.
-	err = c.WatchObject(&crdv1.KubeControllersConfiguration{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.KubeControllersConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch KubeControllersConfiguration resource: %w", err)
 	}
 
 	// Watch for changes to FelixConfiguration.
-	err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
 	// Watch for changes to BGPConfiguration.
-	err = c.WatchObject(&crdv1.BGPConfiguration{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.BGPConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch BGPConfiguration resource: %w", err)
 	}
@@ -315,7 +317,7 @@ func add(c ctrlruntime.Controller, r *ReconcileInstallation) error {
 	}
 
 	// Watch for changes to IPPool.
-	err = c.WatchObject(&crdv1.IPPool{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.IPPool{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch IPPool resource: %w", err)
 	}
@@ -377,17 +379,19 @@ type ReconcileInstallation struct {
 	clusterDomain                 string
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
+	v3CRDs                        bool
+
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
 
 // getActivePools returns the full set of enabled IP pools in the cluster.
-func getActivePools(ctx context.Context, client client.Client) (*crdv1.IPPoolList, error) {
-	allPools := crdv1.IPPoolList{}
+func getActivePools(ctx context.Context, client client.Client) (*v3.IPPoolList, error) {
+	allPools := v3.IPPoolList{}
 	if err := client.List(ctx, &allPools); err != nil && !apierrors.IsNotFound(err) {
 		return nil, fmt.Errorf("unable to list IPPools: %s", err.Error())
 	}
-	filtered := crdv1.IPPoolList{}
+	filtered := v3.IPPoolList{}
 	for _, pool := range allPools.Items {
 		if pool.Spec.Disabled {
 			continue
@@ -430,7 +434,7 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 
 // MergeAndFillDefaults merges in configuration from the Kubernetes provider, if applicable, and then
 // populates defaults in the Installation instance.
-func MergeAndFillDefaults(i *operatorv1.Installation, awsNode *appsv1.DaemonSet, currentPools *crdv1.IPPoolList) error {
+func MergeAndFillDefaults(i *operatorv1.Installation, awsNode *appsv1.DaemonSet, currentPools *v3.IPPoolList) error {
 	if awsNode != nil {
 		if err := updateInstallationForAWSNode(i, awsNode); err != nil {
 			return fmt.Errorf("could not resolve AWS node configuration: %s", err.Error())
@@ -441,7 +445,7 @@ func MergeAndFillDefaults(i *operatorv1.Installation, awsNode *appsv1.DaemonSet,
 }
 
 // fillDefaults populates the default values onto an Installation object.
-func fillDefaults(instance *operatorv1.Installation, currentPools *crdv1.IPPoolList) error {
+func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList) error {
 	if len(instance.Spec.Variant) == 0 {
 		// Default to installing Calico.
 		instance.Spec.Variant = operatorv1.Calico
@@ -1121,7 +1125,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Set any non-default FelixConfiguration values that we need.
-	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
 		// Configure defaults.
 		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needNsMigration)
 		if err != nil {
@@ -1292,6 +1296,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	}
 
+	webhookTLS, err := certificateManager.GetOrCreateKeyPair(r.client, "webhook-secret", common.OperatorNamespace(), dns.GetServiceDNSNames("tier-rbac-validator", "calico-system", r.clusterDomain))
+	if err != nil {
+		r.status.SetDegraded(operator.ResourceCreateError, "Error creating webhook TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	components = append(components,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       common.CalicoNamespace,
@@ -1302,6 +1312,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
 				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
+				rcertificatemanagement.NewKeyPairOption(webhookTLS, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}))
@@ -1410,7 +1421,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Fetch any existing default BGPConfiguration object.
-	bgpConfiguration := &crdv1.BGPConfiguration{}
+	bgpConfiguration := &v3.BGPConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
 	if err != nil && !apierrors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read BGPConfiguration", err, reqLogger)
@@ -1489,10 +1500,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		PrometheusServerTLS:           nodePrometheusTLS,
 		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
 		NodeCgroupV2Path:              felixConfiguration.Spec.CgroupV2Path,
-		BindMode:                      bgpConfiguration.Spec.BindMode,
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
+		V3CRDs:                        r.v3CRDs,
 	}
+
+	if bgpConfiguration.Spec.BindMode != nil {
+		nodeCfg.BindMode = string(*bgpConfiguration.Spec.BindMode)
+	}
+
 	// Check if BPFNetworkBootstrap is Enabled and its requirements are met.
 	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(ctx, r.client, &instance.Spec)
 	if err != nil {
@@ -1545,6 +1561,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BindingNamespaces:           []string{common.CalicoNamespace},
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
+
+	// Add in a validating webhook configuration for tier-based RBAC.
+	hookCfg := tierrbac.Configuration{
+		PullSecrets: pullSecrets,
+		KeyPair:     webhookTLS,
+	}
+	components = append(components, tierrbac.RBAC(&hookCfg))
 
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
@@ -1604,7 +1627,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	certificateManager.AddToStatusManager(r.status, common.CalicoNamespace)
 
 	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
 		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
 	})
 	if err != nil {
@@ -1807,7 +1830,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 	}, nil
 }
 
-func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *operatorv1.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
+func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *operatorv1.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
 	updated := false
 
 	// Set the FelixConfiguration nftables dataplane mode based on the operator configuration. We do this unconditonally because
@@ -1816,13 +1839,13 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
 		if install.Spec.IsNftables() {
 			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
-			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeEnabled
-			nftablesMode := crdv1.NFTablesModeEnabled
+			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != v3.NFTablesModeEnabled
+			var nftablesMode v3.NFTablesMode = v3.NFTablesModeEnabled
 			fc.Spec.NFTablesMode = &nftablesMode
 		} else {
 			// The operator is configured to use another dataplane. Disable nftables.
-			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeDisabled
-			nftablesMode := crdv1.NFTablesModeDisabled
+			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != v3.NFTablesModeDisabled
+			var nftablesMode v3.NFTablesMode = v3.NFTablesModeDisabled
 			fc.Spec.NFTablesMode = &nftablesMode
 		}
 	}
@@ -1834,7 +1857,7 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 
 // setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
 // based on the install config.
-func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operatorv1.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger, needNsMigration bool) (bool, error) {
+func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operatorv1.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger, needNsMigration bool) (bool, error) {
 	updated := false
 
 	switch install.Spec.CNI.Type {
@@ -1850,7 +1873,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 			//   p4d.24xlarge is reported to support 4x15 ENI but it uses 4 cards
 			//   and AWS CNI only uses ENIs on card 0.
 			// - The VLAN table ID + 100 (there is doubt if this is true)
-			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
+			fc.Spec.RouteTableRange = &v3.RouteTableRange{
 				Min: 65,
 				Max: 99,
 			}
@@ -1859,7 +1882,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		if fc.Spec.RouteTableRange == nil {
 			updated = true
 			// Don't conflict with the GKE CNI plugin's routes.
-			fc.Spec.RouteTableRange = &crdv1.RouteTableRange{
+			fc.Spec.RouteTableRange = &v3.RouteTableRange{
 				Min: 10,
 				Max: 250,
 			}
@@ -1985,7 +2008,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 
 // setBPFUpdatesOnFelixConfiguration will take the passed in fc and update any BPF properties needed
 // based on the install config and the daemonset.
-func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Context, install *operatorv1.Installation, fc *crdv1.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
+func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Context, install *operatorv1.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
 	updated := false
 
 	bpfEnabledOnInstall := install.Spec.BPFEnabled()
@@ -2106,7 +2129,7 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	if !r.manageCRDs {
 		return nil
 	}
-	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant)...)...)
+	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant, r.v3CRDs)...)...)
 	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
 	// Installation CR will not remove the CRDs.
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
@@ -2190,7 +2213,7 @@ func addCRDWatches(c ctrlruntime.Controller, v operatorv1.ProductVariant) error 
 			return false
 		},
 	}
-	for _, x := range crds.GetCRDs(v) {
+	for _, x := range crds.GetCRDs(v, true) { // TODO: Both v3 and v1.
 		if err := c.WatchObject(x, &handler.EnqueueRequestForObject{}, pred); err != nil {
 			return err
 		}
@@ -2198,11 +2221,11 @@ func addCRDWatches(c ctrlruntime.Controller, v operatorv1.ProductVariant) error 
 	return nil
 }
 
-func crdPoolsToOperator(crds []crdv1.IPPool) []operatorv1.IPPool {
+func crdPoolsToOperator(crds []v3.IPPool) []operatorv1.IPPool {
 	pools := []operatorv1.IPPool{}
 	for _, p := range crds {
 		op := operatorv1.IPPool{}
-		ippool.FromProjectCalicoV1(&op, p)
+		ippool.FromProjectCalico(&op, p)
 		pools = append(pools, op)
 	}
 	return pools

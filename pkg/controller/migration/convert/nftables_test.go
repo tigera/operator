@@ -17,9 +17,9 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 
 	v1 "k8s.io/api/core/v1"
@@ -31,7 +31,7 @@ var _ = Describe("convert nftables mode", func() {
 	var (
 		comps  = emptyComponents()
 		i      = &operatorv1.Installation{}
-		f      = &crdv1.FelixConfiguration{}
+		f      = &v3.FelixConfiguration{}
 		scheme = kscheme.Scheme
 	)
 
@@ -39,11 +39,11 @@ var _ = Describe("convert nftables mode", func() {
 		comps = emptyComponents()
 		i = &operatorv1.Installation{}
 		f = emptyFelixConfig()
-		Expect(apis.AddToScheme(scheme)).ToNot(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).ToNot(HaveOccurred())
 	})
 
 	It("converts nftables mode from FelixConfiguration Enabled", func() {
-		f.Spec.NFTablesMode = ptr.To(crdv1.NFTablesModeEnabled)
+		f.Spec.NFTablesMode = ptr.To(v3.NFTablesMode(v3.NFTablesModeEnabled))
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 
 		err := handleNftables(&comps, i)
@@ -53,7 +53,7 @@ var _ = Describe("convert nftables mode", func() {
 	})
 
 	It("converts nftables mode from FelixConfiguration Disabled", func() {
-		f.Spec.NFTablesMode = ptr.To(crdv1.NFTablesModeDisabled)
+		f.Spec.NFTablesMode = ptr.To(v3.NFTablesMode(v3.NFTablesModeDisabled))
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 		err := handleNftables(&comps, i)
 		Expect(err).ToNot(HaveOccurred())
@@ -61,7 +61,7 @@ var _ = Describe("convert nftables mode", func() {
 	})
 
 	It("rejects migration if another dataplane is already set", func() {
-		f.Spec.NFTablesMode = ptr.To(crdv1.NFTablesModeEnabled)
+		f.Spec.NFTablesMode = ptr.To(v3.NFTablesMode(v3.NFTablesModeEnabled))
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
 
 		// Set the Installation to already have a dataplane mode set.

@@ -76,7 +76,7 @@ var _ = Describe("compliance rendering tests", func() {
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -312,7 +312,6 @@ var _ = Describe("compliance rendering tests", func() {
 		container = test.GetContainer(ds.Spec.Template.Spec.Containers, "compliance-benchmarker")
 		Expect(container).NotTo(BeNil())
 		Expect(container.Resources).To(Equal(complianceResources))
-
 	})
 
 	It("should render resource requests and limits for compliance report", func() {
@@ -340,7 +339,6 @@ var _ = Describe("compliance rendering tests", func() {
 		Expect(reporter.Template.Spec.Containers).To(HaveLen(1))
 		container := test.GetContainer(reporter.Template.Spec.Containers, "reporter")
 		Expect(container.Resources).To(Equal(complianceResources))
-
 	})
 
 	Context("Standalone cluster", func() {
@@ -723,7 +721,6 @@ var _ = Describe("compliance rendering tests", func() {
 	})
 
 	Context("Certificate management enabled", func() {
-
 		It("should render init containers and volume changes", func() {
 			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
@@ -1175,7 +1172,8 @@ var _ = Describe("compliance rendering tests", func() {
 				render.ComplianceControllerServiceAccount,
 				render.ComplianceReporterServiceAccount,
 				render.ComplianceServerServiceAccount,
-				render.ComplianceSnapshotterServiceAccount}
+				render.ComplianceSnapshotterServiceAccount,
+			}
 
 			for _, name := range expectedClusterRoleBindings {
 				assertClusterRoleBindingHasSubjects(tenantAResources,
@@ -1473,7 +1471,6 @@ var _ = Describe("compliance rendering tests", func() {
 	})
 
 	Context("single-tenant rendering", func() {
-
 		It("should NOT render impersonation permissions as part of tigera-compliance-server ClusterRole", func() {
 			cfg.ExternalElastic = true
 			cfg.Tenant = &operatorv1.Tenant{

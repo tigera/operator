@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,9 +22,9 @@ import (
 	"strings"
 	"time"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -102,7 +102,7 @@ func handleFelixVars(c *components) error {
 
 	}
 
-	return c.client.Patch(ctx, &crdv1.FelixConfiguration{
+	return c.client.Patch(ctx, &v3.FelixConfiguration{
 		ObjectMeta: metav1.ObjectMeta{Name: "default"},
 	}, p)
 }
@@ -112,7 +112,7 @@ func patchFromVal(key, val string) (patch, error) {
 	// the given env var. to do this, loop through the felixconfigspec
 	// using reflection, finding the struct field where the downcased name
 	// matches the downcased env var name.
-	fc := reflect.ValueOf(crdv1.FelixConfigurationSpec{})
+	fc := reflect.ValueOf(v3.FelixConfigurationSpec{})
 	for ii := 0; ii < fc.Type().NumField(); ii++ {
 		field := fc.Type().Field(ii)
 		value := fc.Field(ii)
@@ -172,15 +172,15 @@ func convert(t interface{}, str string) (interface{}, error) {
 		u := uint32(i)
 		return &u, nil
 
-	case *crdv1.IptablesBackend:
-		v := crdv1.IptablesBackend(str)
+	case *v3.IptablesBackend:
+		v := v3.IptablesBackend(str)
 		return &v, nil
-	case *crdv1.AWSSrcDstCheckOption:
-		v := crdv1.AWSSrcDstCheckOption(str)
+	case *v3.AWSSrcDstCheckOption:
+		v := v3.AWSSrcDstCheckOption(str)
 		return &v, nil
 
-	case *[]crdv1.ProtoPort:
-		pps := []crdv1.ProtoPort{}
+	case *[]v3.ProtoPort:
+		pps := []v3.ProtoPort{}
 		if str == "none" {
 			// Failsafe ports support the value "none", which is represented as
 			// an empty slice on the FelixConfiguration API.
@@ -196,7 +196,7 @@ func convert(t interface{}, str string) (interface{}, error) {
 			if err != nil {
 				return nil, fmt.Errorf("could not convert port to number: %s", vals[0])
 			}
-			pps = append(pps, crdv1.ProtoPort{
+			pps = append(pps, v3.ProtoPort{
 				Port:     uint16(port),
 				Protocol: vals[0],
 			})
@@ -229,7 +229,7 @@ func convert(t interface{}, str string) (interface{}, error) {
 		}
 		return &metav1.Duration{Duration: d}, nil
 
-	case *crdv1.RouteTableRange:
+	case *v3.RouteTableRange:
 		minMax := strings.Split(str, "-")
 		if len(minMax) != 2 {
 			return nil, fmt.Errorf("")
@@ -243,7 +243,7 @@ func convert(t interface{}, str string) (interface{}, error) {
 			return nil, err
 		}
 
-		return &crdv1.RouteTableRange{
+		return &v3.RouteTableRange{
 			Min: min,
 			Max: max,
 		}, nil

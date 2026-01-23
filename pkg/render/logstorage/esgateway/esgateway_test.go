@@ -62,7 +62,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 
 		BeforeEach(func() {
 			scheme := runtime.NewScheme()
-			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 			cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 			installation = &operatorv1.InstallationSpec{
@@ -275,7 +275,6 @@ var _ = Describe("ES Gateway rendering tests", func() {
 			initContainer := test.GetContainer(d.Spec.Template.Spec.InitContainers, "tigera-secure-elasticsearch-cert-key-cert-provisioner")
 			Expect(initContainer).NotTo(BeNil())
 			Expect(initContainer.Resources).To(Equal(esGatewayResources))
-
 		})
 
 		Context("allow-tigera rendering", func() {
@@ -313,7 +312,6 @@ var _ = Describe("ES Gateway rendering tests", func() {
 })
 
 func getTLS(cli client.Client, installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
-
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 	Expect(err).NotTo(HaveOccurred())
 

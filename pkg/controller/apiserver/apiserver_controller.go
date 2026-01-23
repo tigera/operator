@@ -224,7 +224,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	instance, msg, err := utils.GetAPIServer(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.Info("APIServer config not found")
+			reqLogger.V(1).Info("APIServer not found")
 			r.status.OnCRNotFound()
 			f, err := r.maintainFinalizer(ctx, nil)
 			// If the finalizer is still set, then requeue so we aren't dependent on the periodic reconcile to check and remove the finalizer

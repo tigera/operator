@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -82,7 +82,7 @@ func template(cn string, altNames []string) *x509.Certificate {
 		Subject:               pkix.Name{CommonName: cn},
 		NotBefore:             time.Now(),
 		// For now use the same lifetime as the other certs we generate. This will change when we implement rotation.
-		NotAfter: time.Now().AddDate(0, 0, crypto.DefaultCACertificateLifetimeInDays),
+		NotAfter: time.Now().Add(crypto.DefaultCACertificateLifetimeDuration),
 		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageKeyEncipherment,
 	}
 }

@@ -35,10 +35,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -67,7 +67,7 @@ var _ = Describe("Istio controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(admregv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(autoscalingv2.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(crdv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(v3.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
 		objTrackerWithCalls = test.NewObjectTrackerWithCalls(scheme)
@@ -268,12 +268,11 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			mockStatus.AssertCalled(GinkgoT(), "OnCRFound")
-			//mockStatus.AssertCalled(GinkgoT(), "ClearDegraded")
+			// mockStatus.AssertCalled(GinkgoT(), "ClearDegraded")
 			mockStatus.AssertCalled(GinkgoT(), "ReadyToMonitor")
 		})
 
 		It("should handle reconciliation without errors", func() {
-
 			r := &ReconcileIstio{
 				Client:   cli,
 				scheme:   scheme,
@@ -318,7 +317,7 @@ var _ = Describe("Istio controller tests", func() {
 
 		It("should handle deletion and remove finalizer", func() {
 			// Create FelixConfiguration for cleanup test
-			fc := &crdv1.FelixConfiguration{
+			fc := &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
@@ -385,7 +384,7 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(updatedIstio.Spec.DSCPMark.ToUint8()).To(Equal(uint8(23)))
 
 			// Verify FelixConfiguration was patched
-			updatedFC := &crdv1.FelixConfiguration{}
+			updatedFC := &v3.FelixConfiguration{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedFC)).NotTo(HaveOccurred())
 			Expect(updatedFC.Spec.IstioAmbientMode).NotTo(BeNil())
 			Expect(*updatedFC.Spec.IstioAmbientMode).To(Equal("Enabled"))
@@ -428,7 +427,7 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(updatedIstio.Spec.DSCPMark.ToUint8()).To(Equal(uint8(10)))
 
 			// Verify FelixConfiguration was patched
-			updatedFC := &crdv1.FelixConfiguration{}
+			updatedFC := &v3.FelixConfiguration{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedFC)).NotTo(HaveOccurred())
 			Expect(updatedFC.Spec.IstioAmbientMode).NotTo(BeNil())
 			Expect(*updatedFC.Spec.IstioAmbientMode).To(Equal("Enabled"))
@@ -448,14 +447,14 @@ var _ = Describe("Istio controller tests", func() {
 
 		It("should detect user modification of IstioAmbientMode in FelixConfiguration", func() {
 			// Create FelixConfiguration with mismatched annotation and spec
-			fc := &crdv1.FelixConfiguration{
+			fc := &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 					Annotations: map[string]string{
 						istio.IstioOperatorAnnotationMode: "Enabled",
 					},
 				},
-				Spec: crdv1.FelixConfigurationSpec{
+				Spec: v3.FelixConfigurationSpec{
 					IstioAmbientMode: ptr.To("Disabled"),
 				},
 			}
@@ -476,14 +475,14 @@ var _ = Describe("Istio controller tests", func() {
 		It("should detect user modification of IstioDSCPMark in FelixConfiguration", func() {
 			// Create FelixConfiguration with mismatched annotation and spec
 			userModifiedDSCP := numorstring.DSCPFromInt(50)
-			fc := &crdv1.FelixConfiguration{
+			fc := &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 					Annotations: map[string]string{
 						istio.IstioOperatorAnnotationDSCP: "23",
 					},
 				},
-				Spec: crdv1.FelixConfigurationSpec{
+				Spec: v3.FelixConfigurationSpec{
 					IstioDSCPMark: &userModifiedDSCP,
 				},
 			}
@@ -503,7 +502,7 @@ var _ = Describe("Istio controller tests", func() {
 
 		It("should clear FelixConfiguration on deletion", func() {
 			// Create empty FelixConfiguration
-			fc := &crdv1.FelixConfiguration{
+			fc := &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
@@ -522,7 +521,7 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Verify FelixConfiguration was patched with Istio settings
-			patchedFC := &crdv1.FelixConfiguration{}
+			patchedFC := &v3.FelixConfiguration{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, patchedFC)).NotTo(HaveOccurred())
 			Expect(patchedFC.Spec.IstioAmbientMode).NotTo(BeNil())
 			Expect(*patchedFC.Spec.IstioAmbientMode).To(Equal("Enabled"))
@@ -545,7 +544,7 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Verify FelixConfiguration was cleared
-			clearedFC := &crdv1.FelixConfiguration{}
+			clearedFC := &v3.FelixConfiguration{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, clearedFC)).NotTo(HaveOccurred())
 			Expect(clearedFC.Spec.IstioAmbientMode).To(BeNil())
 			Expect(clearedFC.Spec.IstioDSCPMark).To(BeNil())

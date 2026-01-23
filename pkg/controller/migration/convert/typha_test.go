@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,9 +26,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
@@ -47,17 +47,17 @@ func getK8sNodes(x int) *corev1.NodeList {
 }
 
 var _ = Describe("Convert typha check tests", func() {
-	var ctx = context.Background()
+	ctx := context.Background()
 	var scheme *runtime.Scheme
-	var pool *crdv1.IPPool
+	var pool *v3.IPPool
 	BeforeEach(func() {
 		scheme = kscheme.Scheme
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
-		pool = crdv1.NewIPPool()
-		pool.Spec = crdv1.IPPoolSpec{
+		pool = v3.NewIPPool()
+		pool.Spec = v3.IPPoolSpec{
 			CIDR:        "192.168.4.0/24",
-			IPIPMode:    crdv1.IPIPModeAlways,
+			IPIPMode:    v3.IPIPModeAlways,
 			NATOutgoing: true,
 		}
 	})
@@ -139,7 +139,6 @@ var _ = Describe("Convert typha check tests", func() {
 			Expect(*i.Spec.TyphaMetricsPort).To(Equal(int32(9091)))
 		})
 		It("defaults prometheus off when no prometheus environment variables set", func() {
-
 			Expect(handleFelixNodeMetrics(&comps, i)).ToNot(HaveOccurred())
 			Expect(i.Spec.TyphaMetricsPort).To(BeNil())
 		})

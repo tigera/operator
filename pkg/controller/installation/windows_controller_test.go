@@ -26,7 +26,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -64,7 +63,7 @@ var _ = Describe("windows-controller installation tests", func() {
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
 			scheme = runtime.NewScheme()
-			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 			Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -100,12 +99,12 @@ var _ = Describe("windows-controller installation tests", func() {
 			// Create default FelixConfiguration with VXLANVNI set up
 			vni := 4096
 			Expect(c.Create(ctx,
-				&crdv1.FelixConfiguration{
+				&v3.FelixConfiguration{
 					TypeMeta: metav1.TypeMeta{},
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "default",
 					},
-					Spec: crdv1.FelixConfigurationSpec{VXLANVNI: &vni},
+					Spec: v3.FelixConfigurationSpec{VXLANVNI: &vni},
 				})).ToNot(HaveOccurred())
 
 			// Create default IPAMConfiguration with StrictAffinity
@@ -433,17 +432,17 @@ var _ = Describe("windows-controller installation tests", func() {
 			It("should not render the Windows daemonset when FelixConfiguration.Spec.VXLANVNI is nil", func() {
 				// Delete existing default FelixConfig and recreate with no VXLANVNI
 				Expect(c.Delete(ctx,
-					&crdv1.FelixConfiguration{
+					&v3.FelixConfiguration{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "default",
 						},
 					})).ToNot(HaveOccurred())
 				Expect(c.Create(ctx,
-					&crdv1.FelixConfiguration{
+					&v3.FelixConfiguration{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: "default",
 						},
-						Spec: crdv1.FelixConfigurationSpec{},
+						Spec: v3.FelixConfigurationSpec{},
 					})).ToNot(HaveOccurred())
 
 				hns := operator.WindowsDataplaneHNS
@@ -535,7 +534,7 @@ var _ = Describe("windows-controller installation tests", func() {
 				BeforeEach(func() {
 					// The schema contains all objects that should be known to the fake client when the test runs.
 					scheme = runtime.NewScheme()
-					Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+					Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 					Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 					Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 					Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -560,12 +559,12 @@ var _ = Describe("windows-controller installation tests", func() {
 					// Create default FelixConfiguration with VXLANVNI set up
 					vni := 4096
 					Expect(c.Create(ctx,
-						&crdv1.FelixConfiguration{
+						&v3.FelixConfiguration{
 							TypeMeta: metav1.TypeMeta{},
 							ObjectMeta: metav1.ObjectMeta{
 								Name: "default",
 							},
-							Spec: crdv1.FelixConfigurationSpec{VXLANVNI: &vni},
+							Spec: v3.FelixConfigurationSpec{VXLANVNI: &vni},
 						})).ToNot(HaveOccurred())
 
 					// Create default IPAMConfiguration with StrictAffinity

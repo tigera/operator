@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,11 +25,10 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	"github.com/tigera/operator/pkg/apis"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 )
 
 var _ = Describe("felix env parser", func() {
@@ -81,7 +80,7 @@ var _ = Describe("felix env parser", func() {
 		Expect(fe).To(Equal(patch{
 			Op:    "replace",
 			Path:  "/spec/failsafeInboundHostPorts",
-			Value: &[]crdv1.ProtoPort{{Port: 10250, Protocol: "tcp"}},
+			Value: &[]v3.ProtoPort{{Port: 10250, Protocol: "tcp"}},
 		}))
 	})
 
@@ -91,12 +90,12 @@ var _ = Describe("felix env parser", func() {
 		Expect(fe).To(Equal(patch{
 			Op:    "replace",
 			Path:  "/spec/routeTableRange",
-			Value: &crdv1.RouteTableRange{Min: 22, Max: 44},
+			Value: &v3.RouteTableRange{Min: 22, Max: 44},
 		}))
 	})
 
 	It("converts a AWSSrcDstCheckOption", func() {
-		d := crdv1.AWSSrcDstCheckOption(crdv1.AWSSrcDstCheckOptionDisable)
+		d := v3.AWSSrcDstCheckOption(v3.AWSSrcDstCheckOptionDisable)
 		fe, err := patchFromVal("awssrcdstcheck", "Disable")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(fe.Value).To(Equal(&d))
@@ -134,7 +133,7 @@ var _ = Describe("felix env parser", func() {
 			c = emptyComponents()
 
 			scheme := kscheme.Scheme
-			Expect(apis.AddToScheme(scheme)).ToNot(HaveOccurred())
+			Expect(apis.AddToScheme(scheme, false)).ToNot(HaveOccurred())
 			c.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(emptyFelixConfig()).Build()
 		})
 
@@ -143,7 +142,7 @@ var _ = Describe("felix env parser", func() {
 
 			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())
 
-			f := crdv1.FelixConfiguration{}
+			f := v3.FelixConfiguration{}
 			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
 			Expect(f.Spec.BPFEnabled).To(BeNil())
 		})
@@ -156,10 +155,10 @@ var _ = Describe("felix env parser", func() {
 
 			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())
 
-			f := crdv1.FelixConfiguration{}
+			f := v3.FelixConfiguration{}
 			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
 			Expect(f.Spec.FailsafeInboundHostPorts).ToNot(BeNil())
-			Expect(f.Spec.FailsafeInboundHostPorts).To(Equal(&[]crdv1.ProtoPort{}))
+			Expect(f.Spec.FailsafeInboundHostPorts).To(Equal(&[]v3.ProtoPort{}))
 		})
 
 		It("handles 'none' failsafe outbound ports", func() {
@@ -170,10 +169,10 @@ var _ = Describe("felix env parser", func() {
 
 			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())
 
-			f := crdv1.FelixConfiguration{}
+			f := v3.FelixConfiguration{}
 			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
 			Expect(f.Spec.FailsafeOutboundHostPorts).ToNot(BeNil())
-			Expect(f.Spec.FailsafeOutboundHostPorts).To(Equal(&[]crdv1.ProtoPort{}))
+			Expect(f.Spec.FailsafeOutboundHostPorts).To(Equal(&[]v3.ProtoPort{}))
 		})
 
 		It("handles natPortRange", func() {
@@ -184,7 +183,7 @@ var _ = Describe("felix env parser", func() {
 
 			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())
 
-			f := crdv1.FelixConfiguration{}
+			f := v3.FelixConfiguration{}
 			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
 			Expect(f.Spec.NATPortRange).ToNot(BeNil())
 			Expect(f.Spec.NATPortRange).To(Equal(&numorstring.Port{MinPort: 32768, MaxPort: 65535}))
@@ -198,7 +197,7 @@ var _ = Describe("felix env parser", func() {
 
 			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())
 
-			f := crdv1.FelixConfiguration{}
+			f := v3.FelixConfiguration{}
 			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
 			Expect(f.Spec.IptablesRefreshInterval).ToNot(BeNil())
 			Expect(f.Spec.IptablesRefreshInterval).To(Equal(&metav1.Duration{Duration: 20 * time.Second}))
@@ -212,10 +211,10 @@ var _ = Describe("felix env parser", func() {
 
 			Expect(handleFelixVars(&c)).ToNot(HaveOccurred())
 
-			f := crdv1.FelixConfiguration{}
+			f := v3.FelixConfiguration{}
 			Expect(c.client.Get(ctx, types.NamespacedName{Name: "default"}, &f)).ToNot(HaveOccurred())
 			Expect(f.Spec.IptablesBackend).ToNot(BeNil())
-			legacy := crdv1.IptablesBackend(crdv1.IptablesBackendLegacy)
+			legacy := v3.IptablesBackend(v3.IptablesBackendLegacy)
 			Expect(f.Spec.IptablesBackend).To(Equal(&legacy))
 		})
 	})

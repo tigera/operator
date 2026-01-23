@@ -35,9 +35,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -112,7 +112,7 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 	}
 
 	// Watch for changes to FelixConfiguration.
-	err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("egressGateway-controller failed to watch FelixConfiguration resource: %w", err)
 	}
@@ -296,7 +296,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// patch and get the felix configuration
-	fc, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+	fc, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
 		if fc.Spec.PolicySyncPathPrefix != "" {
 			return false, nil // don't proceed with the patch
 		}
@@ -341,7 +341,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 }
 
 func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
-	variant operatorv1.ProductVariant, fc *crdv1.FelixConfiguration, pullSecrets []*v1.Secret,
+	variant operatorv1.ProductVariant, fc *v3.FelixConfiguration, pullSecrets []*v1.Secret,
 	installation *operatorv1.InstallationSpec, namespaceAndNames []string,
 ) error {
 	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
@@ -582,7 +582,7 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 
 // validateExternalNetwork validates if the specified external network exists.
 func validateExternalNetwork(ctx context.Context, cli client.Client, externalNetwork string) error {
-	instance := &crdv1.ExternalNetwork{}
+	instance := &v3.ExternalNetwork{}
 	key := types.NamespacedName{Name: externalNetwork}
 	err := cli.Get(ctx, key, instance)
 	if err != nil {
@@ -595,7 +595,7 @@ func validateExternalNetwork(ctx context.Context, cli client.Client, externalNet
 // to see if they match.
 func validateIPPool(ctx context.Context, cli client.Client, ipPool operatorv1.EgressGatewayIPPool, awsNativeIP operatorv1.NativeIP) error {
 	if ipPool.Name != "" {
-		instance := &crdv1.IPPool{}
+		instance := &v3.IPPool{}
 		key := types.NamespacedName{Name: ipPool.Name}
 		err := cli.Get(ctx, key, instance)
 		if err != nil {
@@ -612,7 +612,7 @@ func validateIPPool(ctx context.Context, cli client.Client, ipPool operatorv1.Eg
 		return nil
 	}
 	if ipPool.CIDR != "" {
-		instance := &crdv1.IPPoolList{}
+		instance := &v3.IPPoolList{}
 		err := cli.List(ctx, instance)
 		if err != nil {
 			return err

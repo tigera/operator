@@ -15,6 +15,8 @@
 package crds
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -24,24 +26,32 @@ import (
 // The real test here is simply calling these functions will result in a panic if any of the CRDs cannot be parsed
 
 var _ = Describe("test crds pkg", func() {
-	It("can parse Calico CRDs", func() {
-		Expect(func() { Expect(getCalicoCRDSource()).ToNot(BeEmpty()) }).ToNot(Panic())
+	for _, v3 := range []bool{true, false} {
+		It(fmt.Sprintf("can parse Calico CRDs (v3=%t)", v3), func() {
+			Expect(func() { Expect(getCalicoCRDSource(v3)).ToNot(BeEmpty()) }).ToNot(Panic())
+		})
+
+		It(fmt.Sprintf("can get all CRDS used with Calico (v3=%t)", v3), func() {
+			Expect(func() { Expect(GetCRDs(opv1.Calico, v3)).ToNot(BeEmpty()) }).ToNot(Panic())
+		})
+	}
+
+	It("can get all CRDS used with Enterprise", func() {
+		Expect(func() { Expect(GetCRDs(opv1.TigeraSecureEnterprise, false)).ToNot(BeEmpty()) }).ToNot(Panic())
 	})
+
 	It("can parse Enterprise CRDs", func() {
 		Expect(func() { Expect(getEnterpriseCRDSource()).ToNot(BeEmpty()) }).ToNot(Panic())
 	})
+
 	It("can parse Operator CRDs used with calico", func() {
 		Expect(func() { Expect(getOperatorCRDSource(opv1.Calico)).ToNot(BeEmpty()) }).ToNot(Panic())
 	})
+
 	It("can parse Operator CRDs used with Enterprise", func() {
 		Expect(func() { Expect(getOperatorCRDSource(opv1.TigeraSecureEnterprise)).ToNot(BeEmpty()) }).ToNot(Panic())
 	})
-	It("can get all CRDS used with Calico", func() {
-		Expect(func() { Expect(GetCRDs(opv1.Calico)).ToNot(BeEmpty()) }).ToNot(Panic())
-	})
-	It("can get all CRDS used with Enterprise", func() {
-		Expect(func() { Expect(GetCRDs(opv1.TigeraSecureEnterprise)).ToNot(BeEmpty()) }).ToNot(Panic())
-	})
+
 	It("installs GatewayAPI CRD with Calico OSS", func() {
 		Expect(getOperatorCRDSource(opv1.Calico)).To(HaveKey(ContainSubstring("gatewayapis")))
 	})

@@ -708,7 +708,8 @@ define prep_local_crds
     $(eval product := $(1))
 	rm -rf pkg/crds/$(product)
 	rm -rf .crds/$(product)
-	mkdir -p pkg/crds/$(product)
+	mkdir -p pkg/crds/$(product)/v1.crd.projectcalico.org/
+	mkdir -p pkg/crds/$(product)/v3.projectcalico.org/
 	mkdir -p .crds/$(product)
 endef
 
@@ -722,10 +723,15 @@ define fetch_crds
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
 	git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch git@github.com:$(project).git ./
 endef
-define copy_crds
+define copy_v1_crds
     $(eval dir := $(1))
 		$(eval product := $(2))
-	@cp $(dir)/libcalico-go/config/crd/* pkg/crds/$(product)/ && echo "Copied $(product) CRDs"
+	@cp $(dir)/libcalico-go/config/crd/* pkg/crds/$(product)/v1.crd.projectcalico.org/ && echo "Copied $(product) CRDs"
+endef
+define copy_v3_crds
+    $(eval dir := $(1))
+		$(eval product := $(2))
+	@cp $(dir)/api/config/crd/* pkg/crds/$(product)/v3.projectcalico.org/ && echo "Copied $(product) CRDs"
 endef
 define copy_eck_crds
     $(eval dir := $(1))
@@ -738,7 +744,7 @@ endef
 .PHONY: fetch-calico-crds fetch-enterprise-crds
 .PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
 
-CALICO?=projectcalico/calico
+CALICO?=caseydavenport/calico
 CALICO_CRDS_DIR?=.crds/calico
 DEFAULT_OS_CRDS_DIR?=.crds/calico
 read-libcalico-calico-version:
@@ -748,7 +754,8 @@ read-libcalico-calico-version:
 	if [ -z "$(CALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
-	$(call copy_crds, $(CALICO_CRDS_DIR),"calico")
+	$(call copy_v1_crds, $(CALICO_CRDS_DIR),"calico")
+	$(call copy_v3_crds, $(CALICO_CRDS_DIR),"calico")
 
 prepare-for-calico-crds:
 	$(call prep_local_crds,"calico")
@@ -766,7 +773,7 @@ read-libcalico-enterprise-version:
 	if [ -z "$(CALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds
-	$(call copy_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
+	$(call copy_v1_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_eck_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 
 prepare-for-enterprise-crds:

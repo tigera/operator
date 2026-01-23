@@ -15,13 +15,13 @@
 package testutils
 
 import (
-	"github.com/onsi/gomega"
-
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	"github.com/onsi/gomega"
 
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"k8s.io/apimachinery/pkg/types"

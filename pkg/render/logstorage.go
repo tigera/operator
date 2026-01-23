@@ -781,7 +781,7 @@ func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim, currentES *esv1.Elast
 		panic("ElasticSearch CR has no NodeSets")
 	}
 	if currentES != nil && len(currentES.Spec.NodeSets[0].VolumeClaimTemplates) != 1 {
-		panic(fmt.Sprintf("ElasticSearch CR has %d VolumeClaimTemplates in it's NodeSets, expected 1", len(currentES.Spec.NodeSets[0].VolumeClaimTemplates)))
+		panic(fmt.Sprintf("ElasticSearch CR has %d VolumeClaimTemplates in its NodeSets, expected 1", len(currentES.Spec.NodeSets[0].VolumeClaimTemplates)))
 	}
 	if currentES != nil && currentES.Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.StorageClassName == nil {
 		panic("ElasticSearch CR's VolumeClaimTemplate has no StorageClassName")

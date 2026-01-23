@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import (
 	"net"
 	"strings"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/render"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 )
@@ -32,7 +32,7 @@ import (
 // Since the operator only supports one v4 and one v6 only one of each will be picked
 // if they exist.
 func handleIPPools(c *components, install *operatorv1.Installation) error {
-	pools := crdv1.IPPoolList{}
+	pools := v3.IPPoolList{}
 	if err := c.client.List(ctx, &pools); err != nil && !kerrors.IsNotFound(err) {
 		return fmt.Errorf("failed to list IPPools %v", err)
 	}
@@ -153,7 +153,7 @@ func handleIPPools(c *components, install *operatorv1.Installation) error {
 // should be selected, the first pool that the matcher returns true on is returned.
 // If there is an error returned from the matcher then that error is returned.
 // If no pool is found and there is no error then nil,nil is returned.
-func getIPPool(pools []crdv1.IPPool, matcher func(crdv1.IPPool) (bool, error)) (*crdv1.IPPool, error) {
+func getIPPool(pools []v3.IPPool, matcher func(v3.IPPool) (bool, error)) (*v3.IPPool, error) {
 	for _, pool := range pools {
 		if pool.Spec.Disabled {
 			continue
@@ -186,9 +186,9 @@ func isIpv6(ip net.IP) bool {
 //
 // if none match then nil, nil is returned
 // if there is an error parsing the cidr in a pool then that error will be returned
-func selectInitialPool(pools []crdv1.IPPool, isver func(ip net.IP) bool) (*crdv1.IPPool, error) {
+func selectInitialPool(pools []v3.IPPool, isver func(ip net.IP) bool) (*v3.IPPool, error) {
 	// Select pools prefixed with 'default-ipv' and isver is true
-	pool, err := getIPPool(pools, func(p crdv1.IPPool) (bool, error) {
+	pool, err := getIPPool(pools, func(p v3.IPPool) (bool, error) {
 		ip, _, err := net.ParseCIDR(p.Spec.CIDR)
 		if err != nil {
 			return false, fmt.Errorf("failed to parse IPPool %s in datastore: %v", p.Name, err)
@@ -208,7 +208,7 @@ func selectInitialPool(pools []crdv1.IPPool, isver func(ip net.IP) bool) (*crdv1
 	}
 
 	// If we don't have a pool then just grab any that has the right version
-	pool, err = getIPPool(pools, func(p crdv1.IPPool) (bool, error) {
+	pool, err = getIPPool(pools, func(p v3.IPPool) (bool, error) {
 		ip, _, err := net.ParseCIDR(p.Spec.CIDR)
 		if err != nil {
 			return false, fmt.Errorf("failed to parse IPPool %s in datastore: %v", p.Name, err)
@@ -225,27 +225,27 @@ func selectInitialPool(pools []crdv1.IPPool, isver func(ip net.IP) bool) (*crdv1
 }
 
 // convertPool converts the src (CRD) pool into an Installation/Operator IPPool
-func convertPool(src crdv1.IPPool) (operatorv1.IPPool, error) {
+func convertPool(src v3.IPPool) (operatorv1.IPPool, error) {
 	p := operatorv1.IPPool{CIDR: src.Spec.CIDR}
 
 	ip := src.Spec.IPIPMode
 	if ip == "" {
-		ip = crdv1.IPIPModeNever
+		ip = v3.IPIPModeNever
 	}
 	vx := src.Spec.VXLANMode
 	if vx == "" {
-		vx = crdv1.VXLANModeNever
+		vx = v3.VXLANModeNever
 	}
 	switch {
-	case ip == crdv1.IPIPModeNever && vx == crdv1.VXLANModeNever:
+	case ip == v3.IPIPModeNever && vx == v3.VXLANModeNever:
 		p.Encapsulation = operatorv1.EncapsulationNone
-	case ip == crdv1.IPIPModeNever && vx == crdv1.VXLANModeAlways:
+	case ip == v3.IPIPModeNever && vx == v3.VXLANModeAlways:
 		p.Encapsulation = operatorv1.EncapsulationVXLAN
-	case ip == crdv1.IPIPModeNever && vx == crdv1.VXLANModeCrossSubnet:
+	case ip == v3.IPIPModeNever && vx == v3.VXLANModeCrossSubnet:
 		p.Encapsulation = operatorv1.EncapsulationVXLANCrossSubnet
-	case vx == crdv1.VXLANModeNever && ip == crdv1.IPIPModeAlways:
+	case vx == v3.VXLANModeNever && ip == v3.IPIPModeAlways:
 		p.Encapsulation = operatorv1.EncapsulationIPIP
-	case vx == crdv1.VXLANModeNever && ip == crdv1.IPIPModeCrossSubnet:
+	case vx == v3.VXLANModeNever && ip == v3.IPIPModeCrossSubnet:
 		p.Encapsulation = operatorv1.EncapsulationIPIPCrossSubnet
 	default:
 		return p, fmt.Errorf("unexpected encapsulation combination for pool %+v", src)
@@ -263,7 +263,17 @@ func convertPool(src crdv1.IPPool) (operatorv1.IPPool, error) {
 
 	p.NodeSelector = src.Spec.NodeSelector
 	p.DisableBGPExport = &src.Spec.DisableBGPExport
-	p.AssignmentMode = src.Spec.AssignmentMode
+
+	if src.Spec.AssignmentMode != nil {
+		switch *src.Spec.AssignmentMode {
+		case v3.Automatic:
+			p.AssignmentMode = operatorv1.AssignmentModeAutomatic
+		case v3.Manual:
+			p.AssignmentMode = operatorv1.AssignmentModeManual
+		default:
+			return p, fmt.Errorf("unexpected assignment mode %s for pool %+v", *src.Spec.AssignmentMode, src)
+		}
+	}
 
 	return p, nil
 }

@@ -796,15 +796,16 @@ func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim, currentES *esv1.Elast
 	if currentES == nil {
 		nameMustBeGenerated = true
 	} else {
+		// Check if the existing PVC template matches our LogStorage CR. If it does not, we need to force a rename.
+		// We assume that the VolumeClaimTemplate is the same across all NodeSets (this is how we configure it).
 		currentPVCTemplate := currentES.Spec.NodeSets[0].VolumeClaimTemplates[0]
-
 		storageClassNamesMatch := *pvcTemplate.Spec.StorageClassName == *currentPVCTemplate.Spec.StorageClassName
 		resourceRequirementsMatch := reflect.DeepEqual(currentPVCTemplate.Spec.Resources, pvcTemplate.Spec.Resources)
-
 		if !storageClassNamesMatch || !resourceRequirementsMatch {
 			nameMustBeGenerated = true
 		}
 
+		// Capture the existing name. If there are multiple NodeSets, there will be a suffix, so we strip it.
 		splitExistingName := strings.Split(currentES.Spec.NodeSets[0].Name, "-")[0]
 		existingName = &splitExistingName
 	}

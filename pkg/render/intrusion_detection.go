@@ -269,6 +269,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		},
 		{
 			APIGroups: []string{
+				"projectcalico.org",
 				"crd.projectcalico.org",
 			},
 			Resources: []string{
@@ -319,12 +320,12 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "watch", "update"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"alertexceptions"},
 			Verbs:     []string{"get", "list"},
 		},
@@ -422,7 +423,6 @@ func (c *intrusionDetectionComponent) managedClustersWatchRoleBinding() client.O
 	} else {
 		return rcomponents.ClusterRoleBinding(IntrusionDetectionManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, IntrusionDetectionName, []string{c.cfg.Namespace})
 	}
-
 }
 
 func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {

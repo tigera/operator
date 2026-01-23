@@ -73,7 +73,7 @@ var _ = Describe("CSR controller tests", func() {
 		ctx = context.TODO()
 		// The schema contains all objects that should be known to the fake client when the test runs.
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(certificatesv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -570,5 +570,4 @@ func invalidX509CR(invalidations ...invalidation) *x509.CertificateRequest {
 		}
 	}
 	return cr
-
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ package installation
 import (
 	"strconv"
 
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/common"
 
 	"github.com/tigera/operator/pkg/render"
@@ -31,9 +31,8 @@ import (
 )
 
 var _ = Describe("BPF functional tests", func() {
-
 	Context("Annotations validation tests", func() {
-		var fc *crdv1.FelixConfiguration
+		var fc *v3.FelixConfiguration
 		var textTrue, textFalse string
 		var enabled, notEnabled bool
 
@@ -44,12 +43,12 @@ var _ = Describe("BPF functional tests", func() {
 		notEnabled = false
 
 		BeforeEach(func() {
-			fc = &crdv1.FelixConfiguration{
+			fc = &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        "default",
 					Annotations: map[string]string{"foo": "bar"},
 				},
-				Spec: crdv1.FelixConfigurationSpec{},
+				Spec: v3.FelixConfigurationSpec{},
 			}
 		})
 
@@ -219,18 +218,18 @@ var _ = Describe("BPF functional tests", func() {
 	})
 
 	Context("BPFEnabled on FelixConfiguration tests", func() {
-		var fc *crdv1.FelixConfiguration
+		var fc *v3.FelixConfiguration
 		var enabled, notEnabled bool
 
 		enabled = true
 		notEnabled = false
 
 		BeforeEach(func() {
-			fc = &crdv1.FelixConfiguration{
+			fc = &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
-				Spec: crdv1.FelixConfigurationSpec{},
+				Spec: v3.FelixConfigurationSpec{},
 			}
 		})
 
@@ -253,14 +252,14 @@ var _ = Describe("BPF functional tests", func() {
 	})
 
 	Context("setBPFEnabledOnFelixConfiguration tests", func() {
-		var fc *crdv1.FelixConfiguration
+		var fc *v3.FelixConfiguration
 
 		BeforeEach(func() {
-			fc = &crdv1.FelixConfiguration{
+			fc = &v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
-				Spec: crdv1.FelixConfigurationSpec{},
+				Spec: v3.FelixConfigurationSpec{},
 			}
 		})
 

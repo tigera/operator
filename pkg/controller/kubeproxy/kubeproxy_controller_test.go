@@ -32,9 +32,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	// gopkg.in/yaml.v2 didn't parse all the fields but this package did
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -57,7 +57,7 @@ var _ = Describe("kube-proxy controller tests", func() {
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(discoveryv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -135,9 +135,9 @@ var _ = Describe("kube-proxy controller tests", func() {
 		})
 	}
 	createFelixConfiguration := func(bpfEnabled bool) {
-		createResource(&crdv1.FelixConfiguration{
+		createResource(&v3.FelixConfiguration{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
-			Spec: crdv1.FelixConfigurationSpec{
+			Spec: v3.FelixConfigurationSpec{
 				BPFEnabled: ptr.BoolToPtr(bpfEnabled),
 			},
 		})
@@ -232,5 +232,4 @@ var _ = Describe("kube-proxy controller tests", func() {
 			),
 		)
 	})
-
 })

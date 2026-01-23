@@ -451,7 +451,7 @@ func (c *fluentdComponent) splunkCredentialSecret() []*corev1.Secret {
 		return nil
 	}
 	return []*corev1.Secret{
-		&corev1.Secret{
+		{
 			TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      SplunkFluentdTokenSecretName,
@@ -1156,7 +1156,6 @@ func trustedBundleVolume(bundle certificatemanagement.TrustedBundle) corev1.Volu
 }
 
 func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
-
 	volumeMounts := []corev1.VolumeMount{
 		{
 			Name:      "plugin-statefile-dir",
@@ -1183,7 +1182,6 @@ func (c *fluentdComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 }
 
 func (c *fluentdComponent) eksLogForwarderVolumes() []corev1.Volume {
-
 	volumes := []corev1.Volume{
 		trustedBundleVolume(c.cfg.TrustedBundle),
 		{

@@ -131,6 +131,35 @@ var _ = Describe("Component handler tests", func() {
 		Expect(ds.OwnerReferences[0]).To(Equal(expectOR))
 	})
 
+	It("doesn't remove finalizers it doesn't own", func() {
+		// Create a daemonset with a finalizer that the operator doesn't own.
+		ds := &apps.DaemonSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "test-ds",
+				Namespace:  "default",
+				Finalizers: []string{"some.finalizer.io/do-not-remove"},
+			},
+			Spec: apps.DaemonSetSpec{},
+		}
+		err := c.Create(ctx, ds)
+		Expect(err).To(BeNil())
+
+		// Trigger an update to reconcile, but without the finalizer present in the desired state.
+		ds.Finalizers = []string{}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs:            []client.Object{ds},
+		}
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		// Get the updated daemonset and verify the finalizer is still present.
+		updatedDS := &apps.DaemonSet{}
+		err = c.Get(ctx, client.ObjectKey{Name: "test-ds", Namespace: "default"}, updatedDS)
+		Expect(err).To(BeNil())
+		Expect(updatedDS.Finalizers).To(ContainElement("some.finalizer.io/do-not-remove"))
+	})
+
 	It("merges daemonset template annotations and reconciles only operator added annotations", func() {
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,

@@ -227,7 +227,6 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	c.uiAPIsImage, err = components.GetReference(components.ComponentUIAPIs, reg, path, prefix, is)
-
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -1394,7 +1393,6 @@ func managerClusterWideDefaultView() *v3.UISettings {
 // can be removed for Calico Enterprise v3.26 which corresponds to operator version <todo> when the legacy names will no
 // longer be valid in our official support window
 func (m *managerComponent) deprecatedResources(tenant *operatorv1.Tenant, installNS, truthNS string) []client.Object {
-
 	objs := []client.Object{}
 	clusterRoleName := LegacyManagerClusterRole
 	clusterRoleBindingName := LegacyManagerClusterRoleBinding

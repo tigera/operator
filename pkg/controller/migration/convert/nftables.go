@@ -17,14 +17,14 @@ import (
 	"fmt"
 	"strings"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"k8s.io/apimachinery/pkg/types"
 )
 
 // handleNftables is a migration handler which ensures nftables configuration is carried forward.
 func handleNftables(c *components, install *operatorv1.Installation) error {
-	fc := &crdv1.FelixConfiguration{}
+	fc := &v3.FelixConfiguration{}
 	err := c.client.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 	if err != nil {
 		return fmt.Errorf("error reading felixconfiguration %w", err)
@@ -35,7 +35,7 @@ func handleNftables(c *components, install *operatorv1.Installation) error {
 		return fmt.Errorf("error reading FELIX_NFTABLESMODE env var %w", err)
 	}
 
-	inFelixConfig := fc.Spec.NFTablesMode != nil && *fc.Spec.NFTablesMode == crdv1.NFTablesModeEnabled
+	inFelixConfig := fc.Spec.NFTablesMode != nil && *fc.Spec.NFTablesMode == v3.NFTablesModeEnabled
 	enabledEnvVar := envMode != nil && strings.ToLower(*envMode) == "enabled"
 
 	// A disabled env var will override any other configuration. It's possible to have a feature enabled in the FelixConfiguration

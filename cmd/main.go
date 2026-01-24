@@ -81,15 +81,17 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(operatortigeraiov1.AddToScheme(scheme))
-	utilruntime.Must(apis.AddToScheme(scheme))
+	utilruntime.Must(apis.AddToScheme(scheme, useV3CRDS()))
+}
+
+func useV3CRDS() bool {
+	return os.Getenv("CALICO_API_GROUP") == "projectcalico.org/v3"
 }
 
 func printVersion() {
 	log.Info(fmt.Sprintf("Version: %v", version.VERSION))
 	log.Info(fmt.Sprintf("Go Version: %s", goruntime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", goruntime.GOOS, goruntime.GOARCH))
-	// TODO: Add this back if we can
-	// log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
 }
 
 func main() {
@@ -280,7 +282,9 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	// If configured to manage CRDs, do a preliminary install of them here. The Installation controller
 	// will reconcile them as well, but we need to make sure they are installed before we start the rest of the controllers.
 	if bootstrapCRDs || manageCRDs {
-		if err := crds.Ensure(mgr.GetClient(), variant); err != nil {
+		setupLog.WithValues("v3", useV3CRDS()).Info("Ensuring CRDs are installed")
+
+		if err := crds.Ensure(mgr.GetClient(), variant, useV3CRDS(), setupLog); err != nil {
 			setupLog.Error(err, "Failed to ensure CRDs are created")
 			os.Exit(1)
 		}
@@ -443,6 +447,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		K8sClientset:        clientset,
 		MultiTenant:         multiTenant,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
+		UseV3CRDs:           useV3CRDS(),
 	}
 
 	// Before we start any controllers, make sure our options are valid.
@@ -520,7 +525,7 @@ func metricsAddr() string {
 
 func showCRDs(variant operatortigeraiov1.ProductVariant, outputType string) error {
 	first := true
-	for _, v := range crds.GetCRDs(variant) {
+	for _, v := range crds.GetCRDs(variant, useV3CRDS()) {
 		if outputType != "all" {
 			if !strings.HasPrefix(v.Name, outputType) {
 				continue

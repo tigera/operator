@@ -5410,6 +5410,13 @@ spec:
                         * For KubernetesProvider OpenShift, this field defaults to "/var/run/multus/cni/net.d".
                         * Otherwise, this field defaults to "/etc/cni/net.d".
                       type: string
+                    confName:
+                      description: |-
+                        ConfName is the name of the CNI config file.
+                        If you have changed the name of the CNI configuration file in the container runtime configuration,
+                        please ensure that this field matches the same name as specified in the container runtime settings.
+                        Default: "10-calico.conflist"
+                      type: string
                     ipam:
                       description: |-
                         IPAM specifies the pod IP address management that will be used in the Calico or
@@ -14287,6 +14294,13 @@ spec:
                             * For KubernetesProvider GKE, this field defaults to "/etc/cni/net.d".
                             * For KubernetesProvider OpenShift, this field defaults to "/var/run/multus/cni/net.d".
                             * Otherwise, this field defaults to "/etc/cni/net.d".
+                          type: string
+                        confName:
+                          description: |-
+                            ConfName is the name of the CNI config file.
+                            If you have changed the name of the CNI configuration file in the container runtime configuration,
+                            please ensure that this field matches the same name as specified in the container runtime settings.
+                            Default: "10-calico.conflist"
                           type: string
                         ipam:
                           description: |-

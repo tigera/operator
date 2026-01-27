@@ -15,15 +15,14 @@
 package render
 
 import (
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"hash/fnv"
+	"reflect"
 	"strings"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"gopkg.in/inf.v0"
+	"k8s.io/apimachinery/pkg/util/rand"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -244,7 +243,7 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	toCreate = append(toCreate, es.elasticsearchServiceAccount())
 	toCreate = append(toCreate, es.cfg.ClusterConfig.ConfigMap())
 
-	toCreate = append(toCreate, es.elasticsearchCluster())
+	toCreate = append(toCreate, es.elasticsearchCluster(es.cfg.Elasticsearch))
 
 	if es.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		toCreate = append(toCreate, es.elasticsearchClusterRole(), es.elasticsearchClusterRoleBinding())
@@ -546,7 +545,7 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 }
 
 // render the Elasticsearch CR that the ECK operator uses to create elasticsearch cluster
-func (es *elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
+func (es *elasticsearchComponent) elasticsearchCluster(current *esv1.Elasticsearch) *esv1.Elasticsearch {
 	elasticsearch := &esv1.Elasticsearch{
 		TypeMeta: metav1.TypeMeta{Kind: "Elasticsearch", APIVersion: "elasticsearch.k8s.elastic.co/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -563,7 +562,7 @@ func (es *elasticsearchComponent) elasticsearchCluster() *esv1.Elasticsearch {
 					},
 				},
 			},
-			NodeSets: es.nodeSets(),
+			NodeSets: es.nodeSets(current),
 		},
 	}
 
@@ -639,7 +638,7 @@ func memoryQuantityToJVMHeapSize(q *resource.Quantity) string {
 // nodeSets calculates the number of NodeSets needed for the Elasticsearch cluster. Multiple NodeSets are returned only
 // if the "nodeSets" field has been set in the LogStorage CR. The number of Nodes for the cluster will be distributed as
 // evenly as possible between the NodeSets.
-func (es *elasticsearchComponent) nodeSets() []esv1.NodeSet {
+func (es *elasticsearchComponent) nodeSets(currentES *esv1.Elasticsearch) []esv1.NodeSet {
 	nodeConfig := es.cfg.LogStorage.Spec.Nodes
 	pvcTemplate := es.pvcTemplate()
 
@@ -651,10 +650,12 @@ func (es *elasticsearchComponent) nodeSets() []esv1.NodeSet {
 		return nil
 	}
 
+	name := nodeSetName(pvcTemplate, currentES)
+
 	var nodeSets []esv1.NodeSet
 	if len(nodeConfig.NodeSets) < 1 {
 		nodeSet := es.nodeSetTemplate(pvcTemplate)
-		nodeSet.Name = nodeSetName(pvcTemplate)
+		nodeSet.Name = name
 		nodeSet.Count = int32(nodeConfig.Count)
 		nodeSet.PodTemplate = es.podTemplate()
 
@@ -678,7 +679,7 @@ func (es *elasticsearchComponent) nodeSets() []esv1.NodeSet {
 
 			nodeSet := es.nodeSetTemplate(pvcTemplate)
 			// Each NodeSet needs a unique name, so just add the index as a suffix
-			nodeSet.Name = fmt.Sprintf("%s-%d", nodeSetName(pvcTemplate), i)
+			nodeSet.Name = fmt.Sprintf("%s-%d", name, i)
 			nodeSet.Count = int32(numNodes)
 
 			podTemplate := es.podTemplate()
@@ -769,24 +770,60 @@ func (es *elasticsearchComponent) nodeSetTemplate(pvcTemplate corev1.PersistentV
 	}
 }
 
-// nodeSetName returns thumbprint of PersistentVolumeClaim object as string.
-// As storage requirements of NodeSets are immutable,
-// renaming a NodeSet automatically creates a new StatefulSet with new PersistentVolumeClaim.
-// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-orchestration.html#k8s-orchestration-limitations
-func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim) string {
-	pvcTemplateHash := fnv.New64a()
-	templateBytes, err := json.Marshal(pvcTemplate)
-	if err != nil {
-		log.V(5).Info("Failed to create unique name for ElasticSearch NodeSet.", "err", err)
-		return "es"
+// nodeSetName resolves the name that should be configured on the NodeSet by deciding to either retain the existing
+// name or generate a new random string to force a rename. A rename must be forced when we know that the current
+// NodeSet does not match the storage requirements outlined by LogStorage. This rename triggers the eck-operator
+// to create a new NodeSet, which is required because VolumeClaimTemplates on a StatefulSet are immutable.
+// https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-orchestration.html
+func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim, currentES *esv1.Elasticsearch) string {
+	// We expect the following preconditions to be met, but we check for them explicitly to indicate developer error.
+	if currentES != nil && len(currentES.Spec.NodeSets) == 0 {
+		panic("ElasticSearch CR has no NodeSets")
+	}
+	if currentES != nil && len(currentES.Spec.NodeSets[0].VolumeClaimTemplates) != 1 {
+		panic(fmt.Sprintf("ElasticSearch CR has %d VolumeClaimTemplates in its NodeSets, expected 1", len(currentES.Spec.NodeSets[0].VolumeClaimTemplates)))
+	}
+	if currentES != nil && currentES.Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.StorageClassName == nil {
+		panic("ElasticSearch CR's VolumeClaimTemplate has no StorageClassName")
+	}
+	if pvcTemplate.Spec.StorageClassName == nil {
+		panic("Rendered VolumeClaimTemplate has no StorageClassName")
 	}
 
-	if _, err := pvcTemplateHash.Write(templateBytes); err != nil {
-		log.V(5).Info("Failed to create unique name for ElasticSearch NodeSet.", "err", err)
-		return "es"
+	// Determine if we need to generate a new name
+	var nameMustBeGenerated bool
+	var existingName *string
+	if currentES == nil {
+		nameMustBeGenerated = true
+	} else {
+		// Check if the existing PVC template matches our LogStorage CR. If it does not, we need to force a rename.
+		// We assume that the VolumeClaimTemplate is the same across all NodeSets (this is how we configure it).
+		currentPVCTemplate := currentES.Spec.NodeSets[0].VolumeClaimTemplates[0]
+		storageClassNamesMatch := *pvcTemplate.Spec.StorageClassName == *currentPVCTemplate.Spec.StorageClassName
+		resourceRequirementsMatch := reflect.DeepEqual(currentPVCTemplate.Spec.Resources, pvcTemplate.Spec.Resources)
+		if !storageClassNamesMatch || !resourceRequirementsMatch {
+			nameMustBeGenerated = true
+		}
+
+		// Capture the existing name. If there are multiple NodeSets, there will be a suffix, so we strip it.
+		splitExistingName := strings.Split(currentES.Spec.NodeSets[0].Name, "-")[0]
+		existingName = &splitExistingName
 	}
 
-	return hex.EncodeToString(pvcTemplateHash.Sum(nil))
+	// Generate a new name if necessary
+	var name string
+	if nameMustBeGenerated {
+		for {
+			name = rand.String(12)
+			if existingName == nil || name != *existingName {
+				break
+			}
+		}
+	} else {
+		name = *existingName
+	}
+
+	return name
 }
 
 // This is a list of components that belong to Curator which has been decommissioned since it is no longer supported

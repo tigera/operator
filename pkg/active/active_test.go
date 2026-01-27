@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -37,13 +37,12 @@ var _ = Describe("test active pkg", func() {
 		c      client.Client
 		ctx    context.Context
 		scheme *runtime.Scheme
-		//log    logr.Logger
 	)
 
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -52,14 +51,15 @@ var _ = Describe("test active pkg", func() {
 
 		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
-		//log = logf.Log.WithName("active-test-logger")
 	})
+
 	Context("GetActiveConfigMap", func() {
 		It("should not error with no ConfigMap", func() {
 			cm, err := GetActiveConfigMap(c)
 			Expect(err).To(BeNil())
 			Expect(cm).To(BeNil())
 		})
+
 		It("should retrieve ConfigMap", func() {
 			dataMap := map[string]string{"test-key": "test-data"}
 			Expect(c.Create(ctx, &corev1.ConfigMap{

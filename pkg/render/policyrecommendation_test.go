@@ -62,7 +62,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -180,7 +180,6 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 				Namespace: render.PolicyRecommendationNamespace,
 			},
 		}))
-
 	})
 
 	It("should render toleration on GKE", func() {
@@ -694,6 +693,5 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			Expect(resources).To(BeEmpty(), "Expected no resources to be rendered in a managed cluster")
 			rtest.ExpectResources(deleteResources, expectedDeleteResources)
 		})
-
 	})
 })

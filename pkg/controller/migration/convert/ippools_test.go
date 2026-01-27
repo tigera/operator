@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,9 +22,9 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 
 	corev1 "k8s.io/api/core/v1"
@@ -33,73 +33,73 @@ import (
 )
 
 var _ = Describe("Convert network tests", func() {
-	var ctx = context.Background()
-	var pool *crdv1.IPPool
+	ctx := context.Background()
+	var pool *v3.IPPool
 	var scheme *runtime.Scheme
 	var trueValue bool
 	var falseValue bool
 
 	BeforeEach(func() {
 		scheme = kscheme.Scheme
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
-		pool = crdv1.NewIPPool()
-		pool.Spec = crdv1.IPPoolSpec{
+		pool = v3.NewIPPool()
+		pool.Spec = v3.IPPoolSpec{
 			CIDR:        "192.168.4.0/24",
-			IPIPMode:    crdv1.IPIPModeAlways,
+			IPIPMode:    v3.IPIPModeAlways,
 			NATOutgoing: true,
 		}
 		trueValue = true
 		falseValue = false
 	})
 	Describe("handle IPPool migration", func() {
-		var v4pool1 *crdv1.IPPool
-		var v4pool2 *crdv1.IPPool
-		var v4pooldefault *crdv1.IPPool
-		var v6pool1 *crdv1.IPPool
-		var v6pool2 *crdv1.IPPool
-		var v6pooldefault *crdv1.IPPool
+		var v4pool1 *v3.IPPool
+		var v4pool2 *v3.IPPool
+		var v4pooldefault *v3.IPPool
+		var v6pool1 *v3.IPPool
+		var v6pool2 *v3.IPPool
+		var v6pooldefault *v3.IPPool
 		BeforeEach(func() {
-			v4pool1 = crdv1.NewIPPool()
+			v4pool1 = v3.NewIPPool()
 			v4pool1.Name = "not-default"
-			v4pool1.Spec = crdv1.IPPoolSpec{
+			v4pool1.Spec = v3.IPPoolSpec{
 				CIDR:        "1.168.4.0/24",
-				IPIPMode:    crdv1.IPIPModeAlways,
+				IPIPMode:    v3.IPIPModeAlways,
 				NATOutgoing: true,
 			}
-			v4pool2 = crdv1.NewIPPool()
+			v4pool2 = v3.NewIPPool()
 			v4pool2.Name = "not-default2"
-			v4pool2.Spec = crdv1.IPPoolSpec{
+			v4pool2.Spec = v3.IPPoolSpec{
 				CIDR:        "2.168.4.0/24",
-				IPIPMode:    crdv1.IPIPModeAlways,
+				IPIPMode:    v3.IPIPModeAlways,
 				NATOutgoing: true,
 			}
-			v4pooldefault = crdv1.NewIPPool()
+			v4pooldefault = v3.NewIPPool()
 			v4pooldefault.Name = "default-ipv4-pool"
-			v4pooldefault.Spec = crdv1.IPPoolSpec{
+			v4pooldefault.Spec = v3.IPPoolSpec{
 				CIDR:        "3.168.4.0/24",
-				IPIPMode:    crdv1.IPIPModeAlways,
+				IPIPMode:    v3.IPIPModeAlways,
 				NATOutgoing: true,
 			}
-			v6pool1 = crdv1.NewIPPool()
+			v6pool1 = v3.NewIPPool()
 			v6pool1.Name = "not-default1-v6"
-			v6pool1.Spec = crdv1.IPPoolSpec{
+			v6pool1.Spec = v3.IPPoolSpec{
 				CIDR:        "ff00:0001::/24",
-				IPIPMode:    crdv1.IPIPModeNever,
+				IPIPMode:    v3.IPIPModeNever,
 				NATOutgoing: true,
 			}
-			v6pool2 = crdv1.NewIPPool()
+			v6pool2 = v3.NewIPPool()
 			v6pool2.Name = "not-default2"
-			v6pool2.Spec = crdv1.IPPoolSpec{
+			v6pool2.Spec = v3.IPPoolSpec{
 				CIDR:        "ff00:0002::/24",
-				IPIPMode:    crdv1.IPIPModeNever,
+				IPIPMode:    v3.IPIPModeNever,
 				NATOutgoing: true,
 			}
-			v6pooldefault = crdv1.NewIPPool()
+			v6pooldefault = v3.NewIPPool()
 			v6pooldefault.Name = "default-ipv6-pool"
-			v6pooldefault.Spec = crdv1.IPPoolSpec{
+			v6pooldefault.Spec = v3.IPPoolSpec{
 				CIDR:        "ff00:0003::/24",
-				IPIPMode:    crdv1.IPIPModeNever,
+				IPIPMode:    v3.IPIPModeNever,
 				NATOutgoing: true,
 			}
 		})
@@ -233,11 +233,11 @@ var _ = Describe("Convert network tests", func() {
 			}}
 			pools := []runtime.Object{}
 			for i, c := range cidrs {
-				p := crdv1.NewIPPool()
+				p := v3.NewIPPool()
 				p.Name = fmt.Sprintf("not-default-%d", i)
-				p.Spec = crdv1.IPPoolSpec{
+				p.Spec = v3.IPPoolSpec{
 					CIDR:        c,
-					IPIPMode:    crdv1.IPIPModeAlways,
+					IPIPMode:    v3.IPIPModeAlways,
 					NATOutgoing: true,
 				}
 				pools = append(pools, p)
@@ -255,7 +255,7 @@ var _ = Describe("Convert network tests", func() {
 			Entry("v4 and v6 pool but no assigning v6", `"assign_ipv4": "true", "assign_ipv6": "false"`, "1.168.4.0/24", "ff00:0001::/24"),
 		)
 
-		DescribeTable("test convert pool flags", func(success bool, crdPool crdv1.IPPool, opPool operatorv1.IPPool) {
+		DescribeTable("test convert pool flags", func(success bool, crdPool v3.IPPool, opPool operatorv1.IPPool) {
 			p, err := convertPool(crdPool)
 			if success {
 				Expect(err).NotTo(HaveOccurred())
@@ -264,10 +264,10 @@ var _ = Describe("Convert network tests", func() {
 				Expect(err).To(HaveOccurred())
 			}
 		},
-			Entry("ipv4, no encap, nat, block 27", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, no encap, nat, block 27", true, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
-				VXLANMode:    crdv1.VXLANModeNever,
-				IPIPMode:     crdv1.IPIPModeNever,
+				VXLANMode:    v3.VXLANModeNever,
+				IPIPMode:     v3.IPIPModeNever,
 				NATOutgoing:  true,
 				Disabled:     false,
 				BlockSize:    27,
@@ -280,10 +280,10 @@ var _ = Describe("Convert network tests", func() {
 				NodeSelector:     "nodeselectorstring",
 				DisableBGPExport: &falseValue,
 			}),
-			Entry("ipv4, vxlan encap, nat, block 27", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, vxlan encap, nat, block 27", true, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
-				VXLANMode:    crdv1.VXLANModeAlways,
-				IPIPMode:     crdv1.IPIPModeNever,
+				VXLANMode:    v3.VXLANModeAlways,
+				IPIPMode:     v3.IPIPModeNever,
 				NATOutgoing:  true,
 				Disabled:     false,
 				BlockSize:    27,
@@ -296,10 +296,10 @@ var _ = Describe("Convert network tests", func() {
 				NodeSelector:     "nodeselectorstring",
 				DisableBGPExport: &falseValue,
 			}),
-			Entry("ipv4, ipip encap, nat, block 27", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, ipip encap, nat, block 27", true, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
-				VXLANMode:    crdv1.VXLANModeNever,
-				IPIPMode:     crdv1.IPIPModeAlways,
+				VXLANMode:    v3.VXLANModeNever,
+				IPIPMode:     v3.IPIPModeAlways,
 				NATOutgoing:  true,
 				Disabled:     false,
 				BlockSize:    27,
@@ -312,10 +312,10 @@ var _ = Describe("Convert network tests", func() {
 				NodeSelector:     "nodeselectorstring",
 				DisableBGPExport: &falseValue,
 			}),
-			Entry("ipv4, vxlancross encap, nat, block 27", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, vxlancross encap, nat, block 27", true, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
-				VXLANMode:    crdv1.VXLANModeCrossSubnet,
-				IPIPMode:     crdv1.IPIPModeNever,
+				VXLANMode:    v3.VXLANModeCrossSubnet,
+				IPIPMode:     v3.IPIPModeNever,
 				NATOutgoing:  true,
 				Disabled:     false,
 				BlockSize:    27,
@@ -328,10 +328,10 @@ var _ = Describe("Convert network tests", func() {
 				NodeSelector:     "nodeselectorstring",
 				DisableBGPExport: &falseValue,
 			}),
-			Entry("ipv4, ipipcross encap, nat, block 27", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, ipipcross encap, nat, block 27", true, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
-				VXLANMode:    crdv1.VXLANModeNever,
-				IPIPMode:     crdv1.IPIPModeCrossSubnet,
+				VXLANMode:    v3.VXLANModeNever,
+				IPIPMode:     v3.IPIPModeCrossSubnet,
 				NATOutgoing:  true,
 				Disabled:     false,
 				BlockSize:    27,
@@ -344,10 +344,10 @@ var _ = Describe("Convert network tests", func() {
 				NodeSelector:     "nodeselectorstring",
 				DisableBGPExport: &falseValue,
 			}),
-			Entry("ipv4, no encap, no nat, block 27", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, no encap, no nat, block 27", true, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
-				VXLANMode:    crdv1.VXLANModeNever,
-				IPIPMode:     crdv1.IPIPModeNever,
+				VXLANMode:    v3.VXLANModeNever,
+				IPIPMode:     v3.IPIPModeNever,
 				NATOutgoing:  false,
 				Disabled:     false,
 				BlockSize:    27,
@@ -360,10 +360,10 @@ var _ = Describe("Convert network tests", func() {
 				NodeSelector:     "nodeselectorstring",
 				DisableBGPExport: &falseValue,
 			}),
-			Entry("ipv4, no encap, nat, block 24", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, no encap, nat, block 24", true, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
-				VXLANMode:    crdv1.VXLANModeNever,
-				IPIPMode:     crdv1.IPIPModeNever,
+				VXLANMode:    v3.VXLANModeNever,
+				IPIPMode:     v3.IPIPModeNever,
 				NATOutgoing:  true,
 				Disabled:     false,
 				BlockSize:    24,
@@ -376,10 +376,10 @@ var _ = Describe("Convert network tests", func() {
 				NodeSelector:     "nodeselectorstring",
 				DisableBGPExport: &falseValue,
 			}),
-			Entry("ipv4, no encap, nat, block 27, different nodeselector", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, no encap, nat, block 27, different nodeselector", true, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
-				VXLANMode:    crdv1.VXLANModeNever,
-				IPIPMode:     crdv1.IPIPModeNever,
+				VXLANMode:    v3.VXLANModeNever,
+				IPIPMode:     v3.IPIPModeNever,
 				NATOutgoing:  true,
 				Disabled:     false,
 				BlockSize:    27,
@@ -393,28 +393,28 @@ var _ = Describe("Convert network tests", func() {
 				DisableBGPExport: &falseValue,
 			}),
 
-			Entry("ipv4, invalid encap, nat, block 27", false, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, invalid encap, nat, block 27", false, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
-				VXLANMode:    crdv1.VXLANModeAlways,
-				IPIPMode:     crdv1.IPIPModeAlways,
+				VXLANMode:    v3.VXLANModeAlways,
+				IPIPMode:     v3.IPIPModeAlways,
 				NATOutgoing:  true,
 				Disabled:     false,
 				BlockSize:    27,
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{}),
-			Entry("ipv4, invalid encap2, nat, block 27", false, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, invalid encap2, nat, block 27", false, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:         "1.168.4.0/24",
-				VXLANMode:    crdv1.VXLANModeCrossSubnet,
-				IPIPMode:     crdv1.IPIPModeAlways,
+				VXLANMode:    v3.VXLANModeCrossSubnet,
+				IPIPMode:     v3.IPIPModeAlways,
 				NATOutgoing:  true,
 				Disabled:     false,
 				BlockSize:    27,
 				NodeSelector: "nodeselectorstring",
 			}}, operatorv1.IPPool{}),
-			Entry("ipv4, vxlan encap, nat, disableBGPExport true", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, vxlan encap, nat, disableBGPExport true", true, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:             "1.168.4.0/24",
-				VXLANMode:        crdv1.VXLANModeAlways,
-				IPIPMode:         crdv1.IPIPModeNever,
+				VXLANMode:        v3.VXLANModeAlways,
+				IPIPMode:         v3.IPIPModeNever,
 				NATOutgoing:      true,
 				Disabled:         false,
 				DisableBGPExport: true,
@@ -425,10 +425,10 @@ var _ = Describe("Convert network tests", func() {
 				NodeSelector:     "",
 				DisableBGPExport: &trueValue,
 			}),
-			Entry("ipv4, vxlan encap, nat, disableBGPExport false", true, crdv1.IPPool{Spec: crdv1.IPPoolSpec{
+			Entry("ipv4, vxlan encap, nat, disableBGPExport false", true, v3.IPPool{Spec: v3.IPPoolSpec{
 				CIDR:             "1.168.4.0/24",
-				VXLANMode:        crdv1.VXLANModeAlways,
-				IPIPMode:         crdv1.IPIPModeNever,
+				VXLANMode:        v3.VXLANModeAlways,
+				IPIPMode:         v3.IPIPModeNever,
 				NATOutgoing:      true,
 				Disabled:         false,
 				DisableBGPExport: false,
@@ -441,5 +441,4 @@ var _ = Describe("Convert network tests", func() {
 			}),
 		)
 	})
-
 })

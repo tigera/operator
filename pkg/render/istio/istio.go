@@ -132,7 +132,6 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 	crds := &IstioComponentCRDs{resources: resources}
 	istio := &IstioComponent{cfg: cfg, resources: resources}
 	return crds, istio, nil
-
 }
 
 func (c *IstioComponent) patchImages() (err error) {

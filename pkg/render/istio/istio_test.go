@@ -705,9 +705,7 @@ var _ = Describe("Istio Component Rendering", func() {
 	})
 
 	Describe("GKE Platform Configuration", func() {
-		var (
-			component *istio.IstioComponent
-		)
+		var component *istio.IstioComponent
 
 		BeforeEach(func() {
 			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE

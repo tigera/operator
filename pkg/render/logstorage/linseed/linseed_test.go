@@ -371,7 +371,6 @@ var _ = Describe("Linseed rendering tests", func() {
 			initContainer = test.GetContainer(d.Spec.Template.Spec.InitContainers, "tigera-secure-linseed-cert-key-cert-provisioner")
 			Expect(initContainer).NotTo(BeNil())
 			Expect(initContainer.Resources).To(Equal(linseedResources))
-
 		})
 
 		Context("allow-tigera rendering", func() {
@@ -839,7 +838,7 @@ var _ = Describe("Linseed rendering tests", func() {
 
 func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
 	scheme := runtime.NewScheme()
-	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())

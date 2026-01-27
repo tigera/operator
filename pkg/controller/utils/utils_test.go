@@ -62,7 +62,7 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -97,7 +97,6 @@ var _ = Describe("Utils elasticsearch license type tests", func() {
 		_, err := GetElasticLicenseType(ctx, c, log)
 		Expect(err).Should(HaveOccurred())
 	})
-
 })
 
 var _ = Describe("Tigera License polling test", func() {
@@ -143,7 +142,7 @@ var _ = Describe("Utils APIServer type tests", func() {
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -185,7 +184,6 @@ var _ = Describe("Utils APIServer type tests", func() {
 })
 
 var _ = Describe("ValidateResourceNameIsQualified", func() {
-
 	It("returns nil for a compliant kubernetes name.", func() {
 		qualifiedName := "proper-resource-name"
 
@@ -238,7 +236,7 @@ var _ = Describe("PopulateK8sServiceEndPoint", func() {
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -273,7 +271,6 @@ var _ = Describe("PopulateK8sServiceEndPoint", func() {
 
 		Expect(err).To(BeNil())
 	})
-
 })
 
 var _ = Describe("Utils ElasticSearch test", func() {
@@ -332,9 +329,7 @@ func (m *fakeDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*me
 }
 
 var _ = Describe("CreatePredicateForObject", func() {
-	var (
-		objMeta metav1.Object
-	)
+	var objMeta metav1.Object
 
 	Context("when the name and namespace were specified with empty strings", func() {
 		BeforeEach(func() {
@@ -349,10 +344,12 @@ var _ = Describe("CreatePredicateForObject", func() {
 			Expect(p.Create(event.CreateEvent{})).To(BeTrue())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "", Generation: 0}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "", Generation: 0}}})).To(BeTrue())
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "", Generation: 0}},
+			})).To(BeTrue())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "", Generation: 1}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "", Generation: 2}}})).To(BeTrue())
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "", Generation: 2}},
+			})).To(BeTrue())
 			Expect(p.Delete(event.DeleteEvent{})).To(BeTrue())
 		})
 	})
@@ -370,10 +367,12 @@ var _ = Describe("CreatePredicateForObject", func() {
 			Expect(p.Create(event.CreateEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: ""}}})).To(BeTrue())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 0}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 0}}})).To(BeTrue()) // Generation was not specified.
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 0}},
+			})).To(BeTrue()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 2}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 3}}})).To(BeTrue())
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 3}},
+			})).To(BeTrue())
 			Expect(p.Delete(event.DeleteEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: ""}}})).To(BeTrue())
 		})
 
@@ -382,13 +381,16 @@ var _ = Describe("CreatePredicateForObject", func() {
 			Expect(p.Create(event.CreateEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: ""}}})).To(BeFalse())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "", Generation: 0}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "", Generation: 0}}})).To(BeFalse()) // Generation was not specified.
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "", Generation: 0}},
+			})).To(BeFalse()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "", Generation: 2}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "", Generation: 3}}})).To(BeFalse())
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "", Generation: 3}},
+			})).To(BeFalse())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 2}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 2}}})).To(BeFalse()) // Generation didn't change.
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "", Generation: 2}},
+			})).To(BeFalse()) // Generation didn't change.
 			Expect(p.Delete(event.DeleteEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: ""}}})).To(BeFalse())
 		})
 	})
@@ -406,10 +408,12 @@ var _ = Describe("CreatePredicateForObject", func() {
 			Expect(p.Create(event.CreateEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace"}}})).To(BeTrue())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 0}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 0}}})).To(BeTrue()) // Generation was not specified.
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 0}},
+			})).To(BeTrue()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 2}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 3}}})).To(BeTrue())
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 3}},
+			})).To(BeTrue())
 			Expect(p.Delete(event.DeleteEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace"}}})).To(BeTrue())
 		})
 
@@ -418,13 +422,16 @@ var _ = Describe("CreatePredicateForObject", func() {
 			Expect(p.Create(event.CreateEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace"}}})).To(BeFalse())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace", Generation: 0}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace", Generation: 0}}})).To(BeFalse()) // Generation was not specified.
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace", Generation: 0}},
+			})).To(BeFalse()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace", Generation: 2}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace", Generation: 3}}})).To(BeFalse())
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace", Generation: 3}},
+			})).To(BeFalse())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 2}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 2}}})).To(BeFalse()) // Generation didn't change.
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "test-namespace", Generation: 2}},
+			})).To(BeFalse()) // Generation didn't change.
 			Expect(p.Delete(event.DeleteEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "", Namespace: "other-namespace"}}})).To(BeFalse())
 		})
 	})
@@ -442,10 +449,12 @@ var _ = Describe("CreatePredicateForObject", func() {
 			Expect(p.Create(event.CreateEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace"}}})).To(BeTrue())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 0}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 0}}})).To(BeTrue()) // Generation was not specified.
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 0}},
+			})).To(BeTrue()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 2}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 3}}})).To(BeTrue())
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 3}},
+			})).To(BeTrue())
 			Expect(p.Delete(event.DeleteEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace"}}})).To(BeTrue())
 		})
 
@@ -454,24 +463,30 @@ var _ = Describe("CreatePredicateForObject", func() {
 			Expect(p.Create(event.CreateEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace"}}})).To(BeFalse())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace", Generation: 0}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace", Generation: 0}}})).To(BeFalse()) // Generation was not specified.
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace", Generation: 0}},
+			})).To(BeFalse()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace", Generation: 2}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace", Generation: 3}}})).To(BeFalse())
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace", Generation: 3}},
+			})).To(BeFalse())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace", Generation: 2}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 2}}})).To(BeFalse()) // Generation didn't change.
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "test-namespace", Generation: 2}},
+			})).To(BeFalse()) // Generation didn't change.
 			Expect(p.Delete(event.DeleteEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "test-object", Namespace: "other-namespace"}}})).To(BeFalse())
 			Expect(p.Create(event.CreateEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace"}}})).To(BeFalse())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace", Generation: 0}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace", Generation: 0}}})).To(BeFalse()) // Generation was not specified.
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace", Generation: 0}},
+			})).To(BeFalse()) // Generation was not specified.
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace", Generation: 2}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace", Generation: 3}}})).To(BeFalse())
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace", Generation: 3}},
+			})).To(BeFalse())
 			Expect(p.Update(event.UpdateEvent{
 				ObjectOld: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace", Generation: 2}},
-				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace", Generation: 2}}})).To(BeFalse()) // Generation didn't change.
+				ObjectNew: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace", Generation: 2}},
+			})).To(BeFalse()) // Generation didn't change.
 			Expect(p.Delete(event.DeleteEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace"}}})).To(BeFalse())
 		})
 	})

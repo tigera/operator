@@ -46,4 +46,7 @@ type AddOptions struct {
 	// use external elasticsearch. When set, the operator will not install Elasticsearch
 	// and instead will configure the cluster to use an external Elasticsearch.
 	ElasticExternal bool
+
+	// Whether or not to use crd.projectcalico.org/v1 or projectcalico.org/v3 for Calico CRDs.
+	UseV3CRDs bool
 }

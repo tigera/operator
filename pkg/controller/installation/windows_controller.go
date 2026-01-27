@@ -38,11 +38,10 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 
-	apiv3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
@@ -143,13 +142,13 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 	}
 
 	// Watch for changes to FelixConfiguration.
-	err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-windows-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
 	// Watch for changes to IPAMConfiguration.
-	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, logw, ri.ipamConfigWatchReady, []client.Object{&apiv3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: apiv3.KindIPAMConfiguration}}})
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, logw, ri.ipamConfigWatchReady, []client.Object{&v3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: v3.KindIPAMConfiguration}}})
 
 	if ri.enterpriseCRDsExist {
 		for _, ns := range []string{common.CalicoNamespace, common.OperatorNamespace()} {
@@ -303,7 +302,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Fetch default FelixConfiguration
-	felixConfiguration := &crdv1.FelixConfiguration{}
+	felixConfiguration := &v3.FelixConfiguration{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
 	if err != nil && !apierrors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read FelixConfiguration", err, reqLogger)
@@ -316,7 +315,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for IPAMConfiguration watch to be established", nil, logw)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
-		ipamConfiguration := &apiv3.IPAMConfiguration{}
+		ipamConfiguration := &v3.IPAMConfiguration{}
 		err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, ipamConfiguration)
 		if err != nil && !apierrors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read IPAMConfiguration", err, reqLogger)

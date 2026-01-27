@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ var _ = Describe("tier controller tests", func() {
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(appsv1.AddToScheme(scheme))
 

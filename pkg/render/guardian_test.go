@@ -63,7 +63,7 @@ var _ = Describe("Rendering tests", func() {
 			},
 		}
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -363,7 +363,7 @@ var _ = Describe("guardian", func() {
 		var cfg *render.GuardianConfiguration
 		BeforeEach(func() {
 			scheme := runtime.NewScheme()
-			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())

@@ -119,7 +119,7 @@ var _ = Describe("Node rendering tests", func() {
 					defaultInstance.CalicoNetwork.NodeAddressAutodetectionV6 = &operatorv1.NodeAddressAutodetection{FirstFound: &ff}
 				}
 				scheme := runtime.NewScheme()
-				Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+				Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 				cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -203,6 +203,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+			"calico_api_group": "",
       "policy_setup_timeout_seconds": 0,
       "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "datastore_type": "kubernetes",
@@ -405,6 +406,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -572,6 +574,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 1450,
       "nodename_file_optional": false,
@@ -935,6 +938,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -1337,6 +1341,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -2332,6 +2337,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -2404,6 +2410,7 @@ var _ = Describe("Node rendering tests", func() {
       "container_settings": {
         "allow_ip_forwarding": false
       },
+      "calico_api_group": "",
       "datastore_type": "kubernetes",
         "ipam": {
           "assign_ipv4":  "%t",
@@ -2465,6 +2472,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -2513,6 +2521,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -2582,6 +2591,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -2638,6 +2648,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -2688,6 +2699,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
       "nodename_file_optional": false,
@@ -2730,6 +2742,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "policy_setup_timeout_seconds": 0,
       "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "datastore_type": "kubernetes",
@@ -2868,6 +2881,7 @@ var _ = Describe("Node rendering tests", func() {
   "plugins": [
     {
       "type": "calico",
+      "calico_api_group": "",
       "policy_setup_timeout_seconds": 0,
       "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "datastore_type": "kubernetes",

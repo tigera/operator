@@ -48,7 +48,7 @@ var _ = Describe("CRD management tests", func() {
 	var operatorDone chan struct{}
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 		cfg, err := config.GetConfig()
 		Expect(err).NotTo(HaveOccurred())
@@ -61,7 +61,7 @@ var _ = Describe("CRD management tests", func() {
 		// Save the networkpolicies CRD so we can restore it when finished
 		npCRD = &apiextenv1.CustomResourceDefinition{
 			TypeMeta:   metav1.TypeMeta{Kind: "CustomResourceDefinition", APIVersion: "apiextensions.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "networkpolicies.crd.projectcalico.org"},
+			ObjectMeta: metav1.ObjectMeta{Name: "networkpolicies.projectcalico.org"},
 		}
 		k := client.ObjectKey{Name: npCRD.Name}
 		err = c.Get(context.Background(), k, npCRD)

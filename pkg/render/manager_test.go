@@ -473,7 +473,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
 				Verbs:     []string{"update"},
-			}}))
+			},
+		}))
 		roleBindingUpdateManagedClusters := rtest.GetResource(resourcesToCreate, render.ManagerManagedClustersUpdateRBACName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(roleBindingUpdateManagedClusters.RoleRef.Name).To(Equal(render.ManagerManagedClustersUpdateRBACName))
 		Expect(roleBindingWatchManagedClusters.Subjects).To(ConsistOf([]rbacv1.Subject{
@@ -483,7 +484,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Namespace: render.ManagerNamespace,
 			},
 		}))
-
 	})
 
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {
@@ -510,7 +510,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		var cfg *render.ManagerConfiguration
 		BeforeEach(func() {
 			scheme := runtime.NewScheme()
-			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 			certificateManager, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -801,7 +801,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -1691,7 +1691,7 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 	var voltronLinseedKP certificatemanagement.KeyPairInterface
 
 	scheme := runtime.NewScheme()
-	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 	certificateManager, err := certificatemanager.Create(cli, roc.installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())

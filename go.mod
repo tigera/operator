@@ -22,7 +22,6 @@ require (
 	github.com/openshift/api v0.0.0-20260122154241-80c3fbc164d6
 	github.com/openshift/library-go v0.0.0-20260121132910-dc3a1c884c04
 	github.com/pkg/errors v0.9.1
-	github.com/projectcalico/api v0.0.0-20250916150628-d4009e4d7c50
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.88.0
 	github.com/r3labs/diff/v2 v2.15.1
 	github.com/sirupsen/logrus v1.9.4

@@ -107,7 +107,7 @@ func TestGenerateReleaseNotes(t *testing.T) {
 	cmpNormalizeDateOpt := cmp.Transformer("NormalizeDates", func(s string) string {
 		return dateRegex.ReplaceAllString(s, "DD MMM YYYY")
 	})
-	want := `27 Nov 2025
+	want := `27 Nov 2026
 
 #### Included Calico versions
 

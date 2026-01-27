@@ -69,7 +69,7 @@ var _ = Describe("Manager controller tests", func() {
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()

@@ -145,7 +145,6 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
-
 	objs := []client.Object{
 		// common RBAC for EE and OSS
 		c.serviceAccount(),
@@ -772,7 +771,6 @@ func GuardianService(clusterDomain string) string {
 // rulesForManagementClusterRequests returns the set of RBAC rules needed by Guardian in order to
 // satisfy requests from the management cluster over the tunnel.
 func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
-
 	rules := []rbacv1.PolicyRule{
 		// Common rules required to handle requests from multiple components in the management cluster.
 		{

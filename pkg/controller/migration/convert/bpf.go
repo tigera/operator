@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	corev1 "k8s.io/api/core/v1"
@@ -61,7 +61,7 @@ func copyK8sServicesEPConfigMap(c *components) error {
 
 // handleBPF is a migration handler which ensures BPF configuration is carried forward.
 func handleBPF(c *components, install *operatorv1.Installation) error {
-	felixConfiguration := &crdv1.FelixConfiguration{}
+	felixConfiguration := &v3.FelixConfiguration{}
 	bpf := operatorv1.LinuxDataplaneBPF
 	err := c.client.Get(ctx, types.NamespacedName{Name: "default"}, felixConfiguration)
 	if err != nil {

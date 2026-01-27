@@ -19,9 +19,9 @@ import (
 	"reflect"
 	"strconv"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/controller/utils"
 
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
@@ -29,7 +29,7 @@ import (
 )
 
 // bpfValidateAnnotations validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
-func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
+func bpfValidateAnnotations(fc *v3.FelixConfiguration) error {
 	var annotationValue *bool
 	if fc.Annotations[render.BPFOperatorAnnotation] != "" {
 		v, err := strconv.ParseBool(fc.Annotations[render.BPFOperatorAnnotation])
@@ -71,7 +71,7 @@ func isRolloutCompleteWithBPFVolumes(ds *appsv1.DaemonSet) bool {
 
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == render.BPFVolumeName {
-			//return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
+			// return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
 			if ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable {
 				return true
 			} else {
@@ -82,7 +82,7 @@ func isRolloutCompleteWithBPFVolumes(ds *appsv1.DaemonSet) bool {
 	return false
 }
 
-func setBPFEnabledOnFelixConfiguration(fc *crdv1.FelixConfiguration, bpfEnabled bool) error {
+func setBPFEnabledOnFelixConfiguration(fc *v3.FelixConfiguration, bpfEnabled bool) error {
 	err := bpfValidateAnnotations(fc)
 	if err != nil {
 		return err
@@ -121,11 +121,11 @@ func bpfEnabledOnDaemonsetWithEnvVar(ds *appsv1.DaemonSet) (bool, error) {
 	return bpfEnabledStatus, err
 }
 
-func bpfEnabledOnFelixConfig(fc *crdv1.FelixConfiguration) bool {
+func bpfEnabledOnFelixConfig(fc *v3.FelixConfiguration) bool {
 	return fc.Spec.BPFEnabled != nil && *fc.Spec.BPFEnabled
 }
 
-func disableBPFHostConntrackBypass(fc *crdv1.FelixConfiguration) {
+func disableBPFHostConntrackBypass(fc *v3.FelixConfiguration) {
 	hostConntrackBypassDisabled := false
 	fc.Spec.BPFHostConntrackBypass = &hostConntrackBypassDisabled
 }

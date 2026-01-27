@@ -15,12 +15,11 @@
 package installation
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"path"
 	"strings"
-
-	"errors"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"

@@ -64,9 +64,7 @@ const (
 	FlowsDashboardName = "Calico Flow Logs"
 )
 
-var (
-	EntityRule = networkpolicy.CreateEntityRule(Namespace, CRName, Port)
-)
+var EntityRule = networkpolicy.CreateEntityRule(Namespace, CRName, Port)
 
 // Kibana renders the components necessary for kibana and elasticsearch
 func Kibana(cfg *Configuration) render.Component {

@@ -149,7 +149,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 		},
 		{
 			// For monitoring Calico-specific configuration.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
 				"bfdconfigurations",
 				"bgpconfigurations",
@@ -217,7 +217,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 	rules = append(rules, []rbacv1.PolicyRule{
 		{
 			// Used to update labels on the HostEndpoint resource.
-			APIGroups: []string{"projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"hostendpoints"},
 			Verbs:     []string{"list", "update"},
 		},

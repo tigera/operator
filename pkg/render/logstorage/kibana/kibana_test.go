@@ -142,8 +142,7 @@ var _ = Describe("Kibana rendering tests", func() {
 				&corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				}))
-			resultKB := rtest.GetResource(createResources, kibana.CRName, kibana.Namespace,
-				"kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
+			resultKB := rtest.GetResource(createResources, kibana.CRName, kibana.Namespace, "kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.lifespan"]).To(Equal("8h"))
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.idleTimeout"]).To(Equal("30m"))
 			Expect(resultKB.Spec.Config.Data["xpack.fleet.enabled"]).To(BeFalse())
@@ -186,7 +185,7 @@ var _ = Describe("Kibana rendering tests", func() {
 		})
 
 		It("should configures Kibana publicBaseUrl when BaseURL is specified", func() {
-			//cfg.ElasticLicenseType = render.ElasticsearchLicenseTypeBasic
+			// cfg.ElasticLicenseType = render.ElasticsearchLicenseTypeBasic
 			cfg.BaseURL = "https://test.domain.com"
 
 			component := kibana.Kibana(cfg)
@@ -317,7 +316,6 @@ var _ = Describe("Kibana rendering tests", func() {
 						State: "",
 					},
 				}
-
 			})
 
 			It("returns Kibana CR's to delete and keeps the finalizers on the LogStorage CR", func() {
@@ -326,7 +324,6 @@ var _ = Describe("Kibana rendering tests", func() {
 				createdResources, deletedResources := component.Objects()
 				rtest.ExpectResources(deletedResources, expectedDeletedResources)
 				Expect(createdResources).To(BeEmpty())
-
 			})
 
 			It("doesn't return anything to delete when Kibana have their deletion times stamps set and the LogStorage finalizers are still set", func() {
@@ -432,7 +429,6 @@ var _ = Describe("Kibana rendering tests", func() {
 			})
 
 			It("should render the kibana pod template with resource requests and limits when set", func() {
-
 				cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{
 					CACert:             cfg.KibanaKeyPair.GetCertificatePEM(),
 					SignerName:         "my signer name",
@@ -462,7 +458,8 @@ var _ = Describe("Kibana rendering tests", func() {
 								Containers: []operatorv1.KibanaContainer{
 									{
 										Name:      "kibana",
-										Resources: &expectedResourcesRequirements},
+										Resources: &expectedResourcesRequirements,
+									},
 								},
 								InitContainers: []operatorv1.KibanaInitContainer{
 									{
@@ -488,16 +485,14 @@ var _ = Describe("Kibana rendering tests", func() {
 				initcontainer := test.GetContainer(kibana.Spec.PodTemplate.Spec.InitContainers, "key-cert-provisioner")
 				Expect(initcontainer).NotTo(BeNil())
 				Expect(initcontainer.Resources).To(Equal(expectedResourcesRequirements))
-
 			})
 		})
-
 	})
 })
 
 func getX509Certs(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
 	scheme := runtime.NewScheme()
-	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())

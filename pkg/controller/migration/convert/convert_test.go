@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -33,17 +33,17 @@ import (
 )
 
 var _ = Describe("Parser", func() {
-	var ctx = context.Background()
-	var pool *crdv1.IPPool
+	ctx := context.Background()
+	var pool *v3.IPPool
 	var scheme *runtime.Scheme
 	BeforeEach(func() {
 		scheme = kscheme.Scheme
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
-		pool = crdv1.NewIPPool()
-		pool.Spec = crdv1.IPPoolSpec{
+		pool = v3.NewIPPool()
+		pool.Spec = v3.IPPoolSpec{
 			CIDR:        "192.168.4.0/24",
-			IPIPMode:    crdv1.IPIPModeAlways,
+			IPIPMode:    v3.IPIPModeAlways,
 			NATOutgoing: true,
 		}
 	})
@@ -121,7 +121,7 @@ var _ = Describe("Parser", func() {
 	})
 
 	Context("CNI", func() {
-		var _ = Describe("CNI", func() {
+		_ = Describe("CNI", func() {
 			It("should load cni from correct fields on calico-node", func() {
 				ds := emptyNodeSpec()
 				ds.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{

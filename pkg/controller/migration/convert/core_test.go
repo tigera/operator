@@ -46,7 +46,7 @@ var _ = Describe("core handler", func() {
 			Expect(i.Spec.ComponentResources).To(BeEmpty())
 		})
 
-		var rqs = v1.ResourceRequirements{
+		rqs := v1.ResourceRequirements{
 			Limits: v1.ResourceList{
 				v1.ResourceCPU:    resource.MustParse("500m"),
 				v1.ResourceMemory: resource.MustParse("500Mi"),
@@ -89,7 +89,7 @@ var _ = Describe("core handler", func() {
 					v1.ResourceCPU: resource.MustParse("500m"),
 				},
 			}
-			expectedCompRsrc := []operatorv1.ComponentResource{operatorv1.ComponentResource{
+			expectedCompRsrc := []operatorv1.ComponentResource{{
 				ComponentName:        operatorv1.ComponentNameNode,
 				ResourceRequirements: rqs.DeepCopy(),
 			}}
@@ -631,7 +631,6 @@ var _ = Describe("core handler", func() {
 			Expect(*i.Spec.NodeMetricsPort).To(Equal(int32(9091)))
 		})
 		It("defaults prometheus off when no prometheus environment variables set", func() {
-
 			Expect(handleFelixNodeMetrics(&comps, i)).ToNot(HaveOccurred())
 			Expect(i.Spec.NodeMetricsPort).To(BeNil())
 		})

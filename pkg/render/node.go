@@ -150,6 +150,8 @@ type NodeConfiguration struct {
 	FelixPrometheusMetricsEnabled bool
 
 	FelixPrometheusMetricsPort int
+
+	V3CRDs bool
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -460,7 +462,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// For monitoring Calico-specific configuration.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"bgpconfigurations",
 					"bgpfilters",
@@ -486,7 +488,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// calico/node monitors for caliconodestatus objects and writes its status back into the object.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"caliconodestatuses",
 				},
@@ -495,7 +497,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			{
 				// For migration code in calico/node startup only. Remove when the migration
 				// code is removed from node.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"globalbgpconfigs",
 					"globalfelixconfigs",
@@ -504,7 +506,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Calico creates some configuration on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"clusterinformations",
 					"felixconfigurations",
@@ -514,7 +516,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Calico creates some tiers on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"tiers",
 				},
@@ -529,24 +531,24 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			{
 				// Most IPAM resources need full CRUD permissions so we can allocate and
 				// release IP addresses for pods.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"blockaffinities",
 					"ipamblocks",
-					"ipamconfigs",
+					"ipamconfigurations",
 					"ipamhandles",
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
 			},
 			{
 				// But, we only need to be able to query for IPAM config.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"ipamconfigs"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+				Resources: []string{"ipamconfigurations"},
 				Verbs:     []string{"get"},
 			},
 			{
 				// confd (and in some cases, felix) watches block affinities for route aggregation.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
 			},
@@ -556,7 +558,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Calico Enterprise needs to be able to read additional resources.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"bfdconfigurations",
 					"egressgatewaypolicies",
@@ -569,7 +571,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Tigera Secure updates status for packet captures.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"packetcaptures",
 				},
@@ -618,12 +620,12 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 			{
 				// Most IPAM resources need full CRUD permissions so we can allocate and
 				// release IP addresses for pods.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"blockaffinities",
 					"ipamblocks",
 					"ipamhandles",
-					"ipamconfigs",
+					"ipamconfigurations",
 					"clusterinformations",
 					"ippools",
 					"ipreservations",
@@ -635,7 +637,7 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 	return role
 }
 
-func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
+func (c *nodeComponent) createCalicoPluginConfig() map[string]any {
 	// Determine MTU to use for veth interfaces.
 	// Zero means to use auto-detection.
 	var mtu int32 = 0
@@ -667,22 +669,28 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	if c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds != nil {
 		linuxPolicySetupTimeoutSeconds = *c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds
 	}
+	apiGroup := ""
+	if c.cfg.V3CRDs {
+		apiGroup = "projectcalico.org/v3"
+	}
+
 	// calico plugin
-	calicoPluginConfig := map[string]interface{}{
+	calicoPluginConfig := map[string]any{
 		"type":                   "calico",
 		"datastore_type":         "kubernetes",
 		"mtu":                    mtu,
 		"nodename_file_optional": nodenameFileOptional,
 		"log_file_path":          "/var/log/calico/cni/cni.log",
 		"ipam":                   ipam,
-		"container_settings": map[string]interface{}{
+		"container_settings": map[string]any{
 			"allow_ip_forwarding": ipForward,
 		},
-		"policy": map[string]interface{}{
+		"policy": map[string]any{
 			"type": "k8s",
 		},
 		"policy_setup_timeout_seconds": linuxPolicySetupTimeoutSeconds,
 		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().HostPath.Path, "endpoint-status"),
+		"calico_api_group":             apiGroup,
 	}
 
 	// Determine logging configuration
@@ -710,7 +718,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	}
 
 	// optional properties
-	kubernetes := map[string]interface{}{
+	kubernetes := map[string]any{
 		"kubeconfig": "__KUBECONFIG_FILEPATH__",
 	}
 	if apiRoot != "" {
@@ -719,7 +727,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	calicoPluginConfig["kubernetes"] = kubernetes
 
 	if c.vppDataplaneEnabled() {
-		calicoPluginConfig["dataplane_options"] = map[string]interface{}{
+		calicoPluginConfig["dataplane_options"] = map[string]any{
 			"type":   "grpc",
 			"socket": "unix:///var/run/calico/cni-server.sock",
 		}
@@ -728,9 +736,9 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	return calicoPluginConfig
 }
 
-func (c *nodeComponent) createPortmapPlugin() map[string]interface{} {
+func (c *nodeComponent) createPortmapPlugin() map[string]any {
 	// Determine portmap configuration to use.
-	portmapPlugin := map[string]interface{}{
+	portmapPlugin := map[string]any{
 		"type": "portmap",
 		"snat": true,
 		"capabilities": map[string]bool{
@@ -741,10 +749,10 @@ func (c *nodeComponent) createPortmapPlugin() map[string]interface{} {
 	return portmapPlugin
 }
 
-func (c *nodeComponent) createTuningPlugin() map[string]interface{} {
+func (c *nodeComponent) createTuningPlugin() map[string]any {
 	// tuning plugin (sysctl)
 	sysctl := map[string]string{}
-	tuningPlugin := map[string]interface{}{
+	tuningPlugin := map[string]any{
 		"type":   "tuning",
 		"sysctl": sysctl,
 	}
@@ -766,7 +774,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 		return nil
 	}
 
-	plugins := make([]interface{}, 0)
+	plugins := make([]any, 0)
 	plugins = append(plugins, c.createCalicoPluginConfig())
 
 	// optional portmap plugin
@@ -801,7 +809,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	}
 }
 
-func (c *nodeComponent) getCalicoIPAM() map[string]interface{} {
+func (c *nodeComponent) getCalicoIPAM() map[string]any {
 	// Determine what address families to enable.
 	var assign_ipv4 string
 	var assign_ipv6 string
@@ -815,32 +823,32 @@ func (c *nodeComponent) getCalicoIPAM() map[string]interface{} {
 	} else {
 		assign_ipv6 = "false"
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"type":        "calico-ipam",
 		"assign_ipv4": assign_ipv4,
 		"assign_ipv6": assign_ipv6,
 	}
 }
 
-func buildHostLocalIPAM(pools []operatorv1.IPPool) map[string]interface{} {
+func buildHostLocalIPAM(pools []operatorv1.IPPool) map[string]any {
 	v6 := GetIPv6Pool(pools) != nil
 	v4 := GetIPv4Pool(pools) != nil
 
 	if v4 && v6 {
 		// Dual-stack
-		return map[string]interface{}{
+		return map[string]any{
 			"type":   "host-local",
 			"ranges": [][]map[string]string{{{"subnet": "usePodCidr"}}, {{"subnet": "usePodCidrIPv6"}}},
 		}
 	} else if v6 {
 		// Single-stack v6
-		return map[string]interface{}{
+		return map[string]any{
 			"type":   "host-local",
 			"subnet": "usePodCidrIPv6",
 		}
 	} else {
 		// Single-stack v4
-		return map[string]interface{}{
+		return map[string]any{
 			"type":   "host-local",
 			"subnet": "usePodCidr",
 		}

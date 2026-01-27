@@ -84,7 +84,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -212,12 +212,12 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"securityeventwebhooks"},
 				Verbs:     []string{"get", "list", "watch", "update"},
 			},
 			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"alertexceptions"},
 				Verbs:     []string{"get", "list"},
 			},
@@ -259,7 +259,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				Namespace: render.IntrusionDetectionNamespace,
 			},
 		}))
-
 	})
 
 	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {
@@ -552,7 +551,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	})
 
 	It("should render container and init container with resource requests/limits when configured", func() {
-
 		intrusionDetectionResources := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":     resource.MustParse("2"),
@@ -647,7 +645,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				"memory": resource.MustParse("50Mi"),
 			},
 		}))
-
 	})
 
 	It("should NOT render impersonation permissions as part of intrusion detection ClusterRole", func() {
@@ -771,7 +768,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", tenantANamespace)}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(tenantA)}))
-
 		})
 
 		It("should render impersonation permissions as part of tigera-intrusion-detection ClusterRole", func() {
@@ -840,7 +836,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(deployment.Spec.Template.Spec.Containers[0].Name).To(Equal("controller"))
 		})
-
 	})
 })
 

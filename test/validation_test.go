@@ -31,7 +31,7 @@ import (
 var c client.Client
 
 func testSetup(t *testing.T) func() {
-	err := apis.AddToScheme(scheme.Scheme)
+	err := apis.AddToScheme(scheme.Scheme, false)
 	require.NoError(t, err, "failed to add APIs to scheme")
 
 	cfg, err := config.GetConfig()

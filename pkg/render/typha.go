@@ -261,7 +261,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			},
 			{
 				// For monitoring Calico-specific configuration.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"bgpconfigurations",
 					"bgppeers",
@@ -288,7 +288,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			{
 				// For migration code in calico/node startup only. Remove when the migration
 				// code is removed from node.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"globalbgpconfigs",
 					"globalfelixconfigs",
@@ -297,7 +297,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Calico creates some configuration on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"clusterinformations",
 					"felixconfigurations",
@@ -307,7 +307,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Calico creates some tiers on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"tiers",
 				},
@@ -322,7 +322,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			{
 				// Most IPAM resources need full CRUD permissions so we can allocate and
 				// release IP addresses for pods.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"blockaffinities",
 					"ipamblocks",
@@ -332,13 +332,13 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			},
 			{
 				// But, we only need to be able to query for IPAM config.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"ipamconfigs"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+				Resources: []string{"ipamconfigurations"},
 				Verbs:     []string{"get"},
 			},
 			{
 				// confd (and in some cases, felix) watches block affinities for route aggregation.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
 			},
@@ -348,7 +348,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Tigera Secure needs to be able to read licenses, and config.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"licensekeys",
 					"remoteclusterconfigurations",

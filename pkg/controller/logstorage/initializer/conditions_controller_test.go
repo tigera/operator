@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -68,7 +68,7 @@ var _ = Describe("LogStorage Conditions controller", func() {
 
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).ShouldNot(HaveOccurred())
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -83,11 +83,12 @@ var _ = Describe("LogStorage Conditions controller", func() {
 	})
 
 	generation := int64(2)
-	subControllers := []string{TigeraStatusName, TigeraStatusLogStorageAccess,
-		TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
+	subControllers := []string{
+		TigeraStatusName, TigeraStatusLogStorageAccess,
+		TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets,
+	}
 
 	It("should reconcile with one item in tigerastatus conditions", func() {
-
 		lsControllers := append(subControllers, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController, TigeraStatusLogStorageDashboards)
 		for _, ls := range lsControllers {
 			createTigeraStatus(cli, ctx, ls, generation, []operatorv1.TigeraStatusCondition{{
@@ -149,11 +150,9 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(string(progCondition.Status)).To(Equal(string(operatorv1.ConditionFalse)))
 		Expect(progCondition.Reason).To(Equal(string(operatorv1.Unknown)))
 		Expect(progCondition.Message).To(Equal(""))
-
 	})
 
 	It("should reconcile with empty tigerastatus conditions", func() {
-
 		lsControllers := append(subControllers, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController, TigeraStatusLogStorageDashboards)
 		for _, ls := range lsControllers {
 			ts := &operatorv1.TigeraStatus{
@@ -214,7 +213,6 @@ var _ = Describe("LogStorage Conditions controller", func() {
 	})
 
 	It("should reconcile multiple conditions as true", func() {
-
 		lsControllers := append(subControllers, TigeraStatusLogStorageKubeController, TigeraStatusLogStorageDashboards)
 		for _, ls := range lsControllers {
 			createTigeraStatus(cli, ctx, ls, generation, []operatorv1.TigeraStatusCondition{})
@@ -301,7 +299,6 @@ var _ = Describe("LogStorage Conditions controller", func() {
 		Expect(string(readyCondition.Status)).To(Equal(string(operatorv1.ConditionTrue)))
 		Expect(readyCondition.Reason).To(Equal(string(operatorv1.AllObjectsAvailable)))
 		Expect(readyCondition.ObservedGeneration).To(Equal(int64(2)))
-
 	})
 
 	It("should reconcile with all log-storage-* tigerastatus conditions as Available and later move to degraded", func() {
@@ -469,7 +466,6 @@ func CreateLogStorage(client client.Client, ls *operatorv1.LogStorage) {
 }
 
 func createTigeraStatus(cli client.Client, ctx context.Context, name string, generation int64, conditions []operatorv1.TigeraStatusCondition) {
-
 	// set All objects Available by default
 	if len(conditions) == 0 {
 		conditions = []operatorv1.TigeraStatusCondition{

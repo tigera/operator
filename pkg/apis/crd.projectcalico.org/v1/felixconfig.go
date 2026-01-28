@@ -25,6 +25,7 @@ type NFTablesMode string
 const (
 	NFTablesModeEnabled  NFTablesMode = "Enabled"
 	NFTablesModeDisabled NFTablesMode = "Disabled"
+	NFTablesModeAuto     NFTablesMode = "Auto"
 )
 
 type IptablesBackend string

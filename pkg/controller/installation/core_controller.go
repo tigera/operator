@@ -1814,17 +1814,21 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 	// we don't need to handle upgrades from versions that were previously FelixConfiguration only - nftables mode has always
 	// been controlled by the operator.
 	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
+		nftablesMode := crdv1.NFTablesModeDisabled
 		if install.Spec.IsNftables() {
-			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
-			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeEnabled
-			nftablesMode := crdv1.NFTablesModeEnabled
-			fc.Spec.NFTablesMode = &nftablesMode
-		} else {
-			// The operator is configured to use another dataplane. Disable nftables.
-			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeDisabled
-			nftablesMode := crdv1.NFTablesModeDisabled
-			fc.Spec.NFTablesMode = &nftablesMode
+			// The operator is configured to use the nftables dataplane.
+			if install.Spec.BPFEnabled() {
+				// For BPF mode, we always use nftables, as we don't use the upstream kube-proxy and so don't need to
+				// worry about compatibility with its mode of operation.
+				nftablesMode = crdv1.NFTablesModeEnabled
+			} else {
+				// Otherwise, kube-proxy is running - configure Felix to auto-detect whether it should use nftables or iptables on
+				// a per-node basis, allowing for smoother upgrades.
+				nftablesMode = crdv1.NFTablesModeAuto
+			}
 		}
+		updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != nftablesMode
+		fc.Spec.NFTablesMode = &nftablesMode
 	}
 	if updated {
 		reqLogger.Info("Patching nftables mode", "nftablesMode", *fc.Spec.NFTablesMode)

@@ -467,6 +467,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Verbs:         []string{"use"},
 			ResourceNames: []string{"privileged"},
 		}))
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"config.openshift.io"},
+			Resources: []string{"infrastructures"},
+			Verbs:     []string{"get", "list", "watch"},
+		}))
 	})
 
 	It("should render an API server with custom configuration", func() {

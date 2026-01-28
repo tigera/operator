@@ -957,6 +957,14 @@ type CNISpec struct {
 	// +optional
 	// +kubebuilder:validation:Type=string
 	ConfDir *string `json:"confDir,omitempty"`
+
+	// ConfName is the name of the CNI config file.
+	// If you have changed the name of the CNI configuration file in the container runtime configuration,
+	// please ensure that this field matches the same name as specified in the container runtime settings.
+	// Default: "10-calico.conflist"
+	// +optional
+	// +kubebuilder:validation:Type=string
+	ConfName *string `json:"confName,omitempty"`
 }
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.

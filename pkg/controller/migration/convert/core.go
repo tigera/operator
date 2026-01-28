@@ -184,7 +184,7 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 			}
 		}
 
-		if err := c.node.assertEnv(ctx, c.client, containerInstallCNI, "CNI_CONF_NAME", "10-calico.conflist"); err != nil {
+		if err := c.node.assertEnv(ctx, c.client, containerInstallCNI, "CNI_CONF_NAME", *install.Spec.CNI.ConfName); err != nil {
 			return err
 		}
 	}

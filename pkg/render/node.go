@@ -1299,7 +1299,7 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 	}
 
 	envVars := []corev1.EnvVar{
-		{Name: "CNI_CONF_NAME", Value: "10-calico.conflist"},
+		{Name: "CNI_CONF_NAME", Value: *c.cfg.Installation.CNI.ConfName},
 		{Name: "SLEEP", Value: "false"},
 		{Name: "CNI_NET_DIR", Value: *c.cfg.Installation.CNI.ConfDir},
 		{

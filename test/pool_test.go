@@ -191,7 +191,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
 		Expect(ipPools.Items[0].Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "tigera-operator"))
-		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[0].Spec.AssignmentMode).To(Equal(v3.Automatic))
 	})
 
 	It("should assume ownership of legacy default IP pools", func() {

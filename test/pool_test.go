@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/maps"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -189,7 +190,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.Disabled).To(Equal(false))
 		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
-		Expect(ipPools.Items[0].Labels).To(HaveLen(1))
+		Expect(ipPools.Items[0].Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "tigera-operator"))
 		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
 	})
 
@@ -251,7 +252,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(len(ipPools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
 
 		// This proves the operator has not assumed control.
-		Expect(ipPools.Items[0].Labels).To(HaveLen(0))
+		Expect(ipPools.Items[0].Labels).NotTo(HaveKey("app.kubernetes.io/managed-by"))
 
 		// Now, install the API server.
 		createAPIServer(c, mgr, shutdownContext, nil)
@@ -268,13 +269,11 @@ var _ = Describe("IPPool FV tests", func() {
 			if len(v3Pools.Items) != 1 {
 				return fmt.Errorf("Expected 1 IP pool, but got: %+v", v3Pools.Items)
 			}
-			if len(v3Pools.Items[0].Labels) != 1 {
-				return fmt.Errorf("Expected 1 label on IP pool, but got: %+v", v3Pools.Items[0].Labels)
+			if !maps.ContainsKeys(v3Pools.Items[0].Labels, "app.kubernetes.io/managed-by") {
+				return fmt.Errorf("Expected app.kubernetes.io/managed-by label, but got: %+v", v3Pools.Items[0].Labels)
 			}
 			return nil
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
-
-		Expect(v3Pools.Items[0].Labels).To(HaveKey("app.kubernetes.io/managed-by"))
 
 		// Verify that the default IPv4 pool has been subsumed by the operator.
 		Expect(v3Pools.Items[0].Name).To(Equal("default-ipv4-ippool"))
@@ -351,7 +350,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(len(ipPools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
 
 		// This proves the operator has not assumed control.
-		Expect(ipPools.Items[0].Labels).To(HaveLen(0))
+		Expect(ipPools.Items[0].Labels).NotTo(HaveKey("app.kubernetes.io/managed-by"))
 
 		// Now, install the API server.
 		createAPIServer(c, mgr, shutdownContext, nil)

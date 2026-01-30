@@ -260,7 +260,14 @@ var _ = Describe("Monitor controller tests", func() {
 
 				Expect(serviceMonitor.Spec.Endpoints).To(HaveLen(1))
 				// Verify that the default settings are propagated.
-				Expect(serviceMonitor.Labels).To(Equal(map[string]string{render.AppLabelName: monitor.TigeraExternalPrometheus}))
+				Expect(serviceMonitor.Labels).To(Equal(map[string]string{
+					render.AppLabelName:            monitor.TigeraExternalPrometheus,
+					"app.kubernetes.io/instance":   "tigera-secure",
+					"app.kubernetes.io/managed-by": "tigera-operator",
+					"app.kubernetes.io/name":       "tigera-external-prometheus",
+					"app.kubernetes.io/part-of":    "Calico",
+					"app.kubernetes.io/component":  "Monitor.operator.tigera.io",
+				}))
 				Expect(serviceMonitor.Spec.Endpoints[0]).To(Equal(monitoringv1.Endpoint{
 					Params: map[string][]string{"match[]": {"{__name__=~\".+\"}"}},
 					Port:   "web",

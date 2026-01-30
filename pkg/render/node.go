@@ -1589,6 +1589,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"})
 		} else {
 			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "felix"})
+			nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_PROGRAMCLUSTERROUTES", Value: "Enabled"})
 		}
 		if mtu != nil {
 			ipipMtu := strconv.Itoa(int(*mtu))

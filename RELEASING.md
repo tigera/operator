@@ -56,27 +56,15 @@ This ensures that new PRs against master will be automatically given the correct
 
 ## Preparing for the release
 
-- Create any new milestones that should exist
-  - Create the next patch version
-  - If a new minor was released (`.0`), also ensure the next minor has been created (this should have already been created as part of [Preparing a new release branch](#preparing-a-new-release-branch))
-- Review the milestone for this release and ensure it is accurate. https://github.com/tigera/operator/milestones
-  - Move any open PRs to a new milestone (*likely* the newly created one)
-  - Close the milestone for the release
-
-## Updating versions
-
 Checkout the branch from which you want to release. Ensure that you are using the correct
-operator version for the version of Calico or Calient that you are releasing. If in doubt,
+operator version for the version of Calico or Enterprise that you are releasing. If in doubt,
 check [the releases page](https://github.com/tigera/operator/releases) to find the most
-recent Operator release for your Calico or Calient minor version.
-
-Make sure pins are updated in `go.mod`
+recent Operator release for your Calico or Enterprise minor version.
 
 Run the following command:
 
 ```sh
-make release-prep GIT_PR_BRANCH_BASE=<RELEASE_BRANCH> GIT_REPO_SLUG=tigera/operator CONFIRM=true \
-  VERSION=<OPERATOR_VERSION> CALICO_VERSION=<CALICO_VERSION> CALICO_ENTERPRISE_VERSION=<CALICO_ENTERPRISE_VERSION> COMMON_VERSION=<COMMON_VERSION>
+make release-prep VERSION=<OPERATOR_VERSION> CALICO_VERSION=<CALICO_VERSION> ENTERPRISE_VERSION=<ENTERPRISE_VERSION>
 ```
 
 The command does the following:
@@ -86,20 +74,22 @@ format `vX.Y.Z` for each of the following files:
   1. `config/calico_versions.yml` (Calico OSS version)
   2. `config/enterprise_versions.yml` (Calico Enterprise version)
 
-- It updates the registry reference to `quay.io` from `gcr.io` for each of the following files:
+- It updates the registry reference to `quay.io` from `gcr.io` in the following files:
 
   1. `TigeraRegistry` in `pkg/components/images.go`
-  2. `defaultEnterpriseRegistry` in `hack/gen-versions/main.go`
 
 - It ensures `make gen-versions` is run and the resulting updates committed.
 - It creates a PR with all the changes
+- It manages the milestones on GitHub for the release stream associated with the new release,
+  which involves creating a new milestone for the next patch version and closing the current milestone
+  for the release version. All open issues and pull requests associated with the current milestone
+  are moved to the new milestone.
 
-Go to the PR created and:
-
-1. Ensure tests pass
-2. Update the labels in the PR  to include `docs-not-required` and `release-note-not-required`
+Go to the PR created and it is reviewed and merged.
 
 ## Releasing
+
+Once the PR from [the previous step](#preparing-for-the-release) is merged, follow these steps to create the release:
 
 1. Merge your PR to the release branch
 
@@ -110,15 +100,12 @@ Go to the PR created and:
     git push <remote> <tag> # e.g git push origin v1.30.2
     ```
 
-1. Log in to semaphore and find the new build for the release branch commit, and
-   click 'Rerun'. When Semaphore starts the rebuild, it will notice the new tag and
-   build and publish an operator release.
+  Pushing the tag should automatically run the release pipeline in CI.
 
-1. Go to [releases](https://github.com/tigera/operator/releases) and edit the draft release for the release tag
+1. Once the CI run is done, go to [releases](https://github.com/tigera/operator/releases) and edit the draft release *as needed* before publishing it.
 
-1. Publish the release.
-
-    > NOTE: Only mark this release as latest if it is the highest released version
+  > [!IMPORTANT]
+  > Only mark this release as latest if it is the highest released version
 
 ## Updates for new Calico CRDs
 

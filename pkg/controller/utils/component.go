@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
 	"regexp"
 	"slices"
@@ -1013,39 +1014,35 @@ func setStandardSelectorAndLabels(obj client.Object, customResource metav1.Objec
 	case *monitoringv1.Prometheus:
 		d := obj
 		if d.Spec.PodMetadata == nil {
-			d.Spec.PodMetadata = &monitoringv1.EmbeddedObjectMetadata{}
+			d.Spec.PodMetadata = &monitoringv1.EmbeddedObjectMetadata{Labels: make(map[string]string)}
 		}
-		for k, v := range d.Labels {
-			d.Spec.PodMetadata.Labels[k] = v
-		}
+		maps.Copy(d.Spec.PodMetadata.Labels, d.Labels)
 	case *monitoringv1.Alertmanager:
 		d := obj
 		if d.Spec.PodMetadata == nil {
-			d.Spec.PodMetadata = &monitoringv1.EmbeddedObjectMetadata{}
+			d.Spec.PodMetadata = &monitoringv1.EmbeddedObjectMetadata{Labels: make(map[string]string)}
 		}
-		for k, v := range d.Labels {
-			d.Spec.PodMetadata.Labels[k] = v
-		}
+		maps.Copy(d.Spec.PodMetadata.Labels, d.Labels)
 	default:
 		return
 	}
-
-	if podTemplate.Labels == nil {
-		podTemplate.Labels = make(map[string]string)
+	if podTemplate != nil {
+		if podTemplate.Labels == nil {
+			podTemplate.Labels = make(map[string]string)
+		}
+		if podTemplate.Labels["k8s-app"] == "" {
+			podTemplate.Labels["k8s-app"] = name
+		}
+		if customResource != nil {
+			// We do not want to set these labels on objects without a CR. They are usually deliberately not getting an
+			// owner ref and are not controlled by our operator.
+			addNameLabel(podTemplate, obj.GetName())
+			addInstanceLabel(podTemplate, customResource)
+			addComponentLabel(podTemplate, customResource)
+			addPartOfLabel(podTemplate)
+			addManagedByLabel(podTemplate)
+		}
 	}
-	if podTemplate.Labels["k8s-app"] == "" {
-		podTemplate.Labels["k8s-app"] = name
-	}
-	if customResource != nil {
-		// We do not want to set these labels on objects without a CR. They are usually deliberately not getting an
-		// owner ref and are not controlled by our operator.
-		addNameLabel(podTemplate, obj.GetName())
-		addInstanceLabel(podTemplate, customResource)
-		addComponentLabel(podTemplate, customResource)
-		addPartOfLabel(podTemplate)
-		addManagedByLabel(podTemplate)
-	}
-
 }
 
 // sanitizeLabel cleans an input string to conform to the validation for labels. A valid label must be an empty string

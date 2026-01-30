@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2017-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ type NFTablesMode string
 const (
 	NFTablesModeEnabled  NFTablesMode = "Enabled"
 	NFTablesModeDisabled NFTablesMode = "Disabled"
+	NFTablesModeAuto     NFTablesMode = "Auto"
 )
 
 type IptablesBackend string
@@ -222,6 +223,16 @@ type FelixConfigurationSpec struct {
 	HealthEnabled *bool   `json:"healthEnabled,omitempty"`
 	HealthHost    *string `json:"healthHost,omitempty"`
 	HealthPort    *int    `json:"healthPort,omitempty"`
+
+	// IstioAmbientMode configures Felix to work together with Tigera's Istio distribution.
+	// [Default: Disabled]
+	IstioAmbientMode *string `json:"istioAmbientMode,omitempty"`
+
+	// IstioDSCPMark sets the value to use when directing traffic to Istio ZTunnel, when Istio is enabled. The mark is set only on
+	// SYN packets at the final hop to avoid interference with other protocols. This value is reserved by Calico and must not be
+	// used with other Istio intallation
+	// elsewhere. [Default: 23]
+	IstioDSCPMark *numorstring.DSCP `json:"istioDSCPMark,omitempty"`
 
 	// CgroupV2Path overrides the default location where to find the cgroup hierarchy.
 	CgroupV2Path string `json:"cgroupV2Path,omitempty"`

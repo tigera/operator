@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
+	"github.com/tigera/operator/pkg/render/istio"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/version"
@@ -407,6 +408,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		render.LogCollectorNamespace,
 		render.CSIDaemonSetNamespace,
 		render.ManagerNamespace,
+		istio.IstioNamespace,
 	}
 	for _, ns := range badNamespaces {
 		if common.OperatorNamespace() == ns {

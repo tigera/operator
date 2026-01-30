@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -284,6 +284,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 			delete(labels, common.MultipleOwnersLabel)
 			om.GetObjectMeta().SetLabels(labels)
 		}
+
 		err = c.create(ctx, obj)
 		if err != nil {
 			logCtx.WithValues("key", key).Error(err, "Failed to create object.")
@@ -568,6 +569,15 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 	if reflect.DeepEqual(desiredMeta.GetCreationTimestamp(), metav1.Time{}) {
 		desiredMeta.SetCreationTimestamp(currentMeta.GetCreationTimestamp())
 	}
+
+	// Maintain any finalizers on objects that are not owned by the tigera/operator.
+	finalizers := desiredMeta.GetFinalizers()
+	for _, f := range currentMeta.GetFinalizers() {
+		if !strings.Contains(f, "tigera.io") {
+			finalizers = append(finalizers, f)
+		}
+	}
+	desiredMeta.SetFinalizers(finalizers)
 
 	// Update the generation on the desired object to match the current object.
 	desiredMeta.SetGeneration(currentMeta.GetGeneration())

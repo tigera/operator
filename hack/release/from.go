@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -27,11 +27,66 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// releaseFrom is the main action for the command.
-// It builds (and publishes) a new operator based on the base version specified.
-func releaseFrom(ctx context.Context, c *cli.Command) error {
+// Command to release from a previous version.
+var releaseFromCommand = &cli.Command{
+	Name:  "from",
+	Usage: "Release a new operator image version using a previous version as the base",
+	Flags: []cli.Flag{
+		baseOperatorFlag,
+		versionFlag,
+		exceptCalicoFlag,
+		exceptEnterpriseFlag,
+		publishFlag,
+		archFlag,
+		registryFlag,
+		imageFlag,
+		devTagSuffixFlag,
+		skipValidationFlag,
+	},
+	Before: releaseFromBefore,
+	Action: releaseFromAction,
+}
+
+// Pre-action for "release from" command.
+var releaseFromBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	configureLogging(c)
+
+	if c.Bool(skipValidationFlag.Name) {
+		logrus.Warn("Skipping pre-release validation as requested.")
+		return ctx, nil
+	}
+
+	ctx, err := checkGitClean(ctx)
+	if err != nil {
+		return ctx, err
+	}
+	version := c.String(versionFlag.Name)
+	if c.String(baseOperatorFlag.Name) == version {
+		return ctx, fmt.Errorf("base version and new version cannot be the same")
+	}
+	if isRelease, err := isReleaseVersionFormat(version); err != nil {
+		return ctx, fmt.Errorf("error determining if version is a release: %s", err)
+	} else if isRelease && c.Bool(publishFlag.Name) {
+		logrus.Warn("You are about to publish a release version. Ensure this is intended.")
+		return ctx, nil
+	}
+	hashreleaseRegex, err := regexp.Compile(fmt.Sprintf(hashreleaseFormat, c.String(devTagSuffixFlag.Name)))
+	if err != nil {
+		return ctx, fmt.Errorf("error compiling hashrelease regex: %s", err)
+	}
+	if !hashreleaseRegex.MatchString(version) {
+		if c.Bool(publishFlag.Name) && c.String(registryFlag.Name) == quayRegistry && c.String(imageFlag.Name) == defaultImageName {
+			return ctx, fmt.Errorf("cannot use the default registry and image for publishing operator version %q. "+
+				"Either update registry and/or image flag OR specify version in the format ", version)
+		}
+	}
+	return ctx, nil
+})
+
+// Action executed for "release from" command.
+var releaseFromAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
 	// get root directory of operator git repo
-	repoRootDir, err := runCommand("git", []string{"rev-parse", "--show-toplevel"}, nil)
+	repoRootDir, err := gitDir()
 	if err != nil {
 		return fmt.Errorf("error getting git root directory: %s", err)
 	}
@@ -42,16 +97,14 @@ func releaseFrom(ctx context.Context, c *cli.Command) error {
 	}
 
 	// Apply new version overrides
-	calicoOverrides := c.StringSlice(exceptCalicoFlag.Name)
-	if len(calicoOverrides) > 0 {
+	if calicoOverrides := c.StringSlice(exceptCalicoFlag.Name); len(calicoOverrides) > 0 {
 		if err := modifyComponentConfig(repoRootDir, calicoConfig, calicoOverrides); err != nil {
 			return fmt.Errorf("error overriding calico config: %s", err)
 		}
 	}
-	enterpriseOverrides := c.StringSlice(exceptEnterpriseFlag.Name)
-	if len(enterpriseOverrides) > 0 {
+	if enterpriseOverrides := c.StringSlice(exceptEnterpriseFlag.Name); len(enterpriseOverrides) > 0 {
 		if err := modifyComponentConfig(repoRootDir, enterpriseConfig, enterpriseOverrides); err != nil {
-			return fmt.Errorf("error overriding calico config: %s", err)
+			return fmt.Errorf("error overriding enterprise config: %s", err)
 		}
 	}
 
@@ -65,35 +118,30 @@ func releaseFrom(ctx context.Context, c *cli.Command) error {
 	}
 
 	return newHashreleaseOperator(repoRootDir, version, c.String(imageFlag.Name), c.String(registryFlag.Name), c.StringSlice(archFlag.Name), c.Bool(publishFlag.Name))
-}
-
-// isReleaseVersionFormat checks if the version in the format vX.Y.Z.
-func isReleaseVersionFormat(version string) (bool, error) {
-	releaseRegex, err := regexp.Compile(releaseFormat)
-	if err != nil {
-		return false, fmt.Errorf("error compiling release regex: %s", err)
-	}
-	return releaseRegex.MatchString(version), nil
-}
+})
 
 // newOperator handles creating a new operator release.
 // If publish is true, it will push a new tag to the git remote to trigger a release.
 // Otherwise, it will only commit the changes to the git repo locally.
 func newOperator(dir, version, remote string, publish bool) error {
-	if _, err := runCommandInDir(dir, "git", []string{"add", "config/"}, nil); err != nil {
+	if out, err := gitInDir(dir, "add", "config/"); err != nil {
+		logrus.Error(out)
 		return fmt.Errorf("error adding changes in git: %s", err)
 	}
-	if _, err := runCommandInDir(dir, "git", []string{"commit", "-m", fmt.Sprintf("Release %s", version)}, nil); err != nil {
+	if out, err := git("commit", "-m", fmt.Sprintf("Release %s", version)); err != nil {
+		logrus.Error(out)
 		return fmt.Errorf("error committing changes in git: %s", err)
 	}
-	if _, err := runCommandInDir(dir, "git", []string{"tag", version}, nil); err != nil {
+	if _out, err := git("tag", version); err != nil {
+		logrus.Error(_out)
 		return fmt.Errorf("error tagging release in git: %s", err)
 	}
 	if !publish {
 		logrus.Info("skip pushing tag to git for publishing release")
 		return nil
 	}
-	if _, err := runCommandInDir(dir, "git", []string{"push", remote, version}, nil); err != nil {
+	if out, err := git("push", remote, version); err != nil {
+		logrus.Error(out)
 		return fmt.Errorf("error pushing tag in git: %s", err)
 	}
 	logrus.Warn("Ensure that the changes are merged into the main branch as well.")
@@ -105,7 +153,8 @@ func newOperator(dir, version, remote string, publish bool) error {
 // if publish is true, it will also publish the operator to registry.
 func newHashreleaseOperator(dir, version, imageName, registry string, arches []string, publish bool) error {
 	defer func() {
-		if _, err := runCommandInDir(dir, "git", []string{"checkout", "config/"}, nil); err != nil {
+		if out, err := gitInDir(dir, "checkout", "config/"); err != nil {
+			logrus.Error(out)
 			logrus.WithError(err).Error("error reverting changes in config/")
 		}
 	}()
@@ -125,17 +174,19 @@ func buildHashreleaseOperator(dir, version, imageName, registry string, arches [
 	env = append(env, fmt.Sprintf("ARCHES=%s", strings.Join(arches, " ")))
 	env = append(env, fmt.Sprintf("GIT_VERSION=%s", version))
 	env = append(env, fmt.Sprintf("BUILD_IMAGE=%s", imageName))
-	if _, err := runCommandInDir(dir, "make", []string{"image-all"}, env); err != nil {
-		return err
+	if out, err := makeInDir(dir, "image-all", env...); err != nil {
+		logrus.Error(out)
+		return fmt.Errorf("error building operator images: %w", err)
 	}
 	for _, arch := range arches {
 		tag := fmt.Sprintf("%s/%s:%s-%s", registry, imageName, version, arch)
-		if _, err := runCommand("docker", []string{
+		if out, err := runCommand("docker", []string{
 			"tag",
 			fmt.Sprintf("%s:latest-%s", imageName, arch),
 			tag,
 		}, env); err != nil {
-			return err
+			logrus.Error(out)
+			return fmt.Errorf("error tagging operator %s image: %w", arch, err)
 		}
 		logrus.WithField("tag", tag).Debug("Built image")
 	}
@@ -145,17 +196,19 @@ func buildHashreleaseOperator(dir, version, imageName, registry string, arches [
 	env = append(env, fmt.Sprintf("GIT_VERSION=%s", version))
 	env = append(env, fmt.Sprintf("BUILD_IMAGE=%s", imageName))
 	env = append(env, fmt.Sprintf("BUILD_INIT_IMAGE=%s", initImageName))
-	if _, err := runCommandInDir(dir, "make", []string{"image-init"}, env); err != nil {
-		return err
+	if out, err := makeInDir(dir, "image-init", env...); err != nil {
+		logrus.Error(out)
+		return fmt.Errorf("error building init image: %w", err)
 	}
 
 	initTag := fmt.Sprintf("%s/%s:%s", registry, initImageName, version)
-	if _, err := runCommand("docker", []string{
+	if out, err := runCommand("docker", []string{
 		"tag",
 		fmt.Sprintf("%s:latest", initImageName),
 		fmt.Sprintf("%s/%s:%s", registry, initImageName, version),
 	}, env); err != nil {
-		return err
+		logrus.Error(out)
+		return fmt.Errorf("error tagging init image: %w", err)
 	}
 	logrus.WithField("tag", initTag).Debug("Built init image")
 	return nil
@@ -166,8 +219,9 @@ func publishHashreleaseOperator(version, imageName, registry string, archs []str
 	multiArchTags := []string{}
 	for _, arch := range archs {
 		tag := fmt.Sprintf("%s/%s:%s-%s", registry, imageName, version, arch)
-		if _, err := runCommand("docker", []string{"push", tag}, nil); err != nil {
-			return err
+		if out, err := runCommand("docker", []string{"push", tag}, nil); err != nil {
+			logrus.Error(out)
+			return fmt.Errorf("error pushing %s image %s: %w", arch, tag, err)
 		}
 		logrus.WithField("tag", tag).Debug("Pushed image")
 		multiArchTags = append(multiArchTags, tag)
@@ -177,17 +231,20 @@ func publishHashreleaseOperator(version, imageName, registry string, archs []str
 	for _, tag := range multiArchTags {
 		cmd = append(cmd, "--amend", tag)
 	}
-	if _, err := runCommand("docker", cmd, nil); err != nil {
-		return err
+	if out, err := runCommand("docker", cmd, nil); err != nil {
+		logrus.Error(out)
+		return fmt.Errorf("error creating manifest for image %s: %w", image, err)
 	}
-	if _, err := runCommand("docker", []string{"manifest", "push", "--purge", image}, nil); err != nil {
-		return err
+	if out, err := runCommand("docker", []string{"manifest", "push", "--purge", image}, nil); err != nil {
+		logrus.Error(out)
+		return fmt.Errorf("error pushing manifest: %w", err)
 	}
 	logrus.WithField("image", image).Debug("Pushed manifest")
 
 	initImage := fmt.Sprintf("%s/%s-init:%s", registry, imageName, version)
-	if _, err := runCommand("docker", []string{"push", initImage}, nil); err != nil {
-		return err
+	if out, err := runCommand("docker", []string{"push", initImage}, nil); err != nil {
+		logrus.Error(out)
+		return fmt.Errorf("error pushing init image: %w", err)
 	}
 	logrus.WithField("image", initImage).Debug("Pushed init image")
 	return nil
@@ -283,8 +340,9 @@ func retrieveBaseVersionConfig(baseVersion, repoRootDir string) error {
 			"downloadPath": url,
 		}).Debug("Replacing local file with downloaded file")
 
-		if _, err := runCommand("curl", []string{"-L", "-o", localFilePath, url}, nil); err != nil {
-			return fmt.Errorf("error downloading %s from %s: %s", configFilePath, url, err)
+		if out, err := runCommand("curl", []string{"-L", "-o", localFilePath, url}, nil); err != nil {
+			logrus.Error(out)
+			return fmt.Errorf("error downloading %s from %s: %w", configFilePath, url, err)
 		}
 	}
 	return nil

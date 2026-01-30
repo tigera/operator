@@ -69,11 +69,13 @@ spec:
                                       name:
                                         description: |-
                                           Name is an enum which identifies the Manager Deployment container by name.
-                                          Supported values are: tigera-voltron, tigera-manager, tigera-ui-apis, and tigera-es-proxy (deprecated).
+                                          Supported values are: calico-voltron, calico-manager, calico-ui-apis, tigera-voltron (deprecated), tigera-manager (deprecated), tigera-ui-apis (deprecated), tigera-es-proxy (deprecated)
                                         enum:
+                                          - calico-voltron
+                                          - calico-manager
+                                          - calico-ui-apis
                                           - tigera-voltron
                                           - tigera-manager
-                                          - tigera-es-proxy
                                           - tigera-ui-apis
                                         type: string
                                       resources:
@@ -86,7 +88,7 @@ spec:
                                             description: |-
                                               Claims lists the names of resources, defined in spec.resourceClaims,
                                               that are used by this container.
-                                              This is an alpha field and requires enabling the
+                                              This field depends on the
                                               DynamicResourceAllocation feature gate.
                                               This field is immutable. It can only be set for containers.
                                             items:
@@ -155,10 +157,11 @@ spec:
                                       name:
                                         description: |-
                                           Name is an enum which identifies the Manager Deployment init container by name.
-                                          Supported values are: manager-tls-key-cert-provisioner, internal-manager-tls-key-cert-provisioner, tigera-voltron-linseed-tls-key-cert-provisioner
+                                          Supported values are: manager-tls-key-cert-provisioner, internal-manager-tls-key-cert-provisioner, calico-voltron-linseed-tls-key-cert-provisioner, tigera-voltron-linseed-tls-key-cert-provisioner (deprecated)
                                         enum:
                                           - manager-tls-key-cert-provisioner
                                           - internal-manager-tls-key-cert-provisioner
+                                          - calico-voltron-linseed-tls-key-cert-provisioner
                                           - tigera-voltron-linseed-tls-key-cert-provisioner
                                         type: string
                                       resources:
@@ -172,7 +175,7 @@ spec:
                                             description: |-
                                               Claims lists the names of resources, defined in spec.resourceClaims,
                                               that are used by this container.
-                                              This is an alpha field and requires enabling the
+                                              This field depends on the
                                               DynamicResourceAllocation feature gate.
                                               This field is immutable. It can only be set for containers.
                                             items:
@@ -301,6 +304,9 @@ spec:
                   type: string
               type: object
           type: object
+          x-kubernetes-validations:
+            - message: resource name must be 'tigera-secure'
+              rule: self.metadata.name == 'tigera-secure'
       served: true
       storage: true
       subresources:

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -109,8 +109,7 @@ func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
-		log.V(5).Info("Failed to create network watch", "err", err)
-		return fmt.Errorf("apiserver-controller failed to watch Tigera network resource: %v", err)
+		return fmt.Errorf("apiserver-controller failed to watch Installation resource: %v", err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, render.K8sSvcEndpointConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
@@ -311,7 +310,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query enterprise-only data.
-	var tunnelCAKeyPair certificatemanagement.KeyPairInterface
 	var trustedBundle certificatemanagement.TrustedBundle
 	var applicationLayer *operatorv1.ApplicationLayer
 	var managementCluster *operatorv1.ManagementCluster
@@ -351,23 +349,17 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		// This block depends on the Manager controller having defaulted the ManagementCluster CR and having created the tunnel CA secret.
-		// If these conditions are not met, this controller does not degrade as the Manager controller needs API server to be ready to accomplish the above.
+		// Management cluster only: check if the tunnel CA secret has been created. The apiserver mounts this secret so
+		// it can sign certificates for managed clusters. If the managementCluster has not been defaulted then we should
+		// not degrade. This is because the manager_controller exits the reconcile loop if the apiserver is not available.
 		if managementCluster != nil && managementCluster.Spec.TLS != nil && !r.multiTenant {
-			// The secret that contains the CA x509 certificate to create client certificates for the managed cluster
-			// is created by the Manager controller in tigera-operator namespace. We will read this secret and make
-			// sure it is available in the same namespace as the API server (calico-system)
-			// This secret is only created for a management cluster in a multi-cluster setup for a single tenant.
-			// Other cluster types do not require this secret. (Standalone configuration do not need it and multi-tenant
-			// configuration create secrets inside the tenant namespaces)
 			tunnelSecretName := managementCluster.Spec.TLS.SecretName
-			tunnelCASecret, err := utils.GetSecret(ctx, r.client, tunnelSecretName, common.OperatorNamespace())
+			// The manager_controller should have written this secret. We know this since spec.TLS has been defaulted.
+			// If the secret does not exist, we degrade this controller.
+			_, err := utils.GetSecret(ctx, r.client, tunnelSecretName, common.OperatorNamespace())
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
 				return reconcile.Result{}, err
-			}
-			if tunnelCASecret != nil {
-				tunnelCAKeyPair = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
 			}
 		}
 
@@ -489,7 +481,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			ServiceAccounts: []string{render.APIServerServiceAccountName},
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(tunnelCAKeyPair, false, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),

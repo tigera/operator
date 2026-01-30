@@ -447,7 +447,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -462,7 +461,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -636,7 +634,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -651,7 +648,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -749,8 +745,8 @@ spec:
                                             most preferred is the one with the greatest sum of weights, i.e.
                                             for each node that meets all of the scheduling requirements (resource
                                             request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                            compute a sum by iterating through the elements of this field and adding
-                                            "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                            compute a sum by iterating through the elements of this field and subtracting
+                                            "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                             node(s) with the highest sum are the most preferred.
                                           items:
                                             description:
@@ -827,7 +823,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -842,7 +837,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -1016,7 +1010,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -1031,7 +1024,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -1145,7 +1137,7 @@ spec:
                                             description: |-
                                               Claims lists the names of resources, defined in spec.resourceClaims,
                                               that are used by this container.
-                                              This is an alpha field and requires enabling the
+                                              This field depends on the
                                               DynamicResourceAllocation feature gate.
                                               This field is immutable. It can only be set for containers.
                                             items:
@@ -1926,7 +1918,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -1941,7 +1932,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -2115,7 +2105,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -2130,7 +2119,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -2228,8 +2216,8 @@ spec:
                                             most preferred is the one with the greatest sum of weights, i.e.
                                             for each node that meets all of the scheduling requirements (resource
                                             request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                            compute a sum by iterating through the elements of this field and adding
-                                            "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                            compute a sum by iterating through the elements of this field and subtracting
+                                            "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                             node(s) with the highest sum are the most preferred.
                                           items:
                                             description:
@@ -2306,7 +2294,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -2321,7 +2308,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -2495,7 +2481,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -2510,7 +2495,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -2623,7 +2607,7 @@ spec:
                                             description: |-
                                               Claims lists the names of resources, defined in spec.resourceClaims,
                                               that are used by this container.
-                                              This is an alpha field and requires enabling the
+                                              This field depends on the
                                               DynamicResourceAllocation feature gate.
                                               This field is immutable. It can only be set for containers.
                                             items:
@@ -2772,7 +2756,7 @@ spec:
                                             description: |-
                                               Claims lists the names of resources, defined in spec.resourceClaims,
                                               that are used by this container.
-                                              This is an alpha field and requires enabling the
+                                              This field depends on the
                                               DynamicResourceAllocation feature gate.
                                               This field is immutable. It can only be set for containers.
                                             items:
@@ -3274,7 +3258,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -3289,7 +3272,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -3463,7 +3445,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -3478,7 +3459,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -3576,8 +3556,8 @@ spec:
                                             most preferred is the one with the greatest sum of weights, i.e.
                                             for each node that meets all of the scheduling requirements (resource
                                             request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                            compute a sum by iterating through the elements of this field and adding
-                                            "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                            compute a sum by iterating through the elements of this field and subtracting
+                                            "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                             node(s) with the highest sum are the most preferred.
                                           items:
                                             description:
@@ -3654,7 +3634,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -3669,7 +3648,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -3843,7 +3821,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -3858,7 +3835,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -3956,22 +3932,26 @@ spec:
                                       name:
                                         description: |-
                                           Name is an enum which identifies the calico-node-windows DaemonSet container by name.
-                                          Supported values are: calico-node-windows
+                                          Supported values are: node, felix, confd
+                                          calico-node-windows is allowed because it was previously allowed.
                                         enum:
                                           - calico-node-windows
+                                          - node
+                                          - felix
+                                          - confd
                                         type: string
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.
-                                          If specified, this overrides the named calico-node-windows DaemonSet container's resources.
-                                          If omitted, the calico-node-windows DaemonSet will use its default value for this container's resources.
+                                          If specified, this overrides the named DaemonSet container's resources.
+                                          If omitted, the DaemonSet will use its default value for this container's resources.
                                           If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
                                         properties:
                                           claims:
                                             description: |-
                                               Claims lists the names of resources, defined in spec.resourceClaims,
                                               that are used by this container.
-                                              This is an alpha field and requires enabling the
+                                              This field depends on the
                                               DynamicResourceAllocation feature gate.
                                               This field is immutable. It can only be set for containers.
                                             items:
@@ -4059,7 +4039,7 @@ spec:
                                             description: |-
                                               Claims lists the names of resources, defined in spec.resourceClaims,
                                               that are used by this container.
-                                              This is an alpha field and requires enabling the
+                                              This field depends on the
                                               DynamicResourceAllocation feature gate.
                                               This field is immutable. It can only be set for containers.
                                             items:
@@ -4561,7 +4541,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -4576,7 +4555,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -4750,7 +4728,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -4765,7 +4742,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -4863,8 +4839,8 @@ spec:
                                             most preferred is the one with the greatest sum of weights, i.e.
                                             for each node that meets all of the scheduling requirements (resource
                                             request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                            compute a sum by iterating through the elements of this field and adding
-                                            "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                            compute a sum by iterating through the elements of this field and subtracting
+                                            "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                             node(s) with the highest sum are the most preferred.
                                           items:
                                             description:
@@ -4941,7 +4917,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -4956,7 +4931,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -5130,7 +5104,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -5145,7 +5118,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -5258,7 +5230,7 @@ spec:
                                             description: |-
                                               Claims lists the names of resources, defined in spec.resourceClaims,
                                               that are used by this container.
-                                              This is an alpha field and requires enabling the
+                                              This field depends on the
                                               DynamicResourceAllocation feature gate.
                                               This field is immutable. It can only be set for containers.
                                             items:
@@ -5504,6 +5476,9 @@ spec:
                           - Node
                           - Typha
                           - KubeControllers
+                          - NodeWindows
+                          - FelixWindows
+                          - ConfdWindows
                         type: string
                       resourceRequirements:
                         description:
@@ -5514,7 +5489,7 @@ spec:
                             description: |-
                               Claims lists the names of resources, defined in spec.resourceClaims,
                               that are used by this container.
-                              This is an alpha field and requires enabling the
+                              This field depends on the
                               DynamicResourceAllocation feature gate.
                               This field is immutable. It can only be set for containers.
                             items:
@@ -6010,7 +5985,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -6025,7 +5999,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -6199,7 +6172,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -6214,7 +6186,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -6312,8 +6283,8 @@ spec:
                                             most preferred is the one with the greatest sum of weights, i.e.
                                             for each node that meets all of the scheduling requirements (resource
                                             request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                            compute a sum by iterating through the elements of this field and adding
-                                            "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                            compute a sum by iterating through the elements of this field and subtracting
+                                            "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                             node(s) with the highest sum are the most preferred.
                                           items:
                                             description:
@@ -6390,7 +6361,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -6405,7 +6375,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -6579,7 +6548,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -6594,7 +6562,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -6708,7 +6675,7 @@ spec:
                                             description: |-
                                               Claims lists the names of resources, defined in spec.resourceClaims,
                                               that are used by this container.
-                                              This is an alpha field and requires enabling the
+                                              This field depends on the
                                               DynamicResourceAllocation feature gate.
                                               This field is immutable. It can only be set for containers.
                                             items:
@@ -6968,7 +6935,7 @@ spec:
                             pod is available (Ready for at least minReadySeconds) the old DaemonSet pod
                             on that node is marked deleted. If the old pod becomes unavailable for any
                             reason (Ready transitions to false, is evicted, or is drained) an updated
-                            pod is immediatedly created on that node without considering surge limits.
+                            pod is immediately created on that node without considering surge limits.
                             Allowing surge implies the possibility that the resources consumed by the
                             daemonset on any given node can double if the readiness check fails, and
                             so resource intensive daemonsets should take into account that they may
@@ -7721,7 +7688,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -7736,7 +7702,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -7910,7 +7875,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -7925,7 +7889,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -8023,8 +7986,8 @@ spec:
                                             most preferred is the one with the greatest sum of weights, i.e.
                                             for each node that meets all of the scheduling requirements (resource
                                             request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                            compute a sum by iterating through the elements of this field and adding
-                                            "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                            compute a sum by iterating through the elements of this field and subtracting
+                                            "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                             node(s) with the highest sum are the most preferred.
                                           items:
                                             description:
@@ -8101,7 +8064,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -8116,7 +8078,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -8290,7 +8251,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                   Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -8305,7 +8265,6 @@ spec:
                                                   pod labels will be ignored. The default value is empty.
                                                   The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                   Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                  This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                 items:
                                                   type: string
                                                 type: array
@@ -8418,7 +8377,7 @@ spec:
                                             description: |-
                                               Claims lists the names of resources, defined in spec.resourceClaims,
                                               that are used by this container.
-                                              This is an alpha field and requires enabling the
+                                              This field depends on the
                                               DynamicResourceAllocation feature gate.
                                               This field is immutable. It can only be set for containers.
                                             items:
@@ -8502,7 +8461,7 @@ spec:
                                             description: |-
                                               Claims lists the names of resources, defined in spec.resourceClaims,
                                               that are used by this container.
-                                              This is an alpha field and requires enabling the
+                                              This field depends on the
                                               DynamicResourceAllocation feature gate.
                                               This field is immutable. It can only be set for containers.
                                             items:
@@ -8750,7 +8709,6 @@ spec:
                                           - Honor: only nodes matching nodeAffinity/nodeSelector are included in the calculations.
                                           - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
                                           If this value is nil, the behavior is equivalent to the Honor policy.
-                                          This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                         type: string
                                       nodeTaintsPolicy:
                                         description: |-
@@ -8760,7 +8718,6 @@ spec:
                                           has a toleration, are included.
                                           - Ignore: node taints are ignored. All nodes are included.
                                           If this value is nil, the behavior is equivalent to the Ignore policy.
-                                          This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                         type: string
                                       topologyKey:
                                         description: |-
@@ -9288,7 +9245,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -9303,7 +9259,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -9481,7 +9436,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -9496,7 +9450,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -9595,8 +9548,8 @@ spec:
                                                 most preferred is the one with the greatest sum of weights, i.e.
                                                 for each node that meets all of the scheduling requirements (resource
                                                 request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                                compute a sum by iterating through the elements of this field and adding
-                                                "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                                compute a sum by iterating through the elements of this field and subtracting
+                                                "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                                 node(s) with the highest sum are the most preferred.
                                               items:
                                                 description:
@@ -9677,7 +9630,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -9692,7 +9644,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -9870,7 +9821,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -9885,7 +9835,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -10000,7 +9949,7 @@ spec:
                                                 description: |-
                                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                                   that are used by this container.
-                                                  This is an alpha field and requires enabling the
+                                                  This field depends on the
                                                   DynamicResourceAllocation feature gate.
                                                   This field is immutable. It can only be set for containers.
                                                 items:
@@ -10794,7 +10743,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -10809,7 +10757,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -10987,7 +10934,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -11002,7 +10948,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -11101,8 +11046,8 @@ spec:
                                                 most preferred is the one with the greatest sum of weights, i.e.
                                                 for each node that meets all of the scheduling requirements (resource
                                                 request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                                compute a sum by iterating through the elements of this field and adding
-                                                "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                                compute a sum by iterating through the elements of this field and subtracting
+                                                "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                                 node(s) with the highest sum are the most preferred.
                                               items:
                                                 description:
@@ -11183,7 +11128,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -11198,7 +11142,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -11376,7 +11319,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -11391,7 +11333,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -11505,7 +11446,7 @@ spec:
                                                 description: |-
                                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                                   that are used by this container.
-                                                  This is an alpha field and requires enabling the
+                                                  This field depends on the
                                                   DynamicResourceAllocation feature gate.
                                                   This field is immutable. It can only be set for containers.
                                                 items:
@@ -11654,7 +11595,7 @@ spec:
                                                 description: |-
                                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                                   that are used by this container.
-                                                  This is an alpha field and requires enabling the
+                                                  This field depends on the
                                                   DynamicResourceAllocation feature gate.
                                                   This field is immutable. It can only be set for containers.
                                                 items:
@@ -12165,7 +12106,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -12180,7 +12120,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -12358,7 +12297,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -12373,7 +12311,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -12472,8 +12409,8 @@ spec:
                                                 most preferred is the one with the greatest sum of weights, i.e.
                                                 for each node that meets all of the scheduling requirements (resource
                                                 request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                                compute a sum by iterating through the elements of this field and adding
-                                                "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                                compute a sum by iterating through the elements of this field and subtracting
+                                                "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                                 node(s) with the highest sum are the most preferred.
                                               items:
                                                 description:
@@ -12554,7 +12491,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -12569,7 +12505,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -12747,7 +12682,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -12762,7 +12696,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -12861,22 +12794,26 @@ spec:
                                           name:
                                             description: |-
                                               Name is an enum which identifies the calico-node-windows DaemonSet container by name.
-                                              Supported values are: calico-node-windows
+                                              Supported values are: node, felix, confd
+                                              calico-node-windows is allowed because it was previously allowed.
                                             enum:
                                               - calico-node-windows
+                                              - node
+                                              - felix
+                                              - confd
                                             type: string
                                           resources:
                                             description: |-
                                               Resources allows customization of limits and requests for compute resources such as cpu and memory.
-                                              If specified, this overrides the named calico-node-windows DaemonSet container's resources.
-                                              If omitted, the calico-node-windows DaemonSet will use its default value for this container's resources.
+                                              If specified, this overrides the named DaemonSet container's resources.
+                                              If omitted, the DaemonSet will use its default value for this container's resources.
                                               If used in conjunction with the deprecated ComponentResources, then this value takes precedence.
                                             properties:
                                               claims:
                                                 description: |-
                                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                                   that are used by this container.
-                                                  This is an alpha field and requires enabling the
+                                                  This field depends on the
                                                   DynamicResourceAllocation feature gate.
                                                   This field is immutable. It can only be set for containers.
                                                 items:
@@ -12964,7 +12901,7 @@ spec:
                                                 description: |-
                                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                                   that are used by this container.
-                                                  This is an alpha field and requires enabling the
+                                                  This field depends on the
                                                   DynamicResourceAllocation feature gate.
                                                   This field is immutable. It can only be set for containers.
                                                 items:
@@ -13475,7 +13412,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -13490,7 +13426,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -13668,7 +13603,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -13683,7 +13617,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -13782,8 +13715,8 @@ spec:
                                                 most preferred is the one with the greatest sum of weights, i.e.
                                                 for each node that meets all of the scheduling requirements (resource
                                                 request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                                compute a sum by iterating through the elements of this field and adding
-                                                "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                                compute a sum by iterating through the elements of this field and subtracting
+                                                "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                                 node(s) with the highest sum are the most preferred.
                                               items:
                                                 description:
@@ -13864,7 +13797,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -13879,7 +13811,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -14057,7 +13988,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -14072,7 +14002,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -14186,7 +14115,7 @@ spec:
                                                 description: |-
                                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                                   that are used by this container.
-                                                  This is an alpha field and requires enabling the
+                                                  This field depends on the
                                                   DynamicResourceAllocation feature gate.
                                                   This field is immutable. It can only be set for containers.
                                                 items:
@@ -14434,6 +14363,9 @@ spec:
                               - Node
                               - Typha
                               - KubeControllers
+                              - NodeWindows
+                              - FelixWindows
+                              - ConfdWindows
                             type: string
                           resourceRequirements:
                             description:
@@ -14445,7 +14377,7 @@ spec:
                                 description: |-
                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                   that are used by this container.
-                                  This is an alpha field and requires enabling the
+                                  This field depends on the
                                   DynamicResourceAllocation feature gate.
                                   This field is immutable. It can only be set for containers.
                                 items:
@@ -14954,7 +14886,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -14969,7 +14900,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -15147,7 +15077,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -15162,7 +15091,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -15261,8 +15189,8 @@ spec:
                                                 most preferred is the one with the greatest sum of weights, i.e.
                                                 for each node that meets all of the scheduling requirements (resource
                                                 request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                                compute a sum by iterating through the elements of this field and adding
-                                                "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                                compute a sum by iterating through the elements of this field and subtracting
+                                                "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                                 node(s) with the highest sum are the most preferred.
                                               items:
                                                 description:
@@ -15343,7 +15271,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -15358,7 +15285,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -15536,7 +15462,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -15551,7 +15476,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -15666,7 +15590,7 @@ spec:
                                                 description: |-
                                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                                   that are used by this container.
-                                                  This is an alpha field and requires enabling the
+                                                  This field depends on the
                                                   DynamicResourceAllocation feature gate.
                                                   This field is immutable. It can only be set for containers.
                                                 items:
@@ -15928,7 +15852,7 @@ spec:
                                 pod is available (Ready for at least minReadySeconds) the old DaemonSet pod
                                 on that node is marked deleted. If the old pod becomes unavailable for any
                                 reason (Ready transitions to false, is evicted, or is drained) an updated
-                                pod is immediatedly created on that node without considering surge limits.
+                                pod is immediately created on that node without considering surge limits.
                                 Allowing surge implies the possibility that the resources consumed by the
                                 daemonset on any given node can double if the readiness check fails, and
                                 so resource intensive daemonsets should take into account that they may
@@ -16690,7 +16614,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -16705,7 +16628,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -16883,7 +16805,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -16898,7 +16819,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -16997,8 +16917,8 @@ spec:
                                                 most preferred is the one with the greatest sum of weights, i.e.
                                                 for each node that meets all of the scheduling requirements (resource
                                                 request, requiredDuringScheduling anti-affinity expressions, etc.),
-                                                compute a sum by iterating through the elements of this field and adding
-                                                "weight" to the sum if the node has pods which matches the corresponding podAffinityTerm; the
+                                                compute a sum by iterating through the elements of this field and subtracting
+                                                "weight" from the sum if the node has pods which matches the corresponding podAffinityTerm; the
                                                 node(s) with the highest sum are the most preferred.
                                               items:
                                                 description:
@@ -17079,7 +16999,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                           Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -17094,7 +17013,6 @@ spec:
                                                           pod labels will be ignored. The default value is empty.
                                                           The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                           Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                          This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                         items:
                                                           type: string
                                                         type: array
@@ -17272,7 +17190,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both matchLabelKeys and labelSelector.
                                                       Also, matchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -17287,7 +17204,6 @@ spec:
                                                       pod labels will be ignored. The default value is empty.
                                                       The same key is forbidden to exist in both mismatchLabelKeys and labelSelector.
                                                       Also, mismatchLabelKeys cannot be set when labelSelector isn't set.
-                                                      This is a beta field and requires enabling MatchLabelKeysInPodAffinity feature gate (enabled by default).
                                                     items:
                                                       type: string
                                                     type: array
@@ -17401,7 +17317,7 @@ spec:
                                                 description: |-
                                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                                   that are used by this container.
-                                                  This is an alpha field and requires enabling the
+                                                  This field depends on the
                                                   DynamicResourceAllocation feature gate.
                                                   This field is immutable. It can only be set for containers.
                                                 items:
@@ -17485,7 +17401,7 @@ spec:
                                                 description: |-
                                                   Claims lists the names of resources, defined in spec.resourceClaims,
                                                   that are used by this container.
-                                                  This is an alpha field and requires enabling the
+                                                  This field depends on the
                                                   DynamicResourceAllocation feature gate.
                                                   This field is immutable. It can only be set for containers.
                                                 items:
@@ -17735,7 +17651,6 @@ spec:
                                               - Honor: only nodes matching nodeAffinity/nodeSelector are included in the calculations.
                                               - Ignore: nodeAffinity/nodeSelector are ignored. All nodes are included in the calculations.
                                               If this value is nil, the behavior is equivalent to the Honor policy.
-                                              This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                             type: string
                                           nodeTaintsPolicy:
                                             description: |-
@@ -17745,7 +17660,6 @@ spec:
                                               has a toleration, are included.
                                               - Ignore: node taints are ignored. All nodes are included.
                                               If this value is nil, the behavior is equivalent to the Ignore policy.
-                                              This is a beta-level feature default enabled by the NodeInclusionPolicyInPodTopologySpread feature flag.
                                             type: string
                                           topologyKey:
                                             description: |-
@@ -17923,6 +17837,11 @@ spec:
                   type: string
               type: object
           type: object
+          x-kubernetes-validations:
+            - message: resource name must be 'default', 'tigera-secure', or 'overlay'
+              rule:
+                self.metadata.name == 'default' || self.metadata.name == 'tigera-secure'
+                || self.metadata.name == 'overlay'
       served: true
       storage: true
       subresources:

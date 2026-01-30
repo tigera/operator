@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -565,9 +565,13 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 			},
 		},
 		{
-			// Kubernetes admin network policy resources.
+			// Kubernetes cluster network policy resources.
 			APIGroups: []string{"policy.networking.k8s.io"},
-			Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
+			Resources: []string{
+				"clusternetworkpolicies",
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
+			},
 			Verbs: []string{
 				"get",
 				"list",
@@ -707,7 +711,14 @@ func (c *apiServerComponent) authClusterRole() client.Object {
 			Resources:     []string{"securitycontextconstraints"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{securitycontextconstraints.Privileged},
-		})
+		},
+			// Starting with OCP 4.20, these permissions are required at startup when it sets up watches.
+			rbacv1.PolicyRule{
+				APIGroups: []string{"config.openshift.io"},
+				Resources: []string{"infrastructures"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		)
 	}
 
 	return &rbacv1.ClusterRole{
@@ -1622,6 +1633,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"policy.networking.k8s.io"},
 			Resources: []string{
+				"clusternetworkpolicies",
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},
@@ -1828,6 +1840,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"policy.networking.k8s.io",
 			},
 			Resources: []string{
+				"clusternetworkpolicies",
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},
@@ -2235,6 +2248,12 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "tigera-system",
 		},
+	})
+
+	// Renamed ClusterRole tigera-managed-cluster-watch to calico-managed-cluster-watch
+	renamedRscList = append(renamedRscList, &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "tigera-managed-cluster-watch"},
 	})
 
 	return renamedRscList

@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -466,6 +466,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Resources:     []string{"securitycontextconstraints"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{"privileged"},
+		}))
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"config.openshift.io"},
+			Resources: []string{"infrastructures"},
+			Verbs:     []string{"get", "list", "watch"},
 		}))
 	})
 
@@ -1404,7 +1409,7 @@ func validateTunnelSecret(voltronSecret *corev1.Secret) {
 	opts = x509.VerifyOptions{
 		DNSName:     "voltron",
 		Roots:       x509.NewCertPool(),
-		CurrentTime: time.Now().AddDate(0, 0, crypto.DefaultCACertificateLifetimeInDays+1),
+		CurrentTime: time.Now().Add(crypto.DefaultCACertificateLifetimeDuration + 24*time.Hour),
 	}
 	_, err = newCert.Verify(opts)
 	Expect(err).Should(HaveOccurred())
@@ -1441,6 +1446,7 @@ var (
 		{
 			APIGroups: []string{"policy.networking.k8s.io"},
 			Resources: []string{
+				"clusternetworkpolicies",
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},
@@ -1606,6 +1612,7 @@ var (
 				"policy.networking.k8s.io",
 			},
 			Resources: []string{
+				"clusternetworkpolicies",
 				"adminnetworkpolicies",
 				"baselineadminnetworkpolicies",
 			},

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -104,8 +104,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
-		log.V(5).Info("Failed to create network watch", "err", err)
-		return fmt.Errorf("applicationlayer-controller failed to watch Tigera network resource: %v", err)
+		return fmt.Errorf("applicationlayer-controller failed to watch Installation resource: %v", err)
 	}
 
 	// Watch for configmap changes in tigera-operator namespace; the cm contains config for Coraza library:

@@ -182,7 +182,7 @@ spec:
 
 1. In `Makefile`, update `ENVOY_GATEWAY_VERSION`.
 
-1. Delete `pkg/render/gateway_api_resources.yaml`.
+1. Delete `pkg/render/gatewayapi/gateway_api_resources.yaml`.
 
 1. Run `make build`.  This will generate a new version of `pkg/render/gateway_api_resources.yaml` and then build the operator image.
 

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,8 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	tigera "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
+	admregv1 "k8s.io/api/admissionregistration/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -41,4 +43,6 @@ func init() {
 	AddToSchemes = append(AddToSchemes, policyv1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, policyv1beta1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, monitoringv1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, admregv1.SchemeBuilder.AddToScheme)
+	AddToSchemes = append(AddToSchemes, autoscalingv2.SchemeBuilder.AddToScheme)
 }

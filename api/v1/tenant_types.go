@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +28,7 @@ func init() {
 }
 
 // DataType represent the type of data stored
-// +kubebuilder:validation:Enum=Alerts;AuditLogs;BGPLogs;ComplianceBenchmarks;ComplianceReports;ComplianceSnapshots;DNSLogs;FlowLogs;L7Logs;RuntimeReports;ThreatFeedsDomainSet;ThreatFeedsIPSet;WAFLogs
+// +kubebuilder:validation:Enum=Alerts;AuditLogs;BGPLogs;ComplianceBenchmarks;ComplianceReports;ComplianceSnapshots;DNSLogs;FlowLogs;L7Logs;RuntimeReports;ThreatFeedsDomainSet;ThreatFeedsIPSet;WAFLogs;PolicyActivity
 type DataType string
 
 const (
@@ -45,6 +45,7 @@ const (
 	DataTypeThreatFeedsDomainSet DataType = "ThreatFeedsDomainSet"
 	DataTypeThreatFeedsIPSet     DataType = "ThreatFeedsIPSet"
 	DataTypeWAFLogs              DataType = "WAFLogs"
+	DataTypePolicyActivity       DataType = "PolicyActivity"
 )
 
 // DataTypes is a set of all data types stored mapped to
@@ -63,6 +64,7 @@ var DataTypes = map[DataType]string{
 	DataTypeThreatFeedsDomainSet: "ELASTIC_THREAT_FEEDS_DOMAIN_SET_BASE_INDEX_NAME",
 	DataTypeThreatFeedsIPSet:     "ELASTIC_THREAT_FEEDS_IP_SET_BASE_INDEX_NAME",
 	DataTypeWAFLogs:              "ELASTIC_WAF_LOGS_BASE_INDEX_NAME",
+	DataTypePolicyActivity:       "ELASTIC_POLICY_ACTIVITY_BASE_INDEX_NAME",
 }
 
 type TenantSpec struct {

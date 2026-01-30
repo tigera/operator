@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -86,6 +86,20 @@ var _ = Describe("test GetReference", func() {
 		)
 	})
 
+	Context("registry override not ending with slash", func() {
+		DescribeTable("should render",
+			func(c Component, imagePath string) {
+				Expect(GetReference(c, "quay.io", "", "", nil)).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", imagePath, c.Image, c.Version)))
+			},
+			Entry("a calico image correctly", ComponentCalicoNode, CalicoImagePath),
+			Entry("a tigera image correctly", ComponentTigeraNode, TigeraImagePath),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraImagePath),
+			Entry("an operator init image correctly", ComponentOperatorInit, OperatorImagePath),
+			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoImagePath),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraImagePath),
+		)
+	})
+
 	Context("image prefix override", func() {
 		DescribeTable("should render",
 			func(c Component, image string) {
@@ -103,6 +117,20 @@ var _ = Describe("test GetReference", func() {
 	Context("imagepath override", func() {
 		DescribeTable("should render",
 			func(c Component, registry string) {
+				Expect(GetReference(c, "", "userpath/", "", nil)).To(Equal(fmt.Sprintf("%suserpath/%s:%s", registry, c.Image, c.Version)))
+			},
+			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry),
+			Entry("a tigera image correctly", ComponentTigeraNode, TigeraRegistry),
+			Entry("an ECK image correctly", ComponentElasticsearchOperator, TigeraRegistry),
+			Entry("an operator init image correctly", ComponentOperatorInit, OperatorRegistry),
+			Entry("a CSR init image correctly", ComponentCalicoCSRInitContainer, CalicoRegistry),
+			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraRegistry),
+		)
+	})
+
+	Context("imagepath override not ending in slash", func() {
+		DescribeTable("should render",
+			func(c Component, registry string) {
 				Expect(GetReference(c, "", "userpath", "", nil)).To(Equal(fmt.Sprintf("%suserpath/%s:%s", registry, c.Image, c.Version)))
 			},
 			Entry("a calico image correctly", ComponentCalicoNode, CalicoRegistry),
@@ -113,6 +141,7 @@ var _ = Describe("test GetReference", func() {
 			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, TigeraRegistry),
 		)
 	})
+
 	Context("registry and imagepath override", func() {
 		DescribeTable("should render",
 			func(c Component) {
@@ -126,6 +155,7 @@ var _ = Describe("test GetReference", func() {
 			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer),
 		)
 	})
+
 	Context("with an ImageSet", func() {
 		DescribeTable("should render",
 			func(c Component, hash string) {
@@ -147,6 +177,34 @@ var _ = Describe("test GetReference", func() {
 			Entry("an ECK image correctly", ComponentElasticsearchOperator, "@sha256:eckeckoperatorhash"),
 			Entry("an operator init image correctly", ComponentOperatorInit, "@sha256:tigeraoperatorhash"),
 			Entry("a CSR init image correctly", ComponentTigeraCSRInitContainer, "@sha256:tigerakeycertprovisionerhash"),
+		)
+	})
+
+	Context("component with development imagePath", func() {
+		customTigeraComponent := ComponentTigeraNode
+		customTigeraComponent.imagePath = "customtigera/"
+		customCalicoComponent := ComponentCalicoNode
+		customCalicoComponent.imagePath = "customcalico/"
+		DescribeTable("should render",
+			func(c Component, registry, imagePath string) {
+				Expect(GetReference(c, "", "", "", nil)).To(Equal(fmt.Sprintf("%s%s%s:%s", registry, imagePath, c.Image, c.Version)))
+			},
+			Entry("a calico image correctly", customCalicoComponent, CalicoRegistry, "customcalico/"),
+			Entry("a tigera image correctly", customTigeraComponent, TigeraRegistry, "customtigera/"),
+		)
+	})
+
+	Context("component with development registry", func() {
+		customTigeraComponent := ComponentTigeraNode
+		customTigeraComponent.Registry = "tigera.registry.io/"
+		customCalicoComponent := ComponentCalicoNode
+		customCalicoComponent.Registry = "calico.registry.io/"
+		DescribeTable("should render",
+			func(c Component, registry, imagePath string) {
+				Expect(GetReference(c, "", "", "", nil)).To(Equal(fmt.Sprintf("%s%s%s:%s", registry, imagePath, c.Image, c.Version)))
+			},
+			Entry("a calico image correctly", customCalicoComponent, "calico.registry.io/", CalicoImagePath),
+			Entry("a tigera image correctly", customTigeraComponent, "tigera.registry.io/", TigeraImagePath),
 		)
 	})
 })

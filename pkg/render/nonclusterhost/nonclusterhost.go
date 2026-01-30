@@ -1,4 +1,4 @@
-// Copyright (c) 2024-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -120,10 +120,14 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"watch", "list"},
 		},
 		{
-			// For enforcing admin network policies.
+			// For enforcing k8s cluster network policies.
 			APIGroups: []string{"policy.networking.k8s.io"},
-			Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
-			Verbs:     []string{"get", "watch", "list"},
+			Resources: []string{
+				"clusternetworkpolicies",
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
+			},
+			Verbs: []string{"get", "watch", "list"},
 		},
 		{
 			// Metadata from these are used in conjunction with network policy.
@@ -199,7 +203,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 		{
 			APIGroups: []string{"certificates.k8s.io"},
 			Resources: []string{"certificatesigningrequests"},
-			Verbs:     []string{"create", "list", "watch"},
+			Verbs:     []string{"create", "delete", "list", "watch"},
 		},
 		{
 			APIGroups:     []string{"certificates.tigera.io"},

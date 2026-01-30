@@ -47,13 +47,13 @@ components:
     version: master
   # eck-kibana holds the version of Kibana built for tigera/kibana
   eck-kibana:
-    version: 8.18.4
+    version: 8.19.10
   kibana:
     image: kibana
     version: master
   # eck-elasticsearch holds the version of Elasticsearch built for tigera/elasticsearch
   eck-elasticsearch:
-    version: 8.18.4
+    version: 8.19.10
   elasticsearch:
     image: elasticsearch
     version: master
@@ -108,14 +108,14 @@ components:
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
-    version: v3.4.1
+    version: v3.9.1
   prometheus:
     image: prometheus
     version: master
   # coreos-alertmanager holds the version of alertmanager built for tigera/alertmanager,
   # which prometheus operator uses to validate.
   coreos-alertmanager:
-    version: v0.28.0
+    version: v0.30.1
   alertmanager:
     image: alertmanager
     version: master
@@ -170,4 +170,16 @@ components:
     version: master
   gateway-api-envoy-ratelimit:
     image: envoy-ratelimit
+    version: master
+  istio-pilot:
+    image: istio-pilot
+    version: master
+  istio-install-cni:
+    image: istio-install-cni
+    version: master
+  istio-ztunnel:
+    image: istio-ztunnel
+    version: master
+  istio-proxyv2:
+    image: istio-proxyv2
     version: master

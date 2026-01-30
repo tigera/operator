@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -238,10 +238,14 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"watch", "list"},
 			},
 			{
-				// For enforcing admin network policies.
+				// For enforcing k8s cluster network policies.
 				APIGroups: []string{"policy.networking.k8s.io"},
-				Resources: []string{"adminnetworkpolicies", "baselineadminnetworkpolicies"},
-				Verbs:     []string{"watch", "list"},
+				Resources: []string{
+					"clusternetworkpolicies",
+					"adminnetworkpolicies",
+					"baselineadminnetworkpolicies",
+				},
+				Verbs: []string{"watch", "list"},
 			},
 			{
 				// Metadata from these are used in conjunction with network policy.

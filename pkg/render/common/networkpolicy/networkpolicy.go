@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -274,11 +274,11 @@ func (h *NetworkPolicyHelper) LinseedServiceSelectorEntityRule() v3.EntityRule {
 }
 
 func (h *NetworkPolicyHelper) ManagerEntityRule() v3.EntityRule {
-	return CreateEntityRule(h.namespace("tigera-manager"), "tigera-manager", 9443)
+	return CreateEntityRule(h.namespace("calico-system"), "calico-manager", 9443)
 }
 
 func (h *NetworkPolicyHelper) ManagerSourceEntityRule() v3.EntityRule {
-	return CreateSourceEntityRule(h.namespace("tigera-manager"), "tigera-manager")
+	return CreateSourceEntityRule(h.namespace("calico-system"), "calico-manager")
 }
 
 func (h *NetworkPolicyHelper) APIServerSourceEntityRule(v operatorv1.ProductVariant) v3.EntityRule {

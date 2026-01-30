@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1023,10 +1023,12 @@ var _ = Describe("compliance rendering tests", func() {
 			if policyName.Name == "allow-tigera.compliance-access" {
 				return testutils.SelectPolicyByClusterTypeAndProvider(
 					scenario,
-					expectedCompliancePolicyForUnmanaged,
-					expectedCompliancePolicyForUnmanagedOpenshift,
-					expectedCompliancePolicyForManaged,
-					expectedCompliancePolicyForManagedOpenshift,
+					map[string]*v3.NetworkPolicy{
+						"unmanaged":           expectedCompliancePolicyForUnmanaged,
+						"unmanaged-openshift": expectedCompliancePolicyForUnmanagedOpenshift,
+						"managed":             expectedCompliancePolicyForManaged,
+						"managed-openshift":   expectedCompliancePolicyForManagedOpenshift,
+					},
 				)
 			} else if !scenario.ManagedCluster && policyName.Name == "allow-tigera.compliance-server" {
 				return testutils.SelectPolicyByProvider(scenario, expectedComplianceServerPolicy, expectedComplianceServerPolicyForOpenshift)
@@ -1245,7 +1247,7 @@ var _ = Describe("compliance rendering tests", func() {
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: cfg.Tenant.Namespace}))
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", cfg.Tenant.Namespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(cfg.Tenant)}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", cfg.Tenant.Namespace)}))
 		})
 

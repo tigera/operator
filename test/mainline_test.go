@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -230,53 +230,6 @@ var _ = Describe("Mainline component function tests", func() {
 	})
 })
 
-var _ = Describe("Mainline component function tests with ignored resource", func() {
-	var c client.Client
-	var mgr manager.Manager
-	var shutdownContext context.Context
-	var cancel context.CancelFunc
-
-	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist)
-		verifyCRDsExist(c, operator.TigeraSecureEnterprise)
-	})
-
-	AfterEach(func() {
-		removeInstallation(context.Background(), c, "not-default")
-	})
-
-	It("Should ignore a CRD resource not named 'default'", func() {
-		By("Creating a CRD resource not named default")
-		instance := &operator.Installation{
-			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "not-default"},
-			Spec:       operator.InstallationSpec{},
-		}
-		err := c.Create(context.Background(), instance)
-		Expect(err).NotTo(HaveOccurred())
-
-		By("Running the operator")
-		done := RunOperator(mgr, shutdownContext)
-		defer func() {
-			cancel()
-			Eventually(func() error {
-				select {
-				case <-done:
-					return nil
-				default:
-					return fmt.Errorf("operator did not shutdown")
-				}
-			}, 60*time.Second).Should(BeNil())
-		}()
-
-		By("Verifying resources were not created")
-		ds := &apps.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-node", Namespace: "calico-system"}}
-		ExpectResourceDestroyed(c, ds, 10*time.Second)
-		kc := &apps.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: "calico-system"}}
-		ExpectResourceDestroyed(c, kc, 10*time.Second)
-	})
-})
-
 var _ = Describe("Mainline component function tests - multi-tenant", func() {
 	It("should set up all controllers correctly in multi-tenant mode", func() {
 		_, _, cancel, _ := setupManager(ManageCRDsDisable, MultiTenant, EnterpriseCRDsExist)
@@ -308,11 +261,11 @@ func assertAvailable(ts *operator.TigeraStatus) error {
 	available, degraded, progressing := readStatus(ts)
 
 	if progressing {
-		return fmt.Errorf("TigeraStatus is still progressing")
+		return fmt.Errorf("TigeraStatus is still progressing %v", ts)
 	} else if degraded {
-		return fmt.Errorf("TigeraStatus is degraded")
+		return fmt.Errorf("TigeraStatus is degraded %v", ts)
 	} else if !available {
-		return fmt.Errorf("TigeraStatus is not available")
+		return fmt.Errorf("TigeraStatus is not available %v", ts)
 	}
 	return nil
 }
@@ -321,11 +274,11 @@ func assertDegraded(ts *operator.TigeraStatus) error {
 	available, degraded, progressing := readStatus(ts)
 
 	if progressing {
-		return fmt.Errorf("TigeraStatus is still progressing")
+		return fmt.Errorf("TigeraStatus is still progressing %v", ts)
 	} else if !degraded {
-		return fmt.Errorf("TigeraStatus is not degraded")
+		return fmt.Errorf("TigeraStatus is not degraded %v", ts)
 	} else if available {
-		return fmt.Errorf("TigeraStatus is available")
+		return fmt.Errorf("TigeraStatus is available %v", ts)
 	}
 	return nil
 }
@@ -486,7 +439,33 @@ func removeInstallation(ctx context.Context, c client.Client, name string) {
 			return err
 		}
 		return fmt.Errorf("Installation still exists")
-	}, 120*time.Second).ShouldNot(HaveOccurred())
+	}, 120*time.Second).ShouldNot(HaveOccurred(), func() string {
+		// Collect debugging information for failure message
+		var debugInfo strings.Builder
+		debugInfo.WriteString("Installation instance still exists:\n")
+		debugInfo.WriteString(fmt.Sprintf("Instance: %+v\n", instance))
+
+		// Get calico-system namespace
+		ns := &corev1.Namespace{}
+		if err := c.Get(ctx, client.ObjectKey{Name: "calico-system"}, ns); err != nil {
+			debugInfo.WriteString(fmt.Sprintf("Failed to get calico-system namespace: %v\n", err))
+		} else {
+			debugInfo.WriteString(fmt.Sprintf("calico-system namespace: %+v\n", ns))
+		}
+
+		// Get all pods in calico-system namespace
+		pods := &corev1.PodList{}
+		if err := c.List(ctx, pods, client.InNamespace("calico-system")); err != nil {
+			debugInfo.WriteString(fmt.Sprintf("Failed to list pods in calico-system namespace: %v\n", err))
+		} else {
+			debugInfo.WriteString(fmt.Sprintf("Pods in calico-system namespace (%d pods):\n", len(pods.Items)))
+			for i, pod := range pods.Items {
+				debugInfo.WriteString(fmt.Sprintf("  Pod %d: Name=%s, Phase=%s, Ready=%v\n", i+1, pod.Name, pod.Status.Phase, pod.Status.ContainerStatuses))
+			}
+		}
+
+		return debugInfo.String()
+	})
 }
 
 func verifyAPIServerHasDeployed(c client.Client) {
@@ -529,10 +508,13 @@ func verifyCalicoHasDeployed(c client.Client) {
 		if err != nil {
 			return err
 		}
+		if ds.Generation != ds.Status.ObservedGeneration {
+			return fmt.Errorf("calico-node status has not observed the latest generation")
+		}
 		if ds.Status.NumberAvailable == 0 {
 			return fmt.Errorf("No node pods running")
 		}
-		if ds.Status.NumberAvailable == ds.Status.CurrentNumberScheduled {
+		if ds.Status.NumberAvailable == ds.Status.DesiredNumberScheduled {
 			return nil
 		}
 		return fmt.Errorf("Only %d available replicas", ds.Status.NumberAvailable)
@@ -556,7 +538,7 @@ func verifyCalicoHasDeployed(c client.Client) {
 			return err
 		}
 		return assertAvailable(ts)
-	}, 60*time.Second).Should(BeNil())
+	}, 240*time.Second).Should(BeNil(), "expect calico TigeraStatus to be available")
 }
 
 func verifyCRDsExist(c client.Client, variant operator.ProductVariant) {

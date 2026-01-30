@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ package components
 
 import (
 	"fmt"
-	"strings"
+	"path"
 
 	operator "github.com/tigera/operator/api/v1"
 )
@@ -36,6 +36,11 @@ type Component struct {
 
 	// Version is the image version for this component (e.g., v3.8.1)
 	Version string
+
+	// imagePath is only used for developer workflows. For production builds, the imagePath
+	// is always determined from user configuration. This field can be overridden
+	// as part of a developer workflow to deploy custom dev images on an individual basis.
+	imagePath string
 
 	// Registry is only used for developer workflows. For production builds, the registry
 	// is always determined from user configuration. This field can be overridden
@@ -83,10 +88,6 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 		if c.Registry != "" {
 			registry = c.Registry
 		}
-	} else if !strings.HasSuffix(registry, "/") {
-		// If the registry is explicitly set, make sure it ends with a slash so that the
-		// image can be appended correctly below.
-		registry = fmt.Sprintf("%s/", registry)
 	}
 
 	// If a user supplies an imaagePrefix, prepend it to the image name.
@@ -98,19 +99,21 @@ func GetReference(c Component, registry, imagePath, imagePrefix string, is *oper
 	// If a user did not supply an imagePath, use the default imagePath
 	if imagePath == "" || imagePath == UseDefault {
 		imagePath = defaultImagePath
-	} else if !strings.HasSuffix(imagePath, "/") {
-		// If the imagePath is explicitly set, make sure it ends with a slash so that the
-		// image can be appended correctly below.
-		imagePath = fmt.Sprintf("%s/", imagePath)
+		// If the component asks for an explicit imagePath, and the user
+		// did not provide a custom imagePath, use the one specified by
+		// the component.
+		if c.imagePath != "" {
+			imagePath = c.imagePath
+		}
 	}
 
 	if is == nil {
-		return fmt.Sprintf("%s%s%s:%s", registry, imagePath, imageName, c.Version), nil
+		return fmt.Sprintf("%s:%s", path.Join(registry, imagePath, imageName), c.Version), nil
 	}
 
 	for _, img := range is.Spec.Images {
-		if img.Image == fmt.Sprintf("%s%s", defaultImagePath, c.Image) {
-			return fmt.Sprintf("%s%s%s@%s", registry, imagePath, imageName, img.Digest), nil
+		if img.Image == path.Join(defaultImagePath, c.Image) {
+			return fmt.Sprintf("%s@%s", path.Join(registry, imagePath, imageName), img.Digest), nil
 		}
 	}
 

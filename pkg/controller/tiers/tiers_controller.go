@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -112,7 +112,7 @@ type ReconcileTiers struct {
 // add adds watches for resources that are available at startup.
 func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	if err := utils.AddInstallationWatch(c); err != nil {
-		return fmt.Errorf("tiers-controller failed to watch Tigera network resource: %v", err)
+		return fmt.Errorf("tiers-controller failed to watch Installation resource: %v", err)
 	}
 
 	if err := utils.AddAPIServerWatch(c); err != nil {
@@ -188,7 +188,6 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		render.LogCollectorNamespace,
 		render.IntrusionDetectionNamespace,
 		kibana.Namespace,
-		render.ManagerNamespace,
 		eck.OperatorNamespace,
 		render.PacketCaptureNamespace,
 		common.TigeraPrometheusNamespace,

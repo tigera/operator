@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -835,27 +835,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// See the section 'Use of Finalizers for graceful termination' at the top of this file for details.
 	if installationMarkedForDeletion {
-		// This controller manages a finalizer to track whether its own pods have been properly torn down. Only remove it
-		// when all pod-networked Pods managed by this controller have been torn down. For now, this is just calico-kube-controllers.
-		l := &appsv1.Deployment{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}, l)
-		if err != nil && !apierrors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read calico-kube-controllers deployment", err, reqLogger)
+		ckcDeploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}}
+		csiDaemon := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: render.CSIDaemonSetName, Namespace: common.CalicoNamespace}}
+		_, err := utils.MaintainInstallationFinalizer(ctx, r.client, nil, render.InstallationControllerFinalizer, ckcDeploy, csiDaemon)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "failed to maintain finalizer", err, reqLogger)
 			return reconcile.Result{}, err
-		} else if apierrors.IsNotFound(err) {
-			terminated, err := utils.AllPodsTerminated(ctx, r.client, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers", Namespace: common.CalicoNamespace}})
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read calico-kube-controllers pods", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			if !terminated {
-				reqLogger.Info("calico-kube-controller pod is still present, waiting for termination")
-			} else {
-				reqLogger.Info("calico-kube-controllers has been deleted, removing finalizer", "finalizer", render.InstallationControllerFinalizer)
-				utils.RemoveInstallationFinalizer(instance, render.InstallationControllerFinalizer)
-			}
-		} else {
-			reqLogger.Info("calico-kube-controller deployment is still present, waiting for termination")
 		}
 
 		// Keep an overarching finalizer on the Installation object until ALL necessary dependencies have been cleaned up.
@@ -868,7 +853,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// controllers have completed their finalization logic and removed their finalizer from the Installation.
 		crb := rbacv1.ClusterRoleBinding{}
 		key := types.NamespacedName{Name: "calico-node"}
-		err := r.client.Get(ctx, key, &crb)
+		err = r.client.Get(ctx, key, &crb)
 		if err != nil && !apierrors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Unable to get ClusterRoleBinding", err, reqLogger)
 			return reconcile.Result{}, err
@@ -887,6 +872,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			utils.RemoveInstallationFinalizer(instance, render.OperatorCompleteFinalizer)
 		}
 	} else {
+		// Instead of using the MaintainInstallationFinalizer here we just set the Finalizers on the instance and let the following patch add them. This avoids 2 updates to the installation CR.
+
 		// Add a finalizer to track whether or not this controller's specific finalization logic has completed.
 		utils.SetInstallationFinalizer(instance, render.InstallationControllerFinalizer)
 
@@ -1616,6 +1603,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	r.status.AddDeployments([]types.NamespacedName{{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}})
 	certificateManager.AddToStatusManager(r.status, common.CalicoNamespace)
 
+	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
+	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
+	})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Run this after we have rendered our components so the new (operator created)
 	// Deployments and Daemonset exist with our special migration nodeSelectors.
 	if needNsMigration {
@@ -1681,15 +1677,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
-
-	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
-		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
-	})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating resource", err, reqLogger)
-		return reconcile.Result{}, err
-	}
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
@@ -1827,17 +1814,21 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 	// we don't need to handle upgrades from versions that were previously FelixConfiguration only - nftables mode has always
 	// been controlled by the operator.
 	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
+		nftablesMode := crdv1.NFTablesModeDisabled
 		if install.Spec.IsNftables() {
-			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
-			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeEnabled
-			nftablesMode := crdv1.NFTablesModeEnabled
-			fc.Spec.NFTablesMode = &nftablesMode
-		} else {
-			// The operator is configured to use another dataplane. Disable nftables.
-			updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != crdv1.NFTablesModeDisabled
-			nftablesMode := crdv1.NFTablesModeDisabled
-			fc.Spec.NFTablesMode = &nftablesMode
+			// The operator is configured to use the nftables dataplane.
+			if install.Spec.BPFEnabled() {
+				// For BPF mode, we always use nftables, as we don't use the upstream kube-proxy and so don't need to
+				// worry about compatibility with its mode of operation.
+				nftablesMode = crdv1.NFTablesModeEnabled
+			} else {
+				// Otherwise, kube-proxy is running - configure Felix to auto-detect whether it should use nftables or iptables on
+				// a per-node basis, allowing for smoother upgrades.
+				nftablesMode = crdv1.NFTablesModeAuto
+			}
 		}
+		updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != nftablesMode
+		fc.Spec.NFTablesMode = &nftablesMode
 	}
 	if updated {
 		reqLogger.Info("Patching nftables mode", "nftablesMode", *fc.Spec.NFTablesMode)

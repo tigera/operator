@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -312,6 +312,101 @@ var _ = Describe("GatewayAPI tests", func() {
 		By("Checking that EnvoyProxy in tigera-gateway namespace gets the additional level")
 		Eventually(getEPLoggingLevels, "10s").Should(HaveKeyWithValue(envoyapi.LogComponentConnection, envoyapi.LogLevelDebug))
 		Consistently(getEPLoggingLevels, "60s", "10s").Should(HaveKeyWithValue(envoyapi.LogComponentConnection, envoyapi.LogLevelDebug))
+	})
+
+	It("creates EnvoyProxy with owning gateway env vars in l7-log-collector", func() {
+		By("Creating Installation")
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operator.InstallationSpec{
+				Registry: "myregistry.io/",
+				Variant:  operator.TigeraSecureEnterprise,
+			},
+		}
+		err := c.Create(shutdownContext, instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Read it back again.
+		err = c.Get(shutdownContext, utils.DefaultInstanceKey, instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Update the status to set variant to Enterprise.
+		instance.Status.Variant = operator.TigeraSecureEnterprise
+		err = c.Status().Update(shutdownContext, instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Creating the default GatewayAPI")
+		gatewayAPI := &operator.GatewayAPI{
+			TypeMeta:   metav1.TypeMeta{Kind: "GatewayAPI", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}
+		err = c.Create(shutdownContext, gatewayAPI)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Verifying EnvoyProxy is created with l7-log-collector containing owning gateway env vars")
+		Eventually(func() error {
+			var ep envoyapi.EnvoyProxy
+			err := c.Get(shutdownContext, types.NamespacedName{Namespace: "tigera-gateway", Name: "tigera-gateway-class"}, &ep)
+			if err != nil {
+				return err
+			}
+
+			// Check that EnvoyDeployment has init containers configured
+			if ep.Spec.Provider == nil || ep.Spec.Provider.Kubernetes == nil ||
+				ep.Spec.Provider.Kubernetes.EnvoyDeployment == nil {
+				return errors.New("EnvoyProxy does not have EnvoyDeployment configured")
+			}
+
+			initContainers := ep.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers
+			if len(initContainers) == 0 {
+				return errors.New("EnvoyProxy has no init containers")
+			}
+
+			// Find l7-log-collector init container
+			var l7LogCollector *corev1.Container
+			for i := range initContainers {
+				if initContainers[i].Name == "l7-log-collector" {
+					l7LogCollector = &initContainers[i]
+					break
+				}
+			}
+			if l7LogCollector == nil {
+				return errors.New("l7-log-collector init container not found")
+			}
+
+			// Verify owning gateway env vars are present
+			var foundName, foundNamespace bool
+			for _, env := range l7LogCollector.Env {
+				if env.Name == "OWNING_GATEWAY_NAME" {
+					if env.ValueFrom == nil || env.ValueFrom.FieldRef == nil {
+						return errors.New("OWNING_GATEWAY_NAME env var does not use FieldRef")
+					}
+					if env.ValueFrom.FieldRef.FieldPath != "metadata.labels['gateway.envoyproxy.io/owning-gateway-name']" {
+						return fmt.Errorf("OWNING_GATEWAY_NAME has wrong field path: %s", env.ValueFrom.FieldRef.FieldPath)
+					}
+					foundName = true
+				}
+				if env.Name == "OWNING_GATEWAY_NAMESPACE" {
+					if env.ValueFrom == nil || env.ValueFrom.FieldRef == nil {
+						return errors.New("OWNING_GATEWAY_NAMESPACE env var does not use FieldRef")
+					}
+					if env.ValueFrom.FieldRef.FieldPath != "metadata.labels['gateway.envoyproxy.io/owning-gateway-namespace']" {
+						return fmt.Errorf("OWNING_GATEWAY_NAMESPACE has wrong field path: %s", env.ValueFrom.FieldRef.FieldPath)
+					}
+					foundNamespace = true
+				}
+			}
+
+			if !foundName {
+				return errors.New("OWNING_GATEWAY_NAME env var not found in l7-log-collector")
+			}
+			if !foundNamespace {
+				return errors.New("OWNING_GATEWAY_NAMESPACE env var not found in l7-log-collector")
+			}
+
+			return nil
+		}, "30s").ShouldNot(HaveOccurred())
 	})
 
 	It("watches the custom EnvoyGateway ConfigMap", func() {

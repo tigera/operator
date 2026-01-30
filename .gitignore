@@ -94,6 +94,11 @@ cscope.*
 # Test reports
 pkg/report
 ut/
+# tgz helm charts
+*.tgz
 
 # Tar files created as part of running FVs
 *.tar
+
+# Logs
+*.log

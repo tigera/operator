@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -111,7 +111,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			corev1.EnvVar{Name: "LINSEED_CA", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: "/policy-recommendation-tls/tls.crt"},
 			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: "/policy-recommendation-tls/tls.key"},
-			corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: "https://tigera-manager.tigera-manager.svc:9443"},
+			corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://%s.%s.svc:%d", render.ManagerServiceName, render.ManagerNamespace, render.ManagerPort)},
 		))
 		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].Name).To(Equal(certificatemanagement.TrustedCertConfigMapName))
 		Expect(prc.Spec.Template.Spec.Containers[0].VolumeMounts[0].MountPath).To(Equal("/etc/pki/tls/certs"))
@@ -438,10 +438,10 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 			return testutils.SelectPolicyByClusterTypeAndProvider(
 				scenario,
-				expectedUnmanagedPolicy,
-				expectedUnmanagedPolicyForOpenshift,
-				nil,
-				nil,
+				map[string]*v3.NetworkPolicy{
+					"unmanaged":           expectedUnmanagedPolicy,
+					"unmanaged-openshift": expectedUnmanagedPolicyForOpenshift,
+				},
 			)
 		}
 
@@ -498,6 +498,21 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantANamespace}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a-id"}))
 
+			roleBinding := rtest.GetResource(tenantAResources, render.PolicyRecommendationManagedClustersWatchRoleBindingName, tenantANamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+			Expect(roleBinding.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
+			Expect(roleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      render.PolicyRecommendationName,
+					Namespace: tenantANamespace,
+				},
+				{
+					Kind:      "ServiceAccount",
+					Name:      "tigera-policy-recommendation",
+					Namespace: "tigera-policy-recommendation",
+				},
+			}))
+
 			cfg.Namespace = tenantBNamespace
 			cfg.Tenant = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
@@ -552,7 +567,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: cfg.Tenant.Namespace}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID}))
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", cfg.Tenant.Namespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(cfg.Tenant)}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", cfg.Tenant.Namespace)}))
 		})
 
@@ -575,7 +590,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 			d := rtest.GetResource(createdResources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID}))
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", render.ManagerNamespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(cfg.Tenant)}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", render.ElasticsearchNamespace)}))
 		})
 
@@ -597,7 +612,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 
 			d := rtest.GetResource(createdResources, "tigera-policy-recommendation", render.PolicyRecommendationNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[0].Env
-			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: fmt.Sprintf("https://tigera-manager.%s.svc:9443", render.ManagerNamespace)}))
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(cfg.Tenant)}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", render.ElasticsearchNamespace)}))
 		})
 

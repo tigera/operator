@@ -1,26 +1,10 @@
-# Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+# Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 # This Makefile requires the following dependencies on the host system:
 # - go
 #
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
-
-define yq_cmd
-	$(shell yq --version | grep v$1.* >/dev/null && which yq || echo docker run --rm --user="root" -i -v "$(shell pwd)":/workdir mikefarah/yq:$1 $(if $(shell [ $1 -lt 4 ] && echo "true"), yq,))
-endef
-YQ_V4 = $(call yq_cmd,4)
-
-GIT_CMD   = git
-CURL_CMD  = curl -fL
-
-ifdef CONFIRM
-GIT       = $(GIT_CMD)
-CURL      = $(CURL_CMD)
-else
-GIT       = echo [DRY RUN] $(GIT_CMD)
-CURL      = echo [DRY RUN] $(CURL_CMD)
-endif
 
 # These values are used for fetching tools to run as part of the build process
 # and shouldn't vary based on the target we're building for
@@ -117,8 +101,10 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.25.3-llvm18.1.8-k8s1.34.1
+GO_BUILD_VER?=1.25.6-llvm18.1.8-k8s1.34.3
+CALICO_BASE_VER ?= ubi9-1769122535
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
+CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
 SRC_FILES+=$(shell find ./internal/ -name '*.go')
@@ -246,10 +232,24 @@ else
   GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)
 endif
 
+# To update the Istio version, see "Updating the bundled version of Istio" in docs/common_tasks.md.
+ISTIO_HELM_REPO ?= https://istio-release.storage.googleapis.com/charts
+ISTIO_VERSION ?= 1.28.1
+ISTIO_RESOURCES_DIR = pkg/render/istio
+ISTIO_CHARTS = base istiod cni ztunnel
+ISTIO_CHART_FILES = $(addprefix $(ISTIO_RESOURCES_DIR)/,$(addsuffix .tgz,$(ISTIO_CHARTS)))
+
+.PHONY: istio_charts
+istio_charts: $(ISTIO_CHART_FILES)
+
+$(ISTIO_RESOURCES_DIR)/%.tgz:
+	@echo "Downloading Istio chart $* version $(ISTIO_VERSION)..."
+	@curl -fsSL -o $@ $(ISTIO_HELM_REPO)/$*-$(ISTIO_VERSION).tgz
+
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.5.0
+ENVOY_GATEWAY_VERSION ?= v1.5.6
 ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
 ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
 ENVOY_GATEWAY_RESOURCES = pkg/render/gatewayapi/gateway_api_resources.yaml
@@ -278,7 +278,7 @@ $(HELM_BUILDARCH_VERSIONED_BINARY): | $(HACK_BIN)
 
 
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES)
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
@@ -292,7 +292,11 @@ image: build $(BUILD_IMAGE)
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
 $(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
-	docker buildx build --load --platform=linux/$(ARCH) --pull -t $(BUILD_IMAGE):latest-$(ARCH) --build-arg GIT_VERSION=$(GIT_VERSION) -f build/Dockerfile .
+	docker buildx build --load --platform=linux/$(ARCH) --pull \
+		--build-arg GIT_VERSION=$(GIT_VERSION) \
+		--build-arg CALICO_BASE=$(CALICO_BASE) \
+		-t $(BUILD_IMAGE):latest-$(ARCH) \
+		-f build/Dockerfile .
 ifeq ($(ARCH),amd64)
 	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_IMAGE):latest
 endif
@@ -325,11 +329,12 @@ $(BINDIR)/kind:
 
 clean:
 	rm -rf $(BUILD_DIR)
+	rm -rf $(ISTIO_CHART_FILES)
 	rm -rf build/init/bin
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
 	rm -rf .crds
-	rm -f *-release-notes.md
+	find . -type f -name 'release-*.log' -delete -o  -name '*release-notes.md' -delete
 	docker rmi -f $(shell docker images -f "reference=$(BUILD_IMAGE):latest*" -q) > /dev/null 2>&1 || true
 
 ###############################################################################
@@ -341,21 +346,21 @@ GINKGO_ARGS?= -v -trace -r
 GINKGO_FOCUS?=.*
 
 .PHONY: ut
-ut: $(ENVOY_GATEWAY_RESOURCES)
+ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs: $(ENVOY_GATEWAY_RESOURCES)
+run-fvs: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
 
 ## Create a local kind dual stack cluster.
 KIND_KUBECONFIG?=./kubeconfig.yaml
-KINDEST_NODE_VERSION?=v1.30.4
+KINDEST_NODE_VERSION?=v1.31.12
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy
@@ -570,9 +575,8 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release-github VERSION=$(RELEASE_TAG)
 
 
-release-notes: var-require-all-VERSION-GITHUB_TOKEN
-	@docker build -t tigera/release-notes -f build/Dockerfile.release-notes .
-	@docker run --rm -v $(CURDIR):/workdir -e	GITHUB_TOKEN=$(GITHUB_TOKEN) -e VERSION=$(VERSION) tigera/release-notes
+release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
+	REPO=$(REPO) hack/bin/release notes
 
 ## Tags and builds a release from start to finish.
 release: release-prereqs
@@ -630,14 +634,21 @@ hack/bin/gh:
 	chmod +x $@
 	rm hack/bin/gh.tgz
 
-hack/bin/release-from: $(shell find ./hack/release-from -type f)
+hack/bin/release: $(shell find ./hack/release -type f)
 	mkdir -p hack/bin
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -buildvcs=false -o hack/bin/release-from ./hack/release-from'
+	go build -buildvcs=false -o hack/bin/release ./hack/release'
 
-release-from: hack/bin/release-from var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
-	hack/bin/release-from
+hack/release/ut:
+	mkdir -p report/release
+	$(CONTAINERIZED) $(CALICO_BUILD) \
+	sh -c '$(GIT_CONFIG_SSH) \
+	gotestsum --format=testname --junitfile report/release/ut.xml $(PACKAGE_NAME)/hack/release'
+
+
+release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
+	hack/bin/release from
 
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:
@@ -648,51 +659,8 @@ ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
 endif
 
-check-milestone: hack/bin/gh var-require-all-VERSION-GITHUB_TOKEN
-	@gh extension install valeriobelli/gh-milestone
-	@echo "Checking milestone $(VERSION) exists"
-	$(eval MILESTONE_NUMBER := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state all --json title --jq '.[0].title' | grep $(VERSION)))
-	$(if $(MILESTONE_NUMBER),,$(error Milestone $(VERSION) does not exist))
-	@echo "Checking $(VERSION) milestone has no open PRs"
-	$(eval OPEN_PRS := $(shell gh search prs --milestone $(VERSION) --repo $(REPO) --state open --json number --jq '.[].number'))
-	$(if $(OPEN_PRS),$(error Milestone $(VERSION) has open PRs))
-	@echo "Checking milestone $(VERSION) is closed"
-	$(eval CLOSED_MILESTONE := $(shell gh milestone list --query $(VERSION) --repo $(REPO) --state closed --json title --jq '.[0].title' | grep $(VERSION)))
-	$(if $(CLOSED_MILESTONE),,$(error Milestone $(VERSION) is not closed))
-
-release-prep: check-milestone var-require-all-GIT_PR_BRANCH_BASE-GIT_REPO_SLUG-VERSION-CALICO_VERSION-COMMON_VERSION-CALICO_ENTERPRISE_VERSION
-	$(YQ_V4) ".title = \"$(CALICO_ENTERPRISE_VERSION)\" | .components |= with_entries(select(.key | test(\"^(eck-|coreos-).*\") | not)) |= with(.[]; .version = \"$(CALICO_ENTERPRISE_VERSION)\")" -i config/enterprise_versions.yml
-	$(YQ_V4) ".title = \"$(CALICO_VERSION)\" | .components.[].version = \"$(CALICO_VERSION)\"" -i config/calico_versions.yml
-	sed -i "s/\"gcr.io.*\"/\"quay.io\/\"/g" pkg/components/images.go
-	sed -i "s/\"gcr.io.*\"/\"quay.io\"/g" hack/gen-versions/main.go
-	$(MAKE) gen-versions release-prep/create-and-push-branch release-prep/create-pr release-prep/set-pr-labels
-
-GIT_REMOTE?=origin
-ifneq ($(if $(GIT_REPO_SLUG),$(shell dirname $(GIT_REPO_SLUG)),), $(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`))
-GIT_FORK_USER:=$(shell dirname `git config remote.$(GIT_REMOTE).url | cut -d: -f2`)
-endif
-GIT_PR_BRANCH_BASE?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_BRANCH),)
-GIT_REPO_SLUG?=$(if $(SEMAPHORE),$(SEMAPHORE_GIT_REPO_SLUG),)
-RELEASE_UPDATE_BRANCH?=$(if $(SEMAPHORE),semaphore-,)auto-build-updates-$(VERSION)
-GIT_PR_BRANCH_HEAD?=$(if $(GIT_FORK_USER),$(GIT_FORK_USER):$(RELEASE_UPDATE_BRANCH),$(RELEASE_UPDATE_BRANCH))
-release-prep/create-and-push-branch:
-ifeq ($(shell git rev-parse --abbrev-ref HEAD),$(RELEASE_UPDATE_BRANCH))
-	$(error Current branch is pull request head, cannot set it up.)
-endif
-	-git branch -D $(RELEASE_UPDATE_BRANCH)
-	-$(GIT) push $(GIT_REMOTE) --delete $(RELEASE_UPDATE_BRANCH)
-	git checkout -b $(RELEASE_UPDATE_BRANCH)
-	$(GIT) add config/*_versions.yml hack/gen-versions/main.go pkg/components/* pkg/crds/*
-	$(GIT) commit -m "Automatic version updates for $(VERSION) release"
-	$(GIT) push $(GIT_REMOTE) $(RELEASE_UPDATE_BRANCH)
-
-release-prep/create-pr:
-	$(call github_pr_create,$(GIT_REPO_SLUG),[$(GIT_PR_BRANCH_BASE)] $(if $(SEMAPHORE), Semaphore,) Auto Release Update for $(VERSION),$(GIT_PR_BRANCH_HEAD),$(GIT_PR_BRANCH_BASE))
-	echo 'Created release update pull request for $(VERSION): $(PR_NUMBER)'
-
-release-prep/set-pr-labels:
-	$(call github_pr_add_comment,$(GIT_REPO_SLUG),$(PR_NUMBER),/merge-when-ready release-note-not-required docs-not-required delete-branch)
-	echo "Added labels to pull request $(PR_NUMBER): merge-when-ready, release-note-not-required, docs-not-required & delete-branch"
+release-prep: hack/bin/release hack/bin/gh var-require-all-VERSION var-require-one-of-CALICO_VERSION-ENTERPRISE_VERSION
+	@REPO=$(REPO) hack/bin/release prep
 
 ###############################################################################
 # Utilities
@@ -887,7 +855,7 @@ fmt:
 	go fmt ./...'
 
 # Run go vet against code
-vet:
+vet: $(ISTIO_CHART_FILES)
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go vet ./...'
@@ -924,13 +892,23 @@ $(KUSTOMIZE): $(HACK_BIN)
 
 
 # Options for 'bundle-build'
-ifneq ($(origin CHANNELS), undefined)
-BUNDLE_CHANNELS := --channels=$(CHANNELS)
-endif
+
+# Set the channels to the current release branch, unless
+# we got another one passed to us. Channel should be
+# release-vX.YY
+CHANNEL ?= $(shell git branch --show-current)
+BUNDLE_CHANNEL = --channels=$(if \
+		 $(findstring release-v1,$(CHANNEL)),$(CHANNEL),\
+		 $(error Channel for bundle should be a release branch of the format 'release-vX.YY', not '$(CHANNEL)'))
+
+# We only specify one channel so we don't need to set a
+# default, but if we have one then include it.
 ifneq ($(origin DEFAULT_CHANNEL), undefined)
 BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
-BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+
+# Collate our metadata
+BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNEL) $(BUNDLE_DEFAULT_CHANNEL)
 
 BUNDLE_BASE_DIR ?= $(BUILD_DIR)/bundle/$(VERSION)
 BUNDLE_CRD_DIR ?= $(BUNDLE_BASE_DIR)/crds
@@ -969,7 +947,8 @@ bundle-generate: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
 		--verbose \
 		--manifests \
 		--package tigera-operator \
-		--metadata $(BUNDLE_METADATA_OPTS)
+		--metadata \
+		$(BUNDLE_METADATA_OPTS)
 
 # Update a generated bundle so that it can be certified.
 .PHONY: update-bundle
@@ -1037,34 +1016,6 @@ var-require-all-%:
 # must be set you would call var-require-all-FOO-BAR.
 var-require-one-of-%:
 	$(MAKE) var-require REQUIRED_VARS=$*
-
-GITHUB_API_EXIT_ON_FAILURE?=1
-# Call the github API. $(1) is the http method type for the https request, $(2) is the repo slug, and is $(3) is for json
-# data (if omitted then no data is set for the request). If GITHUB_API_EXIT_ON_FAILURE is set then the macro exits with 1
-# on failure. On success, the ENV variable GITHUB_API_RESPONSE will contain the response from github
-define github_call_api
-	$(eval CMD := $(CURL) -X $(1) \
-		-H "Content-Type: application/json"\
-		-H "Authorization: Bearer ${GITHUB_TOKEN}"\
-		https://api.github.com/repos/$(2) $(if $(3),--data '$(3)',))
-	$(eval GITHUB_API_RESPONSE := $(shell $(CMD) | sed -e 's/#/\\\#/g'))
-	$(if $(GITHUB_API_EXIT_ON_FAILURE), $(if $(GITHUB_API_RESPONSE),,exit 1),)
-endef
-
-# Create the pull request. $(1) is the repo slug, $(2) is the title, $(3) is the head branch and $(4) is the base branch.
-# If the call was successful then the ENV variable PR_NUMBER will contain the pull request number of the created pull request.
-define github_pr_create
-	$(eval JSON := {"title": "$(2)", "head": "$(3)", "base": "$(4)"})
-	$(call github_call_api,POST,$(1)/pulls,$(JSON))
-	$(eval PR_NUMBER := $(filter-out null,$(shell echo '$(GITHUB_API_RESPONSE)' | jq '.number')))
-endef
-
-# Create a comment on a pull request. $(1) is the repo slug, $(2) is the pull request number, and $(3) is the comment
-# body.
-define github_pr_add_comment
-	$(eval JSON := {"body":"$(3)"})
-	$(call github_call_api,POST,$(1)/issues/$(2)/comments,$(JSON))
-endef
 
 #####################################
 #####################################

@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -108,8 +108,7 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
-		log.V(5).Info("Failed to create network watch", "err", err)
-		return fmt.Errorf("egressgateway-controller failed to watch Tigera network resource: %v", err)
+		return fmt.Errorf("egressgateway-controller failed to watch Installation resource: %v", err)
 	}
 
 	// Watch for changes to FelixConfiguration.

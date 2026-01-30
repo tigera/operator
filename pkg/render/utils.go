@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -38,15 +38,15 @@ func LinseedNamespace(tenant *operatorv1.Tenant) string {
 	return ElasticsearchNamespace
 }
 
-// ManagerService determine the name of the tigera manager service.
-// For management and standalone clusters, this is always the tigera-manager.tigera-manager
+// ManagerService determine the name of the calico manager service.
+// For management and standalone clusters, this is always the calico-manager.calico-system
 // namespace. For multi-tenant management clusters, this is a service that resides within the
 // tenant namespace
 func ManagerService(tenant *operatorv1.Tenant) string {
 	if tenant.MultiTenant() {
-		return fmt.Sprintf("https://tigera-manager.%s.svc:9443", tenant.Namespace)
+		return fmt.Sprintf("https://%s.%s.svc:%d", ManagerServiceName, tenant.Namespace, ManagerPort)
 	}
-	return fmt.Sprintf("https://tigera-manager.%s.svc:9443", ManagerNamespace)
+	return fmt.Sprintf("https://%s.%s.svc:%d", ManagerServiceName, ManagerNamespace, ManagerPort)
 }
 
 // CreateOperatorSecretsRoleBinding binds the tigera-operator-secrets ClusterRole to the operator's ServiceAccount

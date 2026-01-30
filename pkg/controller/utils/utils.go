@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ package utils
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -24,7 +25,6 @@ import (
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
-	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	csiv1 "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
 	"github.com/go-logr/logr"
@@ -58,7 +58,6 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
-	"github.com/tigera/operator/pkg/render/monitor"
 )
 
 const (
@@ -860,30 +859,6 @@ func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch
 	return &es, nil
 }
 
-func GetAlertmanager(ctx context.Context, c client.Client) (*monitoringv1.Alertmanager, error) {
-	a := monitoringv1.Alertmanager{}
-	err := c.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, &a)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &a, nil
-}
-
-func GetPrometheus(ctx context.Context, c client.Client) (*monitoringv1.Prometheus, error) {
-	p := monitoringv1.Prometheus{}
-	err := c.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, &p)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &p, nil
-}
-
 // AddKubeProxyWatch creates a watch on the kube-proxy DaemonSet.
 func AddKubeProxyWatch(c ctrlruntime.Controller) error {
 	ds := &appsv1.DaemonSet{
@@ -1143,6 +1118,22 @@ func AllPodsTerminated(ctx context.Context, c client.Client, obj client.Object) 
 		return false, err
 	}
 	return len(podList.Items) == 0, nil
+}
+
+func RestoreV3Metadata(obj client.Object) error {
+	if v3metaJSON, ok := obj.GetAnnotations()["projectcalico.org/metadata"]; ok {
+		v3meta := metav1.ObjectMeta{}
+		err := json.Unmarshal([]byte(v3metaJSON), &v3meta)
+		if err != nil {
+			return err
+		}
+
+		// Restore the v3 metadata we care about.
+		obj.SetLabels(v3meta.Labels)
+		obj.SetAnnotations(v3meta.Annotations)
+		log.V(1).Info("Restored v3 resource metadata", "labels", v3meta.Labels, "annotations", v3meta.Annotations)
+	}
+	return nil
 }
 
 // getMatchLabels extracts the matchLabels from the given workload object.

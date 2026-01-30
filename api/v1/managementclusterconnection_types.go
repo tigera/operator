@@ -1,4 +1,4 @@
-// Copyright (c) 2012,2015-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2012,2015-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -94,6 +94,8 @@ const (
 
 // ManagementClusterConnection represents a link between a managed cluster and a management cluster. At most one
 // instance of this resource is supported. It must be named "tigera-secure".
+//
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'default' || self.metadata.name == 'tigera-secure'",message="resource name must be 'default' or 'tigera-secure'"
 type ManagementClusterConnection struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,13 +39,14 @@ import (
 var (
 	defaultTLSKeyPair        = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "key-pair"}}, nil, "")
 	defaultTrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
+	numExpectedObjects       = 5
 )
 
 var _ = Describe("ComponentRendering", func() {
-	DescribeTable("Creation and deletion counts", func(cfg *whisker.Configuration, creatObjs, delObjs int) {
+	DescribeTable("Creation and deletion counts", func(cfg *whisker.Configuration, createObjs, delObjs int) {
 		component := whisker.Whisker(cfg)
 		objsToCreate, objsToDelete := component.Objects()
-		Expect(objsToCreate).To(HaveLen(creatObjs))
+		Expect(objsToCreate).To(HaveLen(createObjs))
 		Expect(objsToDelete).To(HaveLen(delObjs))
 	},
 		Entry("Should return objects to create when variant is Calico",
@@ -58,7 +59,7 @@ var _ = Describe("ComponentRendering", func() {
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
 			},
-			4, 0,
+			numExpectedObjects, 0,
 		),
 		Entry("Should return objects to delete when variant is not Calico",
 			&whisker.Configuration{
@@ -70,7 +71,7 @@ var _ = Describe("ComponentRendering", func() {
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
 			},
-			0, 4,
+			0, numExpectedObjects,
 		),
 	)
 
@@ -127,6 +128,13 @@ var _ = Describe("ComponentRendering", func() {
 										{Name: "NOTIFICATIONS", Value: "Enabled"},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "nginx-config",
+											MountPath: "/etc/nginx/conf.d",
+											ReadOnly:  true,
+										},
+									},
 								},
 								{
 									Name:            whisker.WhiskerBackendContainerName,
@@ -148,6 +156,14 @@ var _ = Describe("ComponentRendering", func() {
 							Volumes: []corev1.Volume{
 								defaultTrustedCertBundle.Volume(),
 								defaultTLSKeyPair.Volume(),
+								{
+									Name: "nginx-config",
+									VolumeSource: corev1.VolumeSource{
+										ConfigMap: &corev1.ConfigMapVolumeSource{
+											LocalObjectReference: corev1.LocalObjectReference{Name: "whisker-nginx-config"},
+										},
+									},
+								},
 							},
 						},
 					},
@@ -155,6 +171,61 @@ var _ = Describe("ComponentRendering", func() {
 			},
 		),
 	)
+
+	It("should generate an IPv4-only NGINX configuration", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+			},
+			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerBackendKeyPair: defaultTLSKeyPair,
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
+			ClusterID:             "test-cluster-id",
+			CalicoVersion:         "test-calico-version",
+			ClusterType:           "test-cluster-type",
+			ClusterDomain:         "cluster.domain",
+		}
+		component := whisker.Whisker(cfg)
+		objsToCreate, _ := component.Objects()
+
+		config, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, "whisker-nginx-config", whisker.WhiskerNamespace)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		actual, ok := config.Data["default.conf"]
+		Expect(ok).To(BeTrue(), "expected default.conf to be present in config map")
+		Expect(actual).To(Equal(whisker.NginxConfigV4))
+	})
+
+	It("should generate a dual-stack NGINX configuration", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+				CalicoNetwork: &operatorv1.CalicoNetworkSpec{
+					NodeAddressAutodetectionV6: &operatorv1.NodeAddressAutodetection{
+						FirstFound: ptr.ToPtr(true),
+					},
+				},
+			},
+			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerBackendKeyPair: defaultTLSKeyPair,
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
+			ClusterID:             "test-cluster-id",
+			CalicoVersion:         "test-calico-version",
+			ClusterType:           "test-cluster-type",
+			ClusterDomain:         "cluster.domain",
+		}
+		component := whisker.Whisker(cfg)
+		objsToCreate, _ := component.Objects()
+
+		config, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, "whisker-nginx-config", whisker.WhiskerNamespace)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		actual, ok := config.Data["default.conf"]
+		Expect(ok).To(BeTrue(), "expected default.conf to be present in config map")
+		Expect(actual).To(Equal(whisker.NginxConfigDual))
+	})
 
 	It("Should apply overrides", func() {
 		affinity := &corev1.Affinity{

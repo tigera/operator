@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,6 +34,10 @@ func PatchFelixConfiguration(ctx context.Context, c client.Client, patchFn func(
 
 	// Create a base state for the upcoming patch operation.
 	patchFrom := client.MergeFrom(fc.DeepCopy())
+
+	if err = RestoreV3Metadata(fc); err != nil {
+		return nil, err
+	}
 
 	// Apply desired changes to the FelixConfiguration.
 	updated, err := patchFn(fc)

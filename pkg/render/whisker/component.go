@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	_ "embed"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -53,6 +55,19 @@ const (
 	GoldmaneDeploymentName      = "goldmane"
 	GoldmaneServicePort         = 7443
 	GoldmaneNamespace           = common.CalicoNamespace
+
+	configMapName    = "whisker-nginx-config"
+	configVolumeName = "nginx-config"
+	configMountPath  = "/etc/nginx/conf.d"
+)
+
+var (
+	// Embed the nginx config files.
+	//go:embed nginx-v4.conf
+	NginxConfigV4 string
+
+	//go:embed nginx.conf
+	NginxConfigDual string
 )
 
 func Whisker(cfg *Configuration) render.Component {
@@ -114,6 +129,7 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 
 	objs := []client.Object{
 		c.serviceAccount(),
+		c.nginxConfigMap(),
 		deployment,
 		c.whiskerService(),
 		c.networkPolicy(),
@@ -153,6 +169,13 @@ func (c *Component) whiskerContainer() corev1.Container {
 			{Name: "NOTIFICATIONS", Value: string(*c.cfg.Whisker.Spec.Notifications)},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      configVolumeName,
+				MountPath: configMountPath,
+				ReadOnly:  true,
+			},
+		},
 	}
 }
 
@@ -197,7 +220,24 @@ func (c *Component) deployment() *appsv1.Deployment {
 	}
 
 	ctrs := []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer()}
-	volumes := []corev1.Volume{c.cfg.TrustedCertBundle.Volume(), c.cfg.WhiskerBackendKeyPair.Volume()}
+
+	volumes := []corev1.Volume{
+		// Add the trusted cert bundle volume to the pod.
+		c.cfg.TrustedCertBundle.Volume(),
+
+		// Add the whisker backend key pair volume to the pod.
+		c.cfg.WhiskerBackendKeyPair.Volume(),
+
+		// Volume for nginx config from config map.
+		{
+			Name: configVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: configMapName},
+				},
+			},
+		},
+	}
 
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -248,6 +288,25 @@ func (c *Component) networkPolicy() *netv1.NetworkPolicy {
 			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress},
 			PodSelector: *selector.PodLabelSelector(WhiskerDeploymentName),
 			Egress:      append(egressRules, networkpolicy.K8sDNSEgressRules(c.cfg.OpenShift)...),
+		},
+	}
+}
+
+func (c *Component) nginxConfigMap() *corev1.ConfigMap {
+	// Determine which config to use based on supported IP families.
+	config := NginxConfigV4
+	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.NodeAddressAutodetectionV6 != nil {
+		config = NginxConfigDual
+	}
+
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      configMapName,
+			Namespace: WhiskerNamespace,
+		},
+		Data: map[string]string{
+			"default.conf": config,
 		},
 	}
 }

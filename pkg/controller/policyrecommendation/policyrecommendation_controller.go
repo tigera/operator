@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in policy recommendation with the License.
@@ -473,7 +473,6 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	// Prepend PolicyRecommendation before certificate creation
 	components = append([]render.Component{component}, components...)
-
 	for _, cmp := range components {
 		if err := defaultHandler.CreateOrUpdateOrDelete(context.Background(), cmp, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -224,6 +224,8 @@ type LogCollectorStatus struct {
 // LogCollector installs the components required for Tigera flow and DNS log collection. At most one instance
 // of this resource is supported. It must be named "tigera-secure". When created, this installs fluentd on all nodes
 // configured to collect Tigera log data and export it to Tigera's Elasticsearch cluster as well as any additionally configured destinations.
+//
+// +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'",message="resource name must be 'tigera-secure'"
 type LogCollector struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

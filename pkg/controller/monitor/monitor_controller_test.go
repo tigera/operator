@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -68,7 +69,6 @@ var _ = Describe("Monitor controller tests", func() {
 		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
-		Expect(monitoringv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		// Create a client that will have a crud interface of k8s objects.
 		ctx = context.Background()
@@ -86,7 +86,6 @@ var _ = Describe("Monitor controller tests", func() {
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("RemoveDeployments", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", common.TigeraPrometheusNamespace)
-		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
 		// Create an object we can use throughout the test to do the monitor reconcile loops.
@@ -135,107 +134,6 @@ var _ = Describe("Monitor controller tests", func() {
 		// Mark that watches were successful.
 		r.prometheusReady.MarkAsReady()
 		r.tierWatchReady.MarkAsReady()
-	})
-
-	Context("prometheus resources", func() {
-		BeforeEach(func() {
-			// Add the Prometheus and Alertmanager instances
-			prom := &monitoringv1.Prometheus{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      monitor.CalicoNodePrometheus,
-					Namespace: common.TigeraPrometheusNamespace,
-				},
-				Status: monitoringv1.PrometheusStatus{
-					Conditions: []monitoringv1.Condition{
-						{
-							Type:   monitoringv1.Available,
-							Status: monitoringv1.ConditionTrue,
-						},
-						{
-							Type:   monitoringv1.Reconciled,
-							Status: monitoringv1.ConditionTrue,
-						},
-					},
-				},
-			}
-			Expect(cli.Create(ctx, prom)).To(BeNil())
-
-			alertManager := &monitoringv1.Alertmanager{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      monitor.CalicoNodeAlertmanager,
-					Namespace: common.TigeraPrometheusNamespace,
-				},
-				Status: monitoringv1.AlertmanagerStatus{
-					Conditions: []monitoringv1.Condition{
-						{
-							Type:   monitoringv1.Available,
-							Status: monitoringv1.ConditionTrue,
-						},
-						{
-							Type:   monitoringv1.Reconciled,
-							Status: monitoringv1.ConditionTrue,
-						},
-					},
-				},
-			}
-			Expect(cli.Create(ctx, alertManager)).To(BeNil())
-		})
-
-		It("should degrade if the prometheus statefulset isn't ready", func() {
-			prom := &monitoringv1.Prometheus{}
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, prom)).NotTo(HaveOccurred())
-
-			patch := client.MergeFrom(prom.DeepCopy())
-			prom.Status.Conditions = []monitoringv1.Condition{
-				{
-					Type:   monitoringv1.Available,
-					Status: monitoringv1.ConditionFalse,
-				},
-				{
-					Type:   monitoringv1.Reconciled,
-					Status: monitoringv1.ConditionTrue,
-				},
-			}
-			Expect(cli.Patch(ctx, prom, patch)).To(Succeed())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded",
-				operatorv1.ResourceNotReady,
-				"Prometheus component is not available",
-				mock.Anything,
-				mock.Anything,
-			)
-		})
-
-		It("should degrade if the alertmanager statefulset isn't ready", func() {
-			alertManager := &monitoringv1.Alertmanager{}
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, alertManager)).NotTo(HaveOccurred())
-
-			patch := client.MergeFrom(alertManager.DeepCopy())
-			alertManager.Status.Conditions = []monitoringv1.Condition{
-				{
-					Type:   monitoringv1.Available,
-					Status: monitoringv1.ConditionFalse,
-				},
-				{
-					Type:   monitoringv1.Reconciled,
-					Status: monitoringv1.ConditionTrue,
-				},
-			}
-			Expect(cli.Patch(ctx, alertManager, patch)).To(Succeed())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded",
-				operatorv1.ResourceNotReady,
-				"Alertmanager component is not available",
-				mock.Anything,
-				mock.Anything,
-			)
-		})
 	})
 
 	Context("controller reconciliation", func() {
@@ -367,24 +265,30 @@ var _ = Describe("Monitor controller tests", func() {
 					Params: map[string][]string{"match[]": {"{__name__=~\".+\"}"}},
 					Port:   "web",
 					Path:   "/federate",
-					Scheme: "https",
-					TLSConfig: &monitoringv1.TLSConfig{
-						SafeTLSConfig: monitoringv1.SafeTLSConfig{
-							CA: monitoringv1.SecretOrConfigMap{
-								ConfigMap: &corev1.ConfigMapKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: "tigera-external-prometheus",
+					Scheme: ptr.To(monitoringv1.SchemeHTTPS),
+					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+							TLSConfig: &monitoringv1.TLSConfig{
+								SafeTLSConfig: monitoringv1.SafeTLSConfig{
+									CA: monitoringv1.SecretOrConfigMap{
+										ConfigMap: &corev1.ConfigMapKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "tigera-external-prometheus",
+											},
+											Key: corev1.TLSCertKey,
+										},
 									},
-									Key: corev1.TLSCertKey,
+								},
+							},
+							HTTPConfigWithoutTLS: monitoringv1.HTTPConfigWithoutTLS{
+								BearerTokenSecret: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: monitor.TigeraExternalPrometheus,
+									},
+									Key: "token",
 								},
 							},
 						},
-					},
-					BearerTokenSecret: &corev1.SecretKeySelector{
-						LocalObjectReference: corev1.LocalObjectReference{
-							Name: monitor.TigeraExternalPrometheus,
-						},
-						Key: "token",
 					},
 				}))
 			})

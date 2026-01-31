@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/ptr"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
@@ -503,7 +504,22 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					},
 				}
-				cfg.Elasticsearch = &esv1.Elasticsearch{}
+				cfg.Elasticsearch = &esv1.Elasticsearch{
+					Spec: esv1.ElasticsearchSpec{
+						NodeSets: []esv1.NodeSet{
+							{
+								Name: "default",
+								VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+									{
+										Spec: corev1.PersistentVolumeClaimSpec{
+											StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+										},
+									},
+								},
+							},
+						},
+					},
+				}
 
 				component := render.LogStorage(cfg)
 

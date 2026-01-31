@@ -27,7 +27,7 @@ require (
 	github.com/sirupsen/logrus v1.9.4
 	github.com/snowzach/rotatefilehook v0.0.0-20220211133110-53752135082d
 	github.com/stretchr/testify v1.11.1
-	github.com/tigera/api v0.0.0-20260115201458-bce624761bbd
+	github.com/tigera/api v0.0.0-20260131232301-9cd5ef33622f
 	github.com/tigera/operator/api v0.0.0-20260120220012-4a3f8a7d8399
 	github.com/urfave/cli/v3 v3.6.2
 	go.uber.org/zap v1.27.1

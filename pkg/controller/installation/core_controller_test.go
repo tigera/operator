@@ -1098,7 +1098,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(fc.Spec.NFTablesMode).ToNot(BeNil())
-				Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesMode(v3.NFTablesModeEnabled)))
+				Expect(*fc.Spec.NFTablesMode).To(Equal(v3.NFTablesModeAuto))
 			})
 
 			It("should set NFTablesMode to Disabled if nftables mode is changed", func() {

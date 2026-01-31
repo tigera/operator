@@ -16,7 +16,11 @@ spec:
   preserveUnknownFields: false
   scope: Cluster
   versions:
-    - name: v3
+    - additionalPrinterColumns:
+        - jsonPath: .spec.tier
+          name: Tier
+          type: string
+      name: v3
       schema:
         openAPIV3Schema:
           properties:
@@ -420,8 +424,17 @@ spec:
                       - Ingress
                       - Egress
                     type: string
+                  maxItems: 2
+                  minItems: 1
                   type: array
+                  x-kubernetes-list-type: set
               type: object
+          required:
+            - metadata
+            - spec
           type: object
+      selectableFields:
+        - jsonPath: .spec.tier
       served: true
       storage: true
+      subresources: {}

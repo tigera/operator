@@ -74,7 +74,6 @@ spec:
                       x-kubernetes-map-type: atomic
                   type: object
                 peerIP:
-                  format: ip
                   type: string
                 peerSelector:
                   type: string
@@ -97,6 +96,9 @@ spec:
                 ttlSecurity:
                   type: integer
               type: object
+          required:
+            - metadata
+            - spec
           type: object
       served: true
       storage: true

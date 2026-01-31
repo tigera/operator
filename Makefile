@@ -736,7 +736,7 @@ endef
 define copy_eck_crds
     $(eval dir := $(1))
 		$(eval product := $(2))
-	@cp $(dir)/charts/tigera-operator/crds/eck/* pkg/crds/$(product)/ && echo "Copied $(product) ECK CRDs"
+	@cp $(dir)/charts/crd.projectcalico.org.v1/templates/eck/* pkg/crds/$(product)/ && echo "Copied $(product) ECK CRDs"
 endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version

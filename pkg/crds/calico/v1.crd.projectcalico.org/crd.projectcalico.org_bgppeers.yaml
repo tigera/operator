@@ -74,7 +74,6 @@ spec:
                       x-kubernetes-map-type: atomic
                   type: object
                 peerIP:
-                  format: ip
                   type: string
                 peerSelector:
                   type: string

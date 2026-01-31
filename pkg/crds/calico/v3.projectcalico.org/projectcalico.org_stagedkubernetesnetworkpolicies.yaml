@@ -239,7 +239,10 @@ spec:
                 policyTypes:
                   items:
                     type: string
+                  maxItems: 2
+                  minItems: 1
                   type: array
+                  x-kubernetes-list-type: set
                 stagedAction:
                   enum:
                     - Set
@@ -248,6 +251,9 @@ spec:
                     - Ignore
                   type: string
               type: object
+          required:
+            - metadata
+            - spec
           type: object
       served: true
       storage: true

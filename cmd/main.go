@@ -81,11 +81,28 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(operatortigeraiov1.AddToScheme(scheme))
-	utilruntime.Must(apis.AddToScheme(scheme, useV3CRDS()))
 }
 
-func useV3CRDS() bool {
-	return os.Getenv("CALICO_API_GROUP") == "projectcalico.org/v3"
+func useV3CRDS(cs kubernetes.Interface) (bool, error) {
+	if os.Getenv("CALICO_API_GROUP") != "" {
+		return os.Getenv("CALICO_API_GROUP") == "projectcalico.org/v3", nil
+	}
+
+	apiGroups, err := cs.Discovery().ServerGroups()
+	if err != nil {
+		return false, err
+	}
+
+	v3present, v1present := false, false
+	for _, g := range apiGroups.Groups {
+		if g.Name == v3.GroupName {
+			v3present = true
+		}
+		if g.Name == "crd.projectcalico.org" {
+			v1present = true
+		}
+	}
+	return v3present && !v1present, nil
 }
 
 func printVersion() {
@@ -148,6 +165,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		fmt.Println("Enterprise:", components.EnterpriseRelease)
 		os.Exit(0)
 	}
+
 	if printImages != "" {
 		var cmpnts []components.Component
 		if strings.ToLower(printImages) == "list" {
@@ -168,6 +186,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		}
 		os.Exit(0)
 	}
+
 	if printCalicoCRDs != "" {
 		if err := showCRDs(operatortigeraiov1.Calico, printCalicoCRDs); err != nil {
 			fmt.Println(err)
@@ -212,6 +231,15 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		log.Error(err, "")
 		os.Exit(1)
 	}
+
+	v3CRDs, err := useV3CRDS(cs)
+	if err != nil {
+		log.Error(err, "Failed to determine CRD version to use")
+		os.Exit(1)
+	}
+
+	// Add the Calico API to the scheme, now that we know which backing CRD version to use.
+	utilruntime.Must(apis.AddToScheme(scheme, v3CRDs))
 
 	// Because we only run this as a job that is set up by the operator, it should not be
 	// launched except by an operator that is the active operator. So we do not need to
@@ -282,9 +310,9 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	// If configured to manage CRDs, do a preliminary install of them here. The Installation controller
 	// will reconcile them as well, but we need to make sure they are installed before we start the rest of the controllers.
 	if bootstrapCRDs || manageCRDs {
-		setupLog.WithValues("v3", useV3CRDS()).Info("Ensuring CRDs are installed")
+		setupLog.WithValues("v3", v3CRDs).Info("Ensuring CRDs are installed")
 
-		if err := crds.Ensure(mgr.GetClient(), variant, useV3CRDS(), setupLog); err != nil {
+		if err := crds.Ensure(mgr.GetClient(), variant, v3CRDs, setupLog); err != nil {
 			setupLog.Error(err, "Failed to ensure CRDs are created")
 			os.Exit(1)
 		}
@@ -447,7 +475,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		K8sClientset:        clientset,
 		MultiTenant:         multiTenant,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
-		UseV3CRDs:           useV3CRDS(),
+		UseV3CRDs:           v3CRDs,
 	}
 
 	// Before we start any controllers, make sure our options are valid.
@@ -525,7 +553,7 @@ func metricsAddr() string {
 
 func showCRDs(variant operatortigeraiov1.ProductVariant, outputType string) error {
 	first := true
-	for _, v := range crds.GetCRDs(variant, useV3CRDS()) {
+	for _, v := range crds.GetCRDs(variant, os.Getenv("CALICO_API_GROUP") == "projectcalico.org/v3") {
 		if outputType != "all" {
 			if !strings.HasPrefix(v.Name, outputType) {
 				continue

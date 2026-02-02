@@ -30,6 +30,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -40,10 +41,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/crds"
@@ -70,6 +71,7 @@ var _ = Describe("Mainline component function tests", func() {
 	var shutdownContext context.Context
 	var cancel context.CancelFunc
 	var operatorDone chan struct{}
+
 	BeforeEach(func() {
 		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist)
 
@@ -288,7 +290,7 @@ func newNonCachingClient(config *rest.Config, options client.Options) (client.Cl
 	return client.New(config, options)
 }
 
-func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, *kubernetes.Clientset, manager.Manager) {
+func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.Manager) {
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
@@ -296,9 +298,20 @@ func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDs
 	clientset, err := kubernetes.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Create a manager to use in the tests.
+	v3CRDs, err := apis.UseV3CRDS(clientset)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Create a scheme to use.
+	s := runtime.NewScheme()
+	err = apiextensionsv1.AddToScheme(s)
+	Expect(err).NotTo(HaveOccurred())
+	err = apis.AddToScheme(s, v3CRDs)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Create a manager to use in the tests, providing the scheme we created.
 	skipNameValidation := true
 	mgr, err := manager.New(cfg, manager.Options{
+		Scheme: s,
 		Metrics: server.Options{
 			BindAddress: "0",
 		},
@@ -316,17 +329,11 @@ func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDs
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	// Setup Scheme for all resources
-	err = apis.AddToScheme(mgr.GetScheme())
-	Expect(err).NotTo(HaveOccurred())
-	err = apiextensionsv1.AddToScheme(mgr.GetScheme())
-	Expect(err).NotTo(HaveOccurred())
-
 	return mgr.GetClient(), clientset, mgr
 }
 
 func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
-	client, clientset, mgr := setupManagerNoControllers(manageCRDs, multiTenant, enterpriseCRDsExist)
+	client, clientset, mgr := setupManagerNoControllers()
 
 	// Setup all Controllers
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -543,7 +550,7 @@ func verifyCalicoHasDeployed(c client.Client) {
 
 func verifyCRDsExist(c client.Client, variant operator.ProductVariant) {
 	crdNames := []string{}
-	for _, x := range crds.GetCRDs(variant) {
+	for _, x := range crds.GetCRDs(variant, false) {
 		crdNames = append(crdNames, fmt.Sprintf("%s.%s", x.Spec.Names.Plural, x.Spec.Group))
 	}
 
@@ -605,7 +612,7 @@ func waitForProductTeardown(c client.Client) {
 func cleanupIPPools(c client.Client) {
 	By("Cleaning up IP pools")
 	Eventually(func() error {
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		err := c.List(context.Background(), ipPools)
 		if err != nil {
 			return err
@@ -619,7 +626,7 @@ func cleanupIPPools(c client.Client) {
 			}
 		}
 		return nil
-	}, 30*time.Second).ShouldNot(HaveOccurred())
+	}, 10*time.Second).ShouldNot(HaveOccurred())
 }
 
 func cleanupResources(c client.Client) {

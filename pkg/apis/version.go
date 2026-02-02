@@ -19,12 +19,16 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"k8s.io/client-go/kubernetes"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+var log = ctrl.Log.WithName("apis")
 
 // UseV3CRDS detects whether we should use the crd.projectcalic.org/v1 or
 // projectcalico.org/v3 API group for Calico CRDs.
 func UseV3CRDS(cs kubernetes.Interface) (bool, error) {
 	if os.Getenv("CALICO_API_GROUP") != "" {
+		log.Info("CALICO_API_GROUP environment variable is set, using its value to determine API group", "CALICO_API_GROUP", os.Getenv("CALICO_API_GROUP"))
 		return os.Getenv("CALICO_API_GROUP") == "projectcalico.org/v3", nil
 	}
 
@@ -42,5 +46,7 @@ func UseV3CRDS(cs kubernetes.Interface) (bool, error) {
 			v1present = true
 		}
 	}
+
+	log.Info("Detected API groups from API server", "v3present", v3present, "v1present", v1present)
 	return v3present && !v1present, nil
 }

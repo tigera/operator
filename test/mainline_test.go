@@ -30,6 +30,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -296,9 +297,20 @@ func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.
 	clientset, err := kubernetes.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Create a manager to use in the tests.
+	v3CRDs, err := apis.UseV3CRDS(clientset)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Create a scheme to use.
+	scheme := runtime.NewScheme()
+	err = apis.AddToScheme(scheme, v3CRDs)
+	Expect(err).NotTo(HaveOccurred())
+	err = apiextensionsv1.AddToScheme(scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Create a manager to use in the tests, providing the scheme we created.
 	skipNameValidation := true
 	mgr, err := manager.New(cfg, manager.Options{
+		Scheme: scheme,
 		Metrics: server.Options{
 			BindAddress: "0",
 		},
@@ -314,16 +326,6 @@ func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.
 			SkipNameValidation: &skipNameValidation,
 		},
 	})
-	Expect(err).NotTo(HaveOccurred())
-
-	v3CRDs, err := apis.UseV3CRDS(clientset)
-	Expect(err).NotTo(HaveOccurred())
-
-	// Setup Scheme for all resources
-	err = apis.AddToScheme(mgr.GetScheme(), v3CRDs)
-	Expect(err).NotTo(HaveOccurred())
-
-	err = apiextensionsv1.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 
 	return mgr.GetClient(), clientset, mgr
@@ -608,7 +610,7 @@ func waitForProductTeardown(c client.Client) {
 
 func cleanupIPPools(c client.Client) {
 	By("Cleaning up IP pools")
-	EventuallyWithOffset(1, func() error {
+	Eventually(func() error {
 		ipPools := &v3.IPPoolList{}
 		err := c.List(context.Background(), ipPools)
 		if err != nil {
@@ -623,7 +625,7 @@ func cleanupIPPools(c client.Client) {
 			}
 		}
 		return nil
-	}, 30*time.Second).ShouldNot(HaveOccurred())
+	}, 10*time.Second).ShouldNot(HaveOccurred())
 }
 
 func cleanupResources(c client.Client) {

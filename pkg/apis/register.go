@@ -117,8 +117,10 @@ func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {
 			&v3.KubeControllersConfigurationList{},
 		}
 		if useV3 {
+			log.Info("Registering Calico CRD types with projectcalico.org/v3 API group")
 			v3Types = append(v3Types, variableTypes...)
 		} else {
+			log.Info("Registering Calico CRD types with crd.projectcalico.org/v1 API group")
 			v1Types = append(v1Types, variableTypes...)
 		}
 

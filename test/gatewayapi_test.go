@@ -53,7 +53,7 @@ var _ = Describe("GatewayAPI tests", func() {
 	var operatorDone chan struct{}
 	BeforeEach(func() {
 		log = logf.Log.WithName("gatewayapi-test-logger")
-		c, clientset, mgr = setupManagerNoControllers(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist)
+		c, clientset, mgr = setupManagerNoControllers()
 
 		// Start the GatewayAPI controller.
 		shutdownContext, cancel = context.WithCancel(context.TODO())

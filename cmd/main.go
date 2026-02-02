@@ -83,28 +83,6 @@ func init() {
 	utilruntime.Must(operatortigeraiov1.AddToScheme(scheme))
 }
 
-func useV3CRDS(cs kubernetes.Interface) (bool, error) {
-	if os.Getenv("CALICO_API_GROUP") != "" {
-		return os.Getenv("CALICO_API_GROUP") == "projectcalico.org/v3", nil
-	}
-
-	apiGroups, err := cs.Discovery().ServerGroups()
-	if err != nil {
-		return false, err
-	}
-
-	v3present, v1present := false, false
-	for _, g := range apiGroups.Groups {
-		if g.Name == v3.GroupName {
-			v3present = true
-		}
-		if g.Name == "crd.projectcalico.org" {
-			v1present = true
-		}
-	}
-	return v3present && !v1present, nil
-}
-
 func printVersion() {
 	log.Info(fmt.Sprintf("Version: %v", version.VERSION))
 	log.Info(fmt.Sprintf("Go Version: %s", goruntime.Version()))
@@ -232,7 +210,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
-	v3CRDs, err := useV3CRDS(cs)
+	v3CRDs, err := apis.UseV3CRDS(cs)
 	if err != nil {
 		log.Error(err, "Failed to determine CRD version to use")
 		os.Exit(1)

@@ -288,7 +288,7 @@ func newNonCachingClient(config *rest.Config, options client.Options) (client.Cl
 	return client.New(config, options)
 }
 
-func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, *kubernetes.Clientset, manager.Manager) {
+func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.Manager) {
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
@@ -316,9 +316,13 @@ func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDs
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	// Setup Scheme for all resources
-	err = apis.AddToScheme(mgr.GetScheme(), false)
+	v3CRDs, err := apis.UseV3CRDS(clientset)
 	Expect(err).NotTo(HaveOccurred())
+
+	// Setup Scheme for all resources
+	err = apis.AddToScheme(mgr.GetScheme(), v3CRDs)
+	Expect(err).NotTo(HaveOccurred())
+
 	err = apiextensionsv1.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 
@@ -326,7 +330,7 @@ func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDs
 }
 
 func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
-	client, clientset, mgr := setupManagerNoControllers(manageCRDs, multiTenant, enterpriseCRDsExist)
+	client, clientset, mgr := setupManagerNoControllers()
 
 	// Setup all Controllers
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -604,7 +608,7 @@ func waitForProductTeardown(c client.Client) {
 
 func cleanupIPPools(c client.Client) {
 	By("Cleaning up IP pools")
-	Eventually(func() error {
+	EventuallyWithOffset(1, func() error {
 		ipPools := &v3.IPPoolList{}
 		err := c.List(context.Background(), ipPools)
 		if err != nil {

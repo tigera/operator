@@ -744,7 +744,7 @@ endef
 .PHONY: fetch-calico-crds fetch-enterprise-crds
 .PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
 
-CALICO?=caseydavenport/calico
+CALICO?=projectcalico/calico
 CALICO_CRDS_DIR?=.crds/calico
 DEFAULT_OS_CRDS_DIR?=.crds/calico
 read-libcalico-calico-version:

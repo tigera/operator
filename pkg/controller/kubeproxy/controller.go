@@ -28,8 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -59,7 +59,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("%s failed to watch Installation resource: %w", controllerName, err)
 	}
 
-	if err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&v3.FelixConfiguration{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("%s failed to watch for Felix Configuration resource: %w", controllerName, err)
 	}
 

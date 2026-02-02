@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.17.3
   name: ipamblocks.projectcalico.org
 spec:
   group: projectcalico.org
@@ -14,16 +14,7 @@ spec:
   preserveUnknownFields: false
   scope: Cluster
   versions:
-    - additionalPrinterColumns:
-        - description: The block CIDR
-          jsonPath: .spec.cidr
-          name: CIDR
-          type: string
-        - description: The block affinity
-          jsonPath: .spec.affinity
-          name: Affininty
-          type: string
-      name: v3
+    - name: v3
       schema:
         openAPIV3Schema:
           properties:
@@ -36,10 +27,6 @@ spec:
             spec:
               properties:
                 affinity:
-                  pattern: ^(host|virtual):[a-zA-Z0-9\.\-_]+$
-                  type: string
-                affinityClaimTime:
-                  format: date-time
                   type: string
                 allocations:
                   items:
@@ -60,7 +47,6 @@ spec:
                     type: object
                   type: array
                 cidr:
-                  format: cidr
                   type: string
                 deleted:
                   type: boolean
@@ -86,10 +72,6 @@ spec:
                 - strictAffinity
                 - unallocated
               type: object
-          required:
-            - metadata
-            - spec
           type: object
       served: true
       storage: true
-      subresources: {}

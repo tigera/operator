@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/client/clientset_generated/clientset/scheme"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/apis"
@@ -306,6 +307,8 @@ func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.
 	err = apiextensionsv1.AddToScheme(s)
 	Expect(err).NotTo(HaveOccurred())
 	err = apis.AddToScheme(s, v3CRDs)
+	Expect(err).NotTo(HaveOccurred())
+	err = scheme.AddToScheme(s)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Create a manager to use in the tests, providing the scheme we created.

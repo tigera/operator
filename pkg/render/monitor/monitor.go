@@ -1002,7 +1002,6 @@ func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMon
 }
 
 func (mc *monitorComponent) operatorRoles() []*rbacv1.Role {
-
 	return []*rbacv1.Role{
 		// list and watch have to be cluster scopes for watches to work.
 		// In controller-runtime, watches are by default non-namespaced.
@@ -1058,7 +1057,6 @@ func (mc *monitorComponent) operatorRoles() []*rbacv1.Role {
 }
 
 func (mc *monitorComponent) operatorRoleBindings() []*rbacv1.RoleBinding {
-
 	return []*rbacv1.RoleBinding{
 		{
 			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},

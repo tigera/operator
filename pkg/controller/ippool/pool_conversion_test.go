@@ -25,15 +25,15 @@ var (
 	false_ = false
 )
 
-var _ = table.DescribeTable("IPPool operator.tigera.io <-> crd.projectcalico.org/v1 conversion tests",
+var _ = table.DescribeTable("IPPool operator.tigera.io <-> projectcalico.org/v3 conversion tests",
 	func(input operator.IPPool) {
-		// Convert to crd.projectcalico.org/v1
-		crdPool, err := ToProjectCalicoV1(input)
+		// Convert to projectcalico.org/v3
+		crdPool, err := ToProjectCalico(input)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Convert back to operator.tigera.io, expect it to be equal to the input.
 		operPool := operator.IPPool{}
-		FromProjectCalicoV1(&operPool, *crdPool)
+		FromProjectCalico(&operPool, *crdPool)
 		Expect(operPool).To(Equal(input))
 	},
 

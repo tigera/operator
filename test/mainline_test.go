@@ -40,10 +40,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/crds"
@@ -288,7 +288,7 @@ func newNonCachingClient(config *rest.Config, options client.Options) (client.Cl
 	return client.New(config, options)
 }
 
-func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, *kubernetes.Clientset, manager.Manager) {
+func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.Manager) {
 	// Create a Kubernetes client.
 	cfg, err := config.GetConfig()
 	Expect(err).NotTo(HaveOccurred())
@@ -316,9 +316,13 @@ func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDs
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	// Setup Scheme for all resources
-	err = apis.AddToScheme(mgr.GetScheme())
+	v3CRDs, err := apis.UseV3CRDS(clientset)
 	Expect(err).NotTo(HaveOccurred())
+
+	// Setup Scheme for all resources
+	err = apis.AddToScheme(mgr.GetScheme(), v3CRDs)
+	Expect(err).NotTo(HaveOccurred())
+
 	err = apiextensionsv1.AddToScheme(mgr.GetScheme())
 	Expect(err).NotTo(HaveOccurred())
 
@@ -326,7 +330,7 @@ func setupManagerNoControllers(manageCRDs bool, multiTenant bool, enterpriseCRDs
 }
 
 func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
-	client, clientset, mgr := setupManagerNoControllers(manageCRDs, multiTenant, enterpriseCRDsExist)
+	client, clientset, mgr := setupManagerNoControllers()
 
 	// Setup all Controllers
 	ctx, cancel := context.WithCancel(context.TODO())
@@ -543,7 +547,7 @@ func verifyCalicoHasDeployed(c client.Client) {
 
 func verifyCRDsExist(c client.Client, variant operator.ProductVariant) {
 	crdNames := []string{}
-	for _, x := range crds.GetCRDs(variant) {
+	for _, x := range crds.GetCRDs(variant, false) {
 		crdNames = append(crdNames, fmt.Sprintf("%s.%s", x.Spec.Names.Plural, x.Spec.Group))
 	}
 
@@ -604,8 +608,8 @@ func waitForProductTeardown(c client.Client) {
 
 func cleanupIPPools(c client.Client) {
 	By("Cleaning up IP pools")
-	Eventually(func() error {
-		ipPools := &crdv1.IPPoolList{}
+	EventuallyWithOffset(1, func() error {
+		ipPools := &v3.IPPoolList{}
 		err := c.List(context.Background(), ipPools)
 		if err != nil {
 			return err

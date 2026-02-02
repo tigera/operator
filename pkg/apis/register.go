@@ -127,6 +127,7 @@ func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {
 		// Register types with the crd.projectcalico.org API group.
 		v1GV := schema.GroupVersion{Group: "crd.projectcalico.org", Version: "v1"}
 		scheme.AddKnownTypes(v1GV, v1Types...)
+		metav1.AddToGroupVersion(scheme, v1GV)
 
 		// Register types with the projectcalico.org API group.
 		v3GV := schema.GroupVersion{Group: "projectcalico.org", Version: "v3"}

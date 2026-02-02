@@ -71,6 +71,7 @@ var _ = Describe("Mainline component function tests", func() {
 	var shutdownContext context.Context
 	var cancel context.CancelFunc
 	var operatorDone chan struct{}
+
 	BeforeEach(func() {
 		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist)
 
@@ -301,16 +302,16 @@ func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.
 	Expect(err).NotTo(HaveOccurred())
 
 	// Create a scheme to use.
-	scheme := runtime.NewScheme()
-	err = apis.AddToScheme(scheme, v3CRDs)
+	s := runtime.NewScheme()
+	err = apiextensionsv1.AddToScheme(s)
 	Expect(err).NotTo(HaveOccurred())
-	err = apiextensionsv1.AddToScheme(scheme)
+	err = apis.AddToScheme(s, v3CRDs)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Create a manager to use in the tests, providing the scheme we created.
 	skipNameValidation := true
 	mgr, err := manager.New(cfg, manager.Options{
-		Scheme: scheme,
+		Scheme: s,
 		Metrics: server.Options{
 			BindAddress: "0",
 		},

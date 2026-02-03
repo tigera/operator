@@ -46,9 +46,10 @@ var _ = Describe("CRD management tests", func() {
 	var npCRD *apiextenv1.CustomResourceDefinition
 	var scheme *runtime.Scheme
 	var operatorDone chan struct{}
+
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 		cfg, err := config.GetConfig()
 		Expect(err).NotTo(HaveOccurred())
@@ -63,9 +64,11 @@ var _ = Describe("CRD management tests", func() {
 			TypeMeta:   metav1.TypeMeta{Kind: "CustomResourceDefinition", APIVersion: "apiextensions.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "networkpolicies.crd.projectcalico.org"},
 		}
+
 		k := client.ObjectKey{Name: npCRD.Name}
 		err = c.Get(context.Background(), k, npCRD)
 		Expect(err).NotTo(HaveOccurred())
+
 		ns := &corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator"},

@@ -27,8 +27,10 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	aggregator "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme"
@@ -37,7 +39,9 @@ import (
 )
 
 // AddToSchemes may be used to add all resources defined in the project to a Scheme
-var AddToSchemes runtime.SchemeBuilder
+var (
+	AddToSchemes runtime.SchemeBuilder
+)
 
 // AddToScheme adds all Resources to the Scheme
 func AddToScheme(s *runtime.Scheme, v3 bool) error {
@@ -46,7 +50,6 @@ func AddToScheme(s *runtime.Scheme, v3 bool) error {
 }
 
 func init() {
-	// Register the types with the Scheme so the components can map objects to GroupVersionKinds and back
 	AddToSchemes = append(AddToSchemes, configv1.Install)
 	AddToSchemes = append(AddToSchemes, aggregator.AddToScheme)
 	AddToSchemes = append(AddToSchemes, apiextensions.AddToScheme)
@@ -61,6 +64,8 @@ func init() {
 	AddToSchemes = append(AddToSchemes, operatorv1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, admissionregistrationv1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, monitoringv1.AddToScheme)
+	AddToSchemes = append(AddToSchemes, corev1.AddToScheme)
+	AddToSchemes = append(AddToSchemes, rbacv1.AddToScheme)
 }
 
 func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {

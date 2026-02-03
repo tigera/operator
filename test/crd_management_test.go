@@ -46,6 +46,7 @@ var _ = Describe("CRD management tests", func() {
 	var npCRD *apiextenv1.CustomResourceDefinition
 	var scheme *runtime.Scheme
 	var operatorDone chan struct{}
+
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
 		err := apis.AddToScheme(scheme, false)

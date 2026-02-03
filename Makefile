@@ -477,8 +477,7 @@ deploy-crds: kubectl
 		$(BINDIR)/kubectl create -f pkg/crds/operator/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/calico/v1.crd.projectcalico.org/ && \
 		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/v1.crd.projectcalico.org/ && \
-		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
-		$(BINDIR)/kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
+		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/01-crd-eck-bundle.yaml && \
 		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
 create-tigera-operator-namespace: kubectl

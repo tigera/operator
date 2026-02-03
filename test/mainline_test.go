@@ -42,7 +42,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/api/pkg/client/clientset_generated/clientset/scheme"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/apis"
@@ -105,6 +104,8 @@ var _ = Describe("Mainline component function tests", func() {
 	AfterEach(func() {
 		defer func() {
 			cancel()
+
+			By("Waiting for operator to shutdown")
 			Eventually(func() error {
 				select {
 				case <-operatorDone:
@@ -304,11 +305,7 @@ func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.
 
 	// Create a scheme to use.
 	s := runtime.NewScheme()
-	err = apiextensionsv1.AddToScheme(s)
-	Expect(err).NotTo(HaveOccurred())
 	err = apis.AddToScheme(s, v3CRDs)
-	Expect(err).NotTo(HaveOccurred())
-	err = scheme.AddToScheme(s)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Create a manager to use in the tests, providing the scheme we created.
@@ -574,6 +571,7 @@ func verifyCRDsExist(c client.Client, variant operator.ProductVariant) {
 }
 
 func waitForProductTeardown(c client.Client) {
+	By("Waiting for Calico resources to be torn down")
 	Eventually(func() error {
 		ns := &corev1.Namespace{
 			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
@@ -609,7 +607,7 @@ func waitForProductTeardown(c client.Client) {
 			return err
 		}
 		return nil
-	}, 240*time.Second).ShouldNot(HaveOccurred())
+	}, 240*time.Second).ShouldNot(HaveOccurred(), "Calico resources were not torn down in time")
 }
 
 func cleanupIPPools(c client.Client) {
@@ -629,7 +627,7 @@ func cleanupIPPools(c client.Client) {
 			}
 		}
 		return nil
-	}, 10*time.Second).ShouldNot(HaveOccurred())
+	}, 10*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
 }
 
 func cleanupResources(c client.Client) {

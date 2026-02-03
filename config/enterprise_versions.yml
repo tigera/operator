@@ -2,7 +2,7 @@
 title: master
 components:
   libcalico-go:
-    version: master
+    version: release-calient-v3.23-1
   manager:
     image: manager
     version: master

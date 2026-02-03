@@ -403,7 +403,6 @@ spec:
                 serviceAccountSelector:
                   type: string
                 tier:
-                  default: default
                   type: string
                 types:
                   items:

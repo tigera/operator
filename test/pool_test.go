@@ -28,12 +28,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 )
 
 // This test suite covers the installation of IP pools. The vast majority should be covered in the pkg/controller/ippool UTs
@@ -125,7 +125,7 @@ var _ = Describe("IPPool FV tests", func() {
 		verifyCalicoHasDeployed(c)
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
@@ -140,7 +140,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.Disabled).To(Equal(false))
 		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
-		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[0].Spec.AssignmentMode).To(Equal(v3.Automatic))
 
 		// Verify that a default IPv6 pool was created.
 		Expect(ipPools.Items[1].Name).To(Equal("default-ipv6-ippool"))
@@ -149,7 +149,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[1].Spec.Disabled).To(Equal(false))
 		Expect(ipPools.Items[1].Spec.BlockSize).To(Equal(122))
 		Expect(ipPools.Items[1].Spec.NodeSelector).To(Equal("all()"))
-		Expect(ipPools.Items[1].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[1].Spec.AssignmentMode).To(Equal(v3.Automatic))
 
 		// Expect the default pools to be marked as managed by the operator.
 		for _, p := range ipPools.Items {
@@ -175,7 +175,7 @@ var _ = Describe("IPPool FV tests", func() {
 		verifyCalicoHasDeployed(c)
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
@@ -190,27 +190,27 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
 		Expect(ipPools.Items[0].Labels).To(HaveLen(1))
-		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[0].Spec.AssignmentMode).To(Equal(v3.Automatic))
 	})
 
 	It("should assume ownership of legacy default IP pools", func() {
 		// Create an IP pool directly - this simulates a pre-existing IP pool created by Calico prior to
 		// the operator supporting direct IP pool management.
-		ipPool := crdv1.IPPool{
+		ipPool := v3.IPPool{
 			ObjectMeta: metav1.ObjectMeta{Name: "default-ipv4-ippool"},
-			Spec: crdv1.IPPoolSpec{
+			Spec: v3.IPPoolSpec{
 				CIDR:             "192.168.0.0/24",
-				IPIPMode:         crdv1.IPIPModeAlways,
-				VXLANMode:        crdv1.VXLANModeNever,
+				IPIPMode:         v3.IPIPModeAlways,
+				VXLANMode:        v3.VXLANModeNever,
 				BlockSize:        26,
 				NATOutgoing:      true,
 				NodeSelector:     "all()",
 				DisableBGPExport: false,
-				AllowedUses: []crdv1.IPPoolAllowedUse{
-					crdv1.IPPoolAllowedUseWorkload,
-					crdv1.IPPoolAllowedUseTunnel,
+				AllowedUses: []v3.IPPoolAllowedUse{
+					v3.IPPoolAllowedUseWorkload,
+					v3.IPPoolAllowedUseTunnel,
 				},
-				AssignmentMode: operator.AssignmentModeAutomatic,
+				AssignmentMode: ptr.To(v3.Automatic),
 			},
 		}
 		Expect(c.Create(context.Background(), &ipPool)).To(Succeed())
@@ -243,7 +243,7 @@ var _ = Describe("IPPool FV tests", func() {
 		// been controlled by the operator at this point.
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
@@ -285,7 +285,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(v3Pools.Items[0].Spec.NodeSelector).To(Equal("all()"))
 		Expect(v3Pools.Items[0].Spec.IPIPMode).To(Equal(v3.IPIPMode(v3.IPIPModeAlways)))
 		Expect(v3Pools.Items[0].Spec.VXLANMode).To(Equal(v3.VXLANMode(v3.VXLANModeNever)))
-		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[0].Spec.AssignmentMode).To(Equal(v3.Automatic))
 	})
 
 	// This test verifies that the IP pool controller doesn't assume ownership of IP pools that may exist in the
@@ -294,18 +294,18 @@ var _ = Describe("IPPool FV tests", func() {
 	It("should NOT assume ownership of modified IP pools on upgrade", func() {
 		// Create an IP pool directly - this simulates a pre-existing IP pool created by Calico prior to
 		// the operator supporting direct IP pool management.
-		ipPool := crdv1.IPPool{
+		ipPool := v3.IPPool{
 			ObjectMeta: metav1.ObjectMeta{Name: "default-ipv4-ippool"},
-			Spec: crdv1.IPPoolSpec{
+			Spec: v3.IPPoolSpec{
 				CIDR:             "192.168.0.0/24",
-				IPIPMode:         crdv1.IPIPModeAlways,
-				VXLANMode:        crdv1.VXLANModeNever,
+				IPIPMode:         v3.IPIPModeAlways,
+				VXLANMode:        v3.VXLANModeNever,
 				BlockSize:        26,
 				NATOutgoing:      true,
 				DisableBGPExport: false,
-				AllowedUses: []crdv1.IPPoolAllowedUse{
-					crdv1.IPPoolAllowedUseWorkload,
-					crdv1.IPPoolAllowedUseTunnel,
+				AllowedUses: []v3.IPPoolAllowedUse{
+					v3.IPPoolAllowedUseWorkload,
+					v3.IPPoolAllowedUseTunnel,
 				},
 				// Use a non-default selector. This mimics a user modifying the IP pool after it was created,
 				// since we will use the default selector in the Installation spec.
@@ -343,7 +343,7 @@ var _ = Describe("IPPool FV tests", func() {
 		// been controlled by the operator at this point.
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())

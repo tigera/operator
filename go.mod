@@ -22,13 +22,12 @@ require (
 	github.com/openshift/api v0.0.0-20260122154241-80c3fbc164d6
 	github.com/openshift/library-go v0.0.0-20260121132910-dc3a1c884c04
 	github.com/pkg/errors v0.9.1
-	github.com/projectcalico/api v0.0.0-20250916150628-d4009e4d7c50
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.88.0
 	github.com/r3labs/diff/v2 v2.15.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/snowzach/rotatefilehook v0.0.0-20220211133110-53752135082d
 	github.com/stretchr/testify v1.11.1
-	github.com/tigera/api v0.0.0-20260115201458-bce624761bbd
+	github.com/tigera/api v0.0.0-20260131232301-9cd5ef33622f
 	github.com/tigera/operator/api v0.0.0-20260120220012-4a3f8a7d8399
 	github.com/urfave/cli/v3 v3.6.2
 	go.uber.org/zap v1.27.1

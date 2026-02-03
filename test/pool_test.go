@@ -140,7 +140,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.Disabled).To(Equal(false))
 		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
-		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[0].Spec.AssignmentMode).To(Equal(v3.Automatic))
 
 		// Verify that a default IPv6 pool was created.
 		Expect(ipPools.Items[1].Name).To(Equal("default-ipv6-ippool"))
@@ -149,7 +149,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[1].Spec.Disabled).To(Equal(false))
 		Expect(ipPools.Items[1].Spec.BlockSize).To(Equal(122))
 		Expect(ipPools.Items[1].Spec.NodeSelector).To(Equal("all()"))
-		Expect(ipPools.Items[1].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[1].Spec.AssignmentMode).To(Equal(v3.Automatic))
 
 		// Expect the default pools to be marked as managed by the operator.
 		for _, p := range ipPools.Items {
@@ -190,7 +190,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
 		Expect(ipPools.Items[0].Labels).To(HaveLen(1))
-		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[0].Spec.AssignmentMode).To(Equal(v3.Automatic))
 	})
 
 	It("should assume ownership of legacy default IP pools", func() {
@@ -210,7 +210,7 @@ var _ = Describe("IPPool FV tests", func() {
 					v3.IPPoolAllowedUseWorkload,
 					v3.IPPoolAllowedUseTunnel,
 				},
-				AssignmentMode: ptr.To[v3.AssignmentMode](v3.Automatic),
+				AssignmentMode: ptr.To(v3.Automatic),
 			},
 		}
 		Expect(c.Create(context.Background(), &ipPool)).To(Succeed())
@@ -285,7 +285,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(v3Pools.Items[0].Spec.NodeSelector).To(Equal("all()"))
 		Expect(v3Pools.Items[0].Spec.IPIPMode).To(Equal(v3.IPIPMode(v3.IPIPModeAlways)))
 		Expect(v3Pools.Items[0].Spec.VXLANMode).To(Equal(v3.VXLANMode(v3.VXLANModeNever)))
-		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[0].Spec.AssignmentMode).To(Equal(v3.Automatic))
 	})
 
 	// This test verifies that the IP pool controller doesn't assume ownership of IP pools that may exist in the

@@ -27,10 +27,14 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	aggregator "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/scheme"
@@ -66,6 +70,10 @@ func init() {
 	AddToSchemes = append(AddToSchemes, monitoringv1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, corev1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, rbacv1.AddToScheme)
+	AddToSchemes = append(AddToSchemes, appsv1.AddToScheme)
+	AddToSchemes = append(AddToSchemes, batchv1.AddToScheme)
+	AddToSchemes = append(AddToSchemes, storagev1.AddToScheme)
+	AddToSchemes = append(AddToSchemes, certificatesv1.AddToScheme)
 }
 
 func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {

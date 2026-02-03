@@ -535,16 +535,11 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{
 					"blockaffinities",
 					"ipamblocks",
-					"ipamconfigurations",
 					"ipamhandles",
+					"ipamconfigurations",
+					"ipamconfigs",
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
-			},
-			{
-				// But, we only need to be able to query for IPAM config.
-				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-				Resources: []string{"ipamconfigurations"},
-				Verbs:     []string{"get"},
 			},
 			{
 				// confd (and in some cases, felix) watches block affinities for route aggregation.
@@ -626,6 +621,7 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 					"ipamblocks",
 					"ipamhandles",
 					"ipamconfigurations",
+					"ipamconfigs",
 					"clusterinformations",
 					"ippools",
 					"ipreservations",

@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,9 +30,9 @@ import (
 	kscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
@@ -42,27 +42,27 @@ func int32Ptr(x int32) *int32 {
 
 var _ = Describe("Convert network tests", func() {
 	ctx := context.Background()
-	var v4pool *crdv1.IPPool
-	var v6pool *crdv1.IPPool
+	var v4pool *v3.IPPool
+	var v6pool *v3.IPPool
 	var scheme *runtime.Scheme
 	var falseValue bool
 
 	BeforeEach(func() {
 		scheme = kscheme.Scheme
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 
-		v4pool = crdv1.NewIPPool()
+		v4pool = v3.NewIPPool()
 		v4pool.Name = "test-ipv4-pool"
-		v4pool.Spec = crdv1.IPPoolSpec{
+		v4pool.Spec = v3.IPPoolSpec{
 			CIDR:        "192.168.4.0/24",
-			IPIPMode:    crdv1.IPIPModeAlways,
+			IPIPMode:    v3.IPIPModeAlways,
 			NATOutgoing: true,
 		}
 
-		v6pool = crdv1.NewIPPool()
+		v6pool = v3.NewIPPool()
 		v6pool.Name = "test-ipv6-pool"
-		v6pool.Spec = crdv1.IPPoolSpec{
+		v6pool.Spec = v3.IPPoolSpec{
 			CIDR:        "2001:db8::1/120",
 			NATOutgoing: true,
 		}
@@ -450,8 +450,8 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			v6pool.Spec.IPIPMode = crdv1.IPIPModeNever
-			v6pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			v6pool.Spec.IPIPMode = v3.IPIPModeNever
+			v6pool.Spec.VXLANMode = v3.VXLANModeAlways
 			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())
@@ -487,10 +487,10 @@ var _ = Describe("Convert network tests", func() {
 				},
 			)
 
-			v4pool.Spec.IPIPMode = crdv1.IPIPModeNever
-			v4pool.Spec.VXLANMode = crdv1.VXLANModeAlways
-			v6pool.Spec.IPIPMode = crdv1.IPIPModeNever
-			v6pool.Spec.VXLANMode = crdv1.VXLANModeAlways
+			v4pool.Spec.IPIPMode = v3.IPIPModeNever
+			v4pool.Spec.VXLANMode = v3.VXLANModeAlways
+			v6pool.Spec.IPIPMode = v3.IPIPModeNever
+			v6pool.Spec.VXLANMode = v3.VXLANModeAlways
 			c := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(v4pool, v6pool, ds, emptyKubeControllerSpec(), emptyFelixConfig()).Build()
 			cfg, err := Convert(ctx, c)
 			Expect(err).ToNot(HaveOccurred())

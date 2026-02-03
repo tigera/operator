@@ -31,9 +31,9 @@ import (
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/go-logr/logr"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -86,7 +86,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("istio-controller failed to watch Installation resource: %v", err)
 	}
 
-	err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&v3.FelixConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("istio-controller failed to watch FelixConfiguration resource: %w", err)
 	}
@@ -128,7 +128,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	err := r.Get(ctx, utils.DefaultInstanceKey, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.Info("Istio object not found")
+			reqLogger.V(1).Info("Istio object not found")
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
@@ -243,7 +243,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	_, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+	_, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *v3.FelixConfiguration) (bool, error) {
 		return r.setIstioFelixConfiguration(ctx, instance, fc, false)
 	})
 	if err != nil {
@@ -264,7 +264,7 @@ func updateDefaults(istio *operatorv1.Istio) {
 	}
 }
 
-func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, instance *operatorv1.Istio, fc *crdv1.FelixConfiguration, remove bool) (bool, error) {
+func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) (bool, error) {
 	// Handle Istio Ambient Mode configuration
 	if err := r.configureIstioAmbientMode(fc, remove); err != nil {
 		return false, err
@@ -278,7 +278,7 @@ func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, instanc
 	return true, nil
 }
 
-func (r *ReconcileIstio) configureIstioAmbientMode(fc *crdv1.FelixConfiguration, remove bool) error {
+func (r *ReconcileIstio) configureIstioAmbientMode(fc *v3.FelixConfiguration, remove bool) error {
 	var annotationMode *string
 	if fc.Annotations[istio.IstioOperatorAnnotationMode] != "" {
 		value := fc.Annotations[istio.IstioOperatorAnnotationMode]
@@ -287,7 +287,7 @@ func (r *ReconcileIstio) configureIstioAmbientMode(fc *crdv1.FelixConfiguration,
 
 	// If the annotation does not match the spec value (ignoring both nil), it indicates a misconfiguration.
 	match := annotationMode == nil && fc.Spec.IstioAmbientMode == nil ||
-		annotationMode != nil && fc.Spec.IstioAmbientMode != nil && *annotationMode == *fc.Spec.IstioAmbientMode
+		annotationMode != nil && fc.Spec.IstioAmbientMode != nil && *annotationMode == string(*fc.Spec.IstioAmbientMode)
 
 	if !match {
 		return fmt.Errorf("felixconfig IstioAmbientMode modified by user")
@@ -297,18 +297,18 @@ func (r *ReconcileIstio) configureIstioAmbientMode(fc *crdv1.FelixConfiguration,
 		delete(fc.Annotations, istio.IstioOperatorAnnotationMode)
 		fc.Spec.IstioAmbientMode = nil
 	} else {
-		istioModeDesired := "Enabled"
+		istioModeDesired := v3.IstioAmbientModeEnabled
 		fc.Spec.IstioAmbientMode = &istioModeDesired
 		if fc.Annotations == nil {
 			fc.Annotations = make(map[string]string)
 		}
-		fc.Annotations[istio.IstioOperatorAnnotationMode] = istioModeDesired
+		fc.Annotations[istio.IstioOperatorAnnotationMode] = string(istioModeDesired)
 	}
 
 	return nil
 }
 
-func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *crdv1.FelixConfiguration, remove bool) error {
+func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) error {
 	var annotationDSCP *numorstring.DSCP
 	if fc.Annotations[istio.IstioOperatorAnnotationDSCP] != "" {
 		value, err := strconv.ParseUint(fc.Annotations[istio.IstioOperatorAnnotationDSCP], 10, 6)
@@ -342,7 +342,7 @@ func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *
 func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *operatorv1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
 	// Executing clean up on finalizing
 	if !instance.DeletionTimestamp.IsZero() {
-		if _, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *crdv1.FelixConfiguration) (bool, error) {
+		if _, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *v3.FelixConfiguration) (bool, error) {
 			return r.setIstioFelixConfiguration(ctx, instance, fc, true)
 		}); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error cleaning up felix configuration", err, reqLogger)

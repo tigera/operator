@@ -19,9 +19,9 @@ import (
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
@@ -34,8 +34,10 @@ import (
 
 var (
 	cmName = render.K8sSvcEndpointConfigMapName
-	cmData = map[string]string{"KUBERNETES_SERVICE_HOST": "1.1.1.1",
-		"KUBERNETES_SERVICE_PORT": "1234"}
+	cmData = map[string]string{
+		"KUBERNETES_SERVICE_HOST": "1.1.1.1",
+		"KUBERNETES_SERVICE_PORT": "1234",
+	}
 	endPointCM = &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      cmName,
@@ -62,7 +64,7 @@ var _ = Describe("convert bpf config", func() {
 	var (
 		comps  = emptyComponents()
 		i      = &operatorv1.Installation{}
-		f      = &crdv1.FelixConfiguration{}
+		f      = &v3.FelixConfiguration{}
 		scheme = kscheme.Scheme
 	)
 
@@ -70,7 +72,7 @@ var _ = Describe("convert bpf config", func() {
 		comps = emptyComponents()
 		i = &operatorv1.Installation{}
 		f = emptyFelixConfig()
-		Expect(apis.AddToScheme(scheme)).ToNot(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).ToNot(HaveOccurred())
 	})
 
 	It("converts bpfenabled felixconfig set to true", func() {

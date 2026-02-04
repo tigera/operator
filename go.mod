@@ -1,6 +1,6 @@
 module github.com/tigera/operator
 
-go 1.25.6
+go 1.25.7
 
 require (
 	github.com/aws/aws-sdk-go v1.55.8

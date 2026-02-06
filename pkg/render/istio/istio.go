@@ -124,6 +124,9 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 	if cfg.Installation.KubernetesProvider.IsGKE() {
 		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
 	}
+	if cfg.Installation.KubernetesProvider.IsOpenShift() {
+		istioResOpts.IstioCNIOpts.Global.Platform = "openshift"
+	}
 	resources, err := istioResOpts.GetResources(cfg.Scheme)
 	if err != nil {
 		return nil, nil, err

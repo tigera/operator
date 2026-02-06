@@ -184,13 +184,13 @@ spec:
 
 1. Delete `pkg/render/gatewayapi/gateway_api_resources.yaml`.
 
-1. Run `make build`.  This will generate a new version of `pkg/render/gateway_api_resources.yaml` and then build the operator image.
+1. Run `make build`.  This will generate a new version of `pkg/render/gatewayapi/gateway_api_resources.yaml` and then build the operator image.
 
-1. Review diffs between the old and new versions of `pkg/render/gateway_api_resources.yaml` (e.g. using `git diff`) to identify:
+1. Review diffs between the old and new versions of `pkg/render/gatewayapi/gateway_api_resources.yaml` (e.g. using `git diff`) to identify:
 
    - any incompatible changes that would need changes in our Gateway-related operator coding or image building
 
-   - any entirely new CRDs or resources, that would need changes in `pkg/render/gateway_api.go`.
+   - any entirely new CRDs or resources, that would need changes in `pkg/render/gatewayapi/gateway_api.go`.
 
 1. Address build issues if there are any.
 
@@ -200,11 +200,11 @@ spec:
 
 1. Identify the corresponding new versions of the `gateway`, `proxy` and `ratelimit` images.
 
-   - The `gateway` version can be found by looking for "envoyproxy/gateway" in `pkg/render/gateway_api_resources.yaml`, and probably also in the Envoy Gateway release notes ([for example](https://github.com/envoyproxy/gateway/releases/tag/v1.3.2)).  It should be the same as the nominal Envoy Gateway version that you're updating to.
+   - The `gateway` version can be found by looking for "envoyproxy/gateway" in `pkg/render/gatewayapi/gateway_api_resources.yaml`, and probably also in the Envoy Gateway release notes ([for example](https://github.com/envoyproxy/gateway/releases/tag/v1.3.2)).  It should be the same as the nominal Envoy Gateway version that you're updating to.
 
    - The `proxy` version can be found in the Envoy Gateway release notes, or by referring to [this compatibility matrix](https://gateway.envoyproxy.io/news/releases/matrix/).
 
-   - The `ratelimit` version can be found by looking for "envoyproxy/ratelimit" in `pkg/render/gateway_api_resources.yaml`, and probably also in the Envoy Gateway release notes.
+   - The `ratelimit` version can be found by looking for "envoyproxy/ratelimit" in `pkg/render/gatewayapi/gateway_api_resources.yaml`, and probably also in the Envoy Gateway release notes.
 
 1. Switching to the `projectcalico/calico` repo, update the code under `third_party/envoy-{gateway,proxy,ratelimit}` to build those new image versions.  In each case:
 

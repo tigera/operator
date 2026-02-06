@@ -194,24 +194,24 @@ func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) b
 }
 
 func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
-	om, ok := obj.(metav1.ObjectMetaAccessor)
-	if !ok {
-		return fmt.Errorf("object is not ObjectMetaAccessor")
-	}
+	// client.Object embeds metav1.Object, so use obj directly for metadata access.
+	// Most typed objects also implement metav1.ObjectMetaAccessor, but unstructured
+	// objects (e.g., NetworkAttachmentDefinition from Istio OpenShift profiles) do not.
+	var metaObj metav1.Object = obj
 
-	multipleOwners := checkIfMultipleOwnersLabel(om.GetObjectMeta())
+	multipleOwners := checkIfMultipleOwnersLabel(metaObj)
 	// Add owner ref for controller owned resources,
 	switch obj.(type) {
 	case *v3.UISettings:
 		// Never add controller ref for UISettings since these are always GCd through the UISettingsGroup.
 	default:
-		if c.cr != nil && !skipAddingOwnerReference(c.cr, om.GetObjectMeta()) {
+		if c.cr != nil && !skipAddingOwnerReference(c.cr, metaObj) {
 			if multipleOwners {
-				if err := controllerutil.SetOwnerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
+				if err := controllerutil.SetOwnerReference(c.cr, metaObj, c.scheme); err != nil {
 					return err
 				}
 			} else {
-				if err := controllerutil.SetControllerReference(c.cr, om.GetObjectMeta(), c.scheme); err != nil {
+				if err := controllerutil.SetControllerReference(c.cr, metaObj, c.scheme); err != nil {
 					return err
 				}
 			}
@@ -280,9 +280,9 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 		// Otherwise, if it was not found, we should create it and move on.
 		logCtx.V(2).Info("Object does not exist, creating it", "error", err)
 		if multipleOwners {
-			labels := om.GetObjectMeta().GetLabels()
+			labels := metaObj.GetLabels()
 			delete(labels, common.MultipleOwnersLabel)
-			om.GetObjectMeta().SetLabels(labels)
+			metaObj.SetLabels(labels)
 		}
 
 		err = c.create(ctx, obj)
@@ -556,8 +556,8 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 	// adjusting the caller's copy.
 	desired = desired.DeepCopyObject().(client.Object)
 
-	currentMeta := current.(metav1.ObjectMetaAccessor).GetObjectMeta()
-	desiredMeta := desired.(metav1.ObjectMetaAccessor).GetObjectMeta()
+	currentMeta := current.(metav1.Object)
+	desiredMeta := desired.(metav1.Object)
 
 	// Merge common metadata fields if not present on the desired state.
 	if desiredMeta.GetResourceVersion() == "" {

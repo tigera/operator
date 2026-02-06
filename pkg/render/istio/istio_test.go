@@ -731,4 +731,79 @@ var _ = Describe("Istio Component Rendering", func() {
 			rtest.ExpectResources(objsToCreate, expectedResources)
 		})
 	})
+
+	Describe("OpenShift Platform Configuration", func() {
+		var component *istio.IstioComponent
+
+		BeforeEach(func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+
+			_, comp, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			component = comp
+		})
+
+		It("should render all workloads successfully on OpenShift", func() {
+			objsToCreate, objsToDelete := component.Objects()
+
+			// OpenShift adds a NetworkAttachmentDefinition (via Multus provider)
+			Expect(objsToCreate).To(HaveLen(33))
+			Expect(objsToDelete).To(BeEmpty())
+		})
+
+		It("should include SCC use rule in istio-cni ClusterRole", func() {
+			objsToCreate, _ := component.Objects()
+
+			clusterRole, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, "istio-cni", "")
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify the OpenShift SCC rule is present
+			foundSCCRule := false
+			for _, rule := range clusterRole.Rules {
+				for _, apiGroup := range rule.APIGroups {
+					if apiGroup == "security.openshift.io" {
+						Expect(rule.Resources).To(ContainElement("securitycontextconstraints"))
+						Expect(rule.Verbs).To(ContainElement("use"))
+						Expect(rule.ResourceNames).To(ContainElement("privileged"))
+						foundSCCRule = true
+					}
+				}
+			}
+			Expect(foundSCCRule).To(BeTrue(), "Expected SCC 'use' rule in istio-cni ClusterRole for OpenShift")
+		})
+
+		It("should use OpenShift CNI bin directory", func() {
+			objsToCreate, _ := component.Objects()
+
+			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify the hostPath volume uses /var/lib/cni/bin (OpenShift path)
+			foundCNIBinVolume := false
+			for _, vol := range daemonset.Spec.Template.Spec.Volumes {
+				if vol.Name == "cni-bin-dir" && vol.HostPath != nil {
+					Expect(vol.HostPath.Path).To(Equal("/var/lib/cni/bin"))
+					foundCNIBinVolume = true
+				}
+			}
+			Expect(foundCNIBinVolume).To(BeTrue(), "Expected cni-bin-dir volume with OpenShift path /var/lib/cni/bin")
+		})
+
+		It("should use Multus CNI config directory", func() {
+			objsToCreate, _ := component.Objects()
+
+			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify the hostPath volume uses /etc/cni/multus/net.d (Multus config dir)
+			foundCNINetVolume := false
+			for _, vol := range daemonset.Spec.Template.Spec.Volumes {
+				if vol.Name == "cni-net-dir" && vol.HostPath != nil {
+					Expect(vol.HostPath.Path).To(Equal("/etc/cni/multus/net.d"))
+					foundCNINetVolume = true
+				}
+			}
+			Expect(foundCNINetVolume).To(BeTrue(), "Expected cni-net-dir volume with Multus path /etc/cni/multus/net.d")
+		})
+	})
 })

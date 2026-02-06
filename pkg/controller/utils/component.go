@@ -17,7 +17,9 @@ package utils
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -235,7 +237,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	setProbeTimeouts(obj)
 
 	// Make sure we have our standard selector and pod labels
-	setStandardSelectorAndLabels(obj)
+	setStandardSelectorAndLabels(obj, c.cr)
 
 	if err := ensureTLSCiphers(ctx, obj, c.client); err != nil {
 		return fmt.Errorf("failed to set TLS Ciphers: %w", err)
@@ -960,16 +962,31 @@ func setProbeTimeouts(obj client.Object) {
 	}
 }
 
-// setStandardSelectorAndLabels will set the k8s-app and app.kubernetes.io/name Labels on the podTemplates
+// setStandardSelectorAndLabels will set the recommended labels found at
+// https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
+// It will also set the k8s-app and app.kubernetes.io/name Labels on the podTemplates
 // for Deployments and Daemonsets. If there is no Selector specified a selector will also be added
 // that selects the k8s-app label.
-func setStandardSelectorAndLabels(obj client.Object) {
+func setStandardSelectorAndLabels(obj client.Object, customResource metav1.Object) {
+	if obj.GetLabels() == nil {
+		obj.SetLabels(make(map[string]string))
+	}
+	if customResource != nil {
+		// We do not want to set these labels on objects without a CR. They are usually deliberately not getting an
+		// owner ref and are not controlled by our operator.
+		addNameLabel(obj, obj.GetName())
+		addInstanceLabel(obj, customResource)
+		addComponentLabel(obj, customResource)
+		addPartOfLabel(obj)
+		addManagedByLabel(obj)
+	}
+
 	var podTemplate *v1.PodTemplateSpec
 	var name string
 	switch obj := obj.(type) {
 	case *apps.Deployment:
 		d := obj
-		name = d.Name
+		name = sanitizeLabel(d.Name)
 		if d.Labels == nil {
 			d.Labels = make(map[string]string)
 		}
@@ -985,7 +1002,7 @@ func setStandardSelectorAndLabels(obj client.Object) {
 		podTemplate = &d.Spec.Template
 	case *apps.DaemonSet:
 		d := obj
-		name = d.Name
+		name = sanitizeLabel(d.Name)
 		if d.Spec.Selector == nil {
 			d.Spec.Selector = &metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -994,18 +1011,94 @@ func setStandardSelectorAndLabels(obj client.Object) {
 			}
 		}
 		podTemplate = &d.Spec.Template
+	case *monitoringv1.Prometheus:
+		d := obj
+		if d.Spec.PodMetadata == nil {
+			d.Spec.PodMetadata = &monitoringv1.EmbeddedObjectMetadata{Labels: make(map[string]string)}
+		}
+		maps.Copy(d.Spec.PodMetadata.Labels, d.Labels)
+	case *monitoringv1.Alertmanager:
+		d := obj
+		if d.Spec.PodMetadata == nil {
+			d.Spec.PodMetadata = &monitoringv1.EmbeddedObjectMetadata{Labels: make(map[string]string)}
+		}
+		maps.Copy(d.Spec.PodMetadata.Labels, d.Labels)
 	default:
 		return
 	}
+	if podTemplate != nil {
+		if podTemplate.Labels == nil {
+			podTemplate.Labels = make(map[string]string)
+		}
+		if podTemplate.Labels["k8s-app"] == "" {
+			podTemplate.Labels["k8s-app"] = name
+		}
+		if customResource != nil {
+			// We do not want to set these labels on objects without a CR. They are usually deliberately not getting an
+			// owner ref and are not controlled by our operator.
+			addNameLabel(podTemplate, obj.GetName())
+			addInstanceLabel(podTemplate, customResource)
+			addComponentLabel(podTemplate, customResource)
+			addPartOfLabel(podTemplate)
+			addManagedByLabel(podTemplate)
+		}
+	}
+}
 
-	if podTemplate.Labels == nil {
-		podTemplate.Labels = make(map[string]string)
+// sanitizeLabel cleans an input string to conform to the validation for labels. A valid label must be an empty string
+// or consist of alphanumeric characters, '-', '_' or '.', and must start and end with an alphanumeric character and it
+// is validated with regex '(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?'.
+func sanitizeLabel(input string) string {
+	sanitized := regexp.MustCompile(`[^a-zA-Z0-9_.-]`).ReplaceAllString(input, "_")
+	return strings.Trim(sanitized, "-_.")
+}
+
+// addNameLabel sets the name of the application.
+// For more on recommended labels see: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
+func addNameLabel(obj metav1.Object, name string) {
+	if obj.GetLabels()["app.kubernetes.io/name"] == "" {
+		obj.GetLabels()["app.kubernetes.io/name"] = sanitizeLabel(name)
 	}
-	if podTemplate.Labels["k8s-app"] == "" {
-		podTemplate.Labels["k8s-app"] = name
+	if obj.GetLabels()["k8s-app"] == "" {
+		obj.GetLabels()["k8s-app"] = sanitizeLabel(name)
 	}
-	if podTemplate.Labels["app.kubernetes.io/name"] == "" {
-		podTemplate.Labels["app.kubernetes.io/name"] = name
+}
+
+// addInstanceLabel sets a unique name identifying the instance of an application. We use the name of the custom resource
+// that owns this object.
+// For more on recommended labels see: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
+func addInstanceLabel(obj metav1.Object, cr metav1.Object) {
+	if obj.GetLabels()["app.kubernetes.io/instance"] == "" && cr != nil {
+		obj.GetLabels()["app.kubernetes.io/instance"] = sanitizeLabel(cr.GetName())
+	}
+}
+
+// addComponentLabel sets the component within the architecture. We use the kind of the custom resource that owns this
+// object.
+// For more on recommended labels see: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
+func addComponentLabel(obj metav1.Object, cr metav1.Object) {
+	if obj.GetLabels()["app.kubernetes.io/component"] == "" && cr != nil {
+		owner, ok := cr.(runtime.Object)
+		if ok && owner.GetObjectKind() != nil && owner.GetObjectKind() != nil {
+			obj.GetLabels()["app.kubernetes.io/component"] = sanitizeLabel(owner.GetObjectKind().GroupVersionKind().GroupKind().String())
+
+		}
+	}
+}
+
+// addPartOfLabel sets the name of a higher level application this one is part of. We use the product variant.
+// For more on recommended labels see: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
+func addPartOfLabel(obj metav1.Object) {
+	if obj.GetLabels()["app.kubernetes.io/part-of"] == "" {
+		obj.GetLabels()["app.kubernetes.io/part-of"] = "Calico"
+	}
+}
+
+// addManagedByLabel sets the tool being used to manage the operation of an application.
+// For more on recommended labels see: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
+func addManagedByLabel(obj metav1.Object) {
+	if obj.GetLabels()["app.kubernetes.io/managed-by"] == "" {
+		obj.GetLabels()["app.kubernetes.io/managed-by"] = sanitizeLabel(common.OperatorName())
 	}
 }
 

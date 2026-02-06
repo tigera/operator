@@ -49,6 +49,8 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
+require github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
+
 require (
 	al.essio.dev/pkg/shellescape v1.5.1 // indirect
 	dario.cat/mergo v1.0.2 // indirect

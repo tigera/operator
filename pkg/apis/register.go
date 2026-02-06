@@ -21,6 +21,7 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	envoy "github.com/envoyproxy/gateway/api/v1alpha1"
+	netattachv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	configv1 "github.com/openshift/api/config/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -76,6 +77,7 @@ func init() {
 	AddToSchemes = append(AddToSchemes, storagev1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, certificatesv1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, networkingv1.AddToScheme)
+	AddToSchemes = append(AddToSchemes, netattachv1.AddToScheme)
 }
 
 func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {

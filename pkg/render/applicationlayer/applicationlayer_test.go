@@ -488,6 +488,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		expectedDikastesEnvs := []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "Info"},
 			{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},
+			{Name: "DATAPLANE", Value: "iptables"},
 		}
 		Expect(len(dikastesEnvs)).To(Equal(len(expectedDikastesEnvs)))
 
@@ -671,6 +672,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		expectedDikastesEnvs := []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "Info"},
 			{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},
+			{Name: "DATAPLANE", Value: "iptables"},
 		}
 		Expect(len(dikastesEnvs)).To(Equal(len(expectedDikastesEnvs)))
 		for _, element := range expectedDikastesEnvs {
@@ -698,6 +700,40 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		Expect(len(dikastesVolMounts)).To(Equal(len(expectedDikastesVolMounts)))
 		for _, expected := range expectedDikastesVolMounts {
 			Expect(dikastesVolMounts).To(ContainElement(expected))
+		}
+	})
+
+	It("should render dikastes with nftables DATAPLANE when nftables mode is enabled", func() {
+		// Enable nftables mode in the installation
+		nftablesMode := operatorv1.LinuxDataplaneNftables
+		installation.CalicoNetwork = &operatorv1.CalicoNetworkSpec{
+			LinuxDataplane: &nftablesMode,
+		}
+
+		cfg := &applicationlayer.Config{
+			PullSecrets:       nil,
+			Installation:      installation,
+			OsType:            rmeta.OSTypeLinux,
+			PerHostALPEnabled: true,
+		}
+
+		component := applicationlayer.ApplicationLayer(cfg)
+		resources, _ := component.Objects()
+
+		ds := rtest.GetResource(resources, applicationlayer.ApplicationLayerDaemonsetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+
+		dikastesContainer := test.GetContainer(ds.Spec.Template.Spec.Containers, "dikastes")
+		Expect(dikastesContainer).NotTo(BeNil())
+
+		// Verify DATAPLANE is set to nftables
+		expectedDikastesEnvs := []corev1.EnvVar{
+			{Name: "LOG_LEVEL", Value: "Info"},
+			{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},
+			{Name: "DATAPLANE", Value: "nftables"},
+		}
+		Expect(len(dikastesContainer.Env)).To(Equal(len(expectedDikastesEnvs)))
+		for _, element := range expectedDikastesEnvs {
+			Expect(dikastesContainer.Env).To(ContainElement(element))
 		}
 	})
 })

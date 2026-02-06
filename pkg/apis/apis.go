@@ -20,6 +20,7 @@ import (
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	envoy "github.com/envoyproxy/gateway/api/v1alpha1"
+	netattachv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	configv1 "github.com/openshift/api/config/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
 	tigera "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -55,4 +56,5 @@ func init() {
 	AddToSchemes = append(AddToSchemes, gateway.Install)
 	AddToSchemes = append(AddToSchemes, envoy.AddToScheme)
 	AddToSchemes = append(AddToSchemes, csisecret.AddToScheme)
+	AddToSchemes = append(AddToSchemes, netattachv1.AddToScheme)
 }

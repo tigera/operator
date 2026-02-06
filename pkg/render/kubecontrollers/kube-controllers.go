@@ -319,18 +319,12 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 		{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
-				// Pools are watched to maintain a mapping of blocks to IP pools, and for finalization.
+				// Pools are watched by various controllers.
+				// - IPAM garbage collection watches pools to know which blocks to GC.
+				// - The pool controller adds / manages finalizers on IP pools.
+				// - The pool controller updates status conditions on IP pools.
 				"ippools",
-				// NetworkPolicies are watched for defaulting.
-				"networkpolicies",
-				"tier.networkpolicies",
-				"globalnetworkpolicies",
-				"tier.globalnetworkpolicies",
-				"stagedglobalnetworkpolicies",
-				"tier.stagedglobalnetworkpolicies",
-				"stagednetworkpolicies",
-				"tier.stagednetworkpolicies",
-				"stagedkubernetesnetworkpolicies",
+				"ippools/status",
 			},
 			Verbs: []string{"list", "watch", "update"},
 		},

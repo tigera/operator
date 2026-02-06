@@ -91,15 +91,15 @@ var (
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
 func ContextLoggerForResource(log logr.Logger, obj client.Object) logr.Logger {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
-	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
+	name := obj.GetName()
+	namespace := obj.GetNamespace()
 	return log.WithValues("name", name, "namespace", namespace, "kind", gvk.Kind)
 }
 
 // IgnoreObject returns true if the object has been marked as ignored by the user,
 // and returns false otherwise.
 func IgnoreObject(obj runtime.Object) bool {
-	a := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetAnnotations()
+	a := obj.(metav1.Object).GetAnnotations()
 	if val, ok := a[unsupportedIgnoreAnnotation]; ok && val == "true" {
 		return true
 	}

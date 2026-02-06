@@ -17,7 +17,6 @@ package istio
 import (
 	"bytes"
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"io"
 
@@ -26,7 +25,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -170,17 +168,7 @@ func (r *ResourceOpts) parseManifest(scheme *runtime.Scheme, manifest string, is
 
 		obj, _, err := universalDeserializer.Decode(rawObj.Raw, nil, nil)
 		if err != nil {
-			if !runtime.IsNotRegisteredError(err) {
-				return nil, nil, fmt.Errorf("error deserializing object: %w", err)
-			}
-			// Type not registered in scheme — decode as Unstructured.
-			// This handles platform-specific types like NetworkAttachmentDefinition
-			// from OpenShift profiles.
-			u := &unstructured.Unstructured{}
-			if jsonErr := json.Unmarshal(rawObj.Raw, &u.Object); jsonErr != nil {
-				return nil, nil, fmt.Errorf("error deserializing unstructured object: %w", jsonErr)
-			}
-			obj = u
+			return nil, nil, fmt.Errorf("error deserializing object: %w", err)
 		}
 
 		clientObj, ok := obj.(client.Object)

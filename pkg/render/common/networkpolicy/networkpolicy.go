@@ -196,9 +196,10 @@ func AllowTigeraDefaultDeny(namespace string) *v3.NetworkPolicy {
 
 // Entity rules not belonging to Calico/Tigera components.
 var KubeAPIServerEntityRule = v3.EntityRule{
-	NamespaceSelector: "projectcalico.org/name == 'default'",
-	Selector:          "(provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes')",
-	Ports:             Ports(443, 6443, 12388),
+	Services: &v3.ServiceMatch{
+		Name:      "kubernetes",
+		Namespace: "default",
+	},
 }
 
 var KubeAPIServerServiceSelectorEntityRule = v3.EntityRule{

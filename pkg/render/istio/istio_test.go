@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
+	netattachv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	admregv1 "k8s.io/api/admissionregistration/v1"
@@ -115,6 +116,7 @@ var _ = Describe("Istio Component Rendering", func() {
 		Expect(operatorv1.AddToScheme(testScheme)).ShouldNot(HaveOccurred())
 		Expect(v3.AddToScheme(testScheme)).ShouldNot(HaveOccurred())
 		Expect(apiextv1.AddToScheme(testScheme)).ShouldNot(HaveOccurred())
+		Expect(netattachv1.AddToScheme(testScheme)).ShouldNot(HaveOccurred())
 
 		cfg = &istio.Configuration{
 			Installation: &operatorv1.InstallationSpec{

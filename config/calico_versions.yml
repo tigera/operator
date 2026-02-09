@@ -2,7 +2,7 @@
 title: master
 components:
   libcalico-go:
-    version: casey-v3-crds
+    version: master
   typha:
     version: master
   node:

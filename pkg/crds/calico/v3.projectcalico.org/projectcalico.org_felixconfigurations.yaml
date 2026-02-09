@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.17.3
+    controller-gen.kubebuilder.io/version: v0.18.0
   name: felixconfigurations.projectcalico.org
 spec:
   group: projectcalico.org
@@ -35,6 +35,11 @@ spec:
                     - DoNothing
                     - Enable
                     - Disable
+                  type: string
+                bpfAttachType:
+                  enum:
+                    - TC
+                    - TCX
                   type: string
                 bpfCTLBLogFilter:
                   type: string
@@ -121,8 +126,17 @@ spec:
                     - Enabled
                     - Disabled
                   type: string
-                bpfKubeProxyEndpointSlicesEnabled:
-                  type: boolean
+                bpfJITHardening:
+                  allOf:
+                    - enum:
+                        - Auto
+                        - Strict
+                    - enum:
+                        - Auto
+                        - Strict
+                  type: string
+                bpfKubeProxyHealthzPort:
+                  type: integer
                 bpfKubeProxyIptablesCleanupEnabled:
                   type: boolean
                 bpfKubeProxyMinSyncPeriod:
@@ -137,6 +151,10 @@ spec:
                 bpfLogLevel:
                   pattern: ^(?i)(Off|Info|Debug)?$
                   type: string
+                bpfMaglevMaxEndpointsPerService:
+                  type: integer
+                bpfMaglevMaxServices:
+                  type: integer
                 bpfMapSizeConntrack:
                   type: integer
                 bpfMapSizeConntrackCleanupQueue:
@@ -176,7 +194,8 @@ spec:
                   enum:
                     - Enabled
                     - Disabled
-                    - L2Only
+                  type: string
+                cgroupV2Path:
                   type: string
                 chainInsertMode:
                   pattern: ^(?i)(Insert|Append)?$
@@ -324,6 +343,10 @@ spec:
                   pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                   type: string
                 iptablesBackend:
+                  enum:
+                    - Legacy
+                    - NFT
+                    - Auto
                   pattern: ^(?i)(Auto|Legacy|NFT)?$
                   type: string
                 iptablesFilterAllowAction:
@@ -332,12 +355,7 @@ spec:
                 iptablesFilterDenyAction:
                   pattern: ^(?i)(Drop|Reject)?$
                   type: string
-                iptablesLockFilePath:
-                  type: string
                 iptablesLockProbeInterval:
-                  pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
-                  type: string
-                iptablesLockTimeout:
                   pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                   type: string
                 iptablesMangleAllowAction:
@@ -364,11 +382,19 @@ spec:
                     pattern: ^.*
                     x-kubernetes-int-or-string: true
                   type: array
+                logActionRateLimit:
+                  pattern: ^[1-9]\d{0,3}/(?:second|minute|hour|day)$
+                  type: string
+                logActionRateLimitBurst:
+                  maximum: 9999
+                  minimum: 0
+                  type: integer
                 logDebugFilenameRegex:
                   type: string
                 logFilePath:
                   type: string
                 logPrefix:
+                  pattern: "^([a-zA-Z0-9%: /_-])*$"
                   type: string
                 logSeverityFile:
                   pattern: ^(?i)(Trace|Debug|Info|Warning|Error|Fatal)?$
@@ -416,6 +442,7 @@ spec:
                   format: int32
                   type: integer
                 nftablesMode:
+                  default: Auto
                   enum:
                     - Disabled
                     - Enabled
@@ -427,16 +454,24 @@ spec:
                   type: string
                 policySyncPathPrefix:
                   type: string
-                programRoutes:
+                programClusterRoutes:
                   enum:
                     - Enabled
                     - Disabled
                   type: string
                 prometheusGoMetricsEnabled:
                   type: boolean
+                prometheusMetricsCAFile:
+                  type: string
+                prometheusMetricsCertFile:
+                  type: string
+                prometheusMetricsClientAuth:
+                  type: string
                 prometheusMetricsEnabled:
                   type: boolean
                 prometheusMetricsHost:
+                  type: string
+                prometheusMetricsKeyFile:
                   type: string
                 prometheusMetricsPort:
                   type: integer
@@ -452,6 +487,8 @@ spec:
                 reportingTTL:
                   pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                   type: string
+                requireMTUFile:
+                  type: boolean
                 routeRefreshInterval:
                   pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                   type: string
@@ -546,6 +583,9 @@ spec:
                   pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                   type: string
               type: object
+          required:
+            - metadata
+            - spec
           type: object
       served: true
       storage: true

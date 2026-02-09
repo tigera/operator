@@ -51,9 +51,15 @@ const tigeraStatusName string = "ippools"
 var log = logf.Log.WithName("controller_ippool")
 
 func Add(mgr manager.Manager, opts options.AddOptions) error {
+	clientv3, err := utils.V3Client(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("failed to create projectcalico.org/v3 client: %w", err)
+	}
+
 	r := &Reconciler{
 		config:               mgr.GetConfig(),
 		client:               mgr.GetClient(),
+		clientv3:             clientv3,
 		scheme:               mgr.GetScheme(),
 		watches:              make(map[runtime.Object]struct{}),
 		autoDetectedProvider: opts.DetectedProvider,
@@ -115,6 +121,7 @@ var _ reconcile.Reconciler = &Reconciler{}
 type Reconciler struct {
 	config               *rest.Config
 	client               client.Client
+	clientv3             client.Client
 	scheme               *runtime.Scheme
 	watches              map[runtime.Object]struct{}
 	autoDetectedProvider operatorv1.Provider
@@ -364,6 +371,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// running, and we don't want to block the deletion of the Installation on the API server being available, as it introduces too many ways for
 	// things to go wrong upon deleting the Installation API. Users can manually delete the IP pools if they are no longer needed.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
+	if apiAvailable {
+		// Use the projectcalico.org/v3 client.
+		handler = utils.NewComponentHandler(log, r.clientv3, r.scheme, nil)
+	}
 
 	passThru := render.NewPassthroughWithLog(log, toCreateOrUpdate...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, passThru, nil); err != nil {

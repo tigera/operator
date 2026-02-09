@@ -35,6 +35,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/utils"
 )
 
 // This test suite covers the installation of IP pools. The vast majority should be covered in the pkg/controller/ippool UTs
@@ -42,6 +43,7 @@ import (
 // controller and the IP pool controller, making an FV appropriate for testing those interactions.
 var _ = Describe("IPPool FV tests", func() {
 	var c client.Client
+	var clientv3 client.Client
 	var mgr manager.Manager
 	var shutdownContext context.Context
 	var cancel context.CancelFunc
@@ -49,6 +51,11 @@ var _ = Describe("IPPool FV tests", func() {
 
 	BeforeEach(func() {
 		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist)
+
+		// We need a v3 client as well.
+		var err error
+		clientv3, err = utils.V3Client(mgr.GetConfig())
+		Expect(err).NotTo(HaveOccurred())
 
 		By("Cleaning up resources before the test")
 		cleanupResources(c)
@@ -62,7 +69,7 @@ var _ = Describe("IPPool FV tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator"},
 			Spec:       corev1.NamespaceSpec{},
 		}
-		err := c.Create(context.Background(), ns)
+		err = c.Create(context.Background(), ns)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			Expect(err).NotTo(HaveOccurred())
 		}
@@ -262,7 +269,7 @@ var _ = Describe("IPPool FV tests", func() {
 		// This proves that the operator has assumed ownership of the legacy IP pool.
 		v3Pools := &v3.IPPoolList{}
 		Eventually(func() error {
-			err := c.List(context.Background(), v3Pools)
+			err := clientv3.List(context.Background(), v3Pools)
 			if err != nil {
 				return err
 			}
@@ -360,7 +367,7 @@ var _ = Describe("IPPool FV tests", func() {
 		// Verify that the IP pool has not been modified by the operator.
 		v3Pools := &v3.IPPoolList{}
 		Consistently(func() error {
-			err := c.List(context.Background(), v3Pools)
+			err := clientv3.List(context.Background(), v3Pools)
 			if err != nil {
 				return err
 			}

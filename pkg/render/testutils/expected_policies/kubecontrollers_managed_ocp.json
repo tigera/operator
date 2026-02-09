@@ -63,7 +63,7 @@
         "action": "Allow",
         "protocol": "TCP",
         "source": {
-          "selector": "k8s-app == 'tigera-prometheus'",
+          "selector": "k8s-app == 'calico-node-prometheus'",
           "namespaceSelector": "name == 'tigera-prometheus'"
         },
         "destination": {

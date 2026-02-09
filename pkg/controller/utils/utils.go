@@ -41,6 +41,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -106,6 +107,22 @@ func IgnoreObject(obj runtime.Object) bool {
 		return true
 	}
 	return false
+}
+
+// V3Client creates a new controller-runtime client that can be used to interact with projectcalico.org/v3 resources.
+// In some cases it is necessary to use a separate client from the default provisioned by the manager, as we interact with two different
+// API groups (crd.projectcalico.org and projectcalico.org/v3) that may use the same underlying Go types.
+func V3Client(config *rest.Config) (client.Client, error) {
+	scheme := runtime.NewScheme()
+	if err := v3.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add projectcalico.org/v3 to scheme: %w", err)
+	}
+
+	c, err := client.New(config, client.Options{Scheme: scheme})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create API client: %w", err)
+	}
+	return c, nil
 }
 
 func AddInstallationWatch(c ctrlruntime.Controller) error {

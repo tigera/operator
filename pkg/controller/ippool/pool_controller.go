@@ -50,24 +50,8 @@ const tigeraStatusName string = "ippools"
 
 var log = logf.Log.WithName("controller_ippool")
 
-// v3Client creates a new controller-runtime client that can be used to interact with projectcalico.org/v3 resources.
-// It is necessary to use a separate client here, as we interact with two different API groups in this controller (crd.projectcalico.org
-// and projectcalico.org/v3). Since each API uses the same struct, we need to register the struct with two different schemes.
-func v3Client(config *rest.Config) (client.Client, error) {
-	scheme := runtime.NewScheme()
-	if err := v3.AddToScheme(scheme); err != nil {
-		return nil, fmt.Errorf("failed to add projectcalico.org/v3 to scheme: %w", err)
-	}
-
-	c, err := client.New(config, client.Options{Scheme: scheme})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create API client: %w", err)
-	}
-	return c, nil
-}
-
 func Add(mgr manager.Manager, opts options.AddOptions) error {
-	clientv3, err := v3Client(mgr.GetConfig())
+	clientv3, err := utils.V3Client(mgr.GetConfig())
 	if err != nil {
 		return fmt.Errorf("failed to create projectcalico.org/v3 client: %w", err)
 	}

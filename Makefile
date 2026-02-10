@@ -568,7 +568,7 @@ release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
 	REPO=$(REPO) hack/bin/release notes
 
 ## Build a release from start to finish.
-release: clean hack/bin/release var-require-all-VERSION
+release: clean hack/bin/release
 	hack/bin/release build
 
 ## Produces a clean build of release artifacts at the specified version.
@@ -591,7 +591,7 @@ release-check-image-exists: release-prereqs
 		echo "Image tag check passed; image does not already exist"; \
 	fi
 
-release-publish: hack/bin/release var-require-all-VERSION
+release-publish: hack/bin/release
 	hack/bin/release publish
 
 release-publish-images: release-prereqs release-check-image-exists var-require-all-VERSION

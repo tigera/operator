@@ -32,7 +32,7 @@ import (
 // Command to publish release to remote.
 var publishCommand = &cli.Command{
 	Name:  "publish",
-	Usage: "Publish release to remote",
+	Usage: "Publish release images to remote registry and optionally create a GitHub release",
 	Flags: []cli.Flag{
 		versionFlag,
 		imageFlag,

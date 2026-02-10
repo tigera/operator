@@ -28,12 +28,7 @@ global_job_config:
       - ssh-add ~/.keys/*
       # Free up some space
       - sudo rm -rf ~/.kiex ~/.phpbrew ~/.rbenv ~/.nvm ~/.kerl
-      # Semaphore mounts a copy-on-write FS as /var/lib/docker in order to provide a pre-loaded cache of
-      # some images. However, the cache is not useful to us and the copy-on-write FS is a big problem given
-      # how much we churn docker containers during testing.  Disable it.
-      - sudo systemctl stop docker
-      - sudo umount /var/lib/docker && sudo killall qemu-nbd || true
-      - sudo systemctl start docker
+      # Get the code
       - checkout
       # Note that the 'cache restore' commands require that the "Build" block has been run. The "Build" block is what populates
       # the cache, therefore every block that requires the use of these cached items must make the "Build" block one of

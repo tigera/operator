@@ -24397,6 +24397,7 @@ spec:
                   Default: Strict
                 enum:
                 - Strict
+                - InsecureSyntax
                 - Disabled
                 type: string
               mergeGateways:
@@ -44985,10 +44986,10 @@ metadata:
   name: envoy-gateway
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
 ---
 # Source: gateway-helm/templates/envoy-gateway-config.yaml
@@ -44998,10 +44999,10 @@ metadata:
   name: envoy-gateway-config
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
 data:
   envoy-gateway.yaml: |
@@ -45028,7 +45029,7 @@ data:
                     - imagePullPolicy: IfNotPresent
                       name: envoy-ratelimit
         shutdownManager:
-          image: docker.io/envoyproxy/gateway:v1.5.6
+          image: docker.io/envoyproxy/gateway:v1.5.7
       type: Kubernetes
 ---
 # Source: gateway-helm/templates/envoy-gateway-rbac.yaml
@@ -45184,10 +45185,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -45243,10 +45244,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-role
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -45288,10 +45289,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -45309,10 +45310,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-rolebinding
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -45331,10 +45332,10 @@ metadata:
   namespace: 'tigera-gateway'
   labels:
     control-plane: envoy-gateway
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
 spec:
   selector:
@@ -45366,10 +45367,10 @@ metadata:
   namespace: 'tigera-gateway'
   labels:
     control-plane: envoy-gateway
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
 spec:
   replicas: 1
@@ -45400,7 +45401,7 @@ spec:
               fieldPath: metadata.namespace
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: cluster.local
-        image: docker.io/envoyproxy/gateway:v1.5.6
+        image: docker.io/envoyproxy/gateway:v1.5.7
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -45469,10 +45470,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45484,10 +45485,10 @@ kind: ClusterRole
 metadata:
   name: 'tigera-gateway-api-gateway-helm-certgen:tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45517,10 +45518,10 @@ kind: ClusterRoleBinding
 metadata:
   name: 'tigera-gateway-api-gateway-helm-certgen:tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45541,10 +45542,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45566,10 +45567,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45590,10 +45591,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45618,7 +45619,7 @@ spec:
               fieldPath: metadata.namespace
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: cluster.local
-        image: docker.io/envoyproxy/gateway:v1.5.6
+        image: docker.io/envoyproxy/gateway:v1.5.7
         imagePullPolicy: IfNotPresent
         name: envoy-gateway-certgen
         securityContext:
@@ -45648,10 +45649,10 @@ metadata:
     "helm.sh/hook-weight": "-1"
   labels:
     app.kubernetes.io/component: topology-injector
-    helm.sh/chart: gateway-helm-v1.5.6
+    helm.sh/chart: gateway-helm-v1.5.7
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.6"
+    app.kubernetes.io/version: "v1.5.7"
     app.kubernetes.io/managed-by: Helm
 webhooks:
   - name: topology.webhook.gateway.envoyproxy.io

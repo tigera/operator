@@ -1,0 +1,238 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: globalreports.projectcalico.org
+spec:
+  group: projectcalico.org
+  names:
+    kind: GlobalReport
+    listKind: GlobalReportList
+    plural: globalreports
+    singular: globalreport
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v3
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              properties:
+                cis:
+                  properties:
+                    highThreshold:
+                      type: integer
+                    includeUnscoredTests:
+                      type: boolean
+                    medThreshold:
+                      type: integer
+                    numFailedTests:
+                      type: integer
+                    resultsFilters:
+                      items:
+                        properties:
+                          benchmarkSelection:
+                            properties:
+                              kubernetesVersion:
+                                type: string
+                            type: object
+                          exclude:
+                            items:
+                              type: string
+                            type: array
+                          include:
+                            items:
+                              type: string
+                            type: array
+                        type: object
+                      type: array
+                  type: object
+                endpoints:
+                  properties:
+                    namespaces:
+                      properties:
+                        names:
+                          items:
+                            type: string
+                          type: array
+                        selector:
+                          type: string
+                      type: object
+                    selector:
+                      type: string
+                    serviceAccounts:
+                      properties:
+                        names:
+                          items:
+                            type: string
+                          type: array
+                        selector:
+                          type: string
+                      type: object
+                  type: object
+                jobNodeSelector:
+                  additionalProperties:
+                    type: string
+                  type: object
+                reportType:
+                  type: string
+                schedule:
+                  type: string
+                suspend:
+                  type: boolean
+              required:
+                - reportType
+              type: object
+            status:
+              properties:
+                activeReportJobs:
+                  items:
+                    properties:
+                      end:
+                        format: date-time
+                        type: string
+                      job:
+                        properties:
+                          apiVersion:
+                            type: string
+                          fieldPath:
+                            type: string
+                          kind:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                          resourceVersion:
+                            type: string
+                          uid:
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      start:
+                        format: date-time
+                        type: string
+                    required:
+                      - end
+                      - job
+                      - start
+                    type: object
+                  type: array
+                lastFailedReportJobs:
+                  items:
+                    properties:
+                      end:
+                        format: date-time
+                        type: string
+                      job:
+                        properties:
+                          apiVersion:
+                            type: string
+                          fieldPath:
+                            type: string
+                          kind:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                          resourceVersion:
+                            type: string
+                          uid:
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      jobCompletionTime:
+                        format: date-time
+                        type: string
+                      start:
+                        format: date-time
+                        type: string
+                    required:
+                      - end
+                      - job
+                      - start
+                    type: object
+                  type: array
+                lastScheduledReportJob:
+                  properties:
+                    end:
+                      format: date-time
+                      type: string
+                    job:
+                      properties:
+                        apiVersion:
+                          type: string
+                        fieldPath:
+                          type: string
+                        kind:
+                          type: string
+                        name:
+                          type: string
+                        namespace:
+                          type: string
+                        resourceVersion:
+                          type: string
+                        uid:
+                          type: string
+                      type: object
+                      x-kubernetes-map-type: atomic
+                    start:
+                      format: date-time
+                      type: string
+                  required:
+                    - end
+                    - job
+                    - start
+                  type: object
+                lastSuccessfulReportJobs:
+                  items:
+                    properties:
+                      end:
+                        format: date-time
+                        type: string
+                      job:
+                        properties:
+                          apiVersion:
+                            type: string
+                          fieldPath:
+                            type: string
+                          kind:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                          resourceVersion:
+                            type: string
+                          uid:
+                            type: string
+                        type: object
+                        x-kubernetes-map-type: atomic
+                      jobCompletionTime:
+                        format: date-time
+                        type: string
+                      start:
+                        format: date-time
+                        type: string
+                    required:
+                      - end
+                      - job
+                      - start
+                    type: object
+                  type: array
+              type: object
+          required:
+            - metadata
+            - spec
+          type: object
+      served: true
+      storage: true

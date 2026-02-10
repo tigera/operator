@@ -83,9 +83,12 @@ func getCalicoCRDSource(v3 bool) map[string][]byte {
 	return ret
 }
 
-func getEnterpriseCRDSource() map[string][]byte {
+func getEnterpriseCRDSource(v3 bool) map[string][]byte {
 	ret := map[string][]byte{}
 	dir := "enterprise/v1.crd.projectcalico.org"
+	if v3 {
+		dir = "enterprise/v3.projectcalico.org"
+	}
 	entries, err := enterpriseCRDFiles.ReadDir(dir)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to read Enterprise CRDs: %v", err))
@@ -170,7 +173,7 @@ func GetCRDs(variant opv1.ProductVariant, v3 bool) []*apiextenv1.CustomResourceD
 		crds = calicoCRDs
 	} else {
 		if len(enterpriseCRDs) == 0 {
-			enterpriseCRDs = convertYamlsToCRDs(getEnterpriseCRDSource(), getOperatorCRDSource(variant))
+			enterpriseCRDs = convertYamlsToCRDs(getEnterpriseCRDSource(v3), getOperatorCRDSource(variant))
 		}
 		crds = enterpriseCRDs
 	}

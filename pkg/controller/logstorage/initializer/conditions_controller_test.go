@@ -45,7 +45,7 @@ func NewTestConditionController(
 	scheme *runtime.Scheme,
 	clusterDomain string,
 ) (*LogStorageConditions, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		ClusterDomain:   clusterDomain,
 		ShutdownContext: context.TODO(),
 	}

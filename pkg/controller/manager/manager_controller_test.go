@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -157,11 +158,13 @@ var _ = Describe("Manager controller tests", func() {
 			r = ReconcileManager{
 				client:          c,
 				scheme:          scheme,
-				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
-				clusterDomain:   clusterDomain,
 				licenseAPIReady: &utils.ReadyFlag{},
 				tierWatchReady:  &utils.ReadyFlag{},
+				opts: options.ControllerOptions{
+					ClusterDomain:    clusterDomain,
+					DetectedProvider: operatorv1.ProviderNone,
+				},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -265,7 +268,7 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
-			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.clusterDomain)
+			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.opts.ClusterDomain)
 			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
@@ -290,7 +293,7 @@ var _ = Describe("Manager controller tests", func() {
 			}
 
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
-			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.clusterDomain)
+			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.opts.ClusterDomain)
 			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
@@ -366,7 +369,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			secret := &corev1.Secret{}
 			dnsNames := append([]string{"localhost"}, dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)...)
-			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.clusterDomain)
+			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.opts.ClusterDomain)
 			dnsNames = append(dnsNames, legacyDNSNames...)
 			// Verify that the operator managed cert secrets exist. These cert
 			// secrets should have the manager service DNS names plus localhost only.
@@ -423,7 +426,7 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
-			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.clusterDomain)
+			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.opts.ClusterDomain)
 			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalTLS)).To(BeNil())
 			test.VerifyCert(internalTLS, dnsNames...)
@@ -445,10 +448,12 @@ var _ = Describe("Manager controller tests", func() {
 			r = ReconcileManager{
 				client:          c,
 				scheme:          scheme,
-				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
 				licenseAPIReady: &utils.ReadyFlag{},
 				tierWatchReady:  &utils.ReadyFlag{},
+				opts: options.ControllerOptions{
+					DetectedProvider: operatorv1.ProviderNone,
+				},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -703,10 +708,12 @@ var _ = Describe("Manager controller tests", func() {
 					r = ReconcileManager{
 						client:          c,
 						scheme:          scheme,
-						provider:        operatorv1.ProviderNone,
 						status:          mockStatus,
 						licenseAPIReady: readyFlag,
 						tierWatchReady:  readyFlag,
+						opts: options.ControllerOptions{
+							DetectedProvider: operatorv1.ProviderNone,
+						},
 					}
 				})
 
@@ -1188,7 +1195,7 @@ var _ = Describe("Manager controller tests", func() {
 				mockStatus.On("ClearDegraded")
 				mockStatus.On("IsAvailable").Return(true)
 
-				r.multiTenant = true
+				r.opts.MultiTenant = true
 				r.licenseAPIReady.MarkAsReady()
 				r.tierWatchReady.MarkAsReady()
 

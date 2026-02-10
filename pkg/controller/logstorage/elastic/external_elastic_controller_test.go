@@ -212,7 +212,7 @@ func NewExternalESReconcilerWithShims(
 	provider operatorv1.Provider,
 	clusterDomain string,
 ) (*ExternalESController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),
@@ -220,11 +220,10 @@ func NewExternalESReconcilerWithShims(
 	}
 
 	r := &ExternalESController{
-		client:        cli,
-		scheme:        scheme,
-		status:        status,
-		clusterDomain: opts.ClusterDomain,
-		provider:      opts.DetectedProvider,
+		client: cli,
+		scheme: scheme,
+		status: status,
+		opts:   opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil

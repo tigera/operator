@@ -32,6 +32,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -67,10 +68,12 @@ var _ = Describe("tier controller tests", func() {
 		r = ReconcileTiers{
 			client:             c,
 			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
 			status:             mockStatus,
 			tierWatchReady:     readyFlag,
 			policyWatchesReady: readyFlag,
+			opts: options.ControllerOptions{
+				DetectedProvider: operatorv1.ProviderNone,
+			},
 		}
 
 		// Create objects that are prerequisites of the reconcile loop.
@@ -137,10 +140,12 @@ var _ = Describe("tier controller tests", func() {
 		r = ReconcileTiers{
 			client:             c,
 			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
 			status:             mockStatus,
 			tierWatchReady:     readyFlag,
 			policyWatchesReady: readyFlag,
+			opts: options.ControllerOptions{
+				DetectedProvider: operatorv1.ProviderNone,
+			},
 		}
 
 		_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -155,10 +160,12 @@ var _ = Describe("tier controller tests", func() {
 		r = ReconcileTiers{
 			client:             c,
 			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
 			status:             mockStatus,
 			tierWatchReady:     readyFlag,
 			policyWatchesReady: readyFlag,
+			opts: options.ControllerOptions{
+				DetectedProvider: operatorv1.ProviderNone,
+			},
 		}
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, "License not found", "licensekeies.projectcalico.org \"default\" not found", mock.Anything).Return()
@@ -182,10 +189,12 @@ var _ = Describe("tier controller tests", func() {
 		r = ReconcileTiers{
 			client:             c,
 			scheme:             scheme,
-			provider:           operatorv1.ProviderNone,
 			status:             mockStatus,
 			tierWatchReady:     readyFlag,
 			policyWatchesReady: readyFlag,
+			opts: options.ControllerOptions{
+				DetectedProvider: operatorv1.ProviderNone,
+			},
 		}
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: tiers", mock.Anything, mock.Anything).Return()

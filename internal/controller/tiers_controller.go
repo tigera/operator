@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +31,6 @@ type TiersReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func (r *TiersReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *TiersReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return tiers.Add(mgr, opts)
 }

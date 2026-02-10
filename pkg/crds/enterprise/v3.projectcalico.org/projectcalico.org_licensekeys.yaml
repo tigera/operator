@@ -1,0 +1,61 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: licensekeys.projectcalico.org
+spec:
+  group: projectcalico.org
+  names:
+    kind: LicenseKey
+    listKind: LicenseKeyList
+    plural: licensekeys
+    singular: licensekey
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v3
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              properties:
+                certificate:
+                  type: string
+                token:
+                  type: string
+              required:
+                - token
+              type: object
+            status:
+              properties:
+                expiry:
+                  format: date-time
+                  nullable: true
+                  type: string
+                features:
+                  items:
+                    type: string
+                  type: array
+                maxnodes:
+                  type: integer
+                package:
+                  enum:
+                    - CloudCommunity
+                    - CloudStarter
+                    - CloudPro
+                    - Enterprise
+                  type: string
+              type: object
+          required:
+            - metadata
+            - spec
+          type: object
+      served: true
+      storage: true

@@ -37,6 +37,6 @@ type ApplicationLayerReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=applicationlayers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=applicationlayers/status,verbs=get;update;patch
 
-func (r *ApplicationLayerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *ApplicationLayerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return applicationlayer.Add(mgr, opts)
 }

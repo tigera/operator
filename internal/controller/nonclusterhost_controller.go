@@ -32,6 +32,6 @@ type NonClusterHostReconciler struct {
 }
 
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=nonclusterhosts,verbs=get;list;watch;create;update;patch;delete
-func (r *NonClusterHostReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *NonClusterHostReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return nonclusterhost.Add(mgr, opts)
 }

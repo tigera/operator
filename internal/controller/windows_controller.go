@@ -31,6 +31,6 @@ type WindowsReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func (r *WindowsReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *WindowsReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return installation.AddWindowsController(mgr, opts)
 }

@@ -60,7 +60,7 @@ var logw = logf.Log.WithName("controller_windows")
 
 // Add creates a new Tiers Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
+func AddWindowsController(mgr manager.Manager, opts options.ControllerOptions) error {
 	ri, err := newWindowsReconciler(mgr, opts)
 	if err != nil {
 		return fmt.Errorf("failed to create Windows Reconciler: %w", err)
@@ -184,7 +184,7 @@ type ReconcileWindows struct {
 }
 
 // newWindowsReconciler returns a new reconcile.Reconciler
-func newWindowsReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileWindows, error) {
+func newWindowsReconciler(mgr manager.Manager, opts options.ControllerOptions) (*ReconcileWindows, error) {
 	statusManager := status.New(mgr.GetClient(), "calico-windows", opts.KubernetesVersion)
 
 	r := &ReconcileWindows{

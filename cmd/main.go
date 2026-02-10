@@ -443,7 +443,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
-	options := options.AddOptions{
+	options := options.ControllerOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
 		ClusterDomain:       clusterDomain,
@@ -597,7 +597,7 @@ func executePreDeleteHook(ctx context.Context, c client.Client) error {
 }
 
 // verifyConfiguration verifies that the final configuration of the operator is correct before starting any controllers.
-func verifyConfiguration(ctx context.Context, cs kubernetes.Interface, opts options.AddOptions) error {
+func verifyConfiguration(ctx context.Context, cs kubernetes.Interface, opts options.ControllerOptions) error {
 	if opts.ElasticExternal {
 		// There should not be an internal-es cert
 		if _, err := cs.CoreV1().Secrets(render.ElasticsearchNamespace).Get(ctx, render.TigeraElasticsearchInternalCertSecret, metav1.GetOptions{}); err != nil {

@@ -67,7 +67,7 @@ type DashboardsSubController struct {
 	tierWatchReady  *utils.ReadyFlag
 }
 
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists || opts.MultiTenant {
 		return nil
 	}

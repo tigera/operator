@@ -66,7 +66,7 @@ const (
 
 // Add creates a new authentication Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
@@ -106,7 +106,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady *utils.ReadyFlag) *ReconcileAuthentication {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions, tierWatchReady *utils.ReadyFlag) *ReconcileAuthentication {
 	r := &ReconcileAuthentication{
 		client:         mgr.GetClient(),
 		scheme:         mgr.GetScheme(),

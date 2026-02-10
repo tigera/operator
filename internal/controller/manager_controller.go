@@ -36,6 +36,6 @@ type ManagerReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=managers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=managers/status,verbs=get;update;patch
 
-func (r *ManagerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *ManagerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return manager.Add(mgr, opts)
 }

@@ -38,7 +38,7 @@ func NewReconcilerWithShims(
 	tierWatchReady *utils.ReadyFlag,
 	clusterInfoWatchReady *utils.ReadyFlag,
 ) reconcile.Reconciler {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		ShutdownContext: context.Background(),
 	}
 

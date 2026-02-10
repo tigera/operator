@@ -40,7 +40,7 @@ type APIServerReconciler struct {
 //	return r.ras.Reconcile(req)
 //}
 
-func (r *APIServerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *APIServerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return apiserver.Add(mgr, opts)
 	//	return ctrl.NewControllerManagedBy(mgr).
 	//		For(&operatorv1.APIServer{}).

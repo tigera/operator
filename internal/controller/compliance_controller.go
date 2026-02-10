@@ -36,6 +36,6 @@ type ComplianceReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=compliances,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=compliances/status,verbs=get;update;patch
 
-func (r *ComplianceReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *ComplianceReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return compliance.Add(mgr, opts)
 }

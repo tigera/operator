@@ -36,6 +36,6 @@ type IntrusionDetectionReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=intrusiondetections,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=intrusiondetections/status,verbs=get;update;patch
 
-func (r *IntrusionDetectionReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *IntrusionDetectionReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return intrusiondetection.Add(mgr, opts)
 }

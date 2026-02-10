@@ -36,6 +36,6 @@ type PolicyRecommendationReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=policyrecommendations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=policyrecommendations/status,verbs=get;update;patch
 
-func (pr *PolicyRecommendationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (pr *PolicyRecommendationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return policyrecommendation.Add(mgr, opts)
 }

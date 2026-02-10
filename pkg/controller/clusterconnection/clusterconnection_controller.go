@@ -66,7 +66,7 @@ var log = logf.Log.WithName(controllerName)
 
 // Add creates a new ManagementClusterConnection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started. This controller is meant only for enterprise users.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	statusManager := status.New(mgr.GetClient(), "management-cluster-connection", opts.KubernetesVersion)
 
 	// Create the reconciler
@@ -166,7 +166,7 @@ func newReconciler(
 	p operatorv1.Provider,
 	tierWatchReady *utils.ReadyFlag,
 	clusterInfoWatchReady *utils.ReadyFlag,
-	opts options.AddOptions,
+	opts options.ControllerOptions,
 ) *ReconcileConnection {
 	c := &ReconcileConnection{
 		cli:                   cli,

@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -88,10 +89,12 @@ var _ = Describe("LogCollector controller tests", func() {
 		r = ReconcileLogCollector{
 			client:          c,
 			scheme:          scheme,
-			provider:        operatorv1.ProviderNone,
 			status:          mockStatus,
 			licenseAPIReady: &utils.ReadyFlag{},
 			tierWatchReady:  &utils.ReadyFlag{},
+			opts: options.ControllerOptions{
+				DetectedProvider: operatorv1.ProviderNone,
+			},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -744,10 +747,12 @@ var _ = Describe("LogCollector controller tests", func() {
 			r = ReconcileLogCollector{
 				client:          c,
 				scheme:          scheme,
-				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
 				licenseAPIReady: readyFlag,
 				tierWatchReady:  readyFlag,
+				opts: options.ControllerOptions{
+					DetectedProvider: operatorv1.ProviderNone,
+				},
 			}
 		})
 

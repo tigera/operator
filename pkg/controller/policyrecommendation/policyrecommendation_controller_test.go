@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -97,11 +98,13 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		r = ReconcilePolicyRecommendation{
 			client:                   c,
 			scheme:                   scheme,
-			provider:                 operatorv1.ProviderNone,
 			status:                   mockStatus,
 			licenseAPIReady:          &utils.ReadyFlag{},
 			tierWatchReady:           &utils.ReadyFlag{},
 			policyRecScopeWatchReady: &utils.ReadyFlag{},
+			opts: options.ControllerOptions{
+				DetectedProvider: operatorv1.ProviderNone,
+			},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -239,11 +242,13 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			r = ReconcilePolicyRecommendation{
 				client:                   c,
 				scheme:                   scheme,
-				provider:                 operatorv1.ProviderNone,
 				status:                   mockStatus,
 				licenseAPIReady:          readyFlag,
 				tierWatchReady:           readyFlag,
 				policyRecScopeWatchReady: readyFlag,
+				opts: options.ControllerOptions{
+					DetectedProvider: operatorv1.ProviderNone,
+				},
 			}
 		})
 
@@ -322,7 +327,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			tenantBNamespace := "tenant-b"
 
 			BeforeEach(func() {
-				r.multiTenant = true
+				r.opts.MultiTenant = true
 			})
 
 			It("should reconcile both with and without namespace provided while namespaced policyrecommendations exist", func() {
@@ -505,11 +510,13 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			r := &ReconcilePolicyRecommendation{
 				client:                   c,
 				scheme:                   scheme,
-				provider:                 operatorv1.ProviderNone,
 				status:                   mockStatus,
 				licenseAPIReady:          &utils.ReadyFlag{},
 				tierWatchReady:           &utils.ReadyFlag{},
 				policyRecScopeWatchReady: &utils.ReadyFlag{},
+				opts: options.ControllerOptions{
+					DetectedProvider: operatorv1.ProviderNone,
+				},
 			}
 
 			// Create a new context.
@@ -545,7 +552,9 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				policyRecScopeWatchReady: &utils.ReadyFlag{},
 
 				// Set the provider to OpenShift.
-				provider: operatorv1.ProviderOpenShift,
+				opts: options.ControllerOptions{
+					DetectedProvider: operatorv1.ProviderOpenShift,
+				},
 			}
 
 			// Create a new context.

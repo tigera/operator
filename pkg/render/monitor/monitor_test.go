@@ -179,7 +179,6 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers).To(HaveLen(1))
 		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers[0].Name).To(Equal("authn-proxy"))
 		Expect(prometheusObj.Spec.CommonPrometheusFields.Containers[0].Resources).To(Equal(prometheusResources))
-
 		Expect(prometheusObj.Spec.CommonPrometheusFields.Resources).To(Equal(prometheusResources))
 
 		// AlertManager

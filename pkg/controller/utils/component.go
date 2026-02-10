@@ -1056,10 +1056,15 @@ func sanitizeLabel(input string) string {
 // addNameLabel sets the name of the application.
 // For more on recommended labels see: https://kubernetes.io/docs/concepts/overview/working-with-objects/common-labels/
 func addNameLabel(obj metav1.Object, name string) {
+	k8sapp := obj.GetLabels()["k8s-app"]
 	if obj.GetLabels()["app.kubernetes.io/name"] == "" {
-		obj.GetLabels()["app.kubernetes.io/name"] = sanitizeLabel(name)
+		if k8sapp != "" {
+			obj.GetLabels()["app.kubernetes.io/name"] = k8sapp
+		} else {
+			obj.GetLabels()["app.kubernetes.io/name"] = sanitizeLabel(name)
+		}
 	}
-	if obj.GetLabels()["k8s-app"] == "" {
+	if k8sapp == "" {
 		obj.GetLabels()["k8s-app"] = sanitizeLabel(name)
 	}
 }

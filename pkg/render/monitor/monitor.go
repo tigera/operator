@@ -541,6 +541,9 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CalicoNodePrometheus,
 			Namespace: common.TigeraPrometheusNamespace,
+			Labels: map[string]string{
+				"k8s-app": TigeraPrometheusObjectName,
+			},
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{

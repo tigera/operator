@@ -36,6 +36,6 @@ type IPPoolReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=installations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=installations/status,verbs=get;update;patch
 
-func (r *IPPoolReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *IPPoolReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return ippool.Add(mgr, opts)
 }

@@ -33,6 +33,6 @@ type GatewayAPIReconciler struct {
 //+kubebuilder:rbac:groups=operator.tigera.io,resources=gatewayapis,verbs=get;list;watch;create;update;patch;delete
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *GatewayAPIReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *GatewayAPIReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return gatewayapi.Add(mgr, opts)
 }

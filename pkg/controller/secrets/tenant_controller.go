@@ -54,7 +54,7 @@ type TenantController struct {
 	elasticExternal bool
 }
 
-func AddTenantController(mgr manager.Manager, opts options.AddOptions) error {
+func AddTenantController(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.MultiTenant {
 		return nil
 	}

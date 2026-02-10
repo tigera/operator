@@ -66,7 +66,7 @@ func NewDashboardsControllerWithShims(
 	multiTenant bool,
 	externalElastic bool,
 ) (*DashboardsSubController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),

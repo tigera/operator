@@ -56,7 +56,7 @@ const (
 
 // Add creates a new ApplicationLayer Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
@@ -76,7 +76,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new *reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileApplicationLayer{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),

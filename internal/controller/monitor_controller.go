@@ -36,6 +36,6 @@ type MonitorReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=monitors,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=monitors/status,verbs=get;update;patch
 
-func (r *MonitorReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *MonitorReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return monitor.Add(mgr, opts)
 }

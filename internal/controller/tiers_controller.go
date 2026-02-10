@@ -31,6 +31,6 @@ type TiersReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func (r *TiersReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *TiersReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return tiers.Add(mgr, opts)
 }

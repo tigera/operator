@@ -50,7 +50,7 @@ const tigeraStatusName string = "ippools"
 
 var log = logf.Log.WithName("controller_ippool")
 
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	clientv3, err := utils.V3Client(mgr.GetConfig())
 	if err != nil {
 		return fmt.Errorf("failed to create projectcalico.org/v3 client: %w", err)
@@ -126,7 +126,7 @@ type Reconciler struct {
 	watches              map[runtime.Object]struct{}
 	autoDetectedProvider operatorv1.Provider
 	status               status.StatusManager
-	opts                 options.AddOptions
+	opts                 options.ControllerOptions
 }
 
 const (

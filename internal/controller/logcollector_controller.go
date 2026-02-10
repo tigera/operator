@@ -36,6 +36,6 @@ type LogCollectorReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=logcollectors,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=logcollectors/status,verbs=get;update;patch
 
-func (r *LogCollectorReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *LogCollectorReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return logcollector.Add(mgr, opts)
 }

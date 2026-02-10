@@ -23,7 +23,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 )
 
-func AddToManager(mgr ctrl.Manager, options options.AddOptions) error {
+func AddToManager(mgr ctrl.Manager, options options.ControllerOptions) error {
 	if err := (&IPPoolReconciler{
 		Client: mgr.GetClient(),
 		Log:    ctrl.Log.WithName("controllers").WithName("IPPool"),

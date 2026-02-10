@@ -43,7 +43,7 @@ func NewReconcilerWithShims(
 	provider operatorv1.Provider,
 	clusterDomain string,
 ) (*LogStorageManagedClusterController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),

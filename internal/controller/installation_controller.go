@@ -36,6 +36,6 @@ type InstallationReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=installations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=installations/status,verbs=get;update;patch
 
-func (r *InstallationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *InstallationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return installation.Add(mgr, opts)
 }

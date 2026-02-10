@@ -82,7 +82,7 @@ type ElasticSubController struct {
 	multiTenant    bool
 }
 
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}

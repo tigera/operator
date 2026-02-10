@@ -32,6 +32,6 @@ type CSRReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func (r *CSRReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *CSRReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return csr.Add(mgr, opts)
 }

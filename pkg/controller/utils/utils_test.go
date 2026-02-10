@@ -46,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/options"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
@@ -176,7 +177,7 @@ var _ = Describe("Utils APIServer type tests", func() {
 		}
 		Expect(c.Create(ctx, inst)).ShouldNot(HaveOccurred())
 
-		Expect(IsAPIServerReady(c, log)).Should(BeTrue())
+		Expect(IsProjectCalicoV3Available(c, options.ControllerOptions{}, log)).Should(BeTrue())
 	},
 		Entry("with tigera-secure name", "tigera-secure"),
 		Entry("wth default name", "default"),

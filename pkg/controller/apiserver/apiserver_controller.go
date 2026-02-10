@@ -61,8 +61,19 @@ var log = logf.Log.WithName("controller_apiserver")
 
 // Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
-	r := newReconciler(mgr, opts)
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
+	r := &ReconcileAPIServer{
+		client:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
+		tierWatchReady:      &utils.ReadyFlag{},
+		provider:            opts.DetectedProvider,
+		enterpriseCRDsExist: opts.EnterpriseCRDExists,
+		clusterDomain:       opts.ClusterDomain,
+		multiTenant:         opts.MultiTenant,
+		kubernetesVersion:   opts.KubernetesVersion,
+	}
+	r.status.Run(opts.ShutdownContext)
 
 	c, err := ctrlruntime.NewController("apiserver-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
@@ -79,30 +90,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		})
 	}
 
-	return add(c, r)
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileAPIServer {
-	r := &ReconcileAPIServer{
-		client:              mgr.GetClient(),
-		scheme:              mgr.GetScheme(),
-		provider:            opts.DetectedProvider,
-		enterpriseCRDsExist: opts.EnterpriseCRDExists,
-		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
-		clusterDomain:       opts.ClusterDomain,
-		tierWatchReady:      &utils.ReadyFlag{},
-		multiTenant:         opts.MultiTenant,
-		kubernetesVersion:   opts.KubernetesVersion,
-	}
-	r.status.Run(opts.ShutdownContext)
-	return r
-}
-
-// add adds watches for resources that are available at startup
-func add(c ctrlruntime.Controller, r *ReconcileAPIServer) error {
 	// Watch for changes to primary resource APIServer
-	err := c.WatchObject(&operatorv1.APIServer{}, &handler.EnqueueRequestForObject{})
+	err = c.WatchObject(&operatorv1.APIServer{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		log.V(5).Info("Failed to create APIServer watch", "err", err)
 		return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)

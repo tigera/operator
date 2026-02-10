@@ -62,7 +62,7 @@ var log = logf.Log.WithName("controller_manager")
 
 // Add creates a new Manager Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
@@ -192,17 +192,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileManager{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), "manager", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 		tierWatchReady:  tierWatchReady,
-		multiTenant:     opts.MultiTenant,
-		elasticExternal: opts.ElasticExternal,
+		opts:            opts,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -216,15 +213,10 @@ type ReconcileManager struct {
 	// that reads objects from the cache and writes to the apiserver
 	client          client.Client
 	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
 	status          status.StatusManager
-	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
-
-	// Whether or not the operator is running in multi-tenant mode.
-	multiTenant     bool
-	elasticExternal bool
+	opts            options.ControllerOptions
 }
 
 // GetManager returns the default manager instance with defaults populated.
@@ -250,17 +242,17 @@ func GetManager(ctx context.Context, cli client.Client, mt bool, ns string) (*op
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Perform any common preparation that needs to be done for single-tenant and multi-tenant scenarios.
-	helper := utils.NewNamespaceHelper(r.multiTenant, render.ManagerNamespace, request.Namespace)
-	logc := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace(), "multi-tenant", r.multiTenant)
+	helper := utils.NewNamespaceHelper(r.opts.MultiTenant, render.ManagerNamespace, request.Namespace)
+	logc := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace(), "multi-tenant", r.opts.MultiTenant)
 	logc.Info("Reconciling Manager")
 
 	// We skip requests without a namespace specified in multi-tenant setups.
-	if r.multiTenant && request.Namespace == "" {
+	if r.opts.MultiTenant && request.Namespace == "" {
 		return reconcile.Result{}, nil
 	}
 
 	// Check if this is a tenant-scoped request.
-	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	tenant, _, err := utils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		logc.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -270,7 +262,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Fetch the Manager instance that corresponds with this reconcile trigger.
-	instance, err := GetManager(ctx, r.client, r.multiTenant, request.Namespace)
+	instance, err := GetManager(ctx, r.client, r.opts.MultiTenant, request.Namespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			logc.Info("Manager object not found")
@@ -300,7 +292,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	if !utils.IsAPIServerReady(r.client, logc) {
+	if !utils.IsProjectCalicoV3Available(r.client, r.opts, logc) {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, logc)
 		return reconcile.Result{}, nil
 	}
@@ -356,23 +348,23 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		certificatemanager.WithLogger(logc),
 		certificatemanager.WithTenant(tenant),
 	}
-	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain, helper.TruthNamespace(), opts...)
+	certificateManager, err := certificatemanager.Create(r.client, installation, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, logc)
 		return reconcile.Result{}, err
 	}
 
-	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, helper.InstallNamespace(), r.clusterDomain)
+	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, helper.InstallNamespace(), r.opts.ClusterDomain)
 
 	// Continue to add in the legacy names and namespaces of manager components to cover version skew scenarios. These
 	// can be removed in v3.26 when the oldest version we will officially support will use the newer names and namespace
 	var legacyInstallNamespace string
-	if r.multiTenant {
+	if r.opts.MultiTenant {
 		legacyInstallNamespace = helper.InstallNamespace()
 	} else {
 		legacyInstallNamespace = render.LegacyManagerNamespace
 	}
-	legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, legacyInstallNamespace, r.clusterDomain)
+	legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, legacyInstallNamespace, r.opts.ClusterDomain)
 	dnsNames = append(dnsNames, legacyDNSNames...)
 
 	// Get or create a certificate for clients of the manager pod ui-apis container.
@@ -399,7 +391,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Determine if compliance is enabled.
 	complianceLicenseFeatureActive := utils.IsFeatureActive(license, common.ComplianceFeature)
-	complianceCR, err := compliance.GetCompliance(ctx, r.client, r.multiTenant, request.Namespace)
+	complianceCR, err := compliance.GetCompliance(ctx, r.client, r.opts.MultiTenant, request.Namespace)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying compliance: ", err, logc)
 		return reconcile.Result{}, err
@@ -410,7 +402,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// certificates, in case the user has provided their own cert in lieu of the default certificate.
 
 	var trustedSecretNames []string
-	if !r.multiTenant {
+	if !r.opts.MultiTenant {
 		// For multi-tenant systems, we don't support user-provided certs for all components. So, we don't need to include these,
 		// and the bundle will simply use the root CA for the tenant. For single-tenant systems, we need to include these in case
 		// any of them haven't been signed by the root CA.
@@ -541,7 +533,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		// to Linseed. This certificate is used only for connections received over Voltron's mTLS tunnel targeting tigera-linseed.
 		// The public cert from this keypair is sent by es-kube-controllers to managed clusters so that linseed clients in those clusters
 		// can authenticate the certificate presented by Voltron.
-		linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, render.ElasticsearchNamespace, r.clusterDomain)
+		linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, render.ElasticsearchNamespace, r.opts.ClusterDomain)
 		linseedVoltronServerCert, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
 			render.VoltronLinseedTLS,
@@ -565,7 +557,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 		// Single tenant MCM clusters will use "voltron" as a server name to establish mTLS connection
 		serverName := "voltron"
-		if r.multiTenant {
+		if r.opts.MultiTenant {
 			// Multi-tenant MCM clusters will use the tenat ID as a server name to establish mTLS connection
 			serverName = tenant.Spec.ID
 		}
@@ -594,14 +586,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		tunnelSecretPassthrough = render.NewPassthrough(tunnelCASecret)
 	}
 
-	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Failed to process the authentication CR.", err, logc)
 		return reconcile.Result{}, err
 	}
 
 	elasticLicenseType := render.ElasticsearchLicenseTypeBasic
-	if !r.elasticExternal && managementClusterConnection == nil {
+	if !r.opts.ElasticExternal && managementClusterConnection == nil {
 		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, logc); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch license", err, logc)
 			return reconcile.Result{}, err
@@ -620,7 +612,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	trustedBundle := bundleMaker.(certificatemanagement.TrustedBundleRO)
-	if r.multiTenant {
+	if r.opts.MultiTenant {
 		// For multi-tenant systems, we load the pre-created bundle for this tenant instead of using the one we built here.
 		// Multi-tenant managers need the bundle variant that includes system root certificates, in order to verify external auth providers.
 		trustedBundle, err = certificateManager.LoadMultiTenantTrustedBundleWithRootCertificates(ctx, r.client, helper.InstallNamespace())
@@ -667,22 +659,22 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		TLSKeyPair:              tlsSecret,
 		VoltronLinseedKeyPair:   linseedVoltronServerCert,
 		PullSecrets:             pullSecrets,
-		OpenShift:               r.provider.IsOpenShift(),
+		OpenShift:               r.opts.DetectedProvider.IsOpenShift(),
 		Installation:            installation,
 		ManagementCluster:       managementCluster,
 		NonClusterHost:          nonclusterhost,
 		TunnelServerCert:        tunnelServerCert,
 		InternalTLSKeyPair:      internalTrafficSecret,
-		ClusterDomain:           r.clusterDomain,
+		ClusterDomain:           r.opts.ClusterDomain,
 		ESLicenseType:           elasticLicenseType,
 		Replicas:                replicas,
 		Compliance:              complianceCR,
 		ComplianceLicenseActive: complianceLicenseFeatureActive,
-		ComplianceNamespace:     utils.NewNamespaceHelper(r.multiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
+		ComplianceNamespace:     utils.NewNamespaceHelper(r.opts.MultiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
 		Namespace:               helper.InstallNamespace(),
 		TruthNamespace:          helper.TruthNamespace(),
 		Tenant:                  tenant,
-		ExternalElastic:         r.elasticExternal,
+		ExternalElastic:         r.opts.ElasticExternal,
 		BindingNamespaces:       namespaces,
 		OSSTenantNamespaces:     ossTenantNamespaces,
 		Manager:                 instance,

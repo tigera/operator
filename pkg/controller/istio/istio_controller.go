@@ -58,7 +58,7 @@ var (
 //
 // Start Watches within the Add function for any resources that this controller creates or monitors. This will trigger
 // calls to Reconcile() when an instance of one of the watched resources is modified.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		log.V(1).Info("Enterprise CRDs not found. Skipping Istio controller.")
 		return nil
@@ -99,7 +99,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions) *ReconcileIstio {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions) *ReconcileIstio {
 	r := &ReconcileIstio{
 		Client:   mgr.GetClient(),
 		scheme:   mgr.GetScheme(),

@@ -149,7 +149,7 @@ blocks:
     dependencies:
       - Pre-commit verification
     run:
-      when: change_in('hack/release/')
+      when: change_in('/hack/release/')
     task:
       jobs:
         - name: "Run tests"

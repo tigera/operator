@@ -541,6 +541,9 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CalicoNodePrometheus,
 			Namespace: common.TigeraPrometheusNamespace,
+			Labels: map[string]string{
+				"k8s-app": TigeraPrometheusObjectName,
+			},
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
@@ -1002,7 +1005,6 @@ func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMon
 }
 
 func (mc *monitorComponent) operatorRoles() []*rbacv1.Role {
-
 	return []*rbacv1.Role{
 		// list and watch have to be cluster scopes for watches to work.
 		// In controller-runtime, watches are by default non-namespaced.
@@ -1058,7 +1060,6 @@ func (mc *monitorComponent) operatorRoles() []*rbacv1.Role {
 }
 
 func (mc *monitorComponent) operatorRoleBindings() []*rbacv1.RoleBinding {
-
 	return []*rbacv1.RoleBinding{
 		{
 			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},

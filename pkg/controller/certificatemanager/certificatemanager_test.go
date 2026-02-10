@@ -123,7 +123,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		}
 		// Create a Kubernetes client.
 		scheme = k8sruntime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -502,13 +502,24 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			By("verifying it does replace a secret when dns names are missing")
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, keyPair.Secret(appNs))).NotTo(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
 			test.VerifyCertSANs(keyPair.GetCertificatePEM(), appDNSNames...)
 			keyPair, err = certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, missingDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			test.VerifyCertSANs(keyPair.GetCertificatePEM(), missingDNSNames...)
 
+			By("verifying it does replace a legacy secret when dns names are missing")
+			Expect(cli.Create(ctx, legacySecret)).NotTo(HaveOccurred())
+			keyPair, err = certificateManager.GetOrCreateKeyPair(cli, legacySecretName, appNs, appDNSNames)
+			Expect(err).NotTo(HaveOccurred())
+			test.VerifyCertSANs(keyPair.GetCertificatePEM(), appDNSNames...)
+			keyPair, err = certificateManager.GetOrCreateKeyPair(cli, legacySecretName, appNs, missingDNSNames)
+			Expect(err).NotTo(HaveOccurred())
+			test.VerifyCertSANs(keyPair.GetCertificatePEM(), missingDNSNames...)
+
 			By("verifying it does not replace a BYO secret, nor throw an error")
-			Expect(cli.Create(ctx, byoSecret)).NotTo(HaveOccurred())
+			Expect(cli.Update(ctx, byoSecret)).NotTo(HaveOccurred())
 			keyPair, err = certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, missingDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(keyPair.UseCertificateManagement()).To(BeFalse())
@@ -728,7 +739,6 @@ var _ = Describe("Test CertificateManagement suite", func() {
 
 		It("should create a hash for both secrets even if the same pem is used twice", func() {
 			By("creating 2 secrets with identical pem in the datastore", func() {
-
 				byoSecretCopy := byoSecret.DeepCopyObject().(*corev1.Secret)
 
 				byoSecret.Name, byoSecret.Namespace = "byo-secret", common.OperatorNamespace()

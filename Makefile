@@ -101,8 +101,8 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.25.6-llvm18.1.8-k8s1.34.3
-CALICO_BASE_VER ?= ubi9-1769122535
+GO_BUILD_VER?=1.25.7-llvm18.1.8-k8s1.34.3
+CALICO_BASE_VER ?= ubi9-1770247388
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -475,10 +475,9 @@ load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KIND_KUBECONFIG) && \
 		$(BINDIR)/kubectl create -f pkg/crds/operator/ && \
-		$(BINDIR)/kubectl apply -f pkg/crds/calico/ && \
-		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
-		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
-		$(BINDIR)/kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
+		$(BINDIR)/kubectl apply -f pkg/crds/calico/v1.crd.projectcalico.org/ && \
+		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/v1.crd.projectcalico.org/ && \
+		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/01-crd-eck-bundle.yaml && \
 		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
 create-tigera-operator-namespace: kubectl
@@ -684,7 +683,8 @@ define prep_local_crds
     $(eval product := $(1))
 	rm -rf pkg/crds/$(product)
 	rm -rf .crds/$(product)
-	mkdir -p pkg/crds/$(product)
+	mkdir -p pkg/crds/$(product)/v1.crd.projectcalico.org/
+	mkdir -p pkg/crds/$(product)/v3.projectcalico.org/
 	mkdir -p .crds/$(product)
 endef
 
@@ -698,15 +698,20 @@ define fetch_crds
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
 	git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch git@github.com:$(project).git ./
 endef
-define copy_crds
+define copy_v1_crds
     $(eval dir := $(1))
 		$(eval product := $(2))
-	@cp $(dir)/libcalico-go/config/crd/* pkg/crds/$(product)/ && echo "Copied $(product) CRDs"
+	@cp $(dir)/libcalico-go/config/crd/* pkg/crds/$(product)/v1.crd.projectcalico.org/ && echo "Copied $(product) CRDs"
+endef
+define copy_v3_crds
+    $(eval dir := $(1))
+		$(eval product := $(2))
+	@cp $(dir)/api/config/crd/* pkg/crds/$(product)/v3.projectcalico.org/ && echo "Copied $(product) CRDs"
 endef
 define copy_eck_crds
     $(eval dir := $(1))
 		$(eval product := $(2))
-	@cp $(dir)/charts/tigera-operator/crds/eck/* pkg/crds/$(product)/ && echo "Copied $(product) ECK CRDs"
+	@cp $(dir)/charts/crd.projectcalico.org.v1/templates/eck/* pkg/crds/$(product)/ && echo "Copied $(product) ECK CRDs"
 endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
@@ -724,7 +729,8 @@ read-libcalico-calico-version:
 	if [ -z "$(CALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
-	$(call copy_crds, $(CALICO_CRDS_DIR),"calico")
+	$(call copy_v1_crds, $(CALICO_CRDS_DIR),"calico")
+	$(call copy_v3_crds, $(CALICO_CRDS_DIR),"calico")
 
 prepare-for-calico-crds:
 	$(call prep_local_crds,"calico")
@@ -742,7 +748,7 @@ read-libcalico-enterprise-version:
 	if [ -z "$(CALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds
-	$(call copy_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
+	$(call copy_v1_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_eck_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 
 prepare-for-enterprise-crds:

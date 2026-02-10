@@ -1,8 +1,9 @@
 module github.com/tigera/operator
 
-go 1.25.6
+go 1.25.7
 
 require (
+	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/aws/aws-sdk-go v1.55.8
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cloudflare/cfssl v1.6.5
@@ -16,6 +17,7 @@ require (
 	github.com/google/go-containerregistry v0.20.6
 	github.com/google/go-github/v53 v53.2.0
 	github.com/hashicorp/go-version v1.8.0
+	github.com/k8snetworkplumbingwg/network-attachment-definition-client v1.7.7
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/ginkgo/v2 v2.27.5
@@ -23,13 +25,12 @@ require (
 	github.com/openshift/api v0.0.0-20260122154241-80c3fbc164d6
 	github.com/openshift/library-go v0.0.0-20260121132910-dc3a1c884c04
 	github.com/pkg/errors v0.9.1
-	github.com/projectcalico/api v0.0.0-20250916150628-d4009e4d7c50
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.88.0
 	github.com/r3labs/diff/v2 v2.15.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/snowzach/rotatefilehook v0.0.0-20220211133110-53752135082d
 	github.com/stretchr/testify v1.11.1
-	github.com/tigera/api v0.0.0-20260115201458-bce624761bbd
+	github.com/tigera/api v0.0.0-20260131232301-9cd5ef33622f
 	github.com/tigera/operator/api v0.0.0-20260120220012-4a3f8a7d8399
 	github.com/urfave/cli/v3 v3.6.2
 	go.uber.org/zap v1.27.1
@@ -52,8 +53,6 @@ require (
 	sigs.k8s.io/secrets-store-csi-driver v1.5.5
 	sigs.k8s.io/yaml v1.6.0
 )
-
-require github.com/Masterminds/semver/v3 v3.4.0
 
 require (
 	al.essio.dev/pkg/shellescape v1.5.1 // indirect

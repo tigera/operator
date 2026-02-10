@@ -66,7 +66,7 @@ var _ = Describe("Monitor controller tests", func() {
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
@@ -165,6 +165,25 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+
+			// Verify the recommended labels are correct on these resources.
+			Expect(p.Labels).To(Equal(map[string]string{
+				"k8s-app":                      "tigera-prometheus",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/name":       "tigera-prometheus",
+				"app.kubernetes.io/part-of":    "Calico",
+				"app.kubernetes.io/component":  "",
+			}))
+			Expect(am.Labels).To(Equal(map[string]string{
+				"k8s-app":                      "calico-node-alertmanager",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/name":       "calico-node-alertmanager",
+				"app.kubernetes.io/part-of":    "Calico",
+				"app.kubernetes.io/component":  "",
+			}))
+
 		})
 
 		It("should create Prometheus related resources even when a cert with missing key usages is configured for other components", func() {
@@ -260,7 +279,13 @@ var _ = Describe("Monitor controller tests", func() {
 
 				Expect(serviceMonitor.Spec.Endpoints).To(HaveLen(1))
 				// Verify that the default settings are propagated.
-				Expect(serviceMonitor.Labels).To(Equal(map[string]string{render.AppLabelName: monitor.TigeraExternalPrometheus}))
+				Expect(serviceMonitor.Labels).Should(And(
+					HaveKeyWithValue(render.AppLabelName, monitor.TigeraExternalPrometheus),
+					HaveKeyWithValue("app.kubernetes.io/instance", "tigera-secure"),
+					HaveKeyWithValue("app.kubernetes.io/managed-by", "tigera-operator"),
+					HaveKeyWithValue("app.kubernetes.io/name", "tigera-external-prometheus"),
+					HaveKeyWithValue("app.kubernetes.io/part-of", "Calico"),
+				))
 				Expect(serviceMonitor.Spec.Endpoints[0]).To(Equal(monitoringv1.Endpoint{
 					Params: map[string][]string{"match[]": {"{__name__=~\".+\"}"}},
 					Port:   "web",

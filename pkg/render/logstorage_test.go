@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/ptr"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
@@ -296,7 +297,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
-				//compareResources(createResources, expectedCreateResources)
+				// compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, expectedDeleteResources)
 			})
 
@@ -503,7 +504,22 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						},
 					},
 				}
-				cfg.Elasticsearch = &esv1.Elasticsearch{}
+				cfg.Elasticsearch = &esv1.Elasticsearch{
+					Spec: esv1.ElasticsearchSpec{
+						NodeSets: []esv1.NodeSet{
+							{
+								Name: "default",
+								VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+									{
+										Spec: corev1.PersistentVolumeClaimSpec{
+											StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+										},
+									},
+								},
+							},
+						},
+					},
+				}
 
 				component := render.LogStorage(cfg)
 
@@ -585,9 +601,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			It("creates Managed cluster logstorage components", func() {
 				expectedCreateResources := []client.Object{
 					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-secrets"}},
-					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-operator"},
-						RoleRef:  rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "ClusterRole", Name: "tigera-linseed-secrets"},
-						Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: "guardian", Namespace: "calico-system"}}},
+					&rbacv1.RoleBinding{
+						ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-operator"},
+						RoleRef:    rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "ClusterRole", Name: "tigera-linseed-secrets"},
+						Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "guardian", Namespace: "calico-system"}},
+					},
 					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 				}
@@ -1146,7 +1164,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
 	scheme := runtime.NewScheme()
-	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())

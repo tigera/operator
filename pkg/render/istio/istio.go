@@ -121,8 +121,17 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 			},
 		},
 	}
+	// Set platform on all charts that have platform-specific behavior.
+	// The embedded Helm charts use zzz_profile.yaml to load platform profiles
+	// (e.g., profile-platform-openshift.yaml) which configure CNI paths, SCC
+	// RBAC rules, SELinux options, and sidecar injection settings.
 	if cfg.Installation.KubernetesProvider.IsGKE() {
 		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
+	}
+	if cfg.Installation.KubernetesProvider.IsOpenShift() {
+		istioResOpts.IstioCNIOpts.Global.Platform = "openshift"
+		istioResOpts.IstiodOpts.Global.Platform = "openshift"
+		istioResOpts.ZTunnelOpts.Global.Platform = "openshift"
 	}
 	resources, err := istioResOpts.GetResources(cfg.Scheme)
 	if err != nil {
@@ -132,7 +141,6 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 	crds := &IstioComponentCRDs{resources: resources}
 	istio := &IstioComponent{cfg: cfg, resources: resources}
 	return crds, istio, nil
-
 }
 
 func (c *IstioComponent) patchImages() (err error) {

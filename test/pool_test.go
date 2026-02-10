@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/maps"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -28,12 +29,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	"github.com/tigera/operator/pkg/controller/utils"
 )
 
 // This test suite covers the installation of IP pools. The vast majority should be covered in the pkg/controller/ippool UTs
@@ -41,6 +43,7 @@ import (
 // controller and the IP pool controller, making an FV appropriate for testing those interactions.
 var _ = Describe("IPPool FV tests", func() {
 	var c client.Client
+	var clientv3 client.Client
 	var mgr manager.Manager
 	var shutdownContext context.Context
 	var cancel context.CancelFunc
@@ -48,6 +51,11 @@ var _ = Describe("IPPool FV tests", func() {
 
 	BeforeEach(func() {
 		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist)
+
+		// We need a v3 client as well.
+		var err error
+		clientv3, err = utils.V3Client(mgr.GetConfig())
+		Expect(err).NotTo(HaveOccurred())
 
 		By("Cleaning up resources before the test")
 		cleanupResources(c)
@@ -61,7 +69,7 @@ var _ = Describe("IPPool FV tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator"},
 			Spec:       corev1.NamespaceSpec{},
 		}
-		err := c.Create(context.Background(), ns)
+		err = c.Create(context.Background(), ns)
 		if err != nil && !errors.IsAlreadyExists(err) {
 			Expect(err).NotTo(HaveOccurred())
 		}
@@ -125,7 +133,7 @@ var _ = Describe("IPPool FV tests", func() {
 		verifyCalicoHasDeployed(c)
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
@@ -140,7 +148,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.Disabled).To(Equal(false))
 		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
-		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[0].Spec.AssignmentMode).To(Equal(v3.Automatic))
 
 		// Verify that a default IPv6 pool was created.
 		Expect(ipPools.Items[1].Name).To(Equal("default-ipv6-ippool"))
@@ -149,7 +157,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[1].Spec.Disabled).To(Equal(false))
 		Expect(ipPools.Items[1].Spec.BlockSize).To(Equal(122))
 		Expect(ipPools.Items[1].Spec.NodeSelector).To(Equal("all()"))
-		Expect(ipPools.Items[1].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[1].Spec.AssignmentMode).To(Equal(v3.Automatic))
 
 		// Expect the default pools to be marked as managed by the operator.
 		for _, p := range ipPools.Items {
@@ -175,7 +183,7 @@ var _ = Describe("IPPool FV tests", func() {
 		verifyCalicoHasDeployed(c)
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
@@ -189,28 +197,28 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(ipPools.Items[0].Spec.Disabled).To(Equal(false))
 		Expect(ipPools.Items[0].Spec.BlockSize).To(Equal(26))
 		Expect(ipPools.Items[0].Spec.NodeSelector).To(Equal("all()"))
-		Expect(ipPools.Items[0].Labels).To(HaveLen(1))
-		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(ipPools.Items[0].Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "tigera-operator"))
+		Expect(*ipPools.Items[0].Spec.AssignmentMode).To(Equal(v3.Automatic))
 	})
 
 	It("should assume ownership of legacy default IP pools", func() {
 		// Create an IP pool directly - this simulates a pre-existing IP pool created by Calico prior to
 		// the operator supporting direct IP pool management.
-		ipPool := crdv1.IPPool{
+		ipPool := v3.IPPool{
 			ObjectMeta: metav1.ObjectMeta{Name: "default-ipv4-ippool"},
-			Spec: crdv1.IPPoolSpec{
+			Spec: v3.IPPoolSpec{
 				CIDR:             "192.168.0.0/24",
-				IPIPMode:         crdv1.IPIPModeAlways,
-				VXLANMode:        crdv1.VXLANModeNever,
+				IPIPMode:         v3.IPIPModeAlways,
+				VXLANMode:        v3.VXLANModeNever,
 				BlockSize:        26,
 				NATOutgoing:      true,
 				NodeSelector:     "all()",
 				DisableBGPExport: false,
-				AllowedUses: []crdv1.IPPoolAllowedUse{
-					crdv1.IPPoolAllowedUseWorkload,
-					crdv1.IPPoolAllowedUseTunnel,
+				AllowedUses: []v3.IPPoolAllowedUse{
+					v3.IPPoolAllowedUseWorkload,
+					v3.IPPoolAllowedUseTunnel,
 				},
-				AssignmentMode: operator.AssignmentModeAutomatic,
+				AssignmentMode: ptr.To(v3.Automatic),
 			},
 		}
 		Expect(c.Create(context.Background(), &ipPool)).To(Succeed())
@@ -243,7 +251,7 @@ var _ = Describe("IPPool FV tests", func() {
 		// been controlled by the operator at this point.
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
@@ -251,7 +259,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(len(ipPools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
 
 		// This proves the operator has not assumed control.
-		Expect(ipPools.Items[0].Labels).To(HaveLen(0))
+		Expect(ipPools.Items[0].Labels).NotTo(HaveKey("app.kubernetes.io/managed-by"))
 
 		// Now, install the API server.
 		createAPIServer(c, mgr, shutdownContext, nil)
@@ -261,20 +269,18 @@ var _ = Describe("IPPool FV tests", func() {
 		// This proves that the operator has assumed ownership of the legacy IP pool.
 		v3Pools := &v3.IPPoolList{}
 		Eventually(func() error {
-			err := c.List(context.Background(), v3Pools)
+			err := clientv3.List(context.Background(), v3Pools)
 			if err != nil {
 				return err
 			}
 			if len(v3Pools.Items) != 1 {
 				return fmt.Errorf("Expected 1 IP pool, but got: %+v", v3Pools.Items)
 			}
-			if len(v3Pools.Items[0].Labels) != 1 {
-				return fmt.Errorf("Expected 1 label on IP pool, but got: %+v", v3Pools.Items[0].Labels)
+			if !maps.ContainsKeys(v3Pools.Items[0].Labels, "app.kubernetes.io/managed-by") {
+				return fmt.Errorf("Expected app.kubernetes.io/managed-by label, but got: %+v", v3Pools.Items[0].Labels)
 			}
 			return nil
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
-
-		Expect(v3Pools.Items[0].Labels).To(HaveKey("app.kubernetes.io/managed-by"))
 
 		// Verify that the default IPv4 pool has been subsumed by the operator.
 		Expect(v3Pools.Items[0].Name).To(Equal("default-ipv4-ippool"))
@@ -285,7 +291,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(v3Pools.Items[0].Spec.NodeSelector).To(Equal("all()"))
 		Expect(v3Pools.Items[0].Spec.IPIPMode).To(Equal(v3.IPIPMode(v3.IPIPModeAlways)))
 		Expect(v3Pools.Items[0].Spec.VXLANMode).To(Equal(v3.VXLANMode(v3.VXLANModeNever)))
-		Expect(ipPools.Items[0].Spec.AssignmentMode).To(Equal(operator.AssignmentModeAutomatic))
+		Expect(*ipPools.Items[0].Spec.AssignmentMode).To(Equal(v3.Automatic))
 	})
 
 	// This test verifies that the IP pool controller doesn't assume ownership of IP pools that may exist in the
@@ -294,18 +300,18 @@ var _ = Describe("IPPool FV tests", func() {
 	It("should NOT assume ownership of modified IP pools on upgrade", func() {
 		// Create an IP pool directly - this simulates a pre-existing IP pool created by Calico prior to
 		// the operator supporting direct IP pool management.
-		ipPool := crdv1.IPPool{
+		ipPool := v3.IPPool{
 			ObjectMeta: metav1.ObjectMeta{Name: "default-ipv4-ippool"},
-			Spec: crdv1.IPPoolSpec{
+			Spec: v3.IPPoolSpec{
 				CIDR:             "192.168.0.0/24",
-				IPIPMode:         crdv1.IPIPModeAlways,
-				VXLANMode:        crdv1.VXLANModeNever,
+				IPIPMode:         v3.IPIPModeAlways,
+				VXLANMode:        v3.VXLANModeNever,
 				BlockSize:        26,
 				NATOutgoing:      true,
 				DisableBGPExport: false,
-				AllowedUses: []crdv1.IPPoolAllowedUse{
-					crdv1.IPPoolAllowedUseWorkload,
-					crdv1.IPPoolAllowedUseTunnel,
+				AllowedUses: []v3.IPPoolAllowedUse{
+					v3.IPPoolAllowedUseWorkload,
+					v3.IPPoolAllowedUseTunnel,
 				},
 				// Use a non-default selector. This mimics a user modifying the IP pool after it was created,
 				// since we will use the default selector in the Installation spec.
@@ -343,7 +349,7 @@ var _ = Describe("IPPool FV tests", func() {
 		// been controlled by the operator at this point.
 
 		// Get IP pools installed in the cluster.
-		ipPools := &crdv1.IPPoolList{}
+		ipPools := &v3.IPPoolList{}
 		Eventually(func() error {
 			return c.List(context.Background(), ipPools)
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
@@ -351,7 +357,7 @@ var _ = Describe("IPPool FV tests", func() {
 		Expect(len(ipPools.Items)).To(Equal(1), fmt.Sprintf("Expected 1 IP pool, but got: %+v", ipPools.Items))
 
 		// This proves the operator has not assumed control.
-		Expect(ipPools.Items[0].Labels).To(HaveLen(0))
+		Expect(ipPools.Items[0].Labels).NotTo(HaveKey("app.kubernetes.io/managed-by"))
 
 		// Now, install the API server.
 		createAPIServer(c, mgr, shutdownContext, nil)
@@ -361,7 +367,7 @@ var _ = Describe("IPPool FV tests", func() {
 		// Verify that the IP pool has not been modified by the operator.
 		v3Pools := &v3.IPPoolList{}
 		Consistently(func() error {
-			err := c.List(context.Background(), v3Pools)
+			err := clientv3.List(context.Background(), v3Pools)
 			if err != nil {
 				return err
 			}

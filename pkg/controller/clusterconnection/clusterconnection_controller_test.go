@@ -75,7 +75,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		clientScheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(clientScheme)).ShouldNot(HaveOccurred())
+		Expect(apis.AddToScheme(clientScheme, false)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(clientScheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(clientScheme)).ShouldNot(HaveOccurred())
 		err := operatorv1.SchemeBuilder.AddToScheme(clientScheme)

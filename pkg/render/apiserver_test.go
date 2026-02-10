@@ -86,7 +86,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		apiserver = &operatorv1.APIServerSpec{}
 		dnsNames = dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, clusterDomain)
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -466,6 +466,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Resources:     []string{"securitycontextconstraints"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{"privileged"},
+		}))
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"config.openshift.io"},
+			Resources: []string{"infrastructures"},
+			Verbs:     []string{"get", "list", "watch"},
 		}))
 	})
 
@@ -1765,7 +1770,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		}
 		apiserver = &operatorv1.APIServerSpec{}
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		var err error
 		certificateManager, err = certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())

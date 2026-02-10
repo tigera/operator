@@ -34,15 +34,15 @@ var _ = Describe("test crds pkg", func() {
 		It(fmt.Sprintf("can get all CRDS used with Calico (v3=%t)", v3), func() {
 			Expect(func() { Expect(GetCRDs(opv1.Calico, v3)).ToNot(BeEmpty()) }).ToNot(Panic())
 		})
+
+		It("can get all CRDS used with Enterprise", func() {
+			Expect(func() { Expect(GetCRDs(opv1.TigeraSecureEnterprise, v3)).ToNot(BeEmpty()) }).ToNot(Panic())
+		})
+
+		It("can parse Enterprise CRDs", func() {
+			Expect(func() { Expect(getEnterpriseCRDSource(v3)).ToNot(BeEmpty()) }).ToNot(Panic())
+		})
 	}
-
-	It("can get all CRDS used with Enterprise", func() {
-		Expect(func() { Expect(GetCRDs(opv1.TigeraSecureEnterprise, false)).ToNot(BeEmpty()) }).ToNot(Panic())
-	})
-
-	It("can parse Enterprise CRDs", func() {
-		Expect(func() { Expect(getEnterpriseCRDSource()).ToNot(BeEmpty()) }).ToNot(Panic())
-	})
 
 	It("can parse Operator CRDs used with calico", func() {
 		Expect(func() { Expect(getOperatorCRDSource(opv1.Calico)).ToNot(BeEmpty()) }).ToNot(Panic())

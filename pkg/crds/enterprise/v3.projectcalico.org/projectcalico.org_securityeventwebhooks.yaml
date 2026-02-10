@@ -1,0 +1,122 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: securityeventwebhooks.projectcalico.org
+spec:
+  group: projectcalico.org
+  names:
+    kind: SecurityEventWebhook
+    listKind: SecurityEventWebhookList
+    plural: securityeventwebhooks
+    singular: securityeventwebhook
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v3
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              properties:
+                config:
+                  items:
+                    properties:
+                      name:
+                        type: string
+                      value:
+                        type: string
+                      valueFrom:
+                        properties:
+                          configMapKeyRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                              - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          secretKeyRef:
+                            properties:
+                              key:
+                                type: string
+                              name:
+                                default: ""
+                                type: string
+                              optional:
+                                type: boolean
+                            required:
+                              - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                        type: object
+                    required:
+                      - name
+                    type: object
+                  type: array
+                consumer:
+                  type: string
+                query:
+                  type: string
+                state:
+                  type: string
+              required:
+                - config
+                - consumer
+                - query
+                - state
+              type: object
+            status:
+              items:
+                properties:
+                  lastTransitionTime:
+                    format: date-time
+                    type: string
+                  message:
+                    maxLength: 32768
+                    type: string
+                  observedGeneration:
+                    format: int64
+                    minimum: 0
+                    type: integer
+                  reason:
+                    maxLength: 1024
+                    minLength: 1
+                    pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                    type: string
+                  status:
+                    enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                    type: string
+                  type:
+                    maxLength: 316
+                    pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                    type: string
+                required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                type: object
+              type: array
+          required:
+            - metadata
+            - spec
+          type: object
+      served: true
+      storage: true

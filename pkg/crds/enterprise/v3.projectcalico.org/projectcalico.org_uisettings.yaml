@@ -1,0 +1,198 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: uisettings.projectcalico.org
+spec:
+  group: projectcalico.org
+  names:
+    kind: UISettings
+    listKind: UISettingsList
+    plural: uisettings
+    singular: uisettings
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v3
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              properties:
+                dashboard:
+                  properties:
+                    dashboardData:
+                      items:
+                        properties:
+                          layout:
+                            properties:
+                              height:
+                                format: int32
+                                type: integer
+                              index:
+                                type: string
+                              isInNamespaceView:
+                                type: boolean
+                              isResizable:
+                                type: boolean
+                              isVisible:
+                                type: boolean
+                              maxHeight:
+                                format: int32
+                                type: integer
+                              maxWidth:
+                                format: int32
+                                type: integer
+                              minHeight:
+                                format: int32
+                                type: integer
+                              minWidth:
+                                format: int32
+                                type: integer
+                              width:
+                                format: int32
+                                type: integer
+                              xPos:
+                                format: int32
+                                type: integer
+                              yPos:
+                                format: int32
+                                type: integer
+                            required:
+                              - height
+                              - width
+                              - xPos
+                              - yPos
+                            type: object
+                          selectedNamespace:
+                            type: string
+                          type:
+                            type: string
+                        type: object
+                      type: array
+                  type: object
+                description:
+                  type: string
+                group:
+                  type: string
+                layer:
+                  properties:
+                    color:
+                      type: string
+                    icon:
+                      type: string
+                    nodes:
+                      items:
+                        properties:
+                          id:
+                            type: string
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                          type:
+                            type: string
+                        required:
+                          - id
+                          - name
+                          - type
+                        type: object
+                      type: array
+                  required:
+                    - nodes
+                  type: object
+                user:
+                  type: string
+                view:
+                  properties:
+                    expandPorts:
+                      type: boolean
+                    followConnectionDirection:
+                      type: boolean
+                    hostAggregationSelectors:
+                      items:
+                        properties:
+                          name:
+                            type: string
+                          selector:
+                            type: string
+                        required:
+                          - name
+                          - selector
+                        type: object
+                      type: array
+                    layers:
+                      items:
+                        type: string
+                      type: array
+                    layoutType:
+                      type: string
+                    nodes:
+                      items:
+                        properties:
+                          deemphasize:
+                            type: boolean
+                          expanded:
+                            type: boolean
+                          followEgress:
+                            type: boolean
+                          followIngress:
+                            type: boolean
+                          hide:
+                            type: boolean
+                          hideUnrelated:
+                            type: boolean
+                          id:
+                            type: string
+                          inFocus:
+                            type: boolean
+                          name:
+                            type: string
+                          namespace:
+                            type: string
+                          type:
+                            type: string
+                        required:
+                          - id
+                          - name
+                          - type
+                        type: object
+                      type: array
+                    positions:
+                      items:
+                        properties:
+                          id:
+                            type: string
+                          xPos:
+                            type: integer
+                          yPos:
+                            type: integer
+                          zPos:
+                            type: integer
+                        required:
+                          - id
+                          - xPos
+                          - yPos
+                          - zPos
+                        type: object
+                      type: array
+                    splitIngressEgress:
+                      type: boolean
+                  type: object
+              required:
+                - description
+                - group
+              type: object
+          required:
+            - metadata
+            - spec
+          type: object
+      served: true
+      storage: true

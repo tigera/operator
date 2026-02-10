@@ -411,7 +411,7 @@ func (r *GithubRelease) Create(ctx context.Context, isDraft, isPrerelease bool) 
 		Body:       github.String(string(relNotesBytes)),
 		Draft:      github.Bool(isDraft),
 		Prerelease: github.Bool(isPrerelease),
-		MakeLatest: makeLatest(isDraft, isPrerelease),
+		MakeLatest: r.makeLatest(ctx, isDraft, isPrerelease),
 	})
 	if err != nil {
 		return fmt.Errorf("creating GitHub release for %s: %w", r.Version, err)
@@ -426,14 +426,29 @@ func (r *GithubRelease) Create(ctx context.Context, isDraft, isPrerelease bool) 
 }
 
 // Helper function to determine the value for MakeLatest option for GitHub releases.
-// Ideally, we want GitHub to determine if this is the latest release only if it is not a draft or prerelease
-// using "legacy" option. See https://docs.github.com/en/rest/releases/releases#create-a-release
-func makeLatest(isDraft, isPrerelease bool) *string {
-	latest := "false"
-	if !isDraft && !isPrerelease {
-		latest = "legacy"
+// If the release is a draft or prerelease, it cannot be the latest release, so return false.
+// Otherwise, compare with the current latest release and return true if this release's version is greater, false otherwise.
+func (r *GithubRelease) makeLatest(ctx context.Context, isDraft, isPrerelease bool) *string {
+	notLatest := github.String("false")
+	if isDraft || isPrerelease {
+		return notLatest
 	}
-	return github.String(latest)
+	latestRelease, _, err := r.githubClient.Repositories.GetLatestRelease(ctx, r.Org, r.Repo)
+	if err != nil {
+		logrus.WithError(err).Warn("Failed to get latest release, defaulting to not making this release the latest")
+		return notLatest
+	}
+	latestVersion, err := semver.ParseTolerant(latestRelease.GetTagName())
+	if err != nil {
+		logrus.WithError(err).Warn("Failed to parse latest release version, defaulting to not making this release the latest")
+		return notLatest
+	}
+	thisVersion, err := semver.ParseTolerant(r.Version)
+	if err != nil {
+		logrus.WithError(err).Warn("Failed to parse current release version, defaulting to not making this release the latest")
+		return notLatest
+	}
+	return github.String(strconv.FormatBool(thisVersion.GT(latestVersion)))
 }
 
 // Update an existing GitHub release.
@@ -446,7 +461,7 @@ func (r *GithubRelease) Update(ctx context.Context, isDraft, isPrerelease bool) 
 	release, _, err := r.githubClient.Repositories.EditRelease(ctx, r.Org, r.Repo, r.githubRepoRelease.GetID(), &github.RepositoryRelease{
 		Draft:      github.Bool(isDraft),
 		Prerelease: github.Bool(isPrerelease),
-		MakeLatest: makeLatest(isDraft, isPrerelease),
+		MakeLatest: r.makeLatest(ctx, isDraft, isPrerelease),
 	})
 	if err != nil {
 		return fmt.Errorf("updating GitHub release for %s: %w", r.Version, err)

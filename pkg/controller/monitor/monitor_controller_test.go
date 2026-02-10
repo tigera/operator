@@ -165,6 +165,25 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+
+			// Verify the recommended labels are correct on these resources.
+			Expect(p.Labels).To(Equal(map[string]string{
+				"k8s-app":                      "tigera-prometheus",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/name":       "tigera-prometheus",
+				"app.kubernetes.io/part-of":    "Calico",
+				"app.kubernetes.io/component":  "",
+			}))
+			Expect(am.Labels).To(Equal(map[string]string{
+				"k8s-app":                      "calico-node-alertmanager",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/name":       "calico-node-alertmanager",
+				"app.kubernetes.io/part-of":    "Calico",
+				"app.kubernetes.io/component":  "",
+			}))
+
 		})
 
 		It("should create Prometheus related resources even when a cert with missing key usages is configured for other components", func() {

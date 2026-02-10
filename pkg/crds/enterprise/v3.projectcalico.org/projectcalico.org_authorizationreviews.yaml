@@ -1,0 +1,103 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: authorizationreviews.projectcalico.org
+spec:
+  group: projectcalico.org
+  names:
+    kind: AuthorizationReview
+    listKind: AuthorizationReviewList
+    plural: authorizationreviews
+    singular: authorizationreview
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v3
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              properties:
+                extra:
+                  additionalProperties:
+                    items:
+                      type: string
+                    type: array
+                  type: object
+                groups:
+                  items:
+                    type: string
+                  type: array
+                resourceAttributes:
+                  items:
+                    properties:
+                      apiGroup:
+                        type: string
+                      resources:
+                        items:
+                          type: string
+                        type: array
+                      verbs:
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                  type: array
+                uid:
+                  type: string
+                user:
+                  type: string
+              type: object
+            status:
+              properties:
+                authorizedResourceVerbs:
+                  items:
+                    properties:
+                      apiGroup:
+                        type: string
+                      resource:
+                        type: string
+                      verbs:
+                        items:
+                          properties:
+                            resourceGroups:
+                              items:
+                                properties:
+                                  managedCluster:
+                                    type: string
+                                  namespace:
+                                    type: string
+                                  tier:
+                                    type: string
+                                  uiSettingsGroup:
+                                    type: string
+                                required:
+                                  - managedCluster
+                                  - namespace
+                                  - uiSettingsGroup
+                                type: object
+                              type: array
+                            verb:
+                              type: string
+                          required:
+                            - resourceGroups
+                            - verb
+                          type: object
+                        type: array
+                    type: object
+                  type: array
+              type: object
+          required:
+            - metadata
+            - spec
+          type: object
+      served: true
+      storage: true

@@ -1,0 +1,44 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: uisettingsgroups.projectcalico.org
+spec:
+  group: projectcalico.org
+  names:
+    kind: UISettingsGroup
+    listKind: UISettingsGroupList
+    plural: uisettingsgroups
+    singular: uisettingsgroup
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v3
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              properties:
+                description:
+                  type: string
+                filterType:
+                  enum:
+                    - None
+                    - User
+                  type: string
+              required:
+                - description
+              type: object
+          required:
+            - metadata
+            - spec
+          type: object
+      served: true
+      storage: true

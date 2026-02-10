@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +32,6 @@ type CSRReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func (r *CSRReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *CSRReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return csr.Add(mgr, opts)
 }

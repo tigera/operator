@@ -56,7 +56,7 @@ func NewESMetricsControllerWithShims(
 	multiTenant bool,
 	readyFlag *utils.ReadyFlag,
 ) (*ESMetricsSubController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),

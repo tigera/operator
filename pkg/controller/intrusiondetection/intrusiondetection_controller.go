@@ -62,7 +62,7 @@ var log = logf.Log.WithName("controller_intrusiondetection")
 
 // Add creates a new IntrusionDetection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
@@ -160,18 +160,15 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, dpiAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseAPIReady *utils.ReadyFlag, dpiAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileIntrusionDetection{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 		dpiAPIReady:     dpiAPIReady,
 		tierWatchReady:  tierWatchReady,
-		multiTenant:     opts.MultiTenant,
-		elasticExternal: opts.ElasticExternal,
+		opts:            opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -186,14 +183,11 @@ type ReconcileIntrusionDetection struct {
 	// that reads objects from the cache and writes to the apiserver
 	client          client.Client
 	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
 	status          status.StatusManager
-	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
 	dpiAPIReady     *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
-	multiTenant     bool
-	elasticExternal bool
+	opts            options.ControllerOptions
 }
 
 func getIntrusionDetection(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.IntrusionDetection, error) {
@@ -216,17 +210,17 @@ func getIntrusionDetection(ctx context.Context, cli client.Client, mt bool, ns s
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(r.multiTenant, render.IntrusionDetectionNamespace, request.Namespace)
+	helper := utils.NewNamespaceHelper(r.opts.MultiTenant, render.IntrusionDetectionNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling IntrusionDetection")
 
 	// We skip requests without a namespace specified in multi-tenant setups.
-	if r.multiTenant && request.Namespace == "" {
+	if r.opts.MultiTenant && request.Namespace == "" {
 		return reconcile.Result{}, nil
 	}
 
 	// Check if this is a tenant-scoped request.
-	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	tenant, _, err := utils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -236,7 +230,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Fetch the IntrusionDetection instance
-	instance, err := getIntrusionDetection(ctx, r.client, r.multiTenant, request.Namespace)
+	instance, err := getIntrusionDetection(ctx, r.client, r.opts.MultiTenant, request.Namespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(3).Info("IntrusionDetection CR not found", "err", err)
@@ -285,12 +279,12 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	if !utils.IsAPIServerReady(r.client, reqLogger) {
+	if !utils.IsProjectCalicoV3Available(r.client, r.opts, reqLogger) {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	if !isManagedCluster && !r.elasticExternal {
+	if !isManagedCluster && !r.opts.ElasticExternal {
 		// Check if Elasticsearch is ready.
 		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
 		if err != nil {
@@ -368,7 +362,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		certificatemanager.WithLogger(reqLogger),
 		certificatemanager.WithTenant(tenant),
 	}
-	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, helper.TruthNamespace(), opts...)
+	certificateManager, err := certificatemanager.Create(r.client, network, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -390,14 +384,14 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// intrusionDetectionKeyPair is the key pair intrusion detection presents to identify itself
-	dnsNames := dns.GetServiceDNSNames(render.IntrusionDetectionTLSSecretName, helper.InstallNamespace(), r.clusterDomain)
+	dnsNames := dns.GetServiceDNSNames(render.IntrusionDetectionTLSSecretName, helper.InstallNamespace(), r.opts.ClusterDomain)
 	intrusionDetectionKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.IntrusionDetectionTLSSecretName, helper.TruthNamespace(), dnsNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	if !r.multiTenant && !r.dpiAPIReady.IsReady() {
+	if !r.opts.MultiTenant && !r.dpiAPIReady.IsReady() {
 		// DPI is only supported in single-tenant clusters, so we don't need to check for it in multi-tenant.
 		log.Info("Waiting for DeepPacketInspection API to be ready")
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for DeepPacketInspection API to be ready", nil, reqLogger)
@@ -425,7 +419,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	trustedBundle := bundleMaker.(certificatemanagement.TrustedBundleRO)
-	if r.multiTenant {
+	if r.opts.MultiTenant {
 		// For multi-tenant systems, we load the pre-created bundle for this tenant instead of using the one we built here.
 		trustedBundle, err = certificateManager.LoadMultiTenantTrustedBundleWithRootCertificates(ctx, r.client, helper.InstallNamespace())
 		if err != nil {
@@ -453,8 +447,8 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		LogCollector:                 lc,
 		Installation:                 network,
 		PullSecrets:                  pullSecrets,
-		OpenShift:                    r.provider.IsOpenShift(),
-		ClusterDomain:                r.clusterDomain,
+		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
+		ClusterDomain:                r.opts.ClusterDomain,
 		ManagedCluster:               isManagedCluster,
 		ManagementCluster:            isManagementCluster,
 		HasNoLicense:                 hasNoLicense,
@@ -463,11 +457,11 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		Namespace:                    helper.InstallNamespace(),
 		BindNamespaces:               namespaces,
 		Tenant:                       tenant,
-		ExternalElastic:              r.elasticExternal,
+		ExternalElastic:              r.opts.ElasticExternal,
 		SyslogForwardingIsEnabled:    syslogForwardingIsEnabled(lc),
 	}
 	setUp := render.NewSetup(&render.SetUpConfiguration{
-		OpenShift:       r.provider.IsOpenShift(),
+		OpenShift:       r.opts.DetectedProvider.IsOpenShift(),
 		Installation:    network,
 		PullSecrets:     pullSecrets,
 		Namespace:       helper.InstallNamespace(),
@@ -487,7 +481,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 	hasNoDPIResource := len(dpiList.Items) == 0
-	if !hasNoDPIResource && r.multiTenant {
+	if !hasNoDPIResource && r.opts.MultiTenant {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "DeepPacketInspection resource is not supported in multi-tenant mode", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -505,7 +499,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		intrusionDetectionComponent,
 	}
 
-	if !r.multiTenant {
+	if !r.opts.MultiTenant {
 		// FIXME: core controller creates TyphaNodeTLSConfig, this controller should only get it.
 		// But changing the call from GetOrCreateTyphaNodeTLSConfig() to GetTyphaNodeTLSConfig()
 		// makes tests fail, this needs to be looked at.
@@ -528,12 +522,12 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			Installation:       network,
 			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
-			OpenShift:          r.provider.IsOpenShift(),
+			OpenShift:          r.opts.DetectedProvider.IsOpenShift(),
 			ManagedCluster:     isManagedCluster,
 			ManagementCluster:  isManagementCluster,
 			HasNoLicense:       hasNoLicense,
 			HasNoDPIResource:   hasNoDPIResource,
-			ClusterDomain:      r.clusterDomain,
+			ClusterDomain:      r.opts.ClusterDomain,
 			DPICertSecret:      dpiKeyPair,
 		})
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, dpiComponent); err != nil {
@@ -555,10 +549,10 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			IntrusionDetection: instance,
 			Installation:       network,
 			PullSecrets:        pullSecrets,
-			OpenShift:          r.provider.IsOpenShift(),
+			OpenShift:          r.opts.DetectedProvider.IsOpenShift(),
 			ManagedCluster:     isManagedCluster,
 			ManagementCluster:  isManagementCluster,
-			ClusterDomain:      r.clusterDomain,
+			ClusterDomain:      r.opts.ClusterDomain,
 			Tenant:             tenant,
 		})
 		components = append(components, dpiComponent)
@@ -640,7 +634,7 @@ func syslogForwardingIsEnabled(logCollector *operatorv1.LogCollector) bool {
 // ComponentResources is not populated.
 func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *operatorv1.IntrusionDetection) error {
 	if ids.Spec.ComponentResources == nil {
-		if !r.multiTenant {
+		if !r.opts.MultiTenant {
 			ids.Spec.ComponentResources = []operatorv1.IntrusionDetectionComponentResource{
 				{
 					ComponentName: operatorv1.ComponentNameDeepPacketInspection,

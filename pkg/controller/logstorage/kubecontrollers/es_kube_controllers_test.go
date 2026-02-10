@@ -68,7 +68,7 @@ func NewControllerWithShims(
 	multiTenant bool,
 	tierWatchReady *utils.ReadyFlag,
 ) (*ESKubeControllersController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),

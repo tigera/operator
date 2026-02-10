@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +36,6 @@ type PolicyRecommendationReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=policyrecommendations,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=policyrecommendations/status,verbs=get;update;patch
 
-func (pr *PolicyRecommendationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (pr *PolicyRecommendationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return policyrecommendation.Add(mgr, opts)
 }

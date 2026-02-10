@@ -57,7 +57,7 @@ var log = logf.Log.WithName("controller_logcollector")
 
 // Add creates a new LogCollector Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
@@ -91,17 +91,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	c := &ReconcileLogCollector{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), "log-collector", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 		tierWatchReady:  tierWatchReady,
-		multiTenant:     opts.MultiTenant,
-		externalElastic: opts.ElasticExternal,
+		opts:            opts,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -168,17 +165,12 @@ var _ reconcile.Reconciler = &ReconcileLogCollector{}
 
 // ReconcileLogCollector reconciles a LogCollector object
 type ReconcileLogCollector struct {
-	// This client, initialized using mgr.Client() above, is a split client
-	// that reads objects from the cache and writes to the apiserver
 	client          client.Client
 	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
 	status          status.StatusManager
-	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
-	multiTenant     bool
-	externalElastic bool
+	opts            options.ControllerOptions
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -294,7 +286,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	if !utils.IsAPIServerReady(r.client, reqLogger) {
+	if !utils.IsProjectCalicoV3Available(r.client, r.opts, reqLogger) {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -370,14 +362,14 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, installation, r.clusterDomain, common.OperatorNamespace())
+	certificateManager, err := certificatemanager.Create(r.client, installation, r.opts.ClusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// fluentdKeyPair is the key pair fluentd presents to identify itself
-	httpInputServiceNames := dns.GetServiceDNSNames(render.FluentdInputService, render.LogCollectorNamespace, r.clusterDomain)
+	httpInputServiceNames := dns.GetServiceDNSNames(render.FluentdInputService, render.LogCollectorNamespace, r.opts.ClusterDomain)
 	fluentdKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), append([]string{render.FluentdPrometheusTLSSecretName}, httpInputServiceNames...))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
@@ -394,7 +386,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Determine whether or not this is a multi-tenant management cluster.
-	multiTenantManagement := r.multiTenant && managementCluster != nil
+	multiTenantManagement := r.opts.MultiTenant && managementCluster != nil
 	if instance.Spec.MultiTenantManagementClusterNamespace != "" && !multiTenantManagement {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "multiTenantManagementClusterNamespace can only be set on multi-tenant management clusters", nil, reqLogger)
 		return reconcile.Result{}, nil
@@ -420,7 +412,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		linseedCertNamespace = instance.Spec.MultiTenantManagementClusterNamespace
 
 		// Make sure that a tenant actually exists in the configured namespace before continuing.
-		tenant, _, err = utils.GetTenant(ctx, r.multiTenant, r.client, instance.Spec.MultiTenantManagementClusterNamespace)
+		tenant, _, err = utils.GetTenant(ctx, r.opts.MultiTenant, r.client, instance.Spec.MultiTenantManagementClusterNamespace)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Failed to retrieve tenant in ns %s", instance.Spec.MultiTenantManagementClusterNamespace), err, reqLogger)
 			return reconcile.Result{}, err
@@ -592,14 +584,14 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		EKSConfig:              eksConfig,
 		PullSecrets:            pullSecrets,
 		Installation:           installation,
-		ClusterDomain:          r.clusterDomain,
+		ClusterDomain:          r.opts.ClusterDomain,
 		OSType:                 rmeta.OSTypeLinux,
 		FluentdKeyPair:         fluentdKeyPair,
 		TrustedBundle:          trustedBundle,
 		ManagedCluster:         managedCluster,
 		UseSyslogCertificate:   useSyslogCertificate,
 		Tenant:                 tenant,
-		ExternalElastic:        r.externalElastic,
+		ExternalElastic:        r.opts.ElasticExternal,
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 		PacketCapture:          packetcaptureapi,
 		NonClusterHost:         nonclusterhost,
@@ -626,7 +618,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	setUp := render.NewSetup(&render.SetUpConfiguration{
-		OpenShift:       r.provider.IsOpenShift(),
+		OpenShift:       r.opts.DetectedProvider.IsOpenShift(),
 		Installation:    installation,
 		PullSecrets:     pullSecrets,
 		Namespace:       render.LogCollectorNamespace,
@@ -667,7 +659,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			EKSConfig:              eksConfig,
 			PullSecrets:            pullSecrets,
 			Installation:           installation,
-			ClusterDomain:          r.clusterDomain,
+			ClusterDomain:          r.opts.ClusterDomain,
 			OSType:                 rmeta.OSTypeWindows,
 			TrustedBundle:          trustedBundle,
 			ManagedCluster:         managedCluster,

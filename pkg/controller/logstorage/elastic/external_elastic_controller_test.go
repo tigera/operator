@@ -212,7 +212,7 @@ func NewExternalESReconcilerWithShims(
 	provider operatorv1.Provider,
 	clusterDomain string,
 ) (*ExternalESController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),

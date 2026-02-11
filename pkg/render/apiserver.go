@@ -214,12 +214,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.calicoCustomResourcesClusterRoleBinding(),
 		c.tierGetterClusterRole(),
 		c.kubeControllerMgrTierGetterClusterRoleBinding(),
-		c.calicoPolicyPassthruClusterRole(),
-		c.calicoPolicyPassthruClusterRolebinding(),
 		c.delegateAuthClusterRoleBinding(),
-		c.authClusterRole(),
-		c.authClusterRoleBinding(),
-		c.authReaderRoleBinding(),
 		c.webhookReaderClusterRole(),
 		c.webhookReaderClusterRoleBinding(),
 	}
@@ -229,6 +224,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Namespaced objects common to both Calico and Calico Enterprise.
 	// These objects will be updated when switching between the variants.
 	namespacedObjects := []client.Object{}
+
 	// Add in image pull secrets.
 	secrets := secret.CopyToNamespace(APIServerNamespace, c.cfg.PullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
@@ -243,23 +239,34 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// These are objects that only need to exist when we are running an aggregation API server to
 	// serve projectcalico.org/v3 APIs. If using CRDs for this API group, we can remove these objects.
 	aggregationAPIServerObjects := []client.Object{
-		c.tigeraAPIServerClusterRole(),
-		c.tigeraAPIServerClusterRoleBinding(),
-		c.kubeControllerManagerUISettingsGroupGetterClusterRoleBinding(),
-		c.uiSettingsPassthruClusterRole(),
-		c.uiSettingsPassthruClusterRolebinding(),
+		c.calicoPolicyPassthruClusterRole(),
+		c.calicoPolicyPassthruClusterRolebinding(),
+		c.authClusterRole(),
+		c.authClusterRoleBinding(),
+		c.authReaderRoleBinding(),
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		aggregationAPIServerObjects = append(aggregationAPIServerObjects,
+			c.uiSettingsGroupGetterClusterRole(),
+			c.kubeControllerManagerUISettingsGroupGetterClusterRoleBinding(),
+			c.uiSettingsPassthruClusterRole(),
+			c.uiSettingsPassthruClusterRolebinding(),
+			c.auditPolicyConfigMap(),
+		)
 	}
 
 	// Add in certificates for API server TLS.
 	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
-		aggregationAPIServerObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))
+		aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))
 	} else {
-		aggregationAPIServerObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
+		aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
 	}
 
 	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
-		c.uiSettingsGroupGetterClusterRole(),
+		c.tigeraAPIServerClusterRole(),
+		c.tigeraAPIServerClusterRoleBinding(),
 	}
 
 	if !c.cfg.MultiTenant {
@@ -293,9 +300,8 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Namespaced enterprise-only objects.
-	namespacedEnterpriseObjects := []client.Object{
-		c.auditPolicyConfigMap(),
-	}
+	namespacedEnterpriseObjects := []client.Object{}
+
 	if c.cfg.TrustedBundle != nil {
 		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.cfg.TrustedBundle.ConfigMap(QueryserverNamespace))
 	}
@@ -307,14 +313,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Compile the final arrays based on the variant.
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		if c.cfg.RequiresAggregationServer {
-			// Include the aggregation API server objects.
-			globalObjects = append(globalObjects, aggregationAPIServerObjects...)
-		} else {
-			// If we're not running an aggregation API server, we need to delete the objects that are only needed for it.
-			objsToDelete = append(objsToDelete, aggregationAPIServerObjects...)
-		}
-
 		// Create any enterprise specific objects.
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
 		namespacedObjects = append(namespacedObjects, namespacedEnterpriseObjects...)
@@ -329,6 +327,15 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
+	}
+
+	// Add or remove the aggregation API server objects as needed.
+	if c.cfg.RequiresAggregationServer {
+		// Include the aggregation API server objects.
+		globalObjects = append(globalObjects, aggregationAPIServerObjects...)
+	} else {
+		// If we're not running an aggregation API server, we need to delete the objects that are only needed for it.
+		objsToDelete = append(objsToDelete, aggregationAPIServerObjects...)
 	}
 
 	// Explicitly delete any renamed/deprecated objects.

@@ -24,8 +24,8 @@ import (
 // EGWDeploymentContainer is a Egress Gateway Deployment container.
 type EGWDeploymentContainer struct {
 	// Name is an enum which identifies the EGW Deployment container by name.
-	// Supported values are: calico-egw
-	// +kubebuilder:validation:Enum=calico-egw
+	// Supported values are: calico-egw,egress-gateway
+	// +kubebuilder:validation:Enum=calico-egw;egress-gateway
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

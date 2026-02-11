@@ -46,7 +46,7 @@ type ClusterCAController struct {
 	log           logr.Logger
 }
 
-func AddClusterCAController(mgr manager.Manager, opts options.AddOptions) error {
+func AddClusterCAController(mgr manager.Manager, opts options.ControllerOptions) error {
 	r := &ClusterCAController{
 		client:        mgr.GetClient(),
 		scheme:        mgr.GetScheme(),

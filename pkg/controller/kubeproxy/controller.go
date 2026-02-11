@@ -46,7 +46,7 @@ var log = logf.Log.WithName(controllerName)
 
 // Add creates a new Reconciler Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	statusManager := status.New(mgr.GetClient(), ResourceName, opts.KubernetesVersion)
 	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts)
 
@@ -87,7 +87,7 @@ func newReconciler(
 	schema *runtime.Scheme,
 	statusMgr status.StatusManager,
 	p operatorv1.Provider,
-	opts options.AddOptions,
+	opts options.ControllerOptions,
 ) *Reconciler {
 	c := &Reconciler{
 		cli:           cli,

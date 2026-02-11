@@ -67,7 +67,7 @@ func NewLinseedControllerWithShims(
 	clusterDomain string,
 	multiTenant bool,
 ) (*LinseedSubController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),

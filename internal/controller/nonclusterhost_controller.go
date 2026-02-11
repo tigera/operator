@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,6 +32,6 @@ type NonClusterHostReconciler struct {
 }
 
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=nonclusterhosts,verbs=get;list;watch;create;update;patch;delete
-func (r *NonClusterHostReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *NonClusterHostReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return nonclusterhost.Add(mgr, opts)
 }

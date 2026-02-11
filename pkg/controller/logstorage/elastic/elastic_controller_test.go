@@ -90,7 +90,7 @@ func NewReconcilerWithShims(
 	clusterDomain string,
 	tierWatchReady *utils.ReadyFlag,
 ) (*ElasticSubController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),

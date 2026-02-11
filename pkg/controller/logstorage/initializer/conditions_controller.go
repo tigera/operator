@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 )
 
-func AddConditionsController(mgr manager.Manager, opts options.AddOptions) error {
+func AddConditionsController(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}
@@ -107,7 +107,6 @@ func getCurrentConditions(lsConditions []metav1.Condition) map[string]metav1.Con
 }
 
 func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[string]metav1.Condition, error) {
-
 	expectedInstances := []string{TigeraStatusName, TigeraStatusLogStorageAccess, TigeraStatusLogStorageElastic, TigeraStatusLogStorageSecrets}
 	if r.multiTenant {
 		expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
@@ -184,10 +183,9 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 }
 
 func updateConditions(currentConditions, desiredConditions map[string]metav1.Condition) []metav1.Condition {
-
 	statusConditions := []metav1.Condition{}
 
-	//Update the current log storage condition only when the aggregate desired status have new changes
+	// Update the current log storage condition only when the aggregate desired status have new changes
 	for _, desired := range desiredConditions {
 
 		current, ok := currentConditions[desired.Type]

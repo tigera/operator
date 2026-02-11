@@ -53,7 +53,7 @@ var log = logf.Log.WithName("controller_compliance")
 
 // Add creates a new Compliance Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
@@ -145,17 +145,14 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new *reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileCompliance{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), "compliance", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
 		tierWatchReady:  tierWatchReady,
-		multiTenant:     opts.MultiTenant,
-		externalElastic: opts.ElasticExternal,
+		opts:            opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -170,13 +167,10 @@ type ReconcileCompliance struct {
 	// that reads objects from the cache and writes to the apiserver
 	client          client.Client
 	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
 	status          status.StatusManager
-	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
-	multiTenant     bool
-	externalElastic bool
+	opts            options.ControllerOptions
 }
 
 func GetCompliance(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.Compliance, error) {
@@ -198,17 +192,17 @@ func GetCompliance(ctx context.Context, cli client.Client, mt bool, ns string) (
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(r.multiTenant, render.ComplianceNamespace, request.Namespace)
+	helper := utils.NewNamespaceHelper(r.opts.MultiTenant, render.ComplianceNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling Compliance")
 
 	// We skip requests without a namespace specified in multi-tenant setups.
-	if r.multiTenant && request.Namespace == "" {
+	if r.opts.MultiTenant && request.Namespace == "" {
 		return reconcile.Result{}, nil
 	}
 
 	// Check if this is a tenant-scoped request.
-	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	tenant, _, err := utils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -218,7 +212,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Fetch the Compliance instance
-	instance, err := GetCompliance(ctx, r.client, r.multiTenant, request.Namespace)
+	instance, err := GetCompliance(ctx, r.client, r.opts.MultiTenant, request.Namespace)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -251,7 +245,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
-	if !utils.IsAPIServerReady(r.client, reqLogger) {
+	if !utils.IsProjectCalicoV3Available(r.client, r.opts, reqLogger) {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -328,7 +322,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	opts = append(opts, certificatemanager.WithTenant(tenant), certificatemanager.WithLogger(reqLogger))
 
-	certificateManager, err := certificatemanager.Create(r.client, network, r.clusterDomain, helper.TruthNamespace(), opts...)
+	certificateManager, err := certificatemanager.Create(r.client, network, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -361,7 +355,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 	bundleMaker := certificateManager.CreateTrustedBundle(managerInternalTLSSecret, linseedCertificate)
 	trustedBundle := bundleMaker.(certificatemanagement.TrustedBundleRO)
-	if r.multiTenant {
+	if r.opts.MultiTenant {
 		// For multi-tenant systems, we load the pre-created bundle for this tenant instead of using the one we built here.
 		// Multi-tenant compliance need the bundle variant that includes system root certificates, in order to verify external auth providers.
 		trustedBundle, err = certificateManager.LoadMultiTenantTrustedBundleWithRootCertificates(ctx, r.client, helper.InstallNamespace())
@@ -398,7 +392,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			r.client,
 			render.ComplianceServerCertSecret,
 			helper.TruthNamespace(),
-			dns.GetServiceDNSNames(render.ComplianceServiceName, helper.InstallNamespace(), r.clusterDomain))
+			dns.GetServiceDNSNames(render.ComplianceServiceName, helper.InstallNamespace(), r.opts.ClusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("failed to retrieve / validate  %s", render.ComplianceServerCertSecret), err, reqLogger)
 			return reconcile.Result{}, err
@@ -429,7 +423,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Failed to process the authentication CR.", err, reqLogger)
 		return reconcile.Result{}, err
@@ -438,7 +432,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.V(3).Info("rendering components")
 
 	setUp := render.NewSetup(&render.SetUpConfiguration{
-		OpenShift:       r.provider.IsOpenShift(),
+		OpenShift:       r.opts.DetectedProvider.IsOpenShift(),
 		Installation:    network,
 		PullSecrets:     pullSecrets,
 		Namespace:       helper.InstallNamespace(),
@@ -447,7 +441,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	})
 
 	hasNoLicense := !utils.IsFeatureActive(license, common.ComplianceFeature)
-	openshift := r.provider.IsOpenShift()
+	openshift := r.opts.DetectedProvider.IsOpenShift()
 	complianceCfg := &render.ComplianceConfiguration{
 		TrustedBundle:               trustedBundle,
 		Installation:                network,
@@ -461,13 +455,13 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,
 		KeyValidatorConfig:          keyValidatorConfig,
-		ClusterDomain:               r.clusterDomain,
+		ClusterDomain:               r.opts.ClusterDomain,
 		HasNoLicense:                hasNoLicense,
 		Namespace:                   helper.InstallNamespace(),
 		BindingNamespaces:           bindNamespaces,
 		Tenant:                      tenant,
 		Compliance:                  instance,
-		ExternalElastic:             r.externalElastic,
+		ExternalElastic:             r.opts.ElasticExternal,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

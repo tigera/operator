@@ -259,12 +259,20 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 	It("should have proper annotations and resources if aws is set", func() {
 		recommendedQuantity := resource.NewQuantity(1, resource.DecimalSI)
 		expectedResource := corev1.ResourceRequirements{
-			Limits:   corev1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
-			Requests: corev1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
+			Limits:   corev1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity, "cpu": resource.MustParse("100m")},
+			Requests: corev1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity, "cpu": resource.MustParse("100m")},
 		}
 
 		nativeIP := operatorv1.NativeIPEnabled
 		egw.Spec.AWS = &operatorv1.AWSEgressGateway{NativeIP: &nativeIP, ElasticIPs: []string{"1.2.3.4", "5.6.7.8"}}
+		deploymentContainer := operatorv1.EGWDeploymentContainer{
+			Name: "egress-gateway",
+			Resources: &corev1.ResourceRequirements{
+				Limits:   corev1.ResourceList{"cpu": resource.MustParse("100m")},
+				Requests: corev1.ResourceList{"cpu": resource.MustParse("100m")},
+			},
+		}
+		egw.Spec.Template.Spec.Containers = append(egw.Spec.Template.Spec.Containers, deploymentContainer)
 		component := egressgateway.EgressGateway(&egressgateway.Config{
 			PullSecrets:  nil,
 			Installation: installation,

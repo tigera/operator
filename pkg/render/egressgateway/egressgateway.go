@@ -414,15 +414,22 @@ func (c *component) getHTTPProbe() (string, string, string) {
 }
 
 func (c *component) getResources() corev1.ResourceRequirements {
+	resourceRequirements := corev1.ResourceRequirements{
+		Limits:   corev1.ResourceList{},
+		Requests: corev1.ResourceList{},
+	}
 	recommendedQuantity := resource.NewQuantity(1, resource.DecimalSI)
 	egw := c.config.EgressGW
-	if egw.Spec.AWS != nil && *egw.Spec.AWS.NativeIP == operatorv1.NativeIPEnabled {
-		return corev1.ResourceRequirements{
-			Limits:   corev1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
-			Requests: corev1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
-		}
+
+	if len(egw.Spec.Template.Spec.Containers) == 1 && egw.Spec.Template.Spec.Containers[0].Resources != nil {
+		resourceRequirements = *egw.Spec.Template.Spec.Containers[0].Resources
 	}
-	return corev1.ResourceRequirements{}
+
+	if egw.Spec.AWS != nil && *egw.Spec.AWS.NativeIP == operatorv1.NativeIPEnabled {
+		resourceRequirements.Limits["projectcalico.org/aws-secondary-ipv4"] = *recommendedQuantity
+		resourceRequirements.Requests["projectcalico.org/aws-secondary-ipv4"] = *recommendedQuantity
+	}
+	return resourceRequirements
 }
 
 func (c *component) getIPPools() string {

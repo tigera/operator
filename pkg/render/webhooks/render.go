@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
+// Copyright (c) 2026 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package tierrbac
+package webhooks
 
 import (
 	"fmt"
@@ -180,6 +180,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					Service: &admissionregistrationv1.ServiceReference{
 						Namespace: "calico-system",
 						Name:      "tier-rbac-validator",
+						Path:      ptr.ToPtr("/rbac"),
 					},
 					CABundle: c.cfg.KeyPair.GetCertificatePEM(),
 				},

@@ -369,8 +369,8 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 			ResourceNames: []string{"calico-node"},
 		},
 		{
-			// The policy name migrator needs to be able to CRUD Calico NetworkPolicies.
-			APIGroups: []string{"crd.projectcalico.org"},
+			// The policy name migrator needs to be able to CRUD Calico NetworkPolicies,
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
 				"networkpolicies",
 				"globalnetworkpolicies",

@@ -21,6 +21,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -43,8 +44,9 @@ const (
 // NodeConfiguration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/node on a cluster.
 type Configuration struct {
-	PullSecrets []*corev1.Secret
-	KeyPair     certificatemanagement.KeyPairInterface
+	PullSecrets  []*corev1.Secret
+	KeyPair      certificatemanagement.KeyPairInterface
+	Installation *operatorv1.InstallationSpec
 }
 
 func Component(cfg *Configuration) render.Component {
@@ -54,9 +56,21 @@ func Component(cfg *Configuration) render.Component {
 type component struct {
 	// Input configuration from the controller.
 	cfg *Configuration
+
+	// Images.
+	webhooksImage string
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
+	reg := c.cfg.Installation.Registry
+	path := c.cfg.Installation.ImagePath
+	prefix := c.cfg.Installation.ImagePrefix
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		c.webhooksImage = components.GetReference(components.ComponentTigeraWebhooks, reg, path, prefix, is)
+	} else {
+		c.webhooksImage = components.GetReference(components.ComponentCalicoWebhooks, reg, path, prefix, is)
+	}
 	return nil
 }
 

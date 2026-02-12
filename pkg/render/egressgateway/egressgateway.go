@@ -155,6 +155,8 @@ func (c *component) egwDeployment() *appsv1.Deployment {
 		rcomp.ApplyDeploymentOverrides(&d, overrides)
 	}
 
+	// Add AWS specific resource requests/limits after applying overrides to avoid being overwritten
+	// if the user has specified their own.
 	c.addAWSResources(&d)
 	return &d
 }

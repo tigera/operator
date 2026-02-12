@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -33,6 +34,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
+const (
+	WebhooksTLSSecretName = "calico-webhook-tls"
+
+	WebhooksName = "calico-webhooks"
+)
+
 // NodeConfiguration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/node on a cluster.
 type Configuration struct {
@@ -40,8 +47,7 @@ type Configuration struct {
 	KeyPair     certificatemanagement.KeyPairInterface
 }
 
-// Node creates the node daemonset and other resources for the daemonset to operate normally.
-func RBAC(cfg *Configuration) render.Component {
+func Component(cfg *Configuration) render.Component {
 	return &component{cfg: cfg}
 }
 
@@ -59,20 +65,21 @@ func (c *component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
-	// Create the Deployment for the webhook.
+	// Create the ServiceAccount for the webhook.
 	sa := &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tier-rbac-validator",
-			Namespace: "calico-system",
+			Name:      WebhooksName,
+			Namespace: common.CalicoNamespace,
 		},
 	}
 
+	// Create the Deployment for the webhook.
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tier-rbac-validator",
-			Namespace: "calico-system",
+			Name:      WebhooksName,
+			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: ptr.ToPtr(int32(1)),
@@ -81,22 +88,22 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"k8s-app": "validation",
+					"k8s-app": "webhooks",
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "tier-rbac-validator",
+					Name: WebhooksName,
 					Labels: map[string]string{
-						"k8s-app": "validation",
+						"k8s-app": "webhooks",
 					},
 				},
 				Spec: corev1.PodSpec{
 					HostNetwork:        true,
-					ServiceAccountName: "tier-rbac-validator",
+					ServiceAccountName: WebhooksName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers: []corev1.Container{{
-						Name:  "tier-rbac-validator",
+						Name:  WebhooksName,
 						Image: "calico/webhook:test-build", // Placeholder image, replace with actual image.
 						Args: []string{
 							"webhook",
@@ -115,10 +122,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
+	// Create the Service for the webhook.
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tier-rbac-validator",
-			Namespace: "calico-system",
+			Name:      WebhooksName,
+			Namespace: common.CalicoNamespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
@@ -130,11 +138,12 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			},
 			Type: corev1.ServiceTypeClusterIP,
 			Selector: map[string]string{
-				"k8s-app": "validation",
+				"k8s-app": "webhooks",
 			},
 		},
 	}
 
+	// Create the ValidatingWebhookConfiguration to register the webhook with the API server.
 	reg := &admissionregistrationv1.ValidatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "api.projectcalico.org",
@@ -178,8 +187,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 				ClientConfig: admissionregistrationv1.WebhookClientConfig{
 					Service: &admissionregistrationv1.ServiceReference{
-						Namespace: "calico-system",
-						Name:      "tier-rbac-validator",
+						Namespace: common.CalicoNamespace,
+						Name:      WebhooksName,
 						Path:      ptr.ToPtr("/rbac"),
 					},
 					CABundle: c.cfg.KeyPair.GetCertificatePEM(),
@@ -195,7 +204,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	cr := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tier-rbac-validator",
+			Name: WebhooksName,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -214,18 +223,18 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	crb := &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "tier-rbac-validator",
+			Name: WebhooksName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     "tier-rbac-validator",
+			Name:     WebhooksName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      "tier-rbac-validator",
-				Namespace: "calico-system",
+				Name:      WebhooksName,
+				Namespace: common.CalicoNamespace,
 			},
 		},
 	}

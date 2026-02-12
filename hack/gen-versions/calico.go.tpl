@@ -237,6 +237,15 @@ var (
 		variant:   calicoVariant,
 	}
 {{- end }}
+{{ with index .Components.webhooks }}
+	ComponentCalicoWebhooks = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
 
 	CalicoImages = []Component{
 		ComponentCalicoCNI,
@@ -264,5 +273,6 @@ var (
 		ComponentCalicoEnvoyProxy,
 		ComponentCalicoEnvoyRatelimit,
 		ComponentCalicoGuardian,
+		ComponentCalicoWebhooks,
 	}
 )

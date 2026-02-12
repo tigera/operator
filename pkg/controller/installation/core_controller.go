@@ -82,6 +82,7 @@ import (
 	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -1126,7 +1127,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// we do then we'll render the Calico components with additional node selectors to
 	// prevent scheduling, later we will run a migration that migrates nodes one by one
 	// to mimic a 'normal' rolling update.
-	needNsMigration, err := r.namespaceMigration.NeedsCoreNamespaceMigration(ctx)
+	needsNamespaceMigration, err := r.namespaceMigration.NeedsCoreNamespaceMigration(ctx)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking if namespace migration is needed", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1135,7 +1136,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Set any non-default FelixConfiguration values that we need.
 	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
 		// Configure defaults.
-		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needNsMigration)
+		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needsNamespaceMigration)
 		if err != nil {
 			return false, err
 		}
@@ -1231,12 +1232,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 
 		// Add prometheus client certificate to Trusted bundle.
-		kubecontrollerprometheusTLS, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+		kubeControllerPrometheusTLS, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate for kube controllers", err, reqLogger)
 			return reconcile.Result{}, err
-		} else if kubecontrollerprometheusTLS != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(kubeControllerTLS, kubecontrollerprometheusTLS)
+		} else if kubeControllerPrometheusTLS != nil {
+			typhaNodeTLS.TrustedBundle.AddCertificates(kubeControllerTLS, kubeControllerPrometheusTLS)
 		}
 	}
 
@@ -1257,6 +1258,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if err := handler.CreateOrUpdateOrDelete(ctx, render.Namespaces(namespaceCfg), nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating namespaces", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// Create a TLS key pair to use for Calico webhooks to authenticate with the Kubernetes API server.
+	webhooksTLS, err := certificateManager.GetOrCreateKeyPair(
+		r.client,
+		webhooks.WebhooksTLSSecretName,
+		common.OperatorNamespace(),
+		dns.GetServiceDNSNames(webhooks.WebhooksName, common.CalicoNamespace, r.clusterDomain),
+	)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate for webhooks", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if webhooksTLS != nil {
+		typhaNodeTLS.TrustedBundle.AddCertificates(webhooksTLS)
 	}
 
 	// Build the list of components to render, in rendering order.
@@ -1360,12 +1376,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Build a configuration for rendering Calico webhooks.
+	webhooksCfg := webhooks.Configuration{
+		PullSecrets:  pullSecrets,
+		KeyPair:      webhooksTLS,
+		Installation: &instance.Spec,
+	}
+	components = append(components, webhooks.Component(&webhooksCfg))
+
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
 		K8sServiceEp:      k8sapi.Endpoint,
 		Installation:      &instance.Spec,
 		TLS:               typhaNodeTLS,
-		MigrateNamespaces: needNsMigration,
+		MigrateNamespaces: needsNamespaceMigration,
 		ClusterDomain:     r.clusterDomain,
 		NonClusterHost:    nonclusterhost,
 		FelixHealthPort:   *felixConfiguration.Spec.HealthPort,
@@ -1496,7 +1520,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		NodeReporterMetricsPort:       nodeReporterMetricsPort,
 		BGPLayouts:                    bgpLayout,
 		NodeAppArmorProfile:           nodeAppArmorProfile,
-		MigrateNamespaces:             needNsMigration,
+		MigrateNamespaces:             needsNamespaceMigration,
 		CanRemoveCNIFinalizer:         canRemoveCNI,
 		PrometheusServerTLS:           nodePrometheusTLS,
 		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
@@ -1631,7 +1655,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Run this after we have rendered our components so the new (operator created)
 	// Deployments and Daemonset exist with our special migration nodeSelectors.
-	if needNsMigration {
+	if needsNamespaceMigration {
 		if err := r.namespaceMigration.Run(ctx, reqLogger); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceMigrationError, "error migrating resources to calico-system", err, reqLogger)
 			// We should always requeue a migration problem. Don't return error

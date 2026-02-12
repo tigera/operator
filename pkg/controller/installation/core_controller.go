@@ -1378,8 +1378,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering Calico webhooks.
 	webhooksCfg := webhooks.Configuration{
-		PullSecrets: pullSecrets,
-		KeyPair:     webhooksTLS,
+		PullSecrets:  pullSecrets,
+		KeyPair:      webhooksTLS,
+		Installation: &instance.Spec,
 	}
 	components = append(components, webhooks.Component(&webhooksCfg))
 

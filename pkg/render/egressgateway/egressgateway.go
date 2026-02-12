@@ -155,6 +155,9 @@ func (c *component) egwDeployment() *appsv1.Deployment {
 		rcomp.ApplyDeploymentOverrides(&d, overrides)
 	}
 
+	// Add AWS specific resource requests/limits after applying overrides to avoid being overwritten
+	// if the user has specified their own.
+	c.addAWSResources(&d)
 	return &d
 }
 
@@ -214,7 +217,6 @@ func (c *component) egwContainer() *corev1.Container {
 		Image:           c.config.egwImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env:             c.egwEnvVars(),
-		Resources:       c.getResources(),
 		VolumeMounts:    c.egwVolumeMounts(),
 		Ports:           c.egwPorts(),
 		Command:         []string{"/start-gateway.sh"},
@@ -413,16 +415,21 @@ func (c *component) getHTTPProbe() (string, string, string) {
 	return probeURLs, interval, timeout
 }
 
-func (c *component) getResources() corev1.ResourceRequirements {
-	recommendedQuantity := resource.NewQuantity(1, resource.DecimalSI)
+func (c *component) addAWSResources(d *appsv1.Deployment) {
 	egw := c.config.EgressGW
-	if egw.Spec.AWS != nil && *egw.Spec.AWS.NativeIP == operatorv1.NativeIPEnabled {
-		return corev1.ResourceRequirements{
-			Limits:   corev1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
-			Requests: corev1.ResourceList{"projectcalico.org/aws-secondary-ipv4": *recommendedQuantity},
-		}
+	if egw.Spec.AWS == nil || *egw.Spec.AWS.NativeIP == operatorv1.NativeIPDisabled {
+		return
 	}
-	return corev1.ResourceRequirements{}
+	recommendedQuantity := resource.NewQuantity(1, resource.DecimalSI)
+	resourceRequirements := &d.Spec.Template.Spec.Containers[0].Resources
+	if resourceRequirements.Limits == nil {
+		resourceRequirements.Limits = corev1.ResourceList{}
+	}
+	if resourceRequirements.Requests == nil {
+		resourceRequirements.Requests = corev1.ResourceList{}
+	}
+	resourceRequirements.Limits["projectcalico.org/aws-secondary-ipv4"] = *recommendedQuantity
+	resourceRequirements.Requests["projectcalico.org/aws-secondary-ipv4"] = *recommendedQuantity
 }
 
 func (c *component) getIPPools() string {

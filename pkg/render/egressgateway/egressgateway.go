@@ -145,6 +145,7 @@ func (c *component) egwDeployment() *appsv1.Deployment {
 		rcomp.ApplyDeploymentOverrides(&d, overrides)
 	}
 
+	c.addAWSResources(&d)
 	return &d
 }
 
@@ -204,7 +205,6 @@ func (c *component) egwContainer() *corev1.Container {
 		Image:           c.config.egwImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env:             c.egwEnvVars(),
-		Resources:       c.getResources(),
 		VolumeMounts:    c.egwVolumeMounts(),
 		Ports:           c.egwPorts(),
 		Command:         []string{"/start-gateway.sh"},
@@ -398,23 +398,21 @@ func (c *component) getHTTPProbe() (string, string, string) {
 	return probeURLs, interval, timeout
 }
 
-func (c *component) getResources() corev1.ResourceRequirements {
-	resourceRequirements := corev1.ResourceRequirements{
-		Limits:   corev1.ResourceList{},
-		Requests: corev1.ResourceList{},
+func (c *component) addAWSResources(d *appsv1.Deployment) {
+	egw := c.config.EgressGW
+	if egw.Spec.AWS == nil || *egw.Spec.AWS.NativeIP == operatorv1.NativeIPDisabled {
+		return
 	}
 	recommendedQuantity := resource.NewQuantity(1, resource.DecimalSI)
-	egw := c.config.EgressGW
-
-	if len(egw.Spec.Template.Spec.Containers) == 1 && egw.Spec.Template.Spec.Containers[0].Resources != nil {
-		resourceRequirements = *egw.Spec.Template.Spec.Containers[0].Resources
+	resourceRequirements := &d.Spec.Template.Spec.Containers[0].Resources
+	if resourceRequirements.Limits == nil {
+		resourceRequirements.Limits = corev1.ResourceList{}
 	}
-
-	if egw.Spec.AWS != nil && *egw.Spec.AWS.NativeIP == operatorv1.NativeIPEnabled {
-		resourceRequirements.Limits["projectcalico.org/aws-secondary-ipv4"] = *recommendedQuantity
-		resourceRequirements.Requests["projectcalico.org/aws-secondary-ipv4"] = *recommendedQuantity
+	if resourceRequirements.Requests == nil {
+		resourceRequirements.Requests = corev1.ResourceList{}
 	}
-	return resourceRequirements
+	resourceRequirements.Limits["projectcalico.org/aws-secondary-ipv4"] = *recommendedQuantity
+	resourceRequirements.Requests["projectcalico.org/aws-secondary-ipv4"] = *recommendedQuantity
 }
 
 func (c *component) getIPPools() string {

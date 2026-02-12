@@ -1010,9 +1010,8 @@ spec:
                             name:
                               description: |-
                                 Name is an enum which identifies the EGW Deployment container by name.
-                                Supported values are: calico-egw,egress-gateway
+                                Supported values are: egress-gateway
                               enum:
-                              - calico-egw
                               - egress-gateway
                               type: string
                             resources:

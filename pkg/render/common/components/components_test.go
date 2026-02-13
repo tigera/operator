@@ -151,6 +151,7 @@ var _ = Describe("Common components render tests", func() {
 		},
 		Entry("APIServerDeployment", &v1.APIServerDeployment{}, false),
 		Entry("CalicoKubeControllersDeployment", &v1.CalicoKubeControllersDeployment{}, false),
+		Entry("CalicoWebhooksDeployment", &v1.CalicoWebhooksDeployment{}, false),
 		Entry("CalicoNodeDaemonSet", &v1.CalicoNodeDaemonSet{}, false),
 		Entry("CalicoNodeWindowsDaemonSet", &v1.CalicoNodeWindowsDaemonSet{}, false),
 		Entry("CalicoWindowsUpgradeDaemonSet", &v1.CalicoWindowsUpgradeDaemonSet{}, false),

@@ -1147,16 +1147,22 @@ func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWe
 }
 
 func (c *apiServerComponent) hostNetwork() bool {
-	hostNetwork := c.cfg.ForceHostNetwork
-	if (c.cfg.Installation.KubernetesProvider.IsEKS() || c.cfg.Installation.KubernetesProvider.IsTKG()) &&
-		c.cfg.Installation.CNI != nil &&
-		c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
+	if c.cfg.ForceHostNetwork {
+		return true
+	}
+	return HostNetworkRequired(c.cfg.Installation)
+}
+
+func HostNetworkRequired(installation *operatorv1.InstallationSpec) bool {
+	if (installation.KubernetesProvider.IsEKS() || installation.KubernetesProvider.IsTKG()) &&
+		installation.CNI != nil &&
+		installation.CNI.Type == operatorv1.PluginCalico {
 		// Workaround the fact that webhooks don't work for non-host-networked pods
 		// when in this networking mode on EKS or TKG, because the control plane nodes don't run
 		// Calico.
-		hostNetwork = true
+		return true
 	}
-	return hostNetwork
+	return false
 }
 
 // apiServerContainer creates the API server container.

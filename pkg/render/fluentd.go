@@ -282,7 +282,7 @@ func (c *fluentdComponent) path(path string) string {
 
 func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	var objs, toDelete []client.Object
-	objs = append(objs, c.allowTigeraPolicy())
+	objs = append(objs, c.calicoSystemPolicy())
 	objs = append(objs, c.metricsService())
 
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
@@ -1260,7 +1260,7 @@ func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
+func (c *fluentdComponent) calicoSystemPolicy() *v3.NetworkPolicy {
 	multiTenant := false
 	tenantNamespace := ""
 	if c.cfg.Tenant != nil {

@@ -212,9 +212,9 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs := []client.Object{}
 	objs = append(objs,
-		c.istiodAllowTigeraPolicy(),
-		c.istioCNIAllowTigeraPolicy(),
-		c.ztunnelAllowTigeraPolicy(),
+		c.istiodCalicoSystemPolicy(),
+		c.istioCNICalicoSystemPolicy(),
+		c.ztunnelCalicoSystemPolicy(),
 	)
 
 	if overrides := c.cfg.Istio.Spec.IstiodDeployment; overrides != nil {
@@ -282,7 +282,7 @@ func (c *IstioComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *IstioComponent) istiodAllowTigeraPolicy() *v3.NetworkPolicy {
+func (c *IstioComponent) istiodCalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -325,7 +325,7 @@ func (c *IstioComponent) istiodAllowTigeraPolicy() *v3.NetworkPolicy {
 	}
 }
 
-func (c *IstioComponent) istioCNIAllowTigeraPolicy() *v3.NetworkPolicy {
+func (c *IstioComponent) istioCNICalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -349,7 +349,7 @@ func (c *IstioComponent) istioCNIAllowTigeraPolicy() *v3.NetworkPolicy {
 	}
 }
 
-func (c *IstioComponent) ztunnelAllowTigeraPolicy() *v3.NetworkPolicy {
+func (c *IstioComponent) ztunnelCalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,

@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	TigeraComponentTierName              = "allow-tigera"
+	TigeraComponentTierName              = "calico-system"
 	TigeraComponentPolicyPrefix          = TigeraComponentTierName + "."
 	TigeraComponentDefaultDenyPolicyName = TigeraComponentPolicyPrefix + "default-deny"
 )
@@ -179,7 +179,7 @@ func Ports(ports ...uint16) []numorstring.Port {
 	return nsPorts
 }
 
-func AllowTigeraDefaultDeny(namespace string) *v3.NetworkPolicy {
+func CalicoSystemDefaultDeny(namespace string) *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{

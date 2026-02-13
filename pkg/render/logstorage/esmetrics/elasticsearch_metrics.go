@@ -92,7 +92,7 @@ func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
 
 func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Object) {
 	toCreate := []client.Object{
-		e.allowTigeraPolicy(),
+		e.calicoSystemPolicy(),
 	}
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...)...)
 	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount())
@@ -271,7 +271,7 @@ func (e *elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 	return d
 }
 
-func (e *elasticsearchMetrics) allowTigeraPolicy() *v3.NetworkPolicy {
+func (e *elasticsearchMetrics) calicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,

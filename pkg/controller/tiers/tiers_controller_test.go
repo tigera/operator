@@ -120,7 +120,7 @@ var _ = Describe("tier controller tests", func() {
 	})
 
 	// Validate that the tier is created. Policy coverage is handled in the render tests.
-	It("reconciles the allow-tigera tier", func() {
+	It("reconciles the calico-system tier", func() {
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("ClearDegraded")
 
@@ -128,7 +128,7 @@ var _ = Describe("tier controller tests", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		tier := v3.Tier{}
-		Expect(c.Get(ctx, client.ObjectKey{Name: "allow-tigera"}, &tier)).To(BeNil())
+		Expect(c.Get(ctx, client.ObjectKey{Name: "calico-system"}, &tier)).To(BeNil())
 	})
 
 	It("waits for API server to be available before reconciling", func() {

@@ -174,7 +174,7 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{
-				ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
 			})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -464,7 +464,7 @@ var _ = Describe("Manager controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &v3.Tier{
-				ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
 			})).NotTo(HaveOccurred())
 
 			licenseKey = &v3.LicenseKey{
@@ -696,7 +696,7 @@ var _ = Describe("Manager controller tests", func() {
 				})
 			})
 
-			Context("allow-tigera reconciliation", func() {
+			Context("calico-system reconciliation", func() {
 				var readyFlag *utils.ReadyFlag
 				BeforeEach(func() {
 					mockStatus = &status.MockStatus{}
@@ -717,8 +717,8 @@ var _ = Describe("Manager controller tests", func() {
 					}
 				})
 
-				It("should wait if allow-tigera tier is unavailable", func() {
-					test.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+				It("should wait if calico-system tier is unavailable", func() {
+					test.DeleteCalicoSystemTierAndExpectWait(ctx, c, &r, mockStatus)
 				})
 
 				It("should wait if tier watch is not ready", func() {

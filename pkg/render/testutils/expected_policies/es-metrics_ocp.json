@@ -2,11 +2,11 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.elasticsearch-metrics",
+    "name": "calico-system.elasticsearch-metrics",
     "namespace": "tigera-elasticsearch"
   },
   "spec": {
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "order": 1,
     "selector": "k8s-app == 'tigera-elasticsearch-metrics'",
     "serviceAccountSelector": "",

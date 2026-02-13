@@ -51,7 +51,7 @@ const (
 	DexPort          = 5556
 	DexTLSSecretName = "tigera-dex-tls"
 	DexClientId      = "tigera-manager"
-	DexPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "allow-tigera-dex"
+	DexPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "calico-system-dex"
 )
 
 var DexEntityRule = networkpolicy.CreateEntityRule(DexNamespace, DexObjectName, DexPort)
@@ -122,8 +122,8 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs := []client.Object{
 		CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
-		c.allowTigeraNetworkPolicy(c.cfg.Installation.Variant),
-		networkpolicy.AllowTigeraDefaultDeny(DexNamespace),
+		c.calicoSystemNetworkPolicy(c.cfg.Installation.Variant),
+		networkpolicy.CalicoSystemDefaultDeny(DexNamespace),
 		CreateOperatorSecretsRoleBinding(DexNamespace),
 		c.serviceAccount(),
 		c.deployment(),
@@ -412,7 +412,7 @@ func (c *dexComponent) configMap() *corev1.ConfigMap {
 	}
 }
 
-func (c *dexComponent) allowTigeraNetworkPolicy(installationVariant operatorv1.ProductVariant) *v3.NetworkPolicy {
+func (c *dexComponent) calicoSystemNetworkPolicy(installationVariant operatorv1.ProductVariant) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 	egressRules = append(egressRules, []v3.Rule{

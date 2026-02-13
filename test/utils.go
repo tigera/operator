@@ -220,13 +220,13 @@ func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*corev1.Node) error {
 	return nil
 }
 
-// DeleteAllowTigeraTierAndExpectWait deletes the tier resource and expects the Reconciler issues a degraded status, waiting for
+// DeleteCalicoSystemTierAndExpectWait deletes the tier resource and expects the Reconciler issues a degraded status, waiting for
 // the tier to become available before progressing its status further. Assumes that mockStatus has any required initial status
 // progression expectations set, and that the Reconciler utilizes the mockStatus object. Assumes the tier resource has been created.
-func DeleteAllowTigeraTierAndExpectWait(ctx context.Context, c client.Client, r reconcile.Reconciler, mockStatus *status.MockStatus) {
-	err := c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})
+func DeleteCalicoSystemTierAndExpectWait(ctx context.Context, c client.Client, r reconcile.Reconciler, mockStatus *status.MockStatus) {
+	err := c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})
 	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
-	mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for allow-tigera tier to be created, see the 'tiers' TigeraStatus for more information", "tiers.projectcalico.org \"allow-tigera\" not found", mock.Anything).Return()
+	mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for calico-system tier to be created, see the 'tiers' TigeraStatus for more information", "tiers.projectcalico.org \"calico-system\" not found", mock.Anything).Return()
 	_, err = r.Reconcile(ctx, reconcile.Request{})
 	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 	mockStatus.AssertExpectations(ginkgo.GinkgoT())

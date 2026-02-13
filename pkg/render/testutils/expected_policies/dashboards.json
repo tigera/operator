@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.dashboards-installer",
+    "name": "calico-system.dashboards-installer",
     "namespace": "tigera-elasticsearch"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "job-name == 'dashboards-installer'",
     "types": [
       "Egress"

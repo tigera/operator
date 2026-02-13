@@ -109,7 +109,7 @@ func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
-	toCreate = append(toCreate, e.esGatewayAllowTigeraPolicy())
+	toCreate = append(toCreate, e.esGatewayCalicoSystemPolicy())
 	toCreate = append(toCreate, secret.ToRuntimeObjects(e.cfg.KubeControllersUserSecrets...)...)
 	toCreate = append(toCreate, e.esGatewayService())
 	toCreate = append(toCreate, e.esGatewayRole())
@@ -342,7 +342,7 @@ func (e *esGateway) esGatewayService() *corev1.Service {
 }
 
 // Allow access to ES Gateway from components that need to talk to Elasticsearch or Kibana.
-func (e *esGateway) esGatewayAllowTigeraPolicy() *v3.NetworkPolicy {
+func (e *esGateway) esGatewayCalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Installation.KubernetesProvider.IsOpenShift())
 	egressRules = append(egressRules, []v3.Rule{

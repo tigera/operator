@@ -1,4 +1,4 @@
-// Copyright (c) 2019, 2022-2026 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,8 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/ptr"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -619,14 +618,14 @@ var _ = Describe("Installation validation tests", func() {
 			Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 			err := validateCustomResource(instance)
 			Expect(err).NotTo(HaveOccurred())
-		}, nonCalicoCNIEntries...)
+		}, nonCalicoCNIEntries)
 		DescribeTable("test with no CalicoNetwork", func(plugin operator.CNIPluginType, ipam operator.IPAMPluginType) {
 			instance.Spec.CalicoNetwork = nil
 			instance.Spec.CNI.Type = plugin
 			instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: ipam}
 			err := validateCustomResource(instance)
 			Expect(err).NotTo(HaveOccurred())
-		}, nonCalicoCNIEntries...)
+		}, nonCalicoCNIEntries)
 		DescribeTable("test invalid CNI and IPAM combinations",
 			func(plugin operator.CNIPluginType, allowedipam operator.IPAMPluginType) {
 				instance.Spec.CNI.Type = plugin
@@ -680,7 +679,7 @@ var _ = Describe("Installation validation tests", func() {
 			}
 			err := validateCustomResource(instance)
 			Expect(err).NotTo(HaveOccurred())
-		}, nonCalicoCNIEntries...)
+		}, nonCalicoCNIEntries)
 		DescribeTable("should disallow IPPool with IPIP", func(plugin operator.CNIPluginType, ipam operator.IPAMPluginType) {
 			instance.Spec.CNI.Type = plugin
 			instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: ipam}
@@ -694,7 +693,7 @@ var _ = Describe("Installation validation tests", func() {
 			}
 			err := validateCustomResource(instance)
 			Expect(err).To(HaveOccurred())
-		}, nonCalicoCNIEntries...)
+		}, nonCalicoCNIEntries)
 		DescribeTable("should disallow IPPool with non-all NodeSelector", func(plugin operator.CNIPluginType, ipam operator.IPAMPluginType) {
 			instance.Spec.CNI.Type = plugin
 			instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: ipam}
@@ -708,7 +707,7 @@ var _ = Describe("Installation validation tests", func() {
 			}
 			err := validateCustomResource(instance)
 			Expect(err).To(HaveOccurred())
-		}, nonCalicoCNIEntries...)
+		}, nonCalicoCNIEntries)
 		DescribeTable("should not allow BGP", func(plugin operator.CNIPluginType, ipam operator.IPAMPluginType) {
 			instance.Spec.CNI.Type = plugin
 			instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: ipam}
@@ -716,7 +715,7 @@ var _ = Describe("Installation validation tests", func() {
 			instance.Spec.CalicoNetwork.BGP = &be
 			err := validateCustomResource(instance)
 			Expect(err).NotTo(HaveOccurred())
-		}, nonCalicoCNIEntries...)
+		}, nonCalicoCNIEntries)
 	})
 	Describe("cross validate CNI.Type and kubernetesProvider", func() {
 		BeforeEach(func() {

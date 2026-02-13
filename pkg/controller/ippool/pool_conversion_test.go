@@ -15,7 +15,7 @@
 package ippool
 
 import (
-	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	operator "github.com/tigera/operator/api/v1"
 )
@@ -25,7 +25,7 @@ var (
 	false_ = false
 )
 
-var _ = table.DescribeTable("IPPool operator.tigera.io <-> projectcalico.org/v3 conversion tests",
+var _ = DescribeTable("IPPool operator.tigera.io <-> projectcalico.org/v3 conversion tests",
 	func(input operator.IPPool) {
 		// Convert to projectcalico.org/v3
 		crdPool, err := ToProjectCalico(input)
@@ -37,7 +37,7 @@ var _ = table.DescribeTable("IPPool operator.tigera.io <-> projectcalico.org/v3 
 		Expect(operPool).To(Equal(input))
 	},
 
-	table.Entry("Fully-specified pool", operator.IPPool{
+	Entry("Fully-specified pool", operator.IPPool{
 		CIDR:                  "172.16.0.0/16",
 		Encapsulation:         operator.EncapsulationVXLANCrossSubnet,
 		NATOutgoing:           operator.NATOutgoingEnabled,
@@ -49,7 +49,7 @@ var _ = table.DescribeTable("IPPool operator.tigera.io <-> projectcalico.org/v3 
 	}),
 
 	// Test fields that implicitly default to false when they are explicitly set to false.
-	table.Entry("Explicitly false fields", operator.IPPool{
+	Entry("Explicitly false fields", operator.IPPool{
 		CIDR:                  "172.16.0.0/16",
 		Encapsulation:         operator.EncapsulationIPIPCrossSubnet,
 		NATOutgoing:           operator.NATOutgoingDisabled,

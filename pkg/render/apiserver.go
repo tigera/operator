@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -133,6 +134,10 @@ type APIServerConfiguration struct {
 	KeyValidatorConfig          authentication.KeyValidatorConfig
 	KubernetesVersion           *common.VersionInfo
 
+	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
+	// as part of this component.
+	RequiresAggregationServer bool
+
 	// When certificate management is enabled, we need a separate init container to create a cert, running
 	// with the same permissions as query server.
 	QueryServerTLSKeyPairCertificateManagementOnly certificatemanagement.KeyPairInterface
@@ -209,12 +214,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.calicoCustomResourcesClusterRoleBinding(),
 		c.tierGetterClusterRole(),
 		c.kubeControllerMgrTierGetterClusterRoleBinding(),
-		c.calicoPolicyPassthruClusterRole(),
-		c.calicoPolicyPassthruClusterRolebinding(),
 		c.delegateAuthClusterRoleBinding(),
-		c.authClusterRole(),
-		c.authClusterRoleBinding(),
-		c.authReaderRoleBinding(),
 		c.webhookReaderClusterRole(),
 		c.webhookReaderClusterRoleBinding(),
 	}
@@ -224,6 +224,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	// Namespaced objects common to both Calico and Calico Enterprise.
 	// These objects will be updated when switching between the variants.
 	namespacedObjects := []client.Object{}
+
 	// Add in image pull secrets.
 	secrets := secret.CopyToNamespace(APIServerNamespace, c.cfg.PullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
@@ -235,21 +236,37 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.apiServerPodDisruptionBudget(),
 	)
 
+	// These are objects that only need to exist when we are running an aggregation API server to
+	// serve projectcalico.org/v3 APIs. If using CRDs for this API group, we can remove these objects.
+	aggregationAPIServerObjects := []client.Object{
+		c.calicoPolicyPassthruClusterRole(),
+		c.calicoPolicyPassthruClusterRolebinding(),
+		c.authClusterRole(),
+		c.authClusterRoleBinding(),
+		c.authReaderRoleBinding(),
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		aggregationAPIServerObjects = append(aggregationAPIServerObjects,
+			c.uiSettingsGroupGetterClusterRole(),
+			c.kubeControllerManagerUISettingsGroupGetterClusterRoleBinding(),
+			c.uiSettingsPassthruClusterRole(),
+			c.uiSettingsPassthruClusterRolebinding(),
+			c.auditPolicyConfigMap(),
+		)
+	}
+
 	// Add in certificates for API server TLS.
 	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
-		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))
+		aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))
 	} else {
-		globalObjects = append(globalObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
+		aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
 	}
 
 	// Global enterprise-only objects.
 	globalEnterpriseObjects := []client.Object{
-		c.tigeraApiServerClusterRole(),
-		c.tigeraApiServerClusterRoleBinding(),
-		c.uisettingsgroupGetterClusterRole(),
-		c.kubeControllerMgrUisettingsgroupGetterClusterRoleBinding(),
-		c.uiSettingsPassthruClusterRole(),
-		c.uiSettingsPassthruClusterRolebinding(),
+		c.tigeraAPIServerClusterRole(),
+		c.tigeraAPIServerClusterRoleBinding(),
 	}
 
 	if !c.cfg.MultiTenant {
@@ -283,9 +300,8 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Namespaced enterprise-only objects.
-	namespacedEnterpriseObjects := []client.Object{
-		c.auditPolicyConfigMap(),
-	}
+	namespacedEnterpriseObjects := []client.Object{}
+
 	if c.cfg.TrustedBundle != nil {
 		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.cfg.TrustedBundle.ConfigMap(QueryserverNamespace))
 	}
@@ -304,7 +320,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// Clean up cluster-scoped resources that were created with the 'tigera' prefix.
 		// The apiserver now uses consistent resource names with 'calico' prefix across both EE and OSS variants.
 		objsToDelete = append(objsToDelete, c.deprecatedResources()...)
-
 	} else {
 		// Add in a NetworkPolicy.
 		namespacedObjects = append(namespacedObjects, c.networkPolicy())
@@ -312,13 +327,21 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
+	}
 
+	// Add or remove the aggregation API server objects as needed.
+	if c.cfg.RequiresAggregationServer {
+		// Include the aggregation API server objects.
+		globalObjects = append(globalObjects, aggregationAPIServerObjects...)
+	} else {
+		// If we're not running an aggregation API server, we need to delete the objects that are only needed for it.
+		objsToDelete = append(objsToDelete, aggregationAPIServerObjects...)
 	}
 
 	// Explicitly delete any renamed/deprecated objects.
 	objsToDelete = append(objsToDelete, c.getDeprecatedResources()...)
-
 	objsToCreate := append(globalObjects, namespacedObjects...)
+
 	return objsToCreate, objsToDelete
 }
 
@@ -1008,22 +1031,28 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 
 	var initContainers []corev1.Container
 	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		initContainerApiServer := c.cfg.TLSKeyPair.InitContainer(APIServerNamespace, c.apiServerContainer().SecurityContext)
-		initContainerApiServer.Name = fmt.Sprintf("%s-%s", CalicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
+		if c.cfg.RequiresAggregationServer {
+			// Only include the API server init container if we're running the aggregation API server!
+			initContainerAPIServer := c.cfg.TLSKeyPair.InitContainer(APIServerNamespace, c.apiServerContainer().SecurityContext)
+			initContainerAPIServer.Name = fmt.Sprintf("%s-%s", CalicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
+			initContainers = append(initContainers, initContainerAPIServer)
+		}
 
 		initContainerQueryServer := c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.InitContainer(APIServerNamespace, c.queryServerContainer().SecurityContext)
-
 		annotations[c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.HashAnnotationKey()] = c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.HashAnnotationValue()
-
-		initContainers = append(initContainers, initContainerApiServer, initContainerQueryServer)
+		initContainers = append(initContainers, initContainerQueryServer)
 	}
 
-	containers := []corev1.Container{
-		c.apiServerContainer(),
+	// Determine which containers to run.
+	containers := []corev1.Container{}
+	if c.cfg.RequiresAggregationServer {
+		containers = append(containers, c.apiServerContainer())
 	}
-
 	if c.cfg.IsSidecarInjectionEnabled() {
 		containers = append(containers, c.l7AdmissionControllerContainer())
+	}
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		containers = append(containers, c.queryServerContainer())
 	}
 
 	d := &appsv1.Deployment{
@@ -1070,8 +1099,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, c.queryServerContainer())
-
 		if c.cfg.TrustedBundle != nil {
 			trustedBundleHashAnnotations := c.cfg.TrustedBundle.HashAnnotations()
 			for k, v := range trustedBundleHashAnnotations {
@@ -1338,15 +1365,17 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 	if c.cfg.QueryServerTLSKeyPairCertificateManagementOnly != nil {
 		volumes = append(volumes, c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.Volume())
 	}
-	hostPathType := corev1.HostPathDirectoryOrCreate
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise && c.cfg.RequiresAggregationServer {
+		// Only include these volumes if we're running the aggregation API server, since audit logging is done through the
+		// main API server otherwise.
 		volumes = append(volumes,
 			corev1.Volume{
 				Name: auditLogsVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					HostPath: &corev1.HostPathVolumeSource{
 						Path: "/var/log/calico/audit",
-						Type: &hostPathType,
+						Type: ptr.To(corev1.HostPathDirectoryOrCreate),
 					},
 				},
 			},
@@ -1365,10 +1394,10 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 				},
 			},
 		)
+	}
 
-		if c.cfg.TrustedBundle != nil {
-			volumes = append(volumes, c.cfg.TrustedBundle.Volume())
-		}
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise && c.cfg.TrustedBundle != nil {
+		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
 	}
 
 	return volumes
@@ -1414,10 +1443,10 @@ func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
 	}
 }
 
-// tigeraApiServerClusterRole creates a clusterrole that gives permissions to access backing CRDs
+// tigeraAPIServerClusterRole creates a clusterrole that gives permissions to access backing CRDs
 //
 // Calico Enterprise only
-func (c *apiServerComponent) tigeraApiServerClusterRole() *rbacv1.ClusterRole {
+func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		{
 			// Calico Enterprise backing storage.
@@ -1477,11 +1506,11 @@ func (c *apiServerComponent) tigeraApiServerClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-// tigeraApiServerClusterRoleBinding creates a clusterrolebinding that applies tigeraApiServerClusterRole to
+// tigeraAPIServerClusterRoleBinding creates a clusterrolebinding that applies tigeraAPIServerClusterRole to
 // the calico-apiserver service account.
 //
 // Calico Enterprise only
-func (c *apiServerComponent) tigeraApiServerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *apiServerComponent) tigeraAPIServerClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1545,10 +1574,10 @@ func (c *apiServerComponent) kubeControllerMgrTierGetterClusterRoleBinding() *rb
 	}
 }
 
-// uisettingsgroupGetterClusterRole creates a clusterrole that gives permissions to get uisettingsgroups.
+// uiSettingsGroupGetterClusterRole creates a clusterrole that gives permissions to get uisettingsgroups.
 //
 // Calico Enterprise only
-func (c *apiServerComponent) uisettingsgroupGetterClusterRole() *rbacv1.ClusterRole {
+func (c *apiServerComponent) uiSettingsGroupGetterClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1566,7 +1595,7 @@ func (c *apiServerComponent) uisettingsgroupGetterClusterRole() *rbacv1.ClusterR
 	}
 }
 
-// kubeControllerMgrUisettingsgroupGetterClusterRoleBinding creates a rolebinding that allows the k8s kube-controller
+// kubeControllerManagerUISettingsGroupGetterClusterRoleBinding creates a rolebinding that allows the k8s kube-controller
 // manager to get uisettingsgroups.
 //
 // In k8s 1.15+, cascading resource deletions (for instance pods for a replicaset) failed due to k8s kube-controller
@@ -1574,7 +1603,7 @@ func (c *apiServerComponent) uisettingsgroupGetterClusterRole() *rbacv1.ClusterR
 // and so we need similar RBAC for UISettingsGroups.
 //
 // Calico Enterprise only
-func (c *apiServerComponent) kubeControllerMgrUisettingsgroupGetterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *apiServerComponent) kubeControllerManagerUISettingsGroupGetterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

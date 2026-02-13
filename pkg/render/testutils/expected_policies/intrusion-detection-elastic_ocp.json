@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.intrusion-detection-elastic",
+    "name": "calico-system.intrusion-detection-elastic",
     "namespace": "tigera-intrusion-detection"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "job-name == 'intrusion-detection-es-job-installer'",
     "types": [
       "Egress"

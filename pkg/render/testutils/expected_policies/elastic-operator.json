@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.elastic-operator-access",
+    "name": "calico-system.elastic-operator-access",
     "namespace": "tigera-eck-operator"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "k8s-app == 'elastic-operator'",
     "types": [
       "Egress"

@@ -107,8 +107,8 @@ var _ = Describe("LogStorage Linseed controller", func() {
 		readyFlag = &utils.ReadyFlag{}
 		readyFlag.MarkAsReady()
 
-		// Create the allow-tigera Tier, since the controller blocks on its existence.
-		tier := &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}}
+		// Create the calico-system Tier, since the controller blocks on its existence.
+		tier := &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}}
 		Expect(cli.Create(ctx, tier)).ShouldNot(HaveOccurred())
 
 		var err error

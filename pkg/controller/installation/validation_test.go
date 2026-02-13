@@ -969,6 +969,39 @@ var _ = Describe("Installation validation tests", func() {
 		})
 	})
 
+	Describe("validate CalicoWebhooksDeployment", func() {
+		It("should return nil when it is empty", func() {
+			instance.Spec.CalicoWebhooksDeployment = &operator.CalicoWebhooksDeployment{}
+			err := validateCustomResource(instance)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an error if it is invalid", func() {
+			instance.Spec.CalicoWebhooksDeployment = &operator.CalicoWebhooksDeployment{
+				Metadata: &operator.Metadata{
+					Labels: map[string]string{
+						"NoUppercaseOrSpecialCharsLike=Equals":    "b",
+						"WowNoUppercaseOrSpecialCharsLike=Equals": "b",
+					},
+					Annotations: map[string]string{
+						"AnnotNoUppercaseOrSpecialCharsLike=Equals": "bar",
+					},
+				},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+
+			var invalidMinReadySeconds int32 = -1
+			instance.Spec.CalicoWebhooksDeployment = &operator.CalicoWebhooksDeployment{
+				Spec: &operatorv1.CalicoWebhooksDeploymentSpec{
+					MinReadySeconds: &invalidMinReadySeconds,
+				},
+			}
+			err = validateCustomResource(instance)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
 	Describe("validate TyphaDeployment", func() {
 		It("should return nil when it is empty", func() {
 			instance.Spec.TyphaDeployment = &operator.TyphaDeployment{}

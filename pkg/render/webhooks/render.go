@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -135,6 +136,10 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 			},
 		},
+	}
+
+	if overrides := c.cfg.Installation.CalicoWebhooksDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(dep, overrides)
 	}
 
 	// Create the Service for the webhook.

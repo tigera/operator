@@ -2,11 +2,11 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.allow-fluentd-node",
+    "name": "calico-system.allow-fluentd-node",
     "namespace": "tigera-fluentd"
   },
   "spec": {
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "order": 1,
     "selector": "k8s-app == 'fluentd-node' || k8s-app == 'fluentd-node-windows'",
     "serviceAccountSelector": "",

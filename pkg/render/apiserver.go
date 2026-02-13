@@ -113,7 +113,7 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 }
 
 func APIServerPolicy(cfg *APIServerConfiguration) Component {
-	return NewPassthrough(allowTigeraAPIServerPolicy(cfg))
+	return NewPassthrough(calicoSystemAPIServerPolicy(cfg))
 }
 
 // APIServerConfiguration contains all the config information needed to render the component.
@@ -443,7 +443,7 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
+func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, []v3.Rule{

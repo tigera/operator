@@ -88,14 +88,14 @@ func Guardian(cfg *GuardianConfiguration) Component {
 }
 
 func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
-	guardianAccessPolicy, err := guardianAllowTigeraPolicy(cfg)
+	guardianAccessPolicy, err := guardianCalicoSystemPolicy(cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	return NewPassthrough(
 		guardianAccessPolicy,
-		networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace),
+		networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
 	), nil
 }
 
@@ -570,7 +570,7 @@ func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
 	}
 }
 
-func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
+func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,

@@ -352,7 +352,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			}
 		}
 
-		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+		// Ensure the calico-system tier exists, before rendering any network policies within it.
 		//
 		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
 		// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
@@ -361,7 +361,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		if r.tierWatchReady.IsReady() {
 			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 				if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			} else {

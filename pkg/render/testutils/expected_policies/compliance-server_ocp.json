@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.compliance-server",
+    "name": "calico-system.compliance-server",
     "namespace": "tigera-compliance"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "k8s-app == 'compliance-server'",
     "types": [
       "Ingress",

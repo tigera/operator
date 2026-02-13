@@ -2,10 +2,10 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "GlobalNetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.node-local-dns"
+    "name": "calico-system.node-local-dns"
   },
   "spec": {
-    "tier":"allow-tigera",
+    "tier":"calico-system",
     "order":10,
     "selector": "projectcalico.org/namespace in {'calico-system','tigera-compliance','tigera-dex','tigera-elasticsearch','tigera-fluentd','tigera-intrusion-detection','tigera-kibana','tigera-eck-operator','tigera-packetcapture','tigera-prometheus','tigera-skraper'}",
     "egress":[

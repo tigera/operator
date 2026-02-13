@@ -178,6 +178,13 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.CalicoKubeControllersDeployment = mergeCalicoKubeControllersDeployment(inst.CalicoKubeControllersDeployment, override.CalicoKubeControllersDeployment)
 	}
 
+	switch compareFields(inst.CalicoWebhooksDeployment, override.CalicoWebhooksDeployment) {
+	case BOnlySet:
+		inst.CalicoWebhooksDeployment = override.CalicoWebhooksDeployment.DeepCopy()
+	case Different:
+		inst.CalicoWebhooksDeployment = mergeCalicoWebhooksDeployment(inst.CalicoWebhooksDeployment, override.CalicoWebhooksDeployment)
+	}
+
 	switch compareFields(inst.TyphaDeployment, override.TyphaDeployment) {
 	case BOnlySet:
 		inst.TyphaDeployment = override.TyphaDeployment.DeepCopy()
@@ -680,6 +687,89 @@ func mergeCalicoKubeControllersDeployment(cfg, override *operatorv1.CalicoKubeCo
 		return out
 	}
 	mergeSpec := func(cfg, override *operatorv1.CalicoKubeControllersDeploymentSpec) *operatorv1.CalicoKubeControllersDeploymentSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.MinReadySeconds, override.MinReadySeconds) {
+		case BOnlySet, Different:
+			out.MinReadySeconds = override.MinReadySeconds
+		}
+
+		switch compareFields(out.Template, override.Template) {
+		case BOnlySet:
+			out.Template = override.Template.DeepCopy()
+		case Different:
+			out.Template = mergeTemplateSpec(out.Template, override.Template)
+		}
+
+		return out
+	}
+
+	switch compareFields(out.Spec, override.Spec) {
+	case BOnlySet:
+		out.Spec = override.Spec.DeepCopy()
+	case Different:
+		out.Spec = mergeSpec(out.Spec, override.Spec)
+	}
+
+	return out
+}
+
+func mergeCalicoWebhooksDeployment(cfg, override *operatorv1.CalicoWebhooksDeployment) *operatorv1.CalicoWebhooksDeployment {
+	out := cfg.DeepCopy()
+
+	switch compareFields(out.Metadata, override.Metadata) {
+	case BOnlySet:
+		out.Metadata = override.Metadata.DeepCopy()
+	case Different:
+		out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+	}
+
+	mergePodSpec := func(cfg, override *operatorv1.CalicoWebhooksDeploymentPodSpec) *operatorv1.CalicoWebhooksDeploymentPodSpec {
+		out := cfg.DeepCopy()
+
+		// CalicoWebhooksDeployment doesn't have init containers.
+		switch compareFields(out.Containers, override.Containers) {
+		case BOnlySet, Different:
+			out.Containers = make([]operatorv1.CalicoWebhooksDeploymentContainer, len(override.Containers))
+			copy(out.Containers, override.Containers)
+		}
+
+		switch compareFields(out.Affinity, override.Affinity) {
+		case BOnlySet, Different:
+			out.Affinity = override.Affinity
+		}
+
+		switch compareFields(out.NodeSelector, override.NodeSelector) {
+		case BOnlySet, Different:
+			out.NodeSelector = override.NodeSelector
+		}
+
+		switch compareFields(out.Tolerations, override.Tolerations) {
+		case BOnlySet, Different:
+			out.Tolerations = override.Tolerations
+		}
+		return out
+	}
+	mergeTemplateSpec := func(cfg, override *operatorv1.CalicoWebhooksDeploymentPodTemplateSpec) *operatorv1.CalicoWebhooksDeploymentPodTemplateSpec {
+		out := cfg.DeepCopy()
+
+		switch compareFields(out.Metadata, override.Metadata) {
+		case BOnlySet:
+			out.Metadata = override.Metadata.DeepCopy()
+		case Different:
+			out.Metadata = mergeMetadata(out.Metadata, override.Metadata)
+		}
+
+		switch compareFields(out.Spec, override.Spec) {
+		case BOnlySet:
+			out.Spec = override.Spec.DeepCopy()
+		case Different:
+			out.Spec = mergePodSpec(out.Spec, override.Spec)
+		}
+
+		return out
+	}
+	mergeSpec := func(cfg, override *operatorv1.CalicoWebhooksDeploymentSpec) *operatorv1.CalicoWebhooksDeploymentSpec {
 		out := cfg.DeepCopy()
 
 		switch compareFields(out.MinReadySeconds, override.MinReadySeconds) {

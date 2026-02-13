@@ -521,6 +521,16 @@ var (
 		variant:  enterpriseVariant,
 	}
 {{- end }}
+{{ with index .Components.webhooks }}
+	ComponentTigeraWebhooks = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   enterpriseVariant,
+	}
+{{- end }}
+
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
@@ -577,5 +587,6 @@ var (
 		ComponentCalicoIstioInstallCNI,
 		ComponentCalicoIstioZTunnel,
 		ComponentCalicoIstioProxyv2,
+		ComponentTigeraWebhooks,
 	}
 )

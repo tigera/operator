@@ -63,6 +63,7 @@ var (
 		"istio-install-cni":           "istio-install-cni",
 		"istio-ztunnel":               "istio-ztunnel",
 		"istio-proxyv2":               "istio-proxyv2",
+		"webhooks":                    "webhooks",
 	}
 
 	ignoredImages = map[string]struct{}{

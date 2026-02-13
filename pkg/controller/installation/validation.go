@@ -28,6 +28,7 @@ import (
 	csinodedriver "github.com/tigera/operator/pkg/common/validation/csi-node-driver"
 	kubecontrollers "github.com/tigera/operator/pkg/common/validation/kube-controllers"
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
+	webhooks "github.com/tigera/operator/pkg/common/validation/webhooks"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -367,6 +368,14 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		err := validation.ValidateReplicatedPodResourceOverrides(deploy, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainer, validation.NoContainersDefined)
 		if err != nil {
 			return fmt.Errorf("installation spec.CalicoKubeControllersDeployment is not valid: %w", err)
+		}
+	}
+
+	// Verify the CalicoWebhooksDeployment overrides, if specified, is valid.
+	if deploy := instance.Spec.CalicoWebhooksDeployment; deploy != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(deploy, webhooks.ValidateCalicoWebhooksDeploymentContainer, validation.NoContainersDefined)
+		if err != nil {
+			return fmt.Errorf("installation spec.CalicoWebhooksDeployment is not valid: %w", err)
 		}
 	}
 

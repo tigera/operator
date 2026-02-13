@@ -25,8 +25,7 @@ import (
 	"encoding/pem"
 	"net"
 
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	authv1 "k8s.io/api/authorization/v1"
@@ -172,7 +171,7 @@ var _ = Describe("CSR controller tests", func() {
 		})
 	})
 
-	table.DescribeTable("csr validation for pods", func(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod, expectError, expectRelevant bool) {
+	DescribeTable("csr validation for pods", func(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod, expectError, expectRelevant bool) {
 		certificate, err := validate(clientset, csr, pod, allowedAssets(dns.DefaultClusterDomain))
 		if expectError {
 			Expect(err).To(HaveOccurred())
@@ -188,20 +187,20 @@ var _ = Describe("CSR controller tests", func() {
 			Expect(relevantCSR(csr)).To(BeFalse())
 		}
 	},
-		table.Entry("valid CSR / happy flow", validPodCSR(validPodX509CR(), validPod()), validPod(), false, true),
-		table.Entry("valid CSR / no pod", validPodCSR(validPodX509CR(), validPod()), nil, true, true),
-		table.Entry("unrecognized csr name", invalidPodCSR(validPodX509CR(), validPod(), invalidName), validPod(), true, true),
-		table.Entry("invalid username", invalidPodCSR(validPodX509CR(), validPod(), invalidUserName), validPod(), true, true),
-		table.Entry("invalid certificate request", invalidPodCSR(validPodX509CR(), validPod(), invalidRequest), validPod(), true, true),
-		table.Entry("previously denied csr", invalidPodCSR(validPodX509CR(), validPod(), invalidDenied), validPod(), false, false),
-		table.Entry("previously failed csr", invalidPodCSR(validPodX509CR(), validPod(), invalidFailed), validPod(), false, false),
-		table.Entry("bad DNS names in x509 certificate request", invalidPodCSR(invalidX509CR(invalidDNSNames), validPod()), validPod(), true, true),
-		table.Entry("bad CN in x509 certificate request", invalidPodCSR(invalidX509CR(invalidCN), validPod()), validPod(), true, true),
-		table.Entry("bad IP in x509 certificate request", invalidPodCSR(invalidX509CR(invalidIP), validPod()), validPod(), true, true),
-		table.Entry("irrelevant signer name", invalidPodCSR(invalidX509CR(), validPod(), invalidSignername), validPod(), false, false),
+		Entry("valid CSR / happy flow", validPodCSR(validPodX509CR(), validPod()), validPod(), false, true),
+		Entry("valid CSR / no pod", validPodCSR(validPodX509CR(), validPod()), nil, true, true),
+		Entry("unrecognized csr name", invalidPodCSR(validPodX509CR(), validPod(), invalidName), validPod(), true, true),
+		Entry("invalid username", invalidPodCSR(validPodX509CR(), validPod(), invalidUserName), validPod(), true, true),
+		Entry("invalid certificate request", invalidPodCSR(validPodX509CR(), validPod(), invalidRequest), validPod(), true, true),
+		Entry("previously denied csr", invalidPodCSR(validPodX509CR(), validPod(), invalidDenied), validPod(), false, false),
+		Entry("previously failed csr", invalidPodCSR(validPodX509CR(), validPod(), invalidFailed), validPod(), false, false),
+		Entry("bad DNS names in x509 certificate request", invalidPodCSR(invalidX509CR(invalidDNSNames), validPod()), validPod(), true, true),
+		Entry("bad CN in x509 certificate request", invalidPodCSR(invalidX509CR(invalidCN), validPod()), validPod(), true, true),
+		Entry("bad IP in x509 certificate request", invalidPodCSR(invalidX509CR(invalidIP), validPod()), validPod(), true, true),
+		Entry("irrelevant signer name", invalidPodCSR(invalidX509CR(), validPod(), invalidSignername), validPod(), false, false),
 	)
 
-	table.DescribeTable("csr validation for non-cluster hosts", func(csr *certificatesv1.CertificateSigningRequest, hep *v3.HostEndpoint, expectError, expectRelevant, subjectAccessReviewAllowed bool) {
+	DescribeTable("csr validation for non-cluster hosts", func(csr *certificatesv1.CertificateSigningRequest, hep *v3.HostEndpoint, expectError, expectRelevant, subjectAccessReviewAllowed bool) {
 		clientset.PrependReactor("create", "subjectaccessreviews", func(action testing.Action) (handled bool, ret runtime.Object, err error) {
 			return true, &authv1.SubjectAccessReview{
 				Status: authv1.SubjectAccessReviewStatus{
@@ -223,20 +222,20 @@ var _ = Describe("CSR controller tests", func() {
 			Expect(relevantCSR(csr)).To(BeFalse())
 		}
 	},
-		table.Entry("valid CSR / happy flow", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), validHostEndpoint(), false, true, true),
-		table.Entry("valid CSR / no hep", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), nil, true, true, true),
-		table.Entry("valid CSR / subject access review denied", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), validHostEndpoint(), true, true, false),
-		table.Entry("unrecognized csr name", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidName), validHostEndpoint(), true, true, true),
-		table.Entry("invalid certificate request", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidRequest), validHostEndpoint(), true, true, true),
-		table.Entry("previously denied csr", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidDenied), validHostEndpoint(), false, false, true),
-		table.Entry("previously failed csr", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidFailed), validHostEndpoint(), false, false, true),
-		table.Entry("bad DNS names in x509 certificate request", invalidNonClusterHostCSR(invalidX509CR(invalidDNSNames), validHostEndpoint()), validHostEndpoint(), true, true, true),
-		table.Entry("bad CN in x509 certificate request", invalidNonClusterHostCSR(invalidX509CR(invalidCN), validHostEndpoint()), validHostEndpoint(), true, true, true),
-		table.Entry("bad IP in x509 certificate request", invalidNonClusterHostCSR(invalidX509CR(invalidIP), validHostEndpoint()), validHostEndpoint(), true, true, true),
-		table.Entry("irrelevant signer name", invalidNonClusterHostCSR(invalidX509CR(), validHostEndpoint(), invalidSignername), validHostEndpoint(), false, false, true),
+		Entry("valid CSR / happy flow", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), validHostEndpoint(), false, true, true),
+		Entry("valid CSR / no hep", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), nil, true, true, true),
+		Entry("valid CSR / subject access review denied", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), validHostEndpoint(), true, true, false),
+		Entry("unrecognized csr name", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidName), validHostEndpoint(), true, true, true),
+		Entry("invalid certificate request", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidRequest), validHostEndpoint(), true, true, true),
+		Entry("previously denied csr", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidDenied), validHostEndpoint(), false, false, true),
+		Entry("previously failed csr", invalidNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint(), invalidFailed), validHostEndpoint(), false, false, true),
+		Entry("bad DNS names in x509 certificate request", invalidNonClusterHostCSR(invalidX509CR(invalidDNSNames), validHostEndpoint()), validHostEndpoint(), true, true, true),
+		Entry("bad CN in x509 certificate request", invalidNonClusterHostCSR(invalidX509CR(invalidCN), validHostEndpoint()), validHostEndpoint(), true, true, true),
+		Entry("bad IP in x509 certificate request", invalidNonClusterHostCSR(invalidX509CR(invalidIP), validHostEndpoint()), validHostEndpoint(), true, true, true),
+		Entry("irrelevant signer name", invalidNonClusterHostCSR(invalidX509CR(), validHostEndpoint(), invalidSignername), validHostEndpoint(), false, false, true),
 	)
 
-	table.DescribeTable("getPod", func(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod, expectPodNil bool) {
+	DescribeTable("getPod", func(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod, expectPodNil bool) {
 		if pod != nil {
 			Expect(cli.Create(ctx, pod)).NotTo(HaveOccurred())
 		}
@@ -248,18 +247,18 @@ var _ = Describe("CSR controller tests", func() {
 			Expect(foundPod).NotTo(BeNil())
 		}
 	},
-		table.Entry("Valid CSR, pod found", validPodCSR(validPodX509CR(), validPod()), validPod(), false),
-		table.Entry("Valid CSR, no pod found", validPodCSR(validPodX509CR(), validPod()), nil, true),
-		table.Entry("Valid CSR, no matching pod found due to different uid", validPodCSR(validPodX509CR(), validPod()), invalidPod(invalidUID), true),
-		table.Entry("Valid CSR, no matching pod found due to different pod name", validPodCSR(validPodX509CR(), validPod()), invalidPod(invalidName), true),
-		table.Entry("Valid CSR, no matching pod found due to different csr username", invalidPodCSR(validPodX509CR(), validPod(), invalidUserName), validPod(), true),
-		table.Entry("Invalid CSR, irrelevant pod names", invalidPodCSR(invalidX509CR(), validPod(), invalidExtraPodNames), validPod(), true),
-		table.Entry("Invalid CSR, irrelevant pod names len", invalidPodCSR(invalidX509CR(), validPod(), invalidExtraPodNamesLen), validPod(), true),
-		table.Entry("Invalid CSR, irrelevant pod UIDs", invalidPodCSR(invalidX509CR(), validPod(), invalidExtraPodUIDs), validPod(), true),
-		table.Entry("Invalid CSR, irrelevant pod UIDs len", invalidPodCSR(invalidX509CR(), validPod(), invalidExtraPodUIDsLen), validPod(), true),
+		Entry("Valid CSR, pod found", validPodCSR(validPodX509CR(), validPod()), validPod(), false),
+		Entry("Valid CSR, no pod found", validPodCSR(validPodX509CR(), validPod()), nil, true),
+		Entry("Valid CSR, no matching pod found due to different uid", validPodCSR(validPodX509CR(), validPod()), invalidPod(invalidUID), true),
+		Entry("Valid CSR, no matching pod found due to different pod name", validPodCSR(validPodX509CR(), validPod()), invalidPod(invalidName), true),
+		Entry("Valid CSR, no matching pod found due to different csr username", invalidPodCSR(validPodX509CR(), validPod(), invalidUserName), validPod(), true),
+		Entry("Invalid CSR, irrelevant pod names", invalidPodCSR(invalidX509CR(), validPod(), invalidExtraPodNames), validPod(), true),
+		Entry("Invalid CSR, irrelevant pod names len", invalidPodCSR(invalidX509CR(), validPod(), invalidExtraPodNamesLen), validPod(), true),
+		Entry("Invalid CSR, irrelevant pod UIDs", invalidPodCSR(invalidX509CR(), validPod(), invalidExtraPodUIDs), validPod(), true),
+		Entry("Invalid CSR, irrelevant pod UIDs len", invalidPodCSR(invalidX509CR(), validPod(), invalidExtraPodUIDsLen), validPod(), true),
 	)
 
-	table.DescribeTable("getHostEndpoint", func(csr *certificatesv1.CertificateSigningRequest, hep *v3.HostEndpoint, expectHepNil bool) {
+	DescribeTable("getHostEndpoint", func(csr *certificatesv1.CertificateSigningRequest, hep *v3.HostEndpoint, expectHepNil bool) {
 		if hep != nil {
 			Expect(cli.Create(ctx, hep)).NotTo(HaveOccurred())
 			// When we list HostEndpoints, we use a field selector to filter host endpoint by their spec.node.
@@ -288,10 +287,10 @@ var _ = Describe("CSR controller tests", func() {
 			Expect(foundHep).NotTo(BeNil())
 		}
 	},
-		table.Entry("Valid CSR, hep found", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), validHostEndpoint(), false),
-		table.Entry("Valid CSR, no hep found", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), nil, true),
-		table.Entry("Valid CSR, no matching hep found due to different hostname", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), invalidHostEndpoint(invalidName), true),
-		table.Entry("Invalid CSR label, irrelevant hep", invalidNonClusterHostCSR(invalidX509CR(), validHostEndpoint(), invalidLabel), validHostEndpoint(), true),
+		Entry("Valid CSR, hep found", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), validHostEndpoint(), false),
+		Entry("Valid CSR, no hep found", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), nil, true),
+		Entry("Valid CSR, no matching hep found due to different hostname", validNonClusterHostCSR(validNonClusterHostX509CR(), validHostEndpoint()), invalidHostEndpoint(invalidName), true),
+		Entry("Invalid CSR label, irrelevant hep", invalidNonClusterHostCSR(invalidX509CR(), validHostEndpoint(), invalidLabel), validHostEndpoint(), true),
 	)
 })
 

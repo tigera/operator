@@ -101,8 +101,8 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.25.7-llvm18.1.8-k8s1.34.3
-CALICO_BASE_VER ?= ubi9-1770247388
+GO_BUILD_VER?=1.25.7-llvm18.1.8-k8s1.34.3-1
+CALICO_BASE_VER ?= ubi9-1770969585
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -141,8 +141,6 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e GOOS=linux \
 		-e GOARCH=$(ARCH) \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
-		-e ACK_GINKGO_RC=true \
-		-e ACK_GINKGO_DEPRECATIONS=1.16.5 \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS)

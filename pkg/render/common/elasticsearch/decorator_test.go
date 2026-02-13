@@ -1,4 +1,4 @@
-// Copyright (c) 2019, 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,7 @@
 package elasticsearch
 
 import (
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	"github.com/tigera/operator/pkg/dns"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 

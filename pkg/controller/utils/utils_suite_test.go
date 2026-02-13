@@ -17,13 +17,11 @@ package utils_test
 import (
 	"testing"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 	"go.uber.org/zap/zapcore"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/onsi/ginkgo/reporters"
 )
 
 type allLogs struct{}
@@ -33,8 +31,9 @@ func (a *allLogs) Enabled(_ zapcore.Level) bool {
 }
 
 func TestStatus(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(&allLogs{})))
-	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/ut/utils_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/utils Suite", []Reporter{junitReporter})
+	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true), zap.Level(&allLogs{})))
+	gomega.RegisterFailHandler(ginkgo.Fail)
+	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
+	reporterConfig.JUnitReport = "../../../report/ut/utils_suite.xml"
+	ginkgo.RunSpecs(t, "pkg/controller/utils Suite", suiteConfig, reporterConfig)
 }

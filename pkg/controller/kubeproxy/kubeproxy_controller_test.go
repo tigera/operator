@@ -17,8 +17,7 @@ package kubeproxy
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
@@ -151,7 +150,7 @@ var _ = Describe("kube-proxy controller tests", func() {
 		}
 	}
 
-	table.DescribeTable("manage kube-proxy DaemonSet",
+	DescribeTable("manage kube-proxy DaemonSet",
 		func(bpfEnabled bool, kpManaged *operatorv1.KubeProxyManagementType) {
 			kp := &appsv1.DaemonSet{}
 			nodeSelectorIncluded := !bpfEnabled
@@ -182,16 +181,16 @@ var _ = Describe("kube-proxy controller tests", func() {
 			}
 			checkKubeProxyState(kp, nodeSelectorIncluded)
 		},
-		table.Entry("disable kube-proxy if BPFEnabled is false and kubeProxyManagement is Enabled",
+		Entry("disable kube-proxy if BPFEnabled is false and kubeProxyManagement is Enabled",
 			true, &kpManagementEnabled,
 		),
-		table.Entry("enable kube-proxy if BPFEnabled is false and kubeProxyManagement is Enabled",
+		Entry("enable kube-proxy if BPFEnabled is false and kubeProxyManagement is Enabled",
 			false, &kpManagementEnabled,
 		),
-		table.Entry("doesn't change kube-proxy if kubeProxyManagement is Disabled",
+		Entry("doesn't change kube-proxy if kubeProxyManagement is Disabled",
 			false, &kpManagementDisabled,
 		),
-		table.Entry("doesn't change kube-proxy if kubeProxyManagement is unset",
+		Entry("doesn't change kube-proxy if kubeProxyManagement is unset",
 			true, nil,
 		),
 	)
@@ -205,7 +204,7 @@ var _ = Describe("kube-proxy controller tests", func() {
 				},
 			}
 		}
-		table.DescribeTable("check whether kube-proxy is not managed",
+		DescribeTable("check whether kube-proxy is not managed",
 			func(labels map[string]string, annotations map[string]string, shouldSucceed bool) {
 				ds := kubeProxyDS()
 				ds.Labels = labels
@@ -213,19 +212,19 @@ var _ = Describe("kube-proxy controller tests", func() {
 				err := validateDaemonSetUnmanaged(ds)
 				Expect(err == nil).Should(Equal(shouldSucceed))
 			},
-			table.Entry("managed by argocd",
+			Entry("managed by argocd",
 				map[string]string{"app.kubernetes.io/managed-by": "argocd"}, nil, false,
 			),
-			table.Entry("addonmanager mode ReconcileOnce",
+			Entry("addonmanager mode ReconcileOnce",
 				map[string]string{"addonmanager.kubernetes.io/mode": "ReconcileOnce"}, nil, false,
 			),
-			table.Entry("managed by argocd with tracking-id",
+			Entry("managed by argocd with tracking-id",
 				nil, map[string]string{"argocd.argoproj.io/tracking-id": "fake-git-commit-hash"}, false,
 			),
-			table.Entry("kube-proxy not managed",
+			Entry("kube-proxy not managed",
 				map[string]string{"app.kubernetes.io/name": "kube-proxy"}, nil, true,
 			),
-			table.Entry("kube-proxy not managed",
+			Entry("kube-proxy not managed",
 				map[string]string{"app.kubernetes.io/name": "kube-proxy"},
 				map[string]string{"kube-proxy.config.k8s.io/proxy-mode": "iptables"},
 				true,

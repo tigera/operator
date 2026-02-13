@@ -994,7 +994,7 @@ var _ = Describe("Installation validation tests", func() {
 
 			var invalidMinReadySeconds int32 = -1
 			instance.Spec.CalicoWebhooksDeployment = &operator.CalicoWebhooksDeployment{
-				Spec: &operatorv1.CalicoWebhooksDeploymentSpec{
+				Spec: &operator.CalicoWebhooksDeploymentSpec{
 					MinReadySeconds: &invalidMinReadySeconds,
 				},
 			}

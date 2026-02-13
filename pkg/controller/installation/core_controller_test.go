@@ -21,8 +21,7 @@ import (
 	"fmt"
 	"time"
 
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/go-logr/logr"
@@ -100,7 +99,7 @@ var _ = Describe("Testing core-controller installation", func() {
 	var scheme *runtime.Scheme
 	var mockStatus *status.MockStatus
 
-	table.DescribeTable("checking rendering configuration",
+	DescribeTable("checking rendering configuration",
 		func(detectedProvider, configuredProvider operator.Provider, expectedErr error) {
 			configuredInstallation := &operator.Installation{}
 			configuredInstallation.Spec.KubernetesProvider = configuredProvider
@@ -113,9 +112,9 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(err).To(Equal(expectedErr))
 			}
 		},
-		table.Entry("Same detected/configured provider", operator.ProviderOpenShift, operator.ProviderOpenShift, nil),
-		table.Entry("Different detected/configured provider", operator.ProviderOpenShift, operator.ProviderDockerEE, errMismatchedError),
-		table.Entry("Same detected/configured managed provider", operator.ProviderEKS, operator.ProviderEKS, nil),
+		Entry("Same detected/configured provider", operator.ProviderOpenShift, operator.ProviderOpenShift, nil),
+		Entry("Different detected/configured provider", operator.ProviderOpenShift, operator.ProviderDockerEE, errMismatchedError),
+		Entry("Same detected/configured managed provider", operator.ProviderEKS, operator.ProviderEKS, nil),
 	)
 
 	notReady := &utils.ReadyFlag{}
@@ -697,7 +696,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 	})
 
-	table.DescribeTable("test Node Affinity defaults",
+	DescribeTable("test Node Affinity defaults",
 		func(expected bool, provider operator.Provider, result []corev1.NodeSelectorTerm) {
 			installation := &operator.Installation{
 				Spec: operator.InstallationSpec{
@@ -712,7 +711,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(installation.Spec.TyphaAffinity).To(BeNil())
 			}
 		},
-		table.Entry("AKS provider sets default",
+		Entry("AKS provider sets default",
 			true,
 			operator.ProviderAKS,
 			[]corev1.NodeSelectorTerm{{
@@ -729,7 +728,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				},
 			}},
 		),
-		table.Entry("Expect no default value for DockerEE provider",
+		Entry("Expect no default value for DockerEE provider",
 			false,
 			operator.ProviderDockerEE,
 			[]corev1.NodeSelectorTerm{},
@@ -1202,7 +1201,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					}
 					Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 				})
-				table.DescribeTable("should fail if requirements are not met",
+				DescribeTable("should fail if requirements are not met",
 					func(funcs []func(), expectedErrorSubstring string) {
 						for _, f := range funcs {
 							f()
@@ -1212,14 +1211,14 @@ var _ = Describe("Testing core-controller installation", func() {
 						Expect(err).Should(HaveOccurred())
 						Expect(err.Error()).To(ContainSubstring(expectedErrorSubstring))
 					},
-					table.Entry("kubernetes service endpoint is already defined",
+					Entry("kubernetes service endpoint is already defined",
 						[]func(){createK8sSvcEpConfigMap, createK8sService, createEndpointSlice},
 						"kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap",
 					),
-					table.Entry("kubernetes service not found",
+					Entry("kubernetes service not found",
 						[]func(){createEndpointSlice}, "failed to get kubernetes service",
 					),
-					table.Entry("kubernetes endpoint slices not found",
+					Entry("kubernetes endpoint slices not found",
 						[]func(){createK8sService}, "failed to get kubernetes endpoint slices",
 					),
 				)

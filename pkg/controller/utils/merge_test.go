@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,7 @@ import (
 	"fmt"
 	"reflect"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	diff "github.com/r3labs/diff/v2"
@@ -711,7 +710,7 @@ var _ = Describe("Installation merge tests", func() {
 			} else {
 				Expect(*inst.CalicoNodeDaemonSet.Metadata).To(Equal(*expect))
 			}
-		}, metadataTests...)
+		}, metadataTests)
 
 		DescribeTable("merge minReadySeconds", func(main, second, expect *int32) {
 			m.CalicoNodeDaemonSet.Spec.MinReadySeconds = main
@@ -738,7 +737,7 @@ var _ = Describe("Installation merge tests", func() {
 			} else {
 				Expect(*inst.CalicoNodeDaemonSet.Spec.Template.Metadata).To(Equal(*expect))
 			}
-		}, metadataTests...)
+		}, metadataTests)
 
 		_resources1 := &v1.ResourceRequirements{
 			Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
@@ -1005,7 +1004,7 @@ var _ = Describe("Installation merge tests", func() {
 			} else {
 				Expect(*inst.CalicoNodeWindowsDaemonSet.Metadata).To(Equal(*expect))
 			}
-		}, metadataTests...)
+		}, metadataTests)
 
 		DescribeTable("merge minReadySeconds", func(main, second, expect *int32) {
 			m.CalicoNodeWindowsDaemonSet.Spec.MinReadySeconds = main
@@ -1032,7 +1031,7 @@ var _ = Describe("Installation merge tests", func() {
 			} else {
 				Expect(*inst.CalicoNodeWindowsDaemonSet.Spec.Template.Metadata).To(Equal(*expect))
 			}
-		}, metadataTests...)
+		}, metadataTests)
 
 		_resources1 := &v1.ResourceRequirements{
 			Requests: v1.ResourceList{v1.ResourceCPU: resource.MustParse("500m")},
@@ -1299,7 +1298,7 @@ var _ = Describe("Installation merge tests", func() {
 			} else {
 				Expect(*inst.CSINodeDriverDaemonSet.Metadata).To(Equal(*expect))
 			}
-		}, metadataTests...)
+		}, metadataTests)
 
 		DescribeTable("merge pod template metadata", func(main, second, expect *opv1.Metadata) {
 			m.CSINodeDriverDaemonSet.Spec.Template.Metadata = main
@@ -1310,7 +1309,7 @@ var _ = Describe("Installation merge tests", func() {
 			} else {
 				Expect(*inst.CSINodeDriverDaemonSet.Spec.Template.Metadata).To(Equal(*expect))
 			}
-		}, metadataTests...)
+		}, metadataTests)
 		_csiNodeDriver1a := opv1.CSINodeDriverDaemonSetContainer{Name: "csi1"}
 		_csiNodeDriver1b := opv1.CSINodeDriverDaemonSetContainer{Name: "csi1"}
 		_csiNodeDriver2 := opv1.CSINodeDriverDaemonSetContainer{Name: "csi2"}

@@ -44,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -102,11 +103,13 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		r = ReconcileIntrusionDetection{
 			client:          c,
 			scheme:          scheme,
-			provider:        operatorv1.ProviderNone,
 			status:          mockStatus,
 			licenseAPIReady: &utils.ReadyFlag{},
 			dpiAPIReady:     &utils.ReadyFlag{},
 			tierWatchReady:  &utils.ReadyFlag{},
+			opts: options.ControllerOptions{
+				DetectedProvider: operatorv1.ProviderNone,
+			},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -320,11 +323,13 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			r = ReconcileIntrusionDetection{
 				client:          c,
 				scheme:          scheme,
-				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
 				licenseAPIReady: readyFlag,
 				dpiAPIReady:     readyFlag,
 				tierWatchReady:  readyFlag,
+				opts: options.ControllerOptions{
+					DetectedProvider: operatorv1.ProviderNone,
+				},
 			}
 		})
 
@@ -688,7 +693,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 			// Update the reconciler to run in external ES mode for these tests.
-			r.elasticExternal = true
+			r.opts.ElasticExternal = true
 		})
 
 		It("should Reconcile with default values for intrusion detection resource", func() {
@@ -717,8 +722,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 
 			// Update the reconciler to run in external ES mode for these tests.
-			r.elasticExternal = true
-			r.multiTenant = true
+			r.opts.ElasticExternal = true
+			r.opts.MultiTenant = true
 
 			// Create the Tenant resources for tenant-a
 			tenantA := &operatorv1.Tenant{

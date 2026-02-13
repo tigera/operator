@@ -55,6 +55,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
@@ -309,7 +310,12 @@ func AddClusterWatch(c ctrlruntime.Controller, obj client.Object, h handler.Even
 	return AddNamespacedWatch(c, obj, h)
 }
 
-func IsAPIServerReady(client client.Client, l logr.Logger) bool {
+// IsProjectCalicoV3Available checks if projectcalico.org/v3 APIs are available. If the v3 parameter is true, it will skip the check and return true.
+func IsProjectCalicoV3Available(client client.Client, opts options.ControllerOptions, l logr.Logger) bool {
+	if opts.UseV3CRDs {
+		return true
+	}
+
 	instance, msg, err := GetAPIServer(context.Background(), client)
 	if err != nil {
 		if errors.IsNotFound(err) {

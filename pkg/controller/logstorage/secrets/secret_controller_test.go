@@ -82,7 +82,7 @@ func NewSecretControllerWithShims(
 	provider operatorv1.Provider,
 	clusterDomain string,
 ) (*SecretSubController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),
@@ -106,7 +106,7 @@ func NewMultiTenantSecretControllerWithShims(
 	provider operatorv1.Provider,
 	clusterDomain string,
 ) (*SecretSubController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),

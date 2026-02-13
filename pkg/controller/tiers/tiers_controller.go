@@ -55,15 +55,21 @@ var log = logf.Log.WithName("controller_tiers")
 
 // Add creates a new Tiers Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		// No need to start this controller.
 		return nil
 	}
 
-	reconciler := newReconciler(mgr, opts)
+	r := &ReconcileTiers{
+		client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		status: status.New(mgr.GetClient(), "tiers", opts.KubernetesVersion),
+		opts:   opts,
+	}
+	r.status.Run(opts.ShutdownContext)
 
-	c, err := ctrlruntime.NewController("tiers-controller", mgr, controller.Options{Reconciler: reconciler})
+	c, err := ctrlruntime.NewController("tiers-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -81,36 +87,6 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		}
 	}
 
-	return add(mgr, c)
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
-	r := &ReconcileTiers{
-		client:      mgr.GetClient(),
-		scheme:      mgr.GetScheme(),
-		provider:    opts.DetectedProvider,
-		status:      status.New(mgr.GetClient(), "tiers", opts.KubernetesVersion),
-		multiTenant: opts.MultiTenant,
-	}
-	r.status.Run(opts.ShutdownContext)
-	return r
-}
-
-var _ reconcile.Reconciler = &ReconcileTiers{}
-
-type ReconcileTiers struct {
-	client             client.Client
-	scheme             *runtime.Scheme
-	provider           operatorv1.Provider
-	status             status.StatusManager
-	tierWatchReady     *utils.ReadyFlag
-	policyWatchesReady *utils.ReadyFlag
-	multiTenant        bool
-}
-
-// add adds watches for resources that are available at startup.
-func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	if err := utils.AddInstallationWatch(c); err != nil {
 		return fmt.Errorf("tiers-controller failed to watch Installation resource: %v", err)
 	}
@@ -126,6 +102,17 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	return nil
 }
 
+var _ reconcile.Reconciler = &ReconcileTiers{}
+
+type ReconcileTiers struct {
+	client             client.Client
+	scheme             *runtime.Scheme
+	status             status.StatusManager
+	tierWatchReady     *utils.ReadyFlag
+	policyWatchesReady *utils.ReadyFlag
+	opts               options.ControllerOptions
+}
+
 func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Tiers")
@@ -133,7 +120,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	// Mark CR as found even though this controller is not associated with a CR, as OnCRFound() enables TigeraStatus reporting.
 	r.status.OnCRFound()
 
-	if !utils.IsAPIServerReady(r.client, reqLogger) {
+	if !utils.IsProjectCalicoV3Available(r.client, r.opts, reqLogger) {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
@@ -174,7 +161,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 
 func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.Logger) (*tiers.Config, *reconcile.Result) {
 	tiersConfig := tiers.Config{
-		OpenShift:      r.provider.IsOpenShift(),
+		OpenShift:      r.opts.DetectedProvider.IsOpenShift(),
 		DNSEgressCIDRs: tiers.DNSEgressCIDR{},
 	}
 
@@ -193,7 +180,7 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		common.TigeraPrometheusNamespace,
 		"tigera-skraper",
 	}
-	if r.multiTenant {
+	if r.opts.MultiTenant {
 		// For multi-tenant clusters, we need to include well-known namespaces as well as per-tenant namespaces.
 		tenantNamespaces, err := utils.TenantNamespaces(ctx, r.client, nil)
 		if err != nil {
@@ -205,13 +192,13 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 	tiersConfig.CalicoNamespaces = namespaces
 
 	// node-local-dns is not supported on openshift
-	if r.provider != operatorv1.ProviderOpenShift {
+	if r.opts.DetectedProvider != operatorv1.ProviderOpenShift {
 		nodeLocalDNSExists, err := utils.IsNodeLocalDNSAvailable(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying node-local-dns pods", err, reqLogger)
 			return nil, &reconcile.Result{RequeueAfter: utils.StandardRetry}
 		} else if nodeLocalDNSExists {
-			dnsServiceIPs, err := utils.GetDNSServiceIPs(ctx, r.client, r.provider)
+			dnsServiceIPs, err := utils.GetDNSServiceIPs(ctx, r.client, r.opts.DetectedProvider)
 			if err != nil {
 				if apierrors.IsNotFound(err) {
 					r.status.SetDegraded(operatorv1.ResourceNotFound, "Unable to find DNS service", err, reqLogger)

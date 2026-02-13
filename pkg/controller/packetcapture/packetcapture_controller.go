@@ -54,8 +54,7 @@ var log = logf.Log.WithName("controller_packet_capture")
 
 // Add creates a new PacketCapture Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
-
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		// No need to start this controller
 		return nil
@@ -98,16 +97,13 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcilePacketCapture{
-		client:              mgr.GetClient(),
-		scheme:              mgr.GetScheme(),
-		provider:            opts.DetectedProvider,
-		enterpriseCRDsExist: opts.EnterpriseCRDExists,
-		status:              status.New(mgr.GetClient(), ResourceName, opts.KubernetesVersion),
-		clusterDomain:       opts.ClusterDomain,
-		tierWatchReady:      tierWatchReady,
-		multiTenant:         opts.MultiTenant,
+		client:         mgr.GetClient(),
+		scheme:         mgr.GetScheme(),
+		status:         status.New(mgr.GetClient(), ResourceName, opts.KubernetesVersion),
+		tierWatchReady: tierWatchReady,
+		opts:           opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -118,14 +114,11 @@ var _ reconcile.Reconciler = &ReconcilePacketCapture{}
 
 // ReconcilePacketCapture reconciles a PackerCaptureAPI object
 type ReconcilePacketCapture struct {
-	client              client.Client
-	scheme              *runtime.Scheme
-	provider            operatorv1.Provider
-	enterpriseCRDsExist bool
-	status              status.StatusManager
-	clusterDomain       string
-	tierWatchReady      *utils.ReadyFlag
-	multiTenant         bool
+	client         client.Client
+	scheme         *runtime.Scheme
+	status         status.StatusManager
+	tierWatchReady *utils.ReadyFlag
+	opts           options.ControllerOptions
 }
 
 // Reconcile reads that state of the cluster for a PacketCapture object and makes changes based on the state read
@@ -188,12 +181,12 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Packet capture is disabled in multi tenant management cluster
-	if r.multiTenant && managementCluster != nil {
+	if r.opts.MultiTenant && managementCluster != nil {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Packet capture is not supported on multi-tenant management clusters", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	if !utils.IsAPIServerReady(r.client, reqLogger) {
+	if !utils.IsProjectCalicoV3Available(r.client, r.opts, reqLogger) {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -217,7 +210,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, packetcaptureapi)
 
-	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace())
+	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -226,7 +219,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		r.client,
 		render.PacketCaptureServerCert,
 		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.clusterDomain))
+		dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, r.opts.ClusterDomain))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieve or creating packet capture TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -239,7 +232,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Failed to process the authentication CR.", err, reqLogger)
 		return reconcile.Result{}, err
@@ -272,11 +265,11 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	trustedBundle := certificateManager.CreateTrustedBundle(certificates...)
 	packetCaptureApiCfg := &render.PacketCaptureApiConfiguration{
 		PullSecrets:                 pullSecrets,
-		OpenShift:                   r.provider.IsOpenShift(),
+		OpenShift:                   r.opts.DetectedProvider.IsOpenShift(),
 		Installation:                installationSpec,
 		KeyValidatorConfig:          keyValidatorConfig,
 		ServerCertSecret:            packetCaptureCertSecret,
-		ClusterDomain:               r.clusterDomain,
+		ClusterDomain:               r.opts.ClusterDomain,
 		ManagementClusterConnection: managementClusterConnection,
 		TrustedBundle:               trustedBundle,
 		PacketCaptureAPI:            packetcaptureapi,
@@ -324,5 +317,4 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
-
 }

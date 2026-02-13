@@ -133,7 +133,7 @@ var (
 
 // Add creates a new Installation Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	ri, err := newReconciler(mgr, opts)
 	if err != nil {
 		return fmt.Errorf("failed to create Core Reconciler: %w", err)
@@ -300,7 +300,7 @@ func addCRDWatches(c ctrlruntime.Controller, v operatorv1.ProductVariant, useV3 
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.AddOptions) (*ReconcileInstallation, error) {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*ReconcileInstallation, error) {
 	nm, err := migration.NewCoreNamespaceMigration(opts.K8sClientset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Namespace migration: %w", err)

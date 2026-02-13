@@ -64,7 +64,7 @@ type ESKubeControllersController struct {
 	tierWatchReady  *utils.ReadyFlag
 }
 
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}

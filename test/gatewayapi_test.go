@@ -60,7 +60,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		err := (&controller.GatewayAPIReconciler{
 			Client: c,
 			Scheme: mgr.GetScheme(),
-		}).SetupWithManager(mgr, options.AddOptions{
+		}).SetupWithManager(mgr, options.ControllerOptions{
 			DetectedProvider:    operator.ProviderNone,
 			EnterpriseCRDExists: EnterpriseCRDsExist,
 			ManageCRDs:          ManageCRDsDisable,

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -94,11 +95,13 @@ var _ = Describe("Compliance controller tests", func() {
 		r = ReconcileCompliance{
 			client:          c,
 			scheme:          scheme,
-			provider:        operatorv1.ProviderNone,
 			status:          mockStatus,
-			clusterDomain:   dns.DefaultClusterDomain,
 			licenseAPIReady: &utils.ReadyFlag{},
 			tierWatchReady:  &utils.ReadyFlag{},
+			opts: options.ControllerOptions{
+				DetectedProvider: operatorv1.ProviderNone,
+				ClusterDomain:    dns.DefaultClusterDomain,
+			},
 		}
 		// We start off with a 'standard' installation, with nothing special
 		installation = &operatorv1.Installation{
@@ -634,11 +637,13 @@ var _ = Describe("Compliance controller tests", func() {
 			r = ReconcileCompliance{
 				client:          c,
 				scheme:          scheme,
-				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
-				clusterDomain:   dns.DefaultClusterDomain,
 				licenseAPIReady: readyFlag,
 				tierWatchReady:  readyFlag,
+				opts: options.ControllerOptions{
+					DetectedProvider: operatorv1.ProviderNone,
+					ClusterDomain:    dns.DefaultClusterDomain,
+				},
 			}
 		})
 
@@ -914,7 +919,7 @@ var _ = Describe("Compliance controller tests", func() {
 		tenantBNamespace := "tenant-b"
 
 		BeforeEach(func() {
-			r.multiTenant = true
+			r.opts.MultiTenant = true
 		})
 
 		It("should reconcile both with and without namespace provided while namespaced compliance instances exist", func() {

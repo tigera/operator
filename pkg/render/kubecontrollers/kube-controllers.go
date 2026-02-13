@@ -319,18 +319,12 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 		{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
-				// Pools are watched to maintain a mapping of blocks to IP pools, and for finalization.
+				// Pools are watched by various controllers.
+				// - IPAM garbage collection watches pools to know which blocks to GC.
+				// - The pool controller adds / manages finalizers on IP pools.
+				// - The pool controller updates status conditions on IP pools.
 				"ippools",
-				// NetworkPolicies are watched for defaulting.
-				"networkpolicies",
-				"tier.networkpolicies",
-				"globalnetworkpolicies",
-				"tier.globalnetworkpolicies",
-				"stagedglobalnetworkpolicies",
-				"tier.stagedglobalnetworkpolicies",
-				"stagednetworkpolicies",
-				"tier.stagednetworkpolicies",
-				"stagedkubernetesnetworkpolicies",
+				"ippools/status",
 			},
 			Verbs: []string{"list", "watch", "update"},
 		},
@@ -376,7 +370,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 		},
 		{
 			// The policy name migrator needs to be able to CRUD Calico NetworkPolicies.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
 				"networkpolicies",
 				"globalnetworkpolicies",
@@ -420,10 +414,10 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Verbs:     []string{"get", "watch", "list"},
 		},
 		{
-			// Needed to validate the license
-			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-			Resources: []string{"licensekeys"},
-			Verbs:     []string{"get", "watch"},
+			// Needed to update the status of the LicenseKey with the result of license validation.
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"licensekeys/status"},
+			Verbs:     []string{"update"},
 		},
 		{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},

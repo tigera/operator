@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,6 +31,6 @@ type WindowsReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func (r *WindowsReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *WindowsReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return installation.AddWindowsController(mgr, opts)
 }

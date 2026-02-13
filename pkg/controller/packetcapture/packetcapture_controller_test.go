@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -148,12 +149,14 @@ var _ = Describe("packet capture controller tests", func() {
 		mockStatus.On("SetDegraded", operatorv1.ResourceCreateError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 
 		r = ReconcilePacketCapture{
-			client:              cli,
-			scheme:              scheme,
-			provider:            operatorv1.ProviderNone,
-			enterpriseCRDsExist: true,
-			status:              mockStatus,
-			tierWatchReady:      ready,
+			client:         cli,
+			scheme:         scheme,
+			status:         mockStatus,
+			tierWatchReady: ready,
+			opts: options.ControllerOptions{
+				DetectedProvider:    operatorv1.ProviderNone,
+				EnterpriseCRDExists: true,
+			},
 		}
 
 		// Apply the packetcapture CR to the fake cluster.
@@ -311,12 +314,14 @@ var _ = Describe("packet capture controller tests", func() {
 			readyFlag = &utils.ReadyFlag{}
 			readyFlag.MarkAsReady()
 			r = ReconcilePacketCapture{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      readyFlag,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: readyFlag,
+				opts: options.ControllerOptions{
+					DetectedProvider:    operatorv1.ProviderNone,
+					EnterpriseCRDExists: true,
+				},
 			}
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 		})
@@ -546,13 +551,15 @@ var _ = Describe("packet capture controller tests", func() {
 
 			It("Should reconcile and not create packet capture resources for a management cluster in multi tenant mode", func() {
 				r := ReconcilePacketCapture{
-					client:              cli,
-					scheme:              scheme,
-					provider:            operatorv1.ProviderNone,
-					enterpriseCRDsExist: true,
-					status:              mockStatus,
-					tierWatchReady:      ready,
-					multiTenant:         true,
+					client:         cli,
+					scheme:         scheme,
+					status:         mockStatus,
+					tierWatchReady: ready,
+					opts: options.ControllerOptions{
+						DetectedProvider:    operatorv1.ProviderNone,
+						EnterpriseCRDExists: true,
+						MultiTenant:         true,
+					},
 				}
 
 				// Reconcile the API server
@@ -573,13 +580,15 @@ var _ = Describe("packet capture controller tests", func() {
 			})
 			It("Should reconcile and create packet capture resources for a management cluster in single tenant mode", func() {
 				r := ReconcilePacketCapture{
-					client:              cli,
-					scheme:              scheme,
-					provider:            operatorv1.ProviderNone,
-					enterpriseCRDsExist: true,
-					status:              mockStatus,
-					tierWatchReady:      ready,
-					multiTenant:         false,
+					client:         cli,
+					scheme:         scheme,
+					status:         mockStatus,
+					tierWatchReady: ready,
+					opts: options.ControllerOptions{
+						DetectedProvider:    operatorv1.ProviderNone,
+						EnterpriseCRDExists: true,
+						MultiTenant:         false,
+					},
 				}
 
 				// Reconcile the API server

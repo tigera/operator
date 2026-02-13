@@ -773,6 +773,7 @@ read-libcalico-enterprise-version:
 
 update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_v1_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
+	$(call copy_v3_crds, $(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_eck_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 
 prepare-for-enterprise-crds:

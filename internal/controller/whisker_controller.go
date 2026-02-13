@@ -36,6 +36,6 @@ type WhiskerReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=whiskers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=whiskers/status,verbs=get;update;patch
 
-func (r *WhiskerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *WhiskerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return whisker.Add(mgr, opts)
 }

@@ -33,6 +33,13 @@ var excludedComponentsPatterns = []string{
 	`^eck-.*`,
 }
 
+var changedFiles = []string{
+	calicoConfig,
+	enterpriseConfig,
+	"pkg/components",
+	"pkg/crds",
+}
+
 // Command to prepare repo for a new release.
 var prepCommand = &cli.Command{
 	Name:  "prep",
@@ -46,10 +53,13 @@ to point to local repositories for Calico and Enterprise respectively.`,
 	Flags: []cli.Flag{
 		versionFlag,
 		calicoVersionFlag,
+		calicoDirFlag,
 		enterpriseVersionFlag,
+		enterpriseDirFlag,
 		enterpriseRegistryFlag,
 		skipValidationFlag,
 		skipMilestoneFlag,
+		skipRepoCheckFlag,
 		githubTokenFlag,
 		localFlag,
 	},
@@ -70,6 +80,7 @@ var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (conte
 
 	// Skip validations if requested
 	if c.Bool(skipValidationFlag.Name) {
+		logrus.Warnf("Skipping %s validation as requested.", c.Name)
 		return ctx, nil
 	}
 
@@ -77,6 +88,10 @@ var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (conte
 	ctx, err = checkGitClean(ctx)
 	if err != nil {
 		return ctx, err
+	}
+
+	if token := c.String(githubTokenFlag.Name); token == "" && !c.Bool(localFlag.Name) {
+		return ctx, fmt.Errorf("GitHub token must be provided via --%s flag or GITHUB_TOKEN environment variable", githubTokenFlag.Name)
 	}
 
 	// One of Calico or Enterprise version must be specified.
@@ -121,6 +136,7 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	}()
 
 	makeTargets := []string{"fix"}
+	prepEnv := os.Environ()
 
 	repoRootDir, err := gitDir()
 	if err != nil {
@@ -141,6 +157,11 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 		if err := updateConfigVersions(repoRootDir, calicoConfig, calico); err != nil {
 			return fmt.Errorf("error modifying Calico config: %w", err)
 		}
+		// Set CALICO_CRDS_DIR if specified
+		if crdsDir := c.String(calicoDirFlag.Name); crdsDir != "" {
+			logrus.Warnf("Using local Calico CRDs from %s", crdsDir)
+			prepEnv = append(prepEnv, fmt.Sprintf("CALICO_CRDS_DIR=%s", crdsDir))
+		}
 	}
 	enterprise := c.String(enterpriseVersionFlag.Name)
 	if enterprise != "" {
@@ -149,22 +170,26 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 			return fmt.Errorf("error modifying Enterprise config: %w", err)
 		}
 		// Update registry for Enterprise
-		eRegistry := c.String(enterpriseRegistryFlag.Name)
-		if eRegistry != "" {
+		if eRegistry := c.String(enterpriseRegistryFlag.Name); eRegistry != "" {
 			logrus.Debugf("Updating Enterprise registry to %s", eRegistry)
-			if _, err := runCommandInDir(repoRootDir, "sed", []string{"-i", fmt.Sprintf(`s|TigeraRegistry.*=.*".*"|TigeraRegistry = "%s/"|`, regexp.QuoteMeta(eRegistry)), "pkg/components/images.go"}, nil); err != nil {
-				return fmt.Errorf("failed to update Enterprise registry in pkg/components/images.go: %w", err)
+			if err := modifyComponentImageConfig(repoRootDir, enterpriseRegistryConfigKey, eRegistry); err != nil {
+				return err
 			}
+		}
+		// Set ENTERPRISE_CRDS_DIR if specified
+		if crdsDir := c.String(enterpriseDirFlag.Name); crdsDir != "" {
+			logrus.Warnf("Using local Enterprise CRDs from %s", crdsDir)
+			prepEnv = append(prepEnv, fmt.Sprintf("ENTERPRISE_CRDS_DIR=%s", crdsDir))
 		}
 	}
 
 	// Run make target to ensure files are formatted correctly and generated files are up to date.
-	if _, err := makeInDir(repoRootDir, strings.Join(makeTargets, " ")); err != nil {
+	if _, err := makeInDir(repoRootDir, strings.Join(makeTargets, " "), prepEnv...); err != nil {
 		return fmt.Errorf("error running \"make fix gen-versions\": %w", err)
 	}
 
 	// Commit changes
-	if _, err := gitInDir(repoRootDir, "add", calicoConfig, enterpriseConfig, "pkg/components", "pkg/crds"); err != nil {
+	if _, err := gitInDir(repoRootDir, append([]string{"add"}, changedFiles...)...); err != nil {
 		return fmt.Errorf("error staging git changes: %w", err)
 	}
 	if _, err := git("commit", "-m", fmt.Sprintf("build: %s release", version)); err != nil {
@@ -230,9 +255,8 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	// Skip milestone management if requested or if using a forked repo
 	if c.Bool(skipMilestoneFlag.Name) {
 		return nil
-	} else if c.String(gitRepoFlag.Name) != mainRepo {
-		logrus.Warn("Cannot manage milestones when using a forked repo, skipping milestone management")
-		return nil
+	} else if c.String(gitRepoFlag.Name) != mainRepo && !c.Bool(skipRepoCheckFlag.Name) {
+		return fmt.Errorf("cannot manage milestones when forked repo (%s); either use the main repo (%s) or set flag to skip repo check", c.String(gitRepoFlag.Name), mainRepo)
 	}
 	return manageStreamMilestone(ctx, c.String(githubTokenFlag.Name))
 })

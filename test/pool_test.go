@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/maps"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"

@@ -20,8 +20,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
@@ -392,13 +391,13 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
-	table.DescribeTable("Test different values for FlexVolumePath",
+	DescribeTable("Test different values for FlexVolumePath",
 		func(i *operator.Installation, expectedFlexVolumePath string) {
 			Expect(fillDefaults(i, nil)).To(BeNil())
 			Expect(i.Spec.FlexVolumePath).To(Equal(expectedFlexVolumePath))
 		},
 
-		table.Entry("FlexVolumePath set to None",
+		Entry("FlexVolumePath set to None",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					FlexVolumePath: "None",
@@ -406,13 +405,13 @@ var _ = Describe("Defaulting logic tests", func() {
 			}, "None",
 		),
 
-		table.Entry("FlexVolumePath left empty (default)",
+		Entry("FlexVolumePath left empty (default)",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{},
 			}, "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
 		),
 
-		table.Entry("FlexVolumePath set to a custom path",
+		Entry("FlexVolumePath set to a custom path",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					FlexVolumePath: "/foo/bar/",
@@ -421,13 +420,13 @@ var _ = Describe("Defaulting logic tests", func() {
 		),
 	)
 
-	table.DescribeTable("Test different values for KubeletVolumePluginPath",
+	DescribeTable("Test different values for KubeletVolumePluginPath",
 		func(i *operator.Installation, expectedKubeletVolumePluginPath string) {
 			Expect(fillDefaults(i, nil)).To(BeNil())
 			Expect(i.Spec.KubeletVolumePluginPath).To(Equal(expectedKubeletVolumePluginPath))
 		},
 
-		table.Entry("KubeletVolumePluginPath set to None",
+		Entry("KubeletVolumePluginPath set to None",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					KubeletVolumePluginPath: "None",
@@ -435,13 +434,13 @@ var _ = Describe("Defaulting logic tests", func() {
 			}, "None",
 		),
 
-		table.Entry("KubeletVolumePluginPath left empty (default)",
+		Entry("KubeletVolumePluginPath left empty (default)",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{},
 			}, filepath.Clean("/var/lib/kubelet"),
 		),
 
-		table.Entry("KubeletVolumePluginPath set to a custom path",
+		Entry("KubeletVolumePluginPath set to a custom path",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					KubeletVolumePluginPath: "/foo/bar/",
@@ -475,7 +474,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
-	table.DescribeTable("should default CNI type based on KubernetesProvider for hosted providers",
+	DescribeTable("should default CNI type based on KubernetesProvider for hosted providers",
 		func(provider operator.Provider, plugin operator.CNIPluginType) {
 			instance := &operator.Installation{
 				Spec: operator.InstallationSpec{KubernetesProvider: provider},
@@ -493,12 +492,12 @@ var _ = Describe("Defaulting logic tests", func() {
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		},
 
-		table.Entry("EKS provider defaults to AmazonVPC plugin", operator.ProviderEKS, operator.PluginAmazonVPC),
-		table.Entry("GKE provider defaults to GKE plugin", operator.ProviderGKE, operator.PluginGKE),
-		table.Entry("AKS provider defaults to AzureVNET plugin", operator.ProviderAKS, operator.PluginAzureVNET),
+		Entry("EKS provider defaults to AmazonVPC plugin", operator.ProviderEKS, operator.PluginAmazonVPC),
+		Entry("GKE provider defaults to GKE plugin", operator.ProviderGKE, operator.PluginGKE),
+		Entry("AKS provider defaults to AzureVNET plugin", operator.ProviderAKS, operator.PluginAzureVNET),
 	)
 
-	table.DescribeTable("setting non-Calico CNI Plugin should default CalicoNetwork to nil",
+	DescribeTable("setting non-Calico CNI Plugin should default CalicoNetwork to nil",
 		func(plugin operator.CNIPluginType) {
 			instance := &operator.Installation{
 				Spec: operator.InstallationSpec{
@@ -518,9 +517,9 @@ var _ = Describe("Defaulting logic tests", func() {
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		},
 
-		table.Entry("AmazonVPC plugin", operator.PluginAmazonVPC),
-		table.Entry("GKE plugin", operator.PluginGKE),
-		table.Entry("AzureVNET plugin", operator.PluginAzureVNET),
+		Entry("AmazonVPC plugin", operator.PluginAmazonVPC),
+		Entry("GKE plugin", operator.PluginGKE),
+		Entry("AzureVNET plugin", operator.PluginAzureVNET),
 	)
 
 	// Tests for Calico Networking on EKS should go in this context.
@@ -626,7 +625,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		})
 	})
 
-	table.DescribeTable("should default IPAM type based on CNI type",
+	DescribeTable("should default IPAM type based on CNI type",
 		func(cni operator.CNIPluginType, ipam operator.IPAMPluginType) {
 			instance := &operator.Installation{
 				Spec: operator.InstallationSpec{
@@ -637,16 +636,16 @@ var _ = Describe("Defaulting logic tests", func() {
 			Expect(instance.Spec.CNI.IPAM.Type).To(Equal(ipam))
 		},
 
-		table.Entry("AmazonVPC CNI defaults to AmazonVPC IPAM", operator.PluginAmazonVPC, operator.IPAMPluginAmazonVPC),
-		table.Entry("GKE CNI defaults to HostLocal IPAM", operator.PluginGKE, operator.IPAMPluginHostLocal),
-		table.Entry("AzureVNET CNI defaults to AzureVNET IPAM", operator.PluginAzureVNET, operator.IPAMPluginAzureVNET),
-		table.Entry("Calico CNI defaults to Calico IPAM", operator.PluginCalico, operator.IPAMPluginCalico),
+		Entry("AmazonVPC CNI defaults to AmazonVPC IPAM", operator.PluginAmazonVPC, operator.IPAMPluginAmazonVPC),
+		Entry("GKE CNI defaults to HostLocal IPAM", operator.PluginGKE, operator.IPAMPluginHostLocal),
+		Entry("AzureVNET CNI defaults to AzureVNET IPAM", operator.PluginAzureVNET, operator.IPAMPluginAzureVNET),
+		Entry("Calico CNI defaults to Calico IPAM", operator.PluginCalico, operator.IPAMPluginCalico),
 	)
 
 	// This test verifies that we properly fill out defaults in the Installation based on the discovered IP pools
 	// in the cluster. The input - currentPools - represents the IP pools that we have discovered from the cluster's API server,
 	// and may have been provisioned either by the user directly, or via the IP pool controller in this operator.
-	table.DescribeTable("should handle various pool configurations",
+	DescribeTable("should handle various pool configurations",
 		func(currentPools []v3.IPPool) {
 			instance := &operator.Installation{}
 			Expect(fillDefaults(instance, &v3.IPPoolList{Items: currentPools})).NotTo(HaveOccurred())
@@ -678,17 +677,17 @@ var _ = Describe("Defaulting logic tests", func() {
 			}
 		},
 
-		table.Entry("one IPv4 pool", []v3.IPPool{{Spec: v3.IPPoolSpec{CIDR: "192.168.0.0/16"}}}),
-		table.Entry("one IPv6 pool", []v3.IPPool{{Spec: v3.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}}}),
-		table.Entry("two IPv6 pools", []v3.IPPool{
+		Entry("one IPv4 pool", []v3.IPPool{{Spec: v3.IPPoolSpec{CIDR: "192.168.0.0/16"}}}),
+		Entry("one IPv6 pool", []v3.IPPool{{Spec: v3.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}}}),
+		Entry("two IPv6 pools", []v3.IPPool{
 			{Spec: v3.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}},
 			{Spec: v3.IPPoolSpec{CIDR: "feed:beef:72e5:a94b::/64"}},
 		}),
-		table.Entry("two IPv4 pools", []v3.IPPool{
+		Entry("two IPv4 pools", []v3.IPPool{
 			{Spec: v3.IPPoolSpec{CIDR: "192.168.0.0/16"}},
 			{Spec: v3.IPPoolSpec{CIDR: "172.168.0.0/16"}},
 		}),
-		table.Entry("dual-spec", []v3.IPPool{
+		Entry("dual-spec", []v3.IPPool{
 			{Spec: v3.IPPoolSpec{CIDR: "192.168.0.0/16"}},
 			{Spec: v3.IPPoolSpec{CIDR: "172.168.0.0/16"}},
 			{Spec: v3.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}},

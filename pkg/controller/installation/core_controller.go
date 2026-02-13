@@ -1260,19 +1260,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Create a TLS key pair to use for Calico webhooks to authenticate with the Kubernetes API server.
-	webhooksTLS, err := certificateManager.GetOrCreateKeyPair(
-		r.client,
-		webhooks.WebhooksTLSSecretName,
-		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(webhooks.WebhooksName, common.CalicoNamespace, r.clusterDomain),
-	)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate for webhooks", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	if webhooksTLS != nil {
-		typhaNodeTLS.TrustedBundle.AddCertificates(webhooksTLS)
+	var webhooksTLS certificatemanagement.KeyPairInterface
+	if r.v3CRDs {
+		// Create a TLS key pair to use for Calico webhooks to authenticate with the Kubernetes API server.
+		webhooksTLS, err = certificateManager.GetOrCreateKeyPair(
+			r.client,
+			webhooks.WebhooksTLSSecretName,
+			common.OperatorNamespace(),
+			dns.GetServiceDNSNames(webhooks.WebhooksName, common.CalicoNamespace, r.clusterDomain),
+		)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate for webhooks", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if webhooksTLS != nil {
+			typhaNodeTLS.TrustedBundle.AddCertificates(webhooksTLS)
+		}
 	}
 
 	// Build the list of components to render, in rendering order.
@@ -1377,13 +1380,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Build a configuration for rendering Calico webhooks.
-	webhooksCfg := webhooks.Configuration{
-		PullSecrets:  pullSecrets,
-		KeyPair:      webhooksTLS,
-		Installation: &instance.Spec,
+	if r.v3CRDs {
+		// Build a configuration for rendering Calico webhooks.
+		webhooksCfg := webhooks.Configuration{
+			PullSecrets:  pullSecrets,
+			KeyPair:      webhooksTLS,
+			Installation: &instance.Spec,
+		}
+		components = append(components, webhooks.Component(&webhooksCfg))
 	}
-	components = append(components, webhooks.Component(&webhooksCfg))
 
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{

@@ -22,7 +22,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -34,6 +33,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 )
 
 const (
@@ -98,7 +98,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: ptr.ToPtr(int32(1)),
+			Replicas: ptr.To[int32](1),
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
@@ -115,7 +115,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					},
 				},
 				Spec: corev1.PodSpec{
-					HostNetwork:        true,
+					HostNetwork:        render.HostNetworkRequired(c.cfg.Installation),
 					ServiceAccountName: WebhooksName,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers: []corev1.Container{{
@@ -187,7 +187,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 								"stagednetworkpolicies",
 								"stagedglobalnetworkpolicies",
 							},
-							Scope: &[]admissionregistrationv1.ScopeType{admissionregistrationv1.ClusterScope}[0],
+							Scope: ptr.To(admissionregistrationv1.ClusterScope),
 						},
 					},
 					{
@@ -201,7 +201,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 							APIGroups:   []string{"projectcalico.org"},
 							APIVersions: []string{"v3"},
 							Resources:   []string{"networkpolicies", "globalnetworkpolicies", "stagednetworkpolicies", "stagedglobalnetworkpolicies"},
-							Scope:       ptr.ToPtr(admissionregistrationv1.ScopeType("*")),
+							Scope:       ptr.To(admissionregistrationv1.ScopeType("*")),
 						},
 					},
 				},
@@ -209,13 +209,14 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					Service: &admissionregistrationv1.ServiceReference{
 						Namespace: common.CalicoNamespace,
 						Name:      WebhooksName,
-						Path:      ptr.ToPtr("/rbac"),
+						Path:      ptr.To("/rbac"),
 					},
 					CABundle: c.cfg.KeyPair.GetCertificatePEM(),
 				},
 				AdmissionReviewVersions: []string{"v1"},
-				SideEffects:             &[]admissionregistrationv1.SideEffectClass{admissionregistrationv1.SideEffectClassNone}[0],
-				TimeoutSeconds:          ptr.Int32ToPtr(5),
+				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
+				TimeoutSeconds:          ptr.To[int32](5),
+				FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
 			},
 		},
 	}

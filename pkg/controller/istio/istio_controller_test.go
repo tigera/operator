@@ -700,7 +700,7 @@ var _ = Describe("Istio controller tests", func() {
 			// Create ImageSet with all required Istio images
 			imageSet := &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "calico-master",
+					Name: "calico-v3.31.3",
 				},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{

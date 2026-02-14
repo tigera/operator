@@ -18,10 +18,10 @@
 package components
 
 var (
-	CalicoRelease string = "v3.31.0"
+	CalicoRelease string = "v3.31.3"
 
 	ComponentCalicoCNI = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "cni",
 		Registry:  "",
 		imagePath: "",
@@ -29,7 +29,7 @@ var (
 	}
 
 	ComponentCalicoCNIFIPS = Component{
-		Version:   "v3.31.0-fips",
+		Version:   "v3.31.3-fips",
 		Image:     "cni",
 		Registry:  "",
 		imagePath: "",
@@ -37,7 +37,7 @@ var (
 	}
 
 	ComponentCalicoCNIWindows = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "cni-windows",
 		Registry:  "",
 		imagePath: "",
@@ -45,7 +45,7 @@ var (
 	}
 
 	ComponentCalicoCSRInitContainer = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "key-cert-provisioner",
 		Registry:  "",
 		imagePath: "",
@@ -53,7 +53,7 @@ var (
 	}
 
 	ComponentCalicoKubeControllers = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "kube-controllers",
 		Registry:  "",
 		imagePath: "",
@@ -61,7 +61,7 @@ var (
 	}
 
 	ComponentCalicoKubeControllersFIPS = Component{
-		Version:   "v3.31.0-fips",
+		Version:   "v3.31.3-fips",
 		Image:     "kube-controllers",
 		Registry:  "",
 		imagePath: "",
@@ -69,7 +69,7 @@ var (
 	}
 
 	ComponentCalicoNode = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "node",
 		Registry:  "",
 		imagePath: "",
@@ -77,7 +77,7 @@ var (
 	}
 
 	ComponentCalicoNodeFIPS = Component{
-		Version:   "v3.31.0-fips",
+		Version:   "v3.31.3-fips",
 		Image:     "node",
 		Registry:  "",
 		imagePath: "",
@@ -85,7 +85,7 @@ var (
 	}
 
 	ComponentCalicoNodeWindows = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "node-windows",
 		Registry:  "",
 		imagePath: "",
@@ -93,7 +93,7 @@ var (
 	}
 
 	ComponentCalicoTypha = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "typha",
 		Registry:  "",
 		imagePath: "",
@@ -101,7 +101,7 @@ var (
 	}
 
 	ComponentCalicoTyphaFIPS = Component{
-		Version:   "v3.31.0-fips",
+		Version:   "v3.31.3-fips",
 		Image:     "typha",
 		Registry:  "",
 		imagePath: "",
@@ -109,7 +109,7 @@ var (
 	}
 
 	ComponentCalicoFlexVolume = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "pod2daemon-flexvol",
 		Registry:  "",
 		imagePath: "",
@@ -117,7 +117,7 @@ var (
 	}
 
 	ComponentCalicoAPIServer = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "apiserver",
 		Registry:  "",
 		imagePath: "",
@@ -125,7 +125,7 @@ var (
 	}
 
 	ComponentCalicoAPIServerFIPS = Component{
-		Version:   "v3.31.0-fips",
+		Version:   "v3.31.3-fips",
 		Image:     "apiserver",
 		Registry:  "",
 		imagePath: "",
@@ -133,7 +133,7 @@ var (
 	}
 
 	ComponentCalicoCSI = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "csi",
 		Registry:  "",
 		imagePath: "",
@@ -141,7 +141,7 @@ var (
 	}
 
 	ComponentCalicoCSIFIPS = Component{
-		Version:   "v3.31.0-fips",
+		Version:   "v3.31.3-fips",
 		Image:     "csi",
 		Registry:  "",
 		imagePath: "",
@@ -149,7 +149,7 @@ var (
 	}
 
 	ComponentCalicoCSIRegistrar = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "node-driver-registrar",
 		Registry:  "",
 		imagePath: "",
@@ -157,7 +157,7 @@ var (
 	}
 
 	ComponentCalicoCSIRegistrarFIPS = Component{
-		Version:   "v3.31.0-fips",
+		Version:   "v3.31.3-fips",
 		Image:     "node-driver-registrar",
 		Registry:  "",
 		imagePath: "",
@@ -165,7 +165,7 @@ var (
 	}
 
 	ComponentCalicoGoldmane = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "goldmane",
 		Registry:  "",
 		imagePath: "",
@@ -173,7 +173,7 @@ var (
 	}
 
 	ComponentCalicoWhisker = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "whisker",
 		Registry:  "",
 		imagePath: "",
@@ -181,7 +181,7 @@ var (
 	}
 
 	ComponentCalicoWhiskerBackend = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "whisker-backend",
 		Registry:  "",
 		imagePath: "",
@@ -189,7 +189,7 @@ var (
 	}
 
 	ComponentCalicoEnvoyGateway = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "envoy-gateway",
 		Registry:  "",
 		imagePath: "",
@@ -197,7 +197,7 @@ var (
 	}
 
 	ComponentCalicoEnvoyProxy = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "envoy-proxy",
 		Registry:  "",
 		imagePath: "",
@@ -205,7 +205,7 @@ var (
 	}
 
 	ComponentCalicoEnvoyRatelimit = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "envoy-ratelimit",
 		Registry:  "",
 		imagePath: "",
@@ -213,7 +213,7 @@ var (
 	}
 
 	ComponentCalicoGuardian = Component{
-		Version:   "v3.31.0",
+		Version:   "v3.31.3",
 		Image:     "guardian",
 		Registry:  "",
 		imagePath: "",

@@ -1,49 +1,49 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/calico.go.tpl
-title: master
+title: v3.31.3
 components:
   libcalico-go:
-    version: master
+    version: v3.31.3
   typha:
-    version: master
+    version: v3.31.3
   node:
-    version: master
+    version: v3.31.3
   cni:
-    version: master
+    version: v3.31.3
   node-windows:
-    version: master
+    version: v3.31.3
   cni-windows:
-    version: master
+    version: v3.31.3
   kube-controllers:
-    version: master
+    version: v3.31.3
   goldmane:
-    version: master
+    version: v3.31.3
   flexvol:
-    version: master
+    version: v3.31.3
   apiserver:
-    version: master
+    version: v3.31.3
   csi:
-    version: master
+    version: v3.31.3
   csi-node-driver-registrar:
-    version: master
+    version: v3.31.3
   key-cert-provisioner:
-    version: master
+    version: v3.31.3
   whisker:
-    version: master
+    version: v3.31.3
   whisker-backend:
-    version: master
+    version: v3.31.3
   envoy-gateway:
-    version: master
+    version: v3.31.3
   envoy-proxy:
-    version: master
+    version: v3.31.3
   envoy-ratelimit:
-    version: master
+    version: v3.31.3
   guardian:
-    version: master
+    version: v3.31.3
   istio-pilot:
-    version: master
+    version: v3.31.3
   istio-install-cni:
-    version: master
+    version: v3.31.3
   istio-ztunnel:
-    version: master
+    version: v3.31.3
   istio-proxyv2:
-    version: master
+    version: v3.31.3

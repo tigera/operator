@@ -2,7 +2,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.18.0
+    controller-gen.kubebuilder.io/version: v0.17.3
   name: caliconodestatuses.crd.projectcalico.org
 spec:
   group: crd.projectcalico.org
@@ -28,10 +28,6 @@ spec:
               properties:
                 classes:
                   items:
-                    enum:
-                      - Agent
-                      - BGP
-                      - Routes
                     type: string
                   type: array
                 node:
@@ -53,9 +49,6 @@ spec:
                         routerID:
                           type: string
                         state:
-                          enum:
-                            - Ready
-                            - NotReady
                           type: string
                         version:
                           type: string
@@ -69,9 +62,6 @@ spec:
                         routerID:
                           type: string
                         state:
-                          enum:
-                            - Ready
-                            - NotReady
                           type: string
                         version:
                           type: string
@@ -95,20 +85,8 @@ spec:
                           since:
                             type: string
                           state:
-                            enum:
-                              - Idle
-                              - Connect
-                              - Active
-                              - OpenSent
-                              - OpenConfirm
-                              - Established
-                              - Close
                             type: string
                           type:
-                            enum:
-                              - NodeMesh
-                              - NodePeer
-                              - GlobalPeer
                             type: string
                         type: object
                       type: array
@@ -120,20 +98,8 @@ spec:
                           since:
                             type: string
                           state:
-                            enum:
-                              - Idle
-                              - Connect
-                              - Active
-                              - OpenSent
-                              - OpenConfirm
-                              - Established
-                              - Close
                             type: string
                           type:
-                            enum:
-                              - NodeMesh
-                              - NodePeer
-                              - GlobalPeer
                             type: string
                         type: object
                       type: array
@@ -163,18 +129,9 @@ spec:
                               peerIP:
                                 type: string
                               sourceType:
-                                enum:
-                                  - Kernel
-                                  - Static
-                                  - Direct
-                                  - NodeMesh
-                                  - BGPPeer
                                 type: string
                             type: object
                           type:
-                            enum:
-                              - FIB
-                              - RIB
                             type: string
                         type: object
                       type: array
@@ -192,18 +149,9 @@ spec:
                               peerIP:
                                 type: string
                               sourceType:
-                                enum:
-                                  - Kernel
-                                  - Static
-                                  - Direct
-                                  - NodeMesh
-                                  - BGPPeer
                                 type: string
                             type: object
                           type:
-                            enum:
-                              - FIB
-                              - RIB
                             type: string
                         type: object
                       type: array

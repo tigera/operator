@@ -892,13 +892,23 @@ $(KUSTOMIZE): $(HACK_BIN)
 
 
 # Options for 'bundle-build'
-ifneq ($(origin CHANNELS), undefined)
-BUNDLE_CHANNELS := --channels=$(CHANNELS)
-endif
+
+# Set the channels to the current release branch, unless
+# we got another one passed to us. Channel should be
+# release-vX.YY
+CHANNEL ?= $(shell git branch --show-current)
+BUNDLE_CHANNEL = --channels=$(if \
+		 $(findstring release-v1,$(CHANNEL)),$(CHANNEL),\
+		 $(error Channel for bundle should be a release branch of the format 'release-vX.YY', not '$(CHANNEL)'))
+
+# We only specify one channel so we don't need to set a
+# default, but if we have one then include it.
 ifneq ($(origin DEFAULT_CHANNEL), undefined)
 BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
-BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+
+# Collate our metadata
+BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNEL) $(BUNDLE_DEFAULT_CHANNEL)
 
 BUNDLE_BASE_DIR ?= $(BUILD_DIR)/bundle/$(VERSION)
 BUNDLE_CRD_DIR ?= $(BUNDLE_BASE_DIR)/crds
@@ -937,7 +947,8 @@ bundle-generate: manifests $(KUSTOMIZE) $(OPERATOR_SDK_BARE) bundle-manifests
 		--verbose \
 		--manifests \
 		--package tigera-operator \
-		--metadata $(BUNDLE_METADATA_OPTS)
+		--metadata \
+		$(BUNDLE_METADATA_OPTS)
 
 # Update a generated bundle so that it can be certified.
 .PHONY: update-bundle

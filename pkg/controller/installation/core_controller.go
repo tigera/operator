@@ -648,6 +648,12 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 		instance.Spec.CNI.BinDir = &defaultCNIBinDir
 	}
 
+	// For compatability reasons, default the CNI config name if not specified.
+	if instance.Spec.CNI.ConfName == nil {
+		defaultCNIConfName := "10-calico.conflist"
+		instance.Spec.CNI.ConfName = &defaultCNIConfName
+	}
+
 	// While a number of the fields in this section are relevant to all CNI plugins,
 	// there are some settings which are currently only applicable if using Calico CNI.
 	// Handle those here.

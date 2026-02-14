@@ -175,6 +175,8 @@ type InstallationSpec struct {
 	// +optional
 	TLSCipherSuites TLSCipherSuites `json:"tlsCipherSuites,omitempty"`
 
+	// Deprecated. NonPrivileged is deprecated and will be removed from the API in a future release.
+	// Enabling this field is not supported and will cause errors.
 	// NonPrivileged configures Calico to be run in non-privileged containers as non-root users where possible.
 	// +optional
 	NonPrivileged *NonPrivilegedType `json:"nonPrivileged,omitempty"`

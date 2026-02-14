@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -700,7 +700,7 @@ var _ = Describe("Istio controller tests", func() {
 			// Create ImageSet with all required Istio images
 			imageSet := &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "calico-master",
+					Name: "calico-v3.31.3",
 				},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{

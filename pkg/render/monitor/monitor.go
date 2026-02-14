@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -35,7 +36,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -544,7 +544,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
-				ReloadStrategy: ptr.ToPtr(monitoringv1.ProcessSignalReloadStrategyType),
+				ReloadStrategy: ptr.To(monitoringv1.ProcessSignalReloadStrategyType),
 				PodMetadata: &monitoringv1.EmbeddedObjectMetadata{
 					Labels: map[string]string{
 						"k8s-app": TigeraPrometheusObjectName,
@@ -607,7 +607,12 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 						Name:      CalicoNodeAlertmanager,
 						Namespace: &promNamespace,
 						Port:      intstr.FromString("web"),
-						Scheme:    string(corev1.URISchemeHTTP),
+						RelabelConfigs: []monitoringv1.RelabelConfig{
+							{
+								TargetLabel: "__scheme__",
+								Replacement: ptr.To("http"),
+							},
+						},
 					},
 				},
 			},
@@ -827,16 +832,34 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 			Interval:      "5s",
 			Port:          "calico-metrics-port",
 			ScrapeTimeout: "5s",
-			Scheme:        "https",
-			TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
+			RelabelConfigs: []monitoringv1.RelabelConfig{
+				{
+					TargetLabel: "__scheme__",
+					Replacement: ptr.To("https"),
+				},
+			},
+			HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+				HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+					TLSConfig: mc.tlsConfig(render.CalicoNodeMetricsService),
+				},
+			},
 		},
 		{
 			HonorLabels:   true,
 			Interval:      "5s",
 			Port:          "calico-bgp-metrics-port",
 			ScrapeTimeout: "5s",
-			Scheme:        "https",
-			TLSConfig:     mc.tlsConfig(render.CalicoNodeMetricsService),
+			RelabelConfigs: []monitoringv1.RelabelConfig{
+				{
+					TargetLabel: "__scheme__",
+					Replacement: ptr.To("https"),
+				},
+			},
+			HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+				HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+					TLSConfig: mc.tlsConfig(render.CalicoNodeMetricsService),
+				},
+			},
 		},
 	}
 
@@ -846,7 +869,12 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 			Interval:      "5s",
 			Port:          "felix-metrics-port",
 			ScrapeTimeout: "5s",
-			Scheme:        "http",
+			RelabelConfigs: []monitoringv1.RelabelConfig{
+				{
+					TargetLabel: "__scheme__",
+					Replacement: ptr.To("http"),
+				},
+			},
 		})
 	}
 
@@ -875,9 +903,11 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 
 func (mc *monitorComponent) tlsConfig(serverName string) *monitoringv1.TLSConfig {
 	return &monitoringv1.TLSConfig{
-		KeyFile:  mc.cfg.ClientTLSSecret.VolumeMountKeyFilePath(),
-		CertFile: mc.cfg.ClientTLSSecret.VolumeMountCertificateFilePath(),
-		CAFile:   mc.cfg.TrustedCertBundle.MountPath(),
+		TLSFilesConfig: monitoringv1.TLSFilesConfig{
+			KeyFile:  mc.cfg.ClientTLSSecret.VolumeMountKeyFilePath(),
+			CertFile: mc.cfg.ClientTLSSecret.VolumeMountCertificateFilePath(),
+			CAFile:   mc.cfg.TrustedCertBundle.MountPath(),
+		},
 		SafeTLSConfig: monitoringv1.SafeTLSConfig{
 			ServerName: &serverName,
 		},
@@ -901,8 +931,17 @@ func (mc *monitorComponent) serviceMonitorElasticsearch() *monitoringv1.ServiceM
 					Interval:      "5s",
 					Port:          "metrics-port",
 					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(esmetrics.ElasticsearchMetricsName),
+					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+							TLSConfig: mc.tlsConfig(esmetrics.ElasticsearchMetricsName),
+						},
+					},
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("https"),
+						},
+					},
 				},
 			},
 		},
@@ -937,8 +976,17 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 					Interval:      "5s",
 					Port:          render.FluentdMetricsPortName,
 					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(render.FluentdPrometheusTLSSecretName),
+					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+							TLSConfig: mc.tlsConfig(render.FluentdPrometheusTLSSecretName),
+						},
+					},
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("https"),
+						},
+					},
 				},
 			},
 		},
@@ -959,16 +1007,27 @@ func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMon
 			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{render.QueryserverNamespace}},
 			Endpoints: []monitoringv1.Endpoint{
 				{
-					HonorLabels:     true,
-					Interval:        "5s",
-					Port:            "queryserver",
-					ScrapeTimeout:   "5s",
-					Scheme:          "https",
+					HonorLabels:   true,
+					Interval:      "5s",
+					Port:          "queryserver",
+					ScrapeTimeout: "5s",
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("https"),
+						},
+					},
 					BearerTokenFile: bearerTokenFile,
-					TLSConfig: &monitoringv1.TLSConfig{
-						CAFile: mc.cfg.TrustedCertBundle.MountPath(),
-						SafeTLSConfig: monitoringv1.SafeTLSConfig{
-							ServerName: &serverName,
+					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+							TLSConfig: &monitoringv1.TLSConfig{
+								TLSFilesConfig: monitoringv1.TLSFilesConfig{
+									CAFile: mc.cfg.TrustedCertBundle.MountPath(),
+								},
+								SafeTLSConfig: monitoringv1.SafeTLSConfig{
+									ServerName: &serverName,
+								},
+							},
 						},
 					},
 				},
@@ -1341,8 +1400,17 @@ func (mc *monitorComponent) serviceMonitorCalicoKubeControllers() *monitoringv1.
 					Interval:      "5s",
 					Port:          "metrics-port",
 					ScrapeTimeout: "5s",
-					Scheme:        "https",
-					TLSConfig:     mc.tlsConfig(KubeControllerMetrics),
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("https"),
+						},
+					},
+					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+							TLSConfig: mc.tlsConfig(KubeControllerMetrics),
+						},
+					},
 				},
 			},
 		},
@@ -1445,30 +1513,44 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 	var needsRBAC bool
 	endpoints := make([]monitoringv1.Endpoint, len(mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor.Endpoints))
 	for i, ep := range mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor.Endpoints {
+		relabelConfigs := ep.RelabelConfigs
+		if len(relabelConfigs) == 0 {
+			relabelConfigs = []monitoringv1.RelabelConfig{
+				{
+					TargetLabel: "__scheme__",
+					Replacement: ptr.To("https"),
+				},
+			}
+		}
 		endpoints[i] = monitoringv1.Endpoint{
 			Port:          "web",
 			Path:          "/federate",
-			Scheme:        "https",
 			Params:        ep.Params,
 			Interval:      ep.Interval,
 			ScrapeTimeout: ep.ScrapeTimeout,
-			TLSConfig: &monitoringv1.TLSConfig{
-				SafeTLSConfig: monitoringv1.SafeTLSConfig{
-					CA: monitoringv1.SecretOrConfigMap{
-						ConfigMap: &corev1.ConfigMapKeySelector{
-							LocalObjectReference: corev1.LocalObjectReference{
-								Name: TigeraExternalPrometheus,
+			HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+				HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+					TLSConfig: &monitoringv1.TLSConfig{
+						SafeTLSConfig: monitoringv1.SafeTLSConfig{
+							CA: monitoringv1.SecretOrConfigMap{
+								ConfigMap: &corev1.ConfigMapKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{
+										Name: TigeraExternalPrometheus,
+									},
+									Key: corev1.TLSCertKey,
+								},
 							},
-							Key: corev1.TLSCertKey,
 						},
+					},
+					HTTPConfigWithoutTLS: monitoringv1.HTTPConfigWithoutTLS{
+						BearerTokenSecret: &ep.BearerTokenSecret,
 					},
 				},
 			},
-			BearerTokenSecret:    &ep.BearerTokenSecret,
 			HonorLabels:          ep.HonorLabels,
 			HonorTimestamps:      ep.HonorTimestamps,
 			MetricRelabelConfigs: ep.MetricRelabelConfigs,
-			RelabelConfigs:       ep.RelabelConfigs,
+			RelabelConfigs:       relabelConfigs,
 		}
 		// All requests that go to our prometheus server are first passing through the authn-proxy side-car. This server
 		// will listen to https traffic and performs authn and authz (see also the rbac attributes in externalPrometheusRole()).
@@ -1516,8 +1598,13 @@ func (mc *monitorComponent) typhaServiceMonitor() client.Object {
 					HonorLabels:   true,
 					Interval:      "5s",
 					Port:          render.TyphaMetricsName,
-					Scheme:        "http",
 					ScrapeTimeout: "5s",
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("http"),
+						},
+					},
 				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"github.com/tigera/operator/pkg/ptr"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/stretchr/testify/mock"
 
@@ -609,6 +611,97 @@ var _ = Describe("LogStorage controller", func() {
 				test.VerifyCert(kbSecret, kbDNSNames...)
 			})
 
+			It("should set the nodeset name as expected", func() {
+				// Setup
+				Expect(cli.Create(ctx, &storagev1.StorageClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: storageClassName,
+					},
+				})).ShouldNot(HaveOccurred())
+				logStorage := &operatorv1.LogStorage{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+					Spec: operatorv1.LogStorageSpec{
+						Nodes: &operatorv1.Nodes{
+							Count: int64(1),
+						},
+						StorageClassName: storageClassName,
+					},
+					Status: operatorv1.LogStorageStatus{
+						State: operatorv1.TigeraStatusReady,
+					},
+				}
+				CreateLogStorage(cli, logStorage)
+				Expect(cli.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
+					Data:       map[string]string{"eck_license_level": string(render.ElasticsearchLicenseTypeEnterprise)},
+				})).ShouldNot(HaveOccurred())
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+				Expect(err).ShouldNot(HaveOccurred())
+				mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", mock.Anything, mock.Anything).Return()
+
+				// Perform the initial reconcile, and capture the generated name.
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				es := &esv1.Elasticsearch{}
+				Expect(cli.Get(ctx, esObjKey, es)).ShouldNot(HaveOccurred())
+				Expect(es.Spec.NodeSets).To(HaveLen(1))
+				nodeSetName := es.Spec.NodeSets[0].Name
+
+				// Check that the nodeset name stays the same after a reconcile with no change.
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, esObjKey, es)).ShouldNot(HaveOccurred())
+				Expect(es.Spec.NodeSets).To(HaveLen(1))
+				Expect(es.Spec.NodeSets[0].Name).To(Equal(nodeSetName))
+
+				// Modify the storage requests - this should trigger a change in the nodeset name
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, logStorage)).ShouldNot(HaveOccurred())
+				logStorage.Spec.Nodes.ResourceRequirements = &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("100Gi"),
+					},
+				}
+				Expect(cli.Update(ctx, logStorage)).ShouldNot(HaveOccurred())
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, esObjKey, es)).ShouldNot(HaveOccurred())
+				Expect(es.Spec.NodeSets[0].Name).ToNot(Equal(nodeSetName))
+
+				// Check that the nodeset name stays the same after a reconcile with no change.
+				nodeSetName = es.Spec.NodeSets[0].Name
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, esObjKey, es)).ShouldNot(HaveOccurred())
+				Expect(es.Spec.NodeSets).To(HaveLen(1))
+				Expect(es.Spec.NodeSets[0].Name).To(Equal(nodeSetName))
+
+				// Modify the storage class name - this should trigger a change in the nodeset name
+				Expect(cli.Create(ctx, &storagev1.StorageClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "new-storage-class",
+					},
+				})).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, logStorage)).ShouldNot(HaveOccurred())
+				logStorage.Spec.StorageClassName = "new-storage-class"
+				Expect(cli.Update(ctx, logStorage)).ShouldNot(HaveOccurred())
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, esObjKey, es)).ShouldNot(HaveOccurred())
+				Expect(es.Spec.NodeSets[0].Name).ToNot(Equal(nodeSetName))
+
+				// Check that the nodeset name stays the same after a reconcile with no change.
+				nodeSetName = es.Spec.NodeSets[0].Name
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, esObjKey, es)).ShouldNot(HaveOccurred())
+				Expect(es.Spec.NodeSets).To(HaveLen(1))
+				Expect(es.Spec.NodeSets[0].Name).To(Equal(nodeSetName))
+
+				mockStatus.AssertExpectations(GinkgoT())
+			})
+
 			It("should not add OwnerReference to user supplied kibana TLS cert", func() {
 				mockStatus.On("ClearDegraded", mock.Anything)
 
@@ -680,6 +773,20 @@ var _ = Describe("LogStorage controller", func() {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      render.ElasticsearchName,
 							Namespace: render.ElasticsearchNamespace,
+						},
+						Spec: esv1.ElasticsearchSpec{
+							NodeSets: []esv1.NodeSet{
+								{
+									Name: "default",
+									VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+										{
+											Spec: corev1.PersistentVolumeClaimSpec{
+												StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+											},
+										},
+									},
+								},
+							},
 						},
 						Status: esv1.ElasticsearchStatus{
 							Phase: esv1.ElasticsearchReadyPhase,
@@ -802,6 +909,20 @@ var _ = Describe("LogStorage controller", func() {
 								Name:      render.ElasticsearchName,
 								Namespace: render.ElasticsearchNamespace,
 							},
+							Spec: esv1.ElasticsearchSpec{
+								NodeSets: []esv1.NodeSet{
+									{
+										Name: "default",
+										VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+											{
+												Spec: corev1.PersistentVolumeClaimSpec{
+													StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+												},
+											},
+										},
+									},
+								},
+							},
 							Status: esv1.ElasticsearchStatus{
 								Phase: esv1.ElasticsearchReadyPhase,
 							},
@@ -853,6 +974,20 @@ var _ = Describe("LogStorage controller", func() {
 						ObjectMeta: metav1.ObjectMeta{
 							Name:      render.ElasticsearchName,
 							Namespace: render.ElasticsearchNamespace,
+						},
+						Spec: esv1.ElasticsearchSpec{
+							NodeSets: []esv1.NodeSet{
+								{
+									Name: "default",
+									VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+										{
+											Spec: corev1.PersistentVolumeClaimSpec{
+												StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+											},
+										},
+									},
+								},
+							},
 						},
 					}
 					Expect(test.GetResource(cli, &escfg)).To(BeNil())
@@ -1219,7 +1354,26 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 			KubernetesProvider:   operatorv1.ProviderNone,
 			Registry:             "testregistry.com/",
 		},
-		Elasticsearch:        &esv1.Elasticsearch{ObjectMeta: metav1.ObjectMeta{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}},
+		Elasticsearch: &esv1.Elasticsearch{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      render.ElasticsearchName,
+				Namespace: render.ElasticsearchNamespace,
+			},
+			Spec: esv1.ElasticsearchSpec{
+				NodeSets: []esv1.NodeSet{
+					{
+						Name: "default",
+						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+							{
+								Spec: corev1.PersistentVolumeClaimSpec{
+									StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 		ClusterConfig:        relasticsearch.NewClusterConfig("cluster", 1, 1, 1),
 		ElasticsearchKeyPair: esKeyPair,
 		TrustedBundle:        trustedBundle,

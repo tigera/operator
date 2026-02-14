@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -121,8 +121,17 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 			},
 		},
 	}
+	// Set platform on all charts that have platform-specific behavior.
+	// The embedded Helm charts use zzz_profile.yaml to load platform profiles
+	// (e.g., profile-platform-openshift.yaml) which configure CNI paths, SCC
+	// RBAC rules, SELinux options, and sidecar injection settings.
 	if cfg.Installation.KubernetesProvider.IsGKE() {
 		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
+	}
+	if cfg.Installation.KubernetesProvider.IsOpenShift() {
+		istioResOpts.IstioCNIOpts.Global.Platform = "openshift"
+		istioResOpts.IstiodOpts.Global.Platform = "openshift"
+		istioResOpts.ZTunnelOpts.Global.Platform = "openshift"
 	}
 	resources, err := istioResOpts.GetResources(cfg.Scheme)
 	if err != nil {

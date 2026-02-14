@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -438,10 +438,10 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
 			return testutils.SelectPolicyByClusterTypeAndProvider(
 				scenario,
-				expectedUnmanagedPolicy,
-				expectedUnmanagedPolicyForOpenshift,
-				nil,
-				nil,
+				map[string]*v3.NetworkPolicy{
+					"unmanaged":           expectedUnmanagedPolicy,
+					"unmanaged-openshift": expectedUnmanagedPolicyForOpenshift,
+				},
 			)
 		}
 

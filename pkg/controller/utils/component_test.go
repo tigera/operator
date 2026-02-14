@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -2314,6 +2314,10 @@ func (mc *mockClient) Get(ctx context.Context, key client.ObjectKey, obj client.
 
 func (mc *mockClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
 	panic("List not implemented in mockClient")
+}
+
+func (mc *mockClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	panic("Apply not implemented in mockClient")
 }
 
 func (mc *mockClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {

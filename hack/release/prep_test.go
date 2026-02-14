@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -57,11 +57,11 @@ components:
   cni:
     version: master
   eck-kibana:
-    version: 8.18.8
+    version: 8.19.10
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
-    version: v3.4.1
+    version: v3.9.1
   gateway-api-envoy-gateway:
     image: envoy-gateway
     version: master
@@ -88,11 +88,11 @@ components:
   cni:
     version: v1.32.4
   eck-kibana:
-    version: 8.18.8
+    version: 8.19.10
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
-    version: v3.4.1
+    version: v3.9.1
   gateway-api-envoy-gateway:
     image: envoy-gateway
     version: v1.32.4

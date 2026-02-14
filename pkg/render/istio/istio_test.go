@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/ginkgo/extensions/table"
 	. "github.com/onsi/gomega"
 
+	netattachv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	admregv1 "k8s.io/api/admissionregistration/v1"
@@ -115,6 +116,7 @@ var _ = Describe("Istio Component Rendering", func() {
 		Expect(operatorv1.AddToScheme(testScheme)).ShouldNot(HaveOccurred())
 		Expect(v3.AddToScheme(testScheme)).ShouldNot(HaveOccurred())
 		Expect(apiextv1.AddToScheme(testScheme)).ShouldNot(HaveOccurred())
+		Expect(netattachv1.AddToScheme(testScheme)).ShouldNot(HaveOccurred())
 
 		cfg = &istio.Configuration{
 			Installation: &operatorv1.InstallationSpec{
@@ -731,6 +733,160 @@ var _ = Describe("Istio Component Rendering", func() {
 			)
 
 			rtest.ExpectResources(objsToCreate, expectedResources)
+		})
+	})
+
+	Describe("OpenShift Platform Configuration", func() {
+		var component *istio.IstioComponent
+
+		BeforeEach(func() {
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
+
+			_, comp, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			component = comp
+		})
+
+		It("should render all workloads successfully on OpenShift", func() {
+			objsToCreate, objsToDelete := component.Objects()
+
+			// OpenShift adds: NetworkAttachmentDefinition (CNI/Multus) +
+			// ztunnel ClusterRole + ztunnel ClusterRoleBinding (SCC)
+			Expect(objsToCreate).To(HaveLen(35))
+			Expect(objsToDelete).To(BeEmpty())
+		})
+
+		It("should include SCC use rule in istio-cni ClusterRole", func() {
+			objsToCreate, _ := component.Objects()
+
+			clusterRole, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, "istio-cni", "")
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify the OpenShift SCC rule is present
+			foundSCCRule := false
+			for _, rule := range clusterRole.Rules {
+				for _, apiGroup := range rule.APIGroups {
+					if apiGroup == "security.openshift.io" {
+						Expect(rule.Resources).To(ContainElement("securitycontextconstraints"))
+						Expect(rule.Verbs).To(ContainElement("use"))
+						Expect(rule.ResourceNames).To(ContainElement("privileged"))
+						foundSCCRule = true
+					}
+				}
+			}
+			Expect(foundSCCRule).To(BeTrue(), "Expected SCC 'use' rule in istio-cni ClusterRole for OpenShift")
+		})
+
+		It("should include SCC use rule in ztunnel ClusterRole", func() {
+			objsToCreate, _ := component.Objects()
+
+			clusterRole, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, "ztunnel", "")
+			Expect(err).ShouldNot(HaveOccurred())
+
+			foundSCCRule := false
+			for _, rule := range clusterRole.Rules {
+				for _, apiGroup := range rule.APIGroups {
+					if apiGroup == "security.openshift.io" {
+						Expect(rule.Resources).To(ContainElement("securitycontextconstraints"))
+						Expect(rule.Verbs).To(ContainElement("use"))
+						Expect(rule.ResourceNames).To(ContainElement("privileged"))
+						foundSCCRule = true
+					}
+				}
+			}
+			Expect(foundSCCRule).To(BeTrue(), "Expected SCC 'use' rule in ztunnel ClusterRole for OpenShift")
+		})
+
+		It("should use OpenShift CNI bin directory", func() {
+			objsToCreate, _ := component.Objects()
+
+			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify the hostPath volume uses /var/lib/cni/bin (OpenShift path)
+			foundCNIBinVolume := false
+			for _, vol := range daemonset.Spec.Template.Spec.Volumes {
+				if vol.Name == "cni-bin-dir" && vol.HostPath != nil {
+					Expect(vol.HostPath.Path).To(Equal("/var/lib/cni/bin"))
+					foundCNIBinVolume = true
+				}
+			}
+			Expect(foundCNIBinVolume).To(BeTrue(), "Expected cni-bin-dir volume with OpenShift path /var/lib/cni/bin")
+		})
+
+		It("should use Multus CNI config directory", func() {
+			objsToCreate, _ := component.Objects()
+
+			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify the hostPath volume uses /etc/cni/multus/net.d (Multus config dir)
+			foundCNINetVolume := false
+			for _, vol := range daemonset.Spec.Template.Spec.Volumes {
+				if vol.Name == "cni-net-dir" && vol.HostPath != nil {
+					Expect(vol.HostPath.Path).To(Equal("/etc/cni/multus/net.d"))
+					foundCNINetVolume = true
+				}
+			}
+			Expect(foundCNINetVolume).To(BeTrue(), "Expected cni-net-dir volume with Multus path /etc/cni/multus/net.d")
+		})
+
+		It("should set PLATFORM env var on istiod", func() {
+			objsToCreate, _ := component.Objects()
+
+			deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, istio.IstioIstiodDeploymentName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			foundPlatformEnv := false
+			for _, container := range deployment.Spec.Template.Spec.Containers {
+				if container.Name == "discovery" {
+					for _, env := range container.Env {
+						if env.Name == "PLATFORM" {
+							Expect(env.Value).To(Equal("openshift"))
+							foundPlatformEnv = true
+						}
+					}
+				}
+			}
+			Expect(foundPlatformEnv).To(BeTrue(), "Expected PLATFORM=openshift env var on istiod")
+		})
+
+		It("should set trusted ztunnel namespace to kube-system on istiod", func() {
+			objsToCreate, _ := component.Objects()
+
+			deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, istio.IstioIstiodDeploymentName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			foundTrustedAccounts := false
+			for _, container := range deployment.Spec.Template.Spec.Containers {
+				if container.Name == "discovery" {
+					for _, env := range container.Env {
+						if env.Name == "CA_TRUSTED_NODE_ACCOUNTS" {
+							Expect(env.Value).To(Equal("kube-system/ztunnel"))
+							foundTrustedAccounts = true
+						}
+					}
+				}
+			}
+			Expect(foundTrustedAccounts).To(BeTrue(), "Expected CA_TRUSTED_NODE_ACCOUNTS=kube-system/ztunnel on istiod")
+		})
+
+		It("should set SELinux context on ztunnel", func() {
+			objsToCreate, _ := component.Objects()
+
+			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioZTunnelDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			foundSELinux := false
+			for _, container := range daemonset.Spec.Template.Spec.Containers {
+				if container.Name == "istio-proxy" {
+					Expect(container.SecurityContext).NotTo(BeNil())
+					Expect(container.SecurityContext.SELinuxOptions).NotTo(BeNil())
+					Expect(container.SecurityContext.SELinuxOptions.Type).To(Equal("spc_t"))
+					foundSELinux = true
+				}
+			}
+			Expect(foundSELinux).To(BeTrue(), "Expected SELinux type spc_t on ztunnel container")
 		})
 	})
 })

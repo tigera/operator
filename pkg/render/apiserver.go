@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -711,7 +711,14 @@ func (c *apiServerComponent) authClusterRole() client.Object {
 			Resources:     []string{"securitycontextconstraints"},
 			Verbs:         []string{"use"},
 			ResourceNames: []string{securitycontextconstraints.Privileged},
-		})
+		},
+			// Starting with OCP 4.20, these permissions are required at startup when it sets up watches.
+			rbacv1.PolicyRule{
+				APIGroups: []string{"config.openshift.io"},
+				Resources: []string{"infrastructures"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+		)
 	}
 
 	return &rbacv1.ClusterRole{

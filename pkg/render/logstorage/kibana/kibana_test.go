@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2025-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -146,7 +146,13 @@ var _ = Describe("Kibana rendering tests", func() {
 				"kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.lifespan"]).To(Equal("8h"))
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.idleTimeout"]).To(Equal("30m"))
-
+			Expect(resultKB.Spec.Config.Data["xpack.fleet.enabled"]).To(BeFalse())
+			Expect(resultKB.Spec.Config.Data["xpack.fleet.agents.enabled"]).To(BeFalse())
+			Expect(resultKB.Spec.Config.Data["xpack.fleet.isAirGapped"]).To(BeTrue())
+			Expect(resultKB.Spec.Config.Data["xpack.fleet.packages"]).To(Equal([]string{}))
+			Expect(resultKB.Spec.Config.Data["xpack.fleet.registryUrl"]).To(Equal("http://localhost:5601"))
+			Expect(resultKB.Spec.Config.Data["newsfeed.enabled"]).To(BeFalse())
+			Expect(resultKB.Spec.Config.Data["xpack.productDocBase.artifactRepositoryUrl"]).To(Equal("http://localhost:5601"))
 		})
 
 		It("should render toleration on GKE", func() {

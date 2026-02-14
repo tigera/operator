@@ -1,4 +1,4 @@
-# Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+# Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.10 AS ubi
+ARG CALICO_BASE
+
+FROM registry.access.redhat.com/ubi9/ubi-minimal:latest AS ubi
 
 FROM scratch AS source
 
@@ -20,14 +22,12 @@ ARG TARGETARCH
 
 COPY --from=ubi /etc/pki /etc/pki/
 COPY --from=ubi /usr/share/pki /usr/share/pki/
-# Used by the Helm library
-COPY --from=ubi /usr/lib64/libdl.so.2 /usr/lib64/libdl.so.2
 
 COPY LICENSE /licenses/LICENSE
 
 COPY build/_output/bin/operator-${TARGETARCH} /usr/bin/operator
 
-FROM calico/base
+FROM ${CALICO_BASE}
 
 ARG GIT_VERSION=unknown
 

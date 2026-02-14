@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,16 +19,21 @@ import (
 	"errors"
 	"fmt"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
+	//nolint:staticcheck // Ignore SA1019 deprecated
 	"github.com/aws/aws-sdk-go/aws"
+	//nolint:staticcheck // Ignore SA1019 deprecated
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	//nolint:staticcheck // Ignore SA1019 deprecated
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
+	//nolint:staticcheck // Ignore SA1019 deprecated
 	"github.com/aws/aws-sdk-go/aws/session"
+	//nolint:staticcheck // Ignore SA1019 deprecated
 	"github.com/aws/aws-sdk-go/service/ec2"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 

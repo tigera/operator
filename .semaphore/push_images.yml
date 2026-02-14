@@ -17,14 +17,7 @@ global_job_config:
       - chmod 0600 ~/.keys/*
       # Add the key to the ssh agent:
       - ssh-add ~/.keys/*
-      # Free up some space
-      - sudo rm -rf ~/.kiex ~/.phpbrew ~/.rbenv ~/.nvm ~/.kerl
-      # Semaphore mounts a copy-on-write FS as /var/lib/docker in order to provide a pre-loaded cache of
-      # some images. However, the cache is not useful to us and the copy-on-write FS is a big problem given
-      # how much we churn docker containers during testing.  Disable it.
-      - sudo systemctl stop docker
-      - sudo umount /var/lib/docker && sudo killall qemu-nbd || true
-      - sudo systemctl start docker
+      # Check out our source code
       - checkout
       # Restore all the build specific caches
       - 'cache restore bin-amd64-${SEMAPHORE_GIT_SHA}'

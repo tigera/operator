@@ -48,6 +48,7 @@ type Configuration struct {
 	PullSecrets  []*corev1.Secret
 	KeyPair      certificatemanagement.KeyPairInterface
 	Installation *operatorv1.InstallationSpec
+	APIServer    *operatorv1.APIServerSpec
 }
 
 func Component(cfg *Configuration) render.Component {
@@ -138,7 +139,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	if overrides := c.cfg.Installation.CalicoWebhooksDeployment; overrides != nil {
+	if overrides := c.cfg.APIServer.CalicoWebhooksDeployment; overrides != nil {
 		rcomp.ApplyDeploymentOverrides(dep, overrides)
 	}
 

@@ -15,7 +15,7 @@
 package webhooks_test
 
 import (
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -39,6 +39,7 @@ import (
 var _ = Describe("Webhooks rendering tests", func() {
 	var (
 		installation       *operatorv1.InstallationSpec
+		apiServerSpec      *operatorv1.APIServerSpec
 		cfg                *webhooks.Configuration
 		certificateManager certificatemanager.CertificateManager
 		cli                client.Client
@@ -50,6 +51,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 			Registry: "test-registry.com/",
 			Variant:  operatorv1.Calico,
 		}
+		apiServerSpec = &operatorv1.APIServerSpec{}
 
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
@@ -65,6 +67,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 		cfg = &webhooks.Configuration{
 			Installation: installation,
+			APIServer:    apiServerSpec,
 			KeyPair:      kp,
 		}
 	})
@@ -87,7 +90,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 	})
 
 	It("should apply deployment overrides", func() {
-		installation.CalicoWebhooksDeployment = &operatorv1.CalicoWebhooksDeployment{
+		apiServerSpec.CalicoWebhooksDeployment = &operatorv1.CalicoWebhooksDeployment{
 			Spec: &operatorv1.CalicoWebhooksDeploymentSpec{
 				Template: &operatorv1.CalicoWebhooksDeploymentPodTemplateSpec{
 					Spec: &operatorv1.CalicoWebhooksDeploymentPodSpec{

@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/validation"
 	apiserver "github.com/tigera/operator/pkg/common/validation/apiserver"
+	webhooksvalidation "github.com/tigera/operator/pkg/common/validation/webhooks"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -52,6 +53,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -158,6 +160,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 	if err = utils.AddDeploymentWatch(c, "calico-apiserver", "calico-apiserver"); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
+	}
+
+	if err = utils.AddDeploymentWatch(c, webhooks.WebhooksName, common.CalicoNamespace); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch webhooks Deployment: %w", err)
+	}
+	if err = utils.AddSecretsWatch(c, webhooks.WebhooksTLSSecretName, common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch webhooks TLS secret: %w", err)
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
@@ -468,15 +477,40 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	certKeyPairOptions := []rcertificatemanagement.KeyPairOption{
+		rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+	}
+
+	// For Enterprise + v3 CRDs, create webhook TLS and render the webhook component.
+	if r.opts.UseV3CRDs {
+		webhooksTLS, err := certificateManager.GetOrCreateKeyPair(
+			r.client,
+			webhooks.WebhooksTLSSecretName,
+			common.OperatorNamespace(),
+			dns.GetServiceDNSNames(webhooks.WebhooksName, common.CalicoNamespace, r.opts.ClusterDomain),
+		)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate for webhooks", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		webhooksCfg := webhooks.Configuration{
+			PullSecrets:  pullSecrets,
+			KeyPair:      webhooksTLS,
+			Installation: installationSpec,
+			APIServer:    &instance.Spec,
+		}
+		components = append(components, webhooks.Component(&webhooksCfg))
+		certKeyPairOptions = append(certKeyPairOptions, rcertificatemanagement.NewKeyPairOption(webhooksTLS, true, true))
+	}
+
 	components = append(components,
 		component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.APIServerNamespace,
 			ServiceAccounts: []string{render.APIServerServiceAccountName},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
-			},
-			TrustedBundle: trustedBundle,
+			KeyPairOptions:  certKeyPairOptions,
+			TrustedBundle:   trustedBundle,
 		}),
 	)
 
@@ -514,6 +548,14 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 		err := validation.ValidateReplicatedPodResourceOverrides(d, apiserver.ValidateAPIServerDeploymentContainer, apiserver.ValidateAPIServerDeploymentInitContainer)
 		if err != nil {
 			return fmt.Errorf("APIServer spec.APIServerDeployment is not valid: %w", err)
+		}
+	}
+
+	// Verify the CalicoWebhooksDeployment overrides, if specified, is valid.
+	if d := instance.Spec.CalicoWebhooksDeployment; d != nil {
+		err := validation.ValidateReplicatedPodResourceOverrides(d, webhooksvalidation.ValidateCalicoWebhooksDeploymentContainer, validation.NoContainersDefined)
+		if err != nil {
+			return fmt.Errorf("APIServer spec.CalicoWebhooksDeployment is not valid: %w", err)
 		}
 	}
 	return nil

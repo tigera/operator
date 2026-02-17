@@ -17,16 +17,16 @@ package common
 import (
 	"os"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 )
 
-var _ = Describe("Operator ServiceAccount name tests", func() {
-	It("should read service account name from the environment variable once", func() {
-		Expect(os.Setenv("OPERATOR_SERVICEACCOUNT", "tigera-operator-env-var")).NotTo(HaveOccurred())
-		Expect(OperatorServiceAccount()).To(Equal("tigera-operator-env-var"))
-		Expect(os.Unsetenv("OPERATOR_SERVICEACCOUNT")).NotTo(HaveOccurred())
-		Expect(os.Setenv("OPERATOR_SERVICEACCOUNT", "other-value")).NotTo(HaveOccurred())
-		Expect(OperatorServiceAccount()).To(Equal("tigera-operator-env-var"))
+var _ = ginkgo.Describe("Operator ServiceAccount name tests", func() {
+	ginkgo.It("should read service account name from the environment variable once", func() {
+		gomega.Expect(os.Setenv("OPERATOR_SERVICEACCOUNT", "tigera-operator-env-var")).NotTo(gomega.HaveOccurred())
+		gomega.Expect(OperatorServiceAccount()).To(gomega.Equal("tigera-operator-env-var"))
+		gomega.Expect(os.Unsetenv("OPERATOR_SERVICEACCOUNT")).NotTo(gomega.HaveOccurred())
+		gomega.Expect(os.Setenv("OPERATOR_SERVICEACCOUNT", "other-value")).NotTo(gomega.HaveOccurred())
+		gomega.Expect(OperatorServiceAccount()).To(gomega.Equal("tigera-operator-env-var"))
 	})
 })

@@ -18,8 +18,7 @@ import (
 	"reflect"
 	"strings"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/ptr"

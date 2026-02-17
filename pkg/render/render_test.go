@@ -21,7 +21,7 @@ import (
 	glog "log"
 	"reflect"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -201,7 +201,7 @@ var _ = Describe("Rendering tests", func() {
 	})
 
 	AfterEach(func() {
-		if CurrentGinkgoTestDescription().Failed {
+		if CurrentSpecReport().Failed() {
 			err := logWriter.Flush()
 			Expect(err).NotTo(HaveOccurred())
 			fmt.Printf("Logs:\n%s\n", logBuffer.String())

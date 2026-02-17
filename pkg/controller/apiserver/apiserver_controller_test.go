@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
@@ -42,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -161,12 +162,14 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -219,12 +222,14 @@ var _ = Describe("apiserver controller tests", func() {
 			})).ToNot(HaveOccurred())
 
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -269,13 +274,15 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, apiSecret)).ShouldNot(HaveOccurred())
 
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				clusterDomain:       dns.DefaultClusterDomain,
-				tierWatchReady:      ready,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+					ClusterDomain:       dns.DefaultClusterDomain,
+				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -291,12 +298,14 @@ var _ = Describe("apiserver controller tests", func() {
 			secretName := "calico-apiserver-certs"
 
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -310,12 +319,14 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -331,12 +342,14 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 
@@ -350,12 +363,14 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      notReady,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: notReady,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 
@@ -373,11 +388,13 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: false,
-				status:              mockStatus,
+				client: cli,
+				scheme: scheme,
+				status: mockStatus,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 
@@ -395,12 +412,14 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
 
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: false,
-				status:              mockStatus,
-				tierWatchReady:      ready,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: false,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 
@@ -434,12 +453,14 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "apiserver",
@@ -463,12 +484,14 @@ var _ = Describe("apiserver controller tests", func() {
 				Status:     operatorv1.TigeraStatusStatus{},
 			}
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
@@ -512,12 +535,14 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "apiserver",
@@ -578,12 +603,14 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      ready,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
 			}
 			installation.Status.Conditions = []metav1.Condition{
 				{
@@ -679,13 +706,14 @@ var _ = Describe("apiserver controller tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				r := ReconcileAPIServer{
-					client:              cli,
-					scheme:              scheme,
-					provider:            operatorv1.ProviderNone,
-					enterpriseCRDsExist: true,
-					status:              mockStatus,
-					tierWatchReady:      ready,
-					multiTenant:         false,
+					client:         cli,
+					scheme:         scheme,
+					status:         mockStatus,
+					tierWatchReady: ready,
+					opts: options.ControllerOptions{
+						EnterpriseCRDExists: true,
+						DetectedProvider:    operatorv1.ProviderNone,
+					},
 				}
 
 				// Reconcile the API server
@@ -706,13 +734,14 @@ var _ = Describe("apiserver controller tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				r := ReconcileAPIServer{
-					client:              cli,
-					scheme:              scheme,
-					provider:            operatorv1.ProviderNone,
-					enterpriseCRDsExist: true,
-					status:              mockStatus,
-					tierWatchReady:      ready,
-					multiTenant:         false,
+					client:         cli,
+					scheme:         scheme,
+					status:         mockStatus,
+					tierWatchReady: ready,
+					opts: options.ControllerOptions{
+						EnterpriseCRDExists: true,
+						DetectedProvider:    operatorv1.ProviderNone,
+					},
 				}
 
 				// Reconcile the API server
@@ -734,13 +763,15 @@ var _ = Describe("apiserver controller tests", func() {
 
 			It("Should reconcile multi-cluster setup for a management cluster for a multiple tenant", func() {
 				r := ReconcileAPIServer{
-					client:              cli,
-					scheme:              scheme,
-					provider:            operatorv1.ProviderNone,
-					enterpriseCRDsExist: true,
-					status:              mockStatus,
-					tierWatchReady:      ready,
-					multiTenant:         true,
+					client:         cli,
+					scheme:         scheme,
+					status:         mockStatus,
+					tierWatchReady: ready,
+					opts: options.ControllerOptions{
+						EnterpriseCRDExists: true,
+						DetectedProvider:    operatorv1.ProviderNone,
+						MultiTenant:         true,
+					},
 				}
 
 				// Reconcile the API server

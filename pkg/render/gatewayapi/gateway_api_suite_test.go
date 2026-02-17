@@ -17,13 +17,13 @@ package gatewayapi
 import (
 	"testing"
 
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/reporters"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 )
 
 func TestRender(t *testing.T) {
-	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../../report/gatewayapi_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/gatewayapi/gatewayapi Suite", []Reporter{junitReporter})
+	gomega.RegisterFailHandler(ginkgo.Fail)
+	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
+	reporterConfig.JUnitReport = "../../../report/gatewayapi_suite.xml"
+	ginkgo.RunSpecs(t, "pkg/gatewayapi/gatewayapi Suite", suiteConfig, reporterConfig)
 }

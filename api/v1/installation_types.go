@@ -193,10 +193,6 @@ type InstallationSpec struct {
 	// +optional
 	CalicoKubeControllersDeployment *CalicoKubeControllersDeployment `json:"calicoKubeControllersDeployment,omitempty"`
 
-	// CalicoWebhooksDeployment configures the calico-webhooks Deployment.
-	// +optional
-	CalicoWebhooksDeployment *CalicoWebhooksDeployment `json:"calicoWebhooksDeployment,omitempty"`
-
 	// TyphaDeployment configures the typha Deployment. If used in conjunction with the deprecated
 	// ComponentResources or TyphaAffinity, then these overrides take precedence.
 	// +optional

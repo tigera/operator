@@ -82,7 +82,6 @@ import (
 	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
-	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -1260,24 +1259,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	var webhooksTLS certificatemanagement.KeyPairInterface
-	if r.v3CRDs {
-		// Create a TLS key pair to use for Calico webhooks to authenticate with the Kubernetes API server.
-		webhooksTLS, err = certificateManager.GetOrCreateKeyPair(
-			r.client,
-			webhooks.WebhooksTLSSecretName,
-			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(webhooks.WebhooksName, common.CalicoNamespace, r.clusterDomain),
-		)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate for webhooks", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if webhooksTLS != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(webhooksTLS)
-		}
-	}
-
 	// Build the list of components to render, in rendering order.
 	components := []render.Component{}
 	if newActiveCM != nil && !installationMarkedForDeletion {
@@ -1333,7 +1314,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
 				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
-				rcertificatemanagement.NewKeyPairOption(webhooksTLS, true, true),
 			},
 			TrustedBundle: typhaNodeTLS.TrustedBundle,
 		}))
@@ -1378,16 +1358,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				r.typhaAutoscalerNonClusterHost.start(r.shutdownContext)
 			}
 		}
-	}
-
-	if r.v3CRDs {
-		// Build a configuration for rendering Calico webhooks.
-		webhooksCfg := webhooks.Configuration{
-			PullSecrets:  pullSecrets,
-			KeyPair:      webhooksTLS,
-			Installation: &instance.Spec,
-		}
-		components = append(components, webhooks.Component(&webhooksCfg))
 	}
 
 	// Build a configuration for rendering calico/typha.

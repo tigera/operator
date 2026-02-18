@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -363,9 +363,9 @@ func (e *eck) operatorStatefulSet() *appsv1.StatefulSet {
 							"--container-registry=" + e.cfg.Installation.Registry,
 							"--max-concurrent-reconciles=3",
 							"--ca-cert-validity=8760h",
-							"--ca-cert-rotate-before=24h",
+							"--ca-cert-rotate-before=30d",
+							"--cert-rotate-before=30d",
 							"--cert-validity=8760h",
-							"--cert-rotate-before=24h",
 							"--enable-webhook=false",
 							"--manage-webhook-certs=false",
 						},

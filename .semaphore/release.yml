@@ -1,6 +1,6 @@
 version: v1.0
 
-name: Operator CD
+name: Operator Release
 
 execution_time_limit:
   hours: 4

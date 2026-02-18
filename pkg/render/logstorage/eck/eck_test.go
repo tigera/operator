@@ -107,9 +107,9 @@ var _ = Describe("ECK rendering tests", func() {
 				"--container-registry=testregistry.com/",
 				"--max-concurrent-reconciles=3",
 				"--ca-cert-validity=8760h",
-				"--ca-cert-rotate-before=24h",
+				"--ca-cert-rotate-before=30d",
+				"--cert-rotate-before=30d",
 				"--cert-validity=8760h",
-				"--cert-rotate-before=24h",
 				"--enable-webhook=false",
 				"--manage-webhook-certs=false",
 			}))

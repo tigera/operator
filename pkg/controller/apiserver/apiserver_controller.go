@@ -464,23 +464,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	var components []render.Component
 
-	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
-	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
-	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
-	if includeV3NetworkPolicy {
-		components = append(components, render.APIServerPolicy(&apiServerCfg))
-	}
-
-	component, err := render.APIServer(&apiServerCfg)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering APIServer", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	certKeyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 	}
-
 	if r.opts.UseV3CRDs {
 		// If using v3 CRDs, we should render the webhooks component that handles various RBAC and
 		// validation responsibilities.
@@ -506,7 +492,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	components = append(components,
-		component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       render.APIServerNamespace,
 			ServiceAccounts: []string{render.APIServerServiceAccountName},
@@ -514,6 +499,20 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			TrustedBundle:   trustedBundle,
 		}),
 	)
+
+	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
+	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
+	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
+	if !r.opts.UseV3CRDs && includeV3NetworkPolicy {
+		components = append(components, render.APIServerPolicy(&apiServerCfg))
+	}
+
+	component, err := render.APIServer(&apiServerCfg)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering APIServer", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	components = append(components, component)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, installationSpec.Variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)

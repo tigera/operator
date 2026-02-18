@@ -468,8 +468,19 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 	}
 	if r.opts.UseV3CRDs {
-		// If using v3 CRDs, we should render the webhooks component that handles various RBAC and
-		// validation responsibilities.
+		// If using v3 CRDs, we render the webhooks component that handles various RBAC and validation
+		// responsibilities. The ordering of resources here is important to avoid a deadlock:
+		//
+		// 1. The webhook's network policy must be installed before the webhook pod starts, because
+		//    the default-deny policy will block traffic to the webhook. If the webhook pod starts
+		//    first, it will register itself with the API server but be unreachable, blocking all
+		//    matching API requests (including the request to create the network policy).
+		//
+		// 2. The webhook's TLS keypair must be provisioned before the pod will launch, since the
+		//    pod mounts the keypair as a volume.
+		//
+		// The network policy is included within the webhooks component so it is reconciled alongside
+		// the Deployment. The TLS keypair is provisioned by the CertificateManagement component below.
 		webhooksTLS, err := certificateManager.GetOrCreateKeyPair(
 			r.client,
 			webhooks.WebhooksTLSSecretName,
@@ -486,19 +497,11 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			KeyPair:      webhooksTLS,
 			Installation: installationSpec,
 			APIServer:    &instance.Spec,
+			OpenShift:    r.opts.DetectedProvider.IsOpenShift(),
 		}
 		components = append(components, webhooks.Component(&webhooksCfg))
 		certKeyPairOptions = append(certKeyPairOptions, rcertificatemanagement.NewKeyPairOption(webhooksTLS, true, true))
 	}
-
-	components = append(components,
-		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
-			Namespace:       render.APIServerNamespace,
-			ServiceAccounts: []string{render.APIServerServiceAccountName},
-			KeyPairOptions:  certKeyPairOptions,
-			TrustedBundle:   trustedBundle,
-		}),
-	)
 
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
@@ -512,7 +515,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering APIServer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	components = append(components, component)
+
+	components = append(components,
+		component,
+		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       render.APIServerNamespace,
+			ServiceAccounts: []string{render.APIServerServiceAccountName},
+			KeyPairOptions:  certKeyPairOptions,
+			TrustedBundle:   trustedBundle,
+		}),
+	)
 
 	if err = imageset.ApplyImageSet(ctx, r.client, installationSpec.Variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)

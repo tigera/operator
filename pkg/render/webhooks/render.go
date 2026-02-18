@@ -26,6 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -41,16 +42,18 @@ import (
 const (
 	WebhooksTLSSecretName = "calico-webhooks-tls"
 
-	WebhooksName = "calico-webhooks"
+	WebhooksName       = "calico-webhooks"
+	WebhooksPolicyName = "calico-system.calico-webhooks"
 )
 
-// NodeConfiguration is the public API used to provide information to the render code to
-// generate Kubernetes objects for installing calico/node on a cluster.
+// Configuration is the public API used to provide information to the render code to
+// generate Kubernetes objects for installing calico/webhooks on a cluster.
 type Configuration struct {
 	PullSecrets  []*corev1.Secret
 	KeyPair      certificatemanagement.KeyPairInterface
 	Installation *operatorv1.InstallationSpec
 	APIServer    *operatorv1.APIServerSpec
+	OpenShift    bool
 }
 
 func Component(cfg *Configuration) render.Component {
@@ -93,30 +96,39 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	// We need a network policy that selects the deployment to ensure bidirectional traffic is allowed between the API server and the webhook.
+	// Network policy to allow traffic to/from the webhook pod.
+	egressRules := networkpolicy.AppendDNSEgressRules(nil, c.cfg.OpenShift)
+	egressRules = append(egressRules,
+		v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		v3.Rule{
+			Action: v3.Pass,
+		},
+	)
 	np := &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "allow-tigera." + WebhooksName, // TODO
+			Name:      WebhooksPolicyName,
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     "allow-tigera", // TODO:
-			Selector: fmt.Sprintf("k8s-app == '%s'", WebhooksName),
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: networkpolicy.KubernetesAppSelector(WebhooksName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
 				{
-					Action: v3.Allow,
-					// Protocol: &networkpolicy.TCPProtocol,
-					// Source:   networkpolicy.KubeAPIServerEntityRule,
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(6443),
+					},
 				},
 			},
-			Egress: []v3.Rule{
-				{
-					Action: v3.Allow,
-					// Protocol:    &networkpolicy.TCPProtocol,
-					// Destination: networkpolicy.KubeAPIServerEntityRule,
-				},
-			},
+			Egress: egressRules,
 		},
 	}
 
@@ -137,19 +149,18 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		Spec: appsv1.DeploymentSpec{
 			Replicas: ptr.To[int32](1),
 			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
-			},
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"k8s-app": WebhooksName,
+				// Use RollingUpdate to avoid downtime during rollouts. Since this is a webhook with
+				// FailurePolicy=Fail, using Recreate would cause a window where no webhook pod is running,
+				// blocking all matching API requests.
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxSurge:       ptr.To(intstr.FromInt(1)),
+					MaxUnavailable: ptr.To(intstr.FromInt(0)),
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: WebhooksName,
-					Labels: map[string]string{
-						"k8s-app": WebhooksName,
-					},
 				},
 				Spec: corev1.PodSpec{
 					HostNetwork:        render.HostNetworkRequired(c.cfg.Installation),
@@ -216,9 +227,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 			},
 			Type: corev1.ServiceTypeClusterIP,
-			Selector: map[string]string{
-				"k8s-app": WebhooksName,
-			},
 		},
 	}
 
@@ -354,8 +362,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	// Create a Cluster role and binding with access to all projectcalico.org resources.
-	calicoRules := []rbacv1.PolicyRule{
+	// Create a ClusterRole and ClusterRoleBinding for the webhook service account.
+	rules := []rbacv1.PolicyRule{
 		{
 			// The webhook needs to be able to create SubjectAccessReviews in order to perform authorization checks for API requests.
 			APIGroups: []string{"authorization.k8s.io"},
@@ -364,48 +372,43 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	enterpriseRules := []rbacv1.PolicyRule{
-		{
-			// The webhook needs to be able to update and delete AuthorizationReviews after they are handled.
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authorizationreviews"},
-			Verbs:     []string{"get", "list", "watch", "update", "delete"},
-		},
-
-		// The webhook service account needs a ClusterRole granting read access to clusterroles, clusterrolebindings, roles,
-		// rolebindings, namespaces, and the Calico resources (tiers, uisettingsgroups, managedclusters) used by the RBAC calculator
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{
-				"tiers",
-				"uisettingsgroups",
-				"managedclusters",
-			},
-			Verbs: []string{"get", "list", "watch"},
-		},
-		{
-			APIGroups: []string{"rbac.authorization.k8s.io"},
-			Resources: []string{
-				"roles",
-				"rolebindings",
-				"clusterroles",
-				"clusterrolebindings",
-			},
-			Verbs: []string{"get", "list", "watch"},
-		},
-		{
-			APIGroups: []string{""},
-			Resources: []string{
-				"namespaces",
-			},
-			Verbs: []string{"get", "list", "watch"},
-		},
-	}
-
-	// Resolve the correct set of permissions needed.
-	rules := calicoRules
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		rules = append(rules, enterpriseRules...)
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				// The webhook needs to be able to update and delete AuthorizationReviews after they are handled.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"authorizationreviews"},
+				Verbs:     []string{"get", "list", "watch", "update", "delete"},
+			},
+			// The webhook service account needs a ClusterRole granting read access to clusterroles, clusterrolebindings, roles,
+			// rolebindings, namespaces, and the Calico resources (tiers, uisettingsgroups, managedclusters) used by the RBAC calculator
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"tiers",
+					"uisettingsgroups",
+					"managedclusters",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{
+					"roles",
+					"rolebindings",
+					"clusterroles",
+					"clusterrolebindings",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{
+					"namespaces",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+		)
 	}
 
 	cr := &rbacv1.ClusterRole{

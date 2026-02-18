@@ -17,7 +17,7 @@ package gatewayapi
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"

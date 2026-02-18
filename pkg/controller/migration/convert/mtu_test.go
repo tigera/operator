@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,8 +19,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/migration/cni"
 	v1 "k8s.io/api/core/v1"
 
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
@@ -50,7 +49,7 @@ var _ = Describe("mtu handler", func() {
 		Expect(*i.Spec.CalicoNetwork.MTU).To(BeEquivalentTo(1234))
 	})
 
-	table.DescribeTable("should read mtu from env vars on calico-node", func(env string) {
+	DescribeTable("should read mtu from env vars on calico-node", func(env string) {
 		comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 			Name:  env,
 			Value: "1324",
@@ -60,11 +59,11 @@ var _ = Describe("mtu handler", func() {
 		Expect(i.Spec.CalicoNetwork).ToNot(BeNil())
 		Expect(*i.Spec.CalicoNetwork.MTU).To(BeEquivalentTo(1324))
 	},
-		table.Entry("ipip", "FELIX_IPINIPMTU"),
-		table.Entry("vxlan", "FELIX_VXLANMTU"),
-		table.Entry("vxlanV6", "FELIX_VXLANMTUV6"),
-		table.Entry("wireguard", "FELIX_WIREGUARDMTU"),
-		table.Entry("wireguardV6", "FELIX_WIREGUARDMTUV6"),
+		Entry("ipip", "FELIX_IPINIPMTU"),
+		Entry("vxlan", "FELIX_VXLANMTU"),
+		Entry("vxlanV6", "FELIX_VXLANMTUV6"),
+		Entry("wireguard", "FELIX_WIREGUARDMTU"),
+		Entry("wireguardV6", "FELIX_WIREGUARDMTUV6"),
 	)
 
 	It("should error if given conflicting mtu values between env vars", func() {

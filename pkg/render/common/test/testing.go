@@ -122,14 +122,14 @@ func ExpectResource(expected client.Object, resources []client.Object) error {
 			}
 		}
 	}
-	return notFoundError(name, ns, resources)
+	return notFoundError(name, ns, expected, resources)
 }
 
-func notFoundError(name, ns string, resources []client.Object) error {
+func notFoundError(name, ns string, o client.Object, resources []client.Object) error {
 	if ns == "" {
-		return fmt.Errorf("resource %s not found in:\n\n%s", name, itemList(resources))
+		return fmt.Errorf("%T %s not found in:\n\n%s", o, name, itemList(resources))
 	}
-	return fmt.Errorf("resource %s/%s not found in:\n\n%s", ns, name, itemList(resources))
+	return fmt.Errorf("%T %s/%s not found in:\n\n%s", o, ns, name, itemList(resources))
 }
 
 // itemList is a helper for printing out a nice error message when a resource is not found.
@@ -191,7 +191,7 @@ func GetResourceOfType[T client.Object](resources []client.Object, name, ns stri
 
 	// Return a nil instance of T and an error.
 	var n T
-	return n, notFoundError(name, ns, resources)
+	return n, notFoundError(name, ns, n, resources)
 }
 
 func GetGlobalResource(resources []client.Object, name, group, version, kind string) client.Object {

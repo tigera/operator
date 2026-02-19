@@ -62,8 +62,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
 		Expect(*instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds).To(BeZero())
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
-		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
-		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
 		Expect(instance.Spec.KubeletVolumePluginPath).To(Equal(filepath.Clean("/var/lib/kubelet")))
 		Expect(*instance.Spec.Logging.CNI.LogSeverity).To(Equal(operator.LogLevelInfo))
 		Expect(*instance.Spec.Logging.CNI.LogFileMaxCount).To(Equal(uint32(10)))
@@ -99,8 +97,6 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPEnabled))
 		Expect(*instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds).To(BeZero())
 		Expect(*instance.Spec.ControlPlaneReplicas).To(Equal(int32(2)))
-		Expect(instance.Spec.NonPrivileged).NotTo(BeNil())
-		Expect(*instance.Spec.NonPrivileged).To(Equal(operator.NonPrivilegedDisabled))
 		Expect(instance.Spec.KubeletVolumePluginPath).To(Equal(filepath.Clean("/var/lib/kubelet")))
 	})
 
@@ -125,12 +121,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		miMode := operator.MultiInterfaceModeNone
 		dpIptables := operator.LinuxDataplaneIptables
 		winDataplaneDisabled := operator.WindowsDataplaneDisabled
-		nonPrivileged := operator.NonPrivilegedEnabled
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
-				Variant:       operator.Calico,
-				NonPrivileged: &nonPrivileged,
-				Registry:      "test-reg/",
+				Variant:  operator.Calico,
+				Registry: "test-reg/",
 				ImagePullSecrets: []v1.LocalObjectReference{
 					{
 						Name: "pullSecret1",
@@ -222,12 +216,10 @@ var _ = Describe("Defaulting logic tests", func() {
 		dpBPF := operator.LinuxDataplaneBPF
 		winDataplaneDisabled := operator.WindowsDataplaneDisabled
 		hpEnabled := operator.HostPortsEnabled
-		npDisabled := operator.NonPrivilegedDisabled
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
-				Variant:       operator.TigeraSecureEnterprise,
-				NonPrivileged: &npDisabled,
-				Registry:      "test-reg/",
+				Variant:  operator.TigeraSecureEnterprise,
+				Registry: "test-reg/",
 				ImagePullSecrets: []v1.LocalObjectReference{
 					{
 						Name: "pullSecret1",

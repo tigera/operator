@@ -2464,7 +2464,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		Expect(mapbCount).To(Equal(1))
 	})
 
-	It("should not create MAPs when k8s<1.32", func() {
+	It("should not create MAPs when k8s<1.32 and should set degraded", func() {
 		r = ReconcileInstallation{
 			client:            c,
 			scheme:            scheme,
@@ -2480,6 +2480,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		err := r.updateMutatingAdmissionPolicies(ctx, operator.Calico, log)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(BeEmpty())
+		mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	It("should not create MAPs when v3CRDs=false", func() {
@@ -2518,7 +2519,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		Expect(componentHandler.objectsToCreate).To(BeEmpty())
 	})
 
-	It("should not create MAPs when kubernetesVersion is nil", func() {
+	It("should not create MAPs when kubernetesVersion is nil and should set degraded", func() {
 		r = ReconcileInstallation{
 			client:            c,
 			scheme:            scheme,
@@ -2534,6 +2535,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		err := r.updateMutatingAdmissionPolicies(ctx, operator.Calico, log)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(BeEmpty())
+		mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	It("should delete stale MAPs with managed label", func() {

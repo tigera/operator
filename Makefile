@@ -518,9 +518,9 @@ format-check:
 dirty-check:
 	@if [ "$$(git diff --stat)" != "" ]; then \
 	echo "The following files are dirty"; git diff --stat; exit 1; fi
-	@# Check that no new CRDs needed to be committed
-	@if [ "$$(git status --porcelain pkg/imports/crds)" != "" ]; then \
-	echo "The following CRD files need to be added"; git status --porcelain pkg/imports/crds; exit 1; fi
+	@# Check that no new CRDs or admission policies needed to be committed
+	@if [ "$$(git status --porcelain pkg/imports)" != "" ]; then \
+	echo "The following imported files need to be added"; git status --porcelain pkg/imports; exit 1; fi
 
 foss-checks:
 	@echo Running $@...
@@ -680,9 +680,11 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 define prep_local_crds
     $(eval product := $(1))
 	rm -rf pkg/imports/crds/$(product)
+	rm -rf pkg/imports/admission/$(product)
 	rm -rf .crds/$(product)
 	mkdir -p pkg/imports/crds/$(product)/v1.crd.projectcalico.org/
 	mkdir -p pkg/imports/crds/$(product)/v3.projectcalico.org/
+	mkdir -p pkg/imports/admission/$(product)
 	mkdir -p .crds/$(product)
 endef
 
@@ -711,6 +713,11 @@ define copy_eck_crds
 		$(eval product := $(2))
 	@cp $(dir)/charts/crd.projectcalico.org.v1/templates/eck/* pkg/imports/crds/$(product)/ && echo "Copied $(product) ECK CRDs"
 endef
+define copy_admission_policies
+    $(eval dir := $(1))
+		$(eval product := $(2))
+	@cp $(dir)/api/admission/* pkg/imports/admission/$(product)/ && echo "Copied $(product) admission policies"
+endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
 .PHONY: update-calico-crds update-enterprise-crds
@@ -729,6 +736,7 @@ read-libcalico-calico-version:
 update-calico-crds: fetch-calico-crds
 	$(call copy_v1_crds, $(CALICO_CRDS_DIR),"calico")
 	$(call copy_v3_crds, $(CALICO_CRDS_DIR),"calico")
+	$(call copy_admission_policies, $(CALICO_CRDS_DIR),"calico")
 
 prepare-for-calico-crds:
 	$(call prep_local_crds,"calico")
@@ -749,6 +757,7 @@ update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_v1_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_v3_crds, $(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_eck_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
+	$(call copy_admission_policies,$(ENTERPRISE_CRDS_DIR),"enterprise")
 
 prepare-for-enterprise-crds:
 	$(call prep_local_crds,"enterprise")

@@ -2147,7 +2147,11 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 }
 
 func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Context, variant operatorv1.ProductVariant, log logr.Logger) error {
-	if !r.manageCRDs || !r.v3CRDs || !r.kubernetesVersion.ProvidesMutatingAdmissionPolicyV1Beta1() {
+	if !r.manageCRDs || !r.v3CRDs {
+		return nil
+	}
+	if !r.kubernetesVersion.ProvidesMutatingAdmissionPolicyV1Beta1() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes version does not support MutatingAdmissionPolicy v1beta1 (requires v1.32+); policy defaulting will not be available", nil, log)
 		return nil
 	}
 

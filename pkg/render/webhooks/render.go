@@ -42,9 +42,10 @@ import (
 const (
 	WebhooksTLSSecretName = "calico-webhooks-tls"
 
-	WebhooksName       = "calico-webhooks"
-	WebhooksPolicyName = "calico-system.calico-webhooks"
+	WebhooksName = "calico-webhooks"
 )
+
+var WebhooksPolicyName = fmt.Sprintf("%s.%s", networkpolicy.TigeraComponentTierName, WebhooksName)
 
 // Configuration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/webhooks on a cluster.

@@ -17,8 +17,7 @@ package validation
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	apiserver "github.com/tigera/operator/pkg/common/validation/apiserver"
 	typha "github.com/tigera/operator/pkg/common/validation/typha"

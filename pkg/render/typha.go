@@ -342,6 +342,12 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
 			},
+			{
+				// For monitoring KubeVirt live migration.
+				APIGroups: []string{"kubevirt.io"},
+				Resources: []string{"virtualmachineinstancemigrations"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
 		},
 	}
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {

@@ -17,8 +17,7 @@ package ippool
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -358,7 +357,7 @@ var _ = Describe("IP Pool controller tests", func() {
 	})
 })
 
-var _ = table.DescribeTable("cidrWithinCidr",
+var _ = DescribeTable("cidrWithinCidr",
 	func(CIDR, pool string, expectedResult bool) {
 		if expectedResult {
 			Expect(cidrWithinCidr(CIDR, pool)).To(BeTrue(), "Expected pool %s to be within CIDR %s", pool, CIDR)
@@ -367,19 +366,19 @@ var _ = table.DescribeTable("cidrWithinCidr",
 		}
 	},
 
-	table.Entry("Default as CIDR and pool", "192.168.0.0/16", "192.168.0.0/16", true),
-	table.Entry("Pool larger than CIDR should fail", "192.168.0.0/16", "192.168.0.0/15", false),
-	table.Entry("Pool larger than CIDR should fail", "192.168.2.0/24", "192.168.0.0/16", false),
-	table.Entry("Non overlapping CIDR and pool should fail", "192.168.0.0/16", "172.168.0.0/16", false),
-	table.Entry("CIDR with smaller pool", "192.168.0.0/16", "192.168.2.0/24", true),
-	table.Entry("IPv6 matching CIDR and pool", "fd00:1234::/32", "fd00:1234::/32", true),
-	table.Entry("IPv6 Pool larger than CIDR should fail", "fd00:1234::/32", "fd00:1234::/31", false),
-	table.Entry("IPv6 Pool larger than CIDR should fail", "fd00:1234:5600::/40", "fd00:1234::/32", false),
-	table.Entry("IPv6 Non overlapping CIDR and pool should fail", "fd00:1234::/32", "fd00:5678::/32", false),
-	table.Entry("IPv6 CIDR with smaller pool", "fd00:1234::/32", "fd00:1234:5600::/40", true),
+	Entry("Default as CIDR and pool", "192.168.0.0/16", "192.168.0.0/16", true),
+	Entry("Pool larger than CIDR should fail", "192.168.0.0/16", "192.168.0.0/15", false),
+	Entry("Pool larger than CIDR should fail", "192.168.2.0/24", "192.168.0.0/16", false),
+	Entry("Non overlapping CIDR and pool should fail", "192.168.0.0/16", "172.168.0.0/16", false),
+	Entry("CIDR with smaller pool", "192.168.0.0/16", "192.168.2.0/24", true),
+	Entry("IPv6 matching CIDR and pool", "fd00:1234::/32", "fd00:1234::/32", true),
+	Entry("IPv6 Pool larger than CIDR should fail", "fd00:1234::/32", "fd00:1234::/31", false),
+	Entry("IPv6 Pool larger than CIDR should fail", "fd00:1234:5600::/40", "fd00:1234::/32", false),
+	Entry("IPv6 Non overlapping CIDR and pool should fail", "fd00:1234::/32", "fd00:5678::/32", false),
+	Entry("IPv6 CIDR with smaller pool", "fd00:1234::/32", "fd00:1234:5600::/40", true),
 )
 
-var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
+var _ = DescribeTable("Test OpenShift IP pool defaulting",
 	func(i *operator.Installation, on *configv1.Network, expectSuccess bool, expected *operator.CalicoNetworkSpec) {
 		// Perform test setup.
 		scheme := runtime.NewScheme()
@@ -430,7 +429,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		Expect(pool).To(Equal(expectedPool))
 	},
 
-	table.Entry("Empty config (with OpenShift) defaults IPPool", &operator.Installation{},
+	Entry("Empty config (with OpenShift) defaults IPPool", &operator.Installation{},
 		&configv1.Network{
 			Spec: configv1.NetworkSpec{
 				ClusterNetwork: []configv1.ClusterNetworkEntry{
@@ -455,7 +454,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 			},
 		}),
 
-	table.Entry("Openshift only CIDR",
+	Entry("Openshift only CIDR",
 		&operator.Installation{
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{},
@@ -485,7 +484,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 			},
 		}),
 
-	table.Entry("CIDR specified from OpenShift config and Calico config",
+	Entry("CIDR specified from OpenShift config and Calico config",
 		&operator.Installation{
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{
@@ -523,7 +522,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 			},
 		}),
 
-	table.Entry("Failure when IPPool is smaller than OpenShift Network",
+	Entry("Failure when IPPool is smaller than OpenShift Network",
 		&operator.Installation{
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{
@@ -548,7 +547,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		nil,
 	),
 
-	table.Entry("Empty IPPool list results in no IPPool with OpenShift",
+	Entry("Empty IPPool list results in no IPPool with OpenShift",
 		&operator.Installation{
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{
@@ -569,7 +568,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		},
 	),
 
-	table.Entry("No OpenShift configuration provided",
+	Entry("No OpenShift configuration provided",
 		&operator.Installation{
 			Spec: operator.InstallationSpec{
 				CNI: &operator.CNISpec{
@@ -628,7 +627,7 @@ var _ = Describe("fillDefaults()", func() {
 
 	// This table verifies that kubernetes provider configuration is accounted for in defaulting. Specifically, it
 	// makes sure that defaulting takes OpenShift config.Network and the kubeadm configmap into account.
-	table.DescribeTable("incorporation of kubernetesProvider config",
+	DescribeTable("incorporation of kubernetesProvider config",
 		func(i *operator.Installation, openshift *configv1.Network, kubeadm *v1.ConfigMap) {
 			// Create the provided kubernetes provider configurations in the fake client.
 			if openshift != nil {
@@ -663,9 +662,9 @@ var _ = Describe("fillDefaults()", func() {
 			Expect(ValidatePools(i)).NotTo(HaveOccurred())
 		},
 
-		table.Entry("Empty config defaults IPPool", &operator.Installation{}, nil, nil),
+		Entry("Empty config defaults IPPool", &operator.Installation{}, nil, nil),
 
-		table.Entry("Openshift only CIDR",
+		Entry("Openshift only CIDR",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					CalicoNetwork: &operator.CalicoNetworkSpec{},
@@ -680,7 +679,7 @@ var _ = Describe("fillDefaults()", func() {
 			nil,
 		),
 
-		table.Entry("CIDR specified from OS config and Calico config",
+		Entry("CIDR specified from OS config and Calico config",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					CalicoNetwork: &operator.CalicoNetworkSpec{
@@ -699,7 +698,7 @@ var _ = Describe("fillDefaults()", func() {
 			nil,
 		),
 
-		table.Entry("kubeadm only CIDR",
+		Entry("kubeadm only CIDR",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					CalicoNetwork: &operator.CalicoNetworkSpec{},
@@ -709,7 +708,7 @@ var _ = Describe("fillDefaults()", func() {
 			&v1.ConfigMap{Data: map[string]string{"ClusterConfiguration": "podSubnet: 10.0.0.0/8"}},
 		),
 
-		table.Entry("CIDR specified from kubeadm config and Calico config",
+		Entry("CIDR specified from kubeadm config and Calico config",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					CalicoNetwork: &operator.CalicoNetworkSpec{

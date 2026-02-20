@@ -101,8 +101,8 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.25.7-llvm18.1.8-k8s1.34.3
-CALICO_BASE_VER ?= ubi9-1770247388
+GO_BUILD_VER?=1.25.7-llvm18.1.8-k8s1.34.3-1
+CALICO_BASE_VER ?= ubi9-1770969585
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -141,8 +141,6 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e GOOS=linux \
 		-e GOARCH=$(ARCH) \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
-		-e ACK_GINKGO_RC=true \
-		-e ACK_GINKGO_DEPRECATIONS=1.16.5 \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS)
@@ -558,54 +556,29 @@ endif
 ###############################################################################
 # Release
 ###############################################################################
-VERSION_REGEX := ^v[0-9]+\.[0-9]+\.[0-9]+$$
+## Create a release for the specified RELEASE_TAG.
 release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
-	$(eval VALID_TAG := $(shell echo $(RELEASE_TAG) | grep -Eq "$(VERSION_REGEX)" && echo true))
-	$(if $(VALID_TAG),,$(error $(RELEASE_TAG) is not a valid version. Please use a version in the format vX.Y.Z))
-
-# Skip releasing if the image already exists.
-	@if !$(MAKE) VERSION=$(RELEASE_TAG) release-check-image-exists; then \
-		echo "Images for $(RELEASE_TAG) already exists"; \
-		exit 0; \
-	fi
-
 	$(MAKE) release VERSION=$(RELEASE_TAG)
-	$(MAKE) release-publish-images VERSION=$(RELEASE_TAG)
-	$(MAKE) release-github VERSION=$(RELEASE_TAG)
+	REPO=$(REPO) CREATE_GITHUB_RELEASE=true $(MAKE) release-publish VERSION=$(RELEASE_TAG)
 
-
+## Generate release notes for the specified VERSION.
 release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
 	REPO=$(REPO) hack/bin/release notes
 
-## Tags and builds a release from start to finish.
-release: release-prereqs
-ifneq ($(VERSION), $(GIT_VERSION))
-	$(error Attempt to build $(VERSION) from $(GIT_VERSION))
-endif
-	$(MAKE) release-build
-	$(MAKE) release-verify
-
-	@echo ""
-	@echo "Release build complete. Next, push the produced images."
-	@echo ""
-	@echo "  make VERSION=$(VERSION) release-publish"
-	@echo ""
+## Build a release from start to finish.
+release: clean hack/bin/release
+	hack/bin/release build
 
 ## Produces a clean build of release artifacts at the specified version.
-release-build: release-prereqs clean
+release-build: release-prereqs var-require-all-VERSION-GIT_VERSION
 # Check that the correct code is checked out.
 ifneq ($(VERSION), $(GIT_VERSION))
 	$(error Attempt to build $(VERSION) from $(GIT_VERSION))
 endif
 	$(MAKE) image-all
-	$(MAKE) tag-images-all RELEASE=true IMAGETAG=$(VERSION)
+	$(MAKE) tag-images-all IMAGETAG=$(VERSION)
 	# Generate the `latest` images.
-	$(MAKE) tag-images-all RELEASE=true IMAGETAG=latest
-
-## Verifies the release artifacts produces by `make release-build` are correct.
-release-verify: release-prereqs
-	# Check the reported version is correct for each release artifact.
-	if ! docker run $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version | grep '^Operator: $(VERSION)$$'; then echo "Reported version:" `docker run $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version ` "\nExpected version: $(VERSION)"; false; else echo "\nVersion check passed\n"; fi
+	$(MAKE) tag-images-all IMAGETAG=latest
 
 release-check-image-exists: release-prereqs
 	@echo "Checking if $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION) exists already"; \
@@ -616,14 +589,15 @@ release-check-image-exists: release-prereqs
 		echo "Image tag check passed; image does not already exist"; \
 	fi
 
-release-publish-images: release-prereqs release-check-image-exists
-	# Push images.
-	$(MAKE) push-all push-manifests push-non-manifests RELEASE=true IMAGETAG=$(VERSION)
+release-publish: hack/bin/release
+	hack/bin/release publish
 
-release-github: release-notes hack/bin/gh
-	@echo "Creating github release for $(VERSION)"
-	hack/bin/gh release create $(VERSION) --title $(VERSION) --draft --notes-file $(VERSION)-release-notes.md
-	@echo "$(VERSION) GitHub release created in draft state. Please review and publish: https://github.com/tigera/operator/releases/tag/$(VERSION) ."
+release-publish-images: release-prereqs release-check-image-exists var-require-all-VERSION
+	# Push images.
+	$(MAKE) push-all push-manifests push-non-manifests IMAGETAG=$(VERSION)
+
+release-github: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
+	hack/bin/release github
 
 GITHUB_CLI_VERSION?=2.62.0
 hack/bin/gh:
@@ -652,7 +626,7 @@ release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:
 ifndef VERSION
-	$(error VERSION is undefined - run using make release VERSION=vX.Y.Z)
+	$(error VERSION is undefined - specify using "VERSION=vX.Y.Z" with make target(s))
 endif
 ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)

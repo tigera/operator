@@ -63,15 +63,11 @@ var log = logf.Log.WithName("controller_apiserver")
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	r := &ReconcileAPIServer{
-		client:              mgr.GetClient(),
-		scheme:              mgr.GetScheme(),
-		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
-		tierWatchReady:      &utils.ReadyFlag{},
-		provider:            opts.DetectedProvider,
-		enterpriseCRDsExist: opts.EnterpriseCRDExists,
-		clusterDomain:       opts.ClusterDomain,
-		multiTenant:         opts.MultiTenant,
-		kubernetesVersion:   opts.KubernetesVersion,
+		client:         mgr.GetClient(),
+		scheme:         mgr.GetScheme(),
+		status:         status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
+		tierWatchReady: &utils.ReadyFlag{},
+		opts:           opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -105,7 +101,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
-	if r.enterpriseCRDsExist {
+	if opts.EnterpriseCRDExists {
 		// Watch for changes to ApplicationLayer
 		err = c.WatchObject(&operatorv1.ApplicationLayer{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -190,15 +186,11 @@ var _ reconcile.Reconciler = &ReconcileAPIServer{}
 type ReconcileAPIServer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client              client.Client
-	scheme              *runtime.Scheme
-	provider            operatorv1.Provider
-	enterpriseCRDsExist bool
-	status              status.StatusManager
-	clusterDomain       string
-	tierWatchReady      *utils.ReadyFlag
-	multiTenant         bool
-	kubernetesVersion   *common.VersionInfo
+	client         client.Client
+	scheme         *runtime.Scheme
+	status         status.StatusManager
+	tierWatchReady *utils.ReadyFlag
+	opts           options.ControllerOptions
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -267,14 +259,26 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace())
+	if r.opts.UseV3CRDs && installationSpec.Variant == operatorv1.Calico {
+		// For Calico OSS, if we're running in v3 CRD mode, there is no reason to continue. For Enterprise,
+		// we still install some containers with this controller so we'll need to carry on.
+		r.status.SetDegraded(
+			operatorv1.ResourceValidationError,
+			"APIServer should not be used when using v3 CRDs, please delete the APIServer CR",
+			nil,
+			reqLogger,
+		)
+		return reconcile.Result{}, nil
+	}
+
+	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	secretName := render.CalicoAPIServerTLSSecretName
-	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, r.clusterDomain))
+	tlsSecret, err := certificateManager.GetOrCreateKeyPair(r.client, secretName, common.OperatorNamespace(), dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, r.opts.ClusterDomain))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create tls key pair", err, reqLogger)
 		return reconcile.Result{}, err
@@ -283,7 +287,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// Since apiserver and queryserver may have different UID:GID at run-time, we need to produce this secret in separate volumes and with different permissions.
 	var queryServerTLSSecretCertificateManagementOnly certificatemanagement.KeyPairInterface
 	if installationSpec.CertificateManagement != nil {
-		queryServerTLSSecretCertificateManagementOnly, err = certificateManager.GetOrCreateKeyPair(r.client, "query-server-tls", common.OperatorNamespace(), dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, r.clusterDomain))
+		queryServerTLSSecretCertificateManagementOnly, err = certificateManager.GetOrCreateKeyPair(r.client, "query-server-tls", common.OperatorNamespace(), dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, r.opts.ClusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create tls key pair", err, reqLogger)
 			return reconcile.Result{}, err
@@ -341,7 +345,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		// Management cluster only: check if the tunnel CA secret has been created. The apiserver mounts this secret so
 		// it can sign certificates for managed clusters. If the managementCluster has not been defaulted then we should
 		// not degrade. This is because the manager_controller exits the reconcile loop if the apiserver is not available.
-		if managementCluster != nil && managementCluster.Spec.TLS != nil && !r.multiTenant {
+		if managementCluster != nil && managementCluster.Spec.TLS != nil && !r.opts.MultiTenant {
 			tunnelSecretName := managementCluster.Spec.TLS.SecretName
 			// The manager_controller should have written this secret. We know this since spec.TLS has been defaulted.
 			// If the secret does not exist, we degrade this controller.
@@ -404,7 +408,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				trustedBundle.AddCertificates(certificate)
 			}
 
-			keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+			keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain)
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get KeyValidator Config", err, reqLogger)
 				return reconcile.Result{}, err
@@ -440,11 +444,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		ManagementClusterConnection: managementClusterConnection,
 		TLSKeyPair:                  tlsSecret,
 		PullSecrets:                 pullSecrets,
-		OpenShift:                   r.provider.IsOpenShift(),
+		OpenShift:                   r.opts.DetectedProvider.IsOpenShift(),
 		TrustedBundle:               trustedBundle,
-		MultiTenant:                 r.multiTenant,
+		MultiTenant:                 r.opts.MultiTenant,
 		KeyValidatorConfig:          keyValidatorConfig,
-		KubernetesVersion:           r.kubernetesVersion,
+		KubernetesVersion:           r.opts.KubernetesVersion,
+		RequiresAggregationServer:   !r.opts.UseV3CRDs,
 		QueryServerTLSKeyPairCertificateManagementOnly: queryServerTLSSecretCertificateManagementOnly,
 	}
 

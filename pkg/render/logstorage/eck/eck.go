@@ -98,6 +98,8 @@ func (e *eck) Objects() ([]client.Object, []client.Object) {
 		render.CreateNamespace(OperatorNamespace, e.cfg.Installation.KubernetesProvider, render.PSSRestricted, e.cfg.Installation.Azure),
 		e.operatorCalicoSystemPolicy(),
 	)
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("elastic-operator-access", OperatorNamespace))
 
 	toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(OperatorNamespace))
 

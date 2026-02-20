@@ -210,11 +210,17 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	res := c.resources
 
-	objs := []client.Object{}
+	var objs, toDelete []client.Object
 	objs = append(objs,
 		c.istiodCalicoSystemPolicy(),
 		c.istioCNICalicoSystemPolicy(),
 		c.ztunnelCalicoSystemPolicy(),
+	)
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istiod", IstioNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istio-cni-node", IstioNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("ztunnel", IstioNamespace),
 	)
 
 	if overrides := c.cfg.Istio.Spec.IstiodDeployment; overrides != nil {
@@ -271,7 +277,7 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, res.CNI...)
 	objs = append(objs, res.ZTunnel...)
 
-	return objs, nil
+	return objs, toDelete
 }
 
 func (c *IstioComponent) Ready() bool {

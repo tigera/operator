@@ -23,8 +23,6 @@ import (
 
 	"github.com/go-logr/logr"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,7 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 
 	"github.com/tigera/operator/pkg/common"
@@ -112,8 +109,6 @@ type ReconcileTiers struct {
 	tierWatchReady     *utils.ReadyFlag
 	policyWatchesReady *utils.ReadyFlag
 	opts               options.ControllerOptions
-
-	deprecatedAllowTigeraTierObjs []client.Object
 }
 
 func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -192,9 +187,6 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		}
 		namespaces = append(namespaces, tenantNamespaces...)
 	}
-	if err := r.fetchDeprecatedObjs(ctx, &tiersConfig); err != nil {
-		reqLogger.V(1).Error(err, "Error fetching deprecated objects for cleaning")
-	}
 	tiersConfig.CalicoNamespaces = namespaces
 
 	// node-local-dns is not supported on openshift
@@ -237,34 +229,4 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 	}
 
 	return &tiersConfig, nil
-}
-
-func (r *ReconcileTiers) fetchDeprecatedObjs(ctx context.Context, tiersConfig *tiers.Config) (err error) {
-	if r.deprecatedAllowTigeraTierObjs != nil {
-		return
-	}
-
-	policies := v3.NetworkPolicyList{}
-	err = r.client.List(ctx, &policies, &client.ListOptions{
-		Namespace: "",
-		LabelSelector: labels.SelectorFromSet(labels.Set{
-			"app.kubernetes.io/managed-by": "tigera-operator",
-		}),
-	})
-	if err != nil {
-		return
-	}
-	for _, pol := range policies.Items {
-		if strings.HasPrefix(pol.Name, "allow-tigera.") {
-			r.deprecatedAllowTigeraTierObjs = append(r.deprecatedAllowTigeraTierObjs, &pol)
-		}
-	}
-	r.deprecatedAllowTigeraTierObjs = append(r.deprecatedAllowTigeraTierObjs,
-		&v3.Tier{
-			TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
-			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
-		},
-	)
-	tiersConfig.DeprecatedObjs = r.deprecatedAllowTigeraTierObjs
-	return
 }

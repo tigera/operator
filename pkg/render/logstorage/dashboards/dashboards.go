@@ -120,11 +120,17 @@ func (d *dashboards) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (d *dashboards) Objects() (objsToCreate, objsToDelete []client.Object) {
+	// allow-tigera Tier was renamed to calico-system
+	objsToDelete = append(objsToDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("dashboards-installer", d.cfg.Namespace),
+	)
 	if d.cfg.IsManaged {
-		return nil, d.resources()
+		objsToDelete = append(objsToDelete, d.resources()...)
+	} else {
+		objsToCreate = append(objsToCreate, d.resources()...)
 	}
 
-	return d.resources(), nil
+	return objsToCreate, objsToDelete
 }
 
 func (d *dashboards) resources() []client.Object {

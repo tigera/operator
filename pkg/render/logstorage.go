@@ -264,6 +264,12 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	// Curator is no longer supported in ElasticSearch beyond version 8 so remove its resources here unconditionally so
 	// that on upgrade we clean up after ourselves. Eventually we can remove this cleanup code as well.
 	toDelete = append(toDelete, es.curatorDecommissionedResources()...)
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("elasticsearch-access", ElasticsearchNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("elasticsearch-internal", ElasticsearchNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", ElasticsearchNamespace),
+	)
 
 	toCreate = append(toCreate, es.oidcUserRole())
 	toCreate = append(toCreate, es.oidcUserRoleBinding())

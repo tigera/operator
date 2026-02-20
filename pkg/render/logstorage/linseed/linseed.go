@@ -169,6 +169,10 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 		// If using External ES, we need to copy the client certificates into Linseed's naespace to be mounted.
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(l.cfg.Namespace, l.cfg.ElasticClientSecret)...)...)
 	}
+
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("linseed-access", l.namespace))
+
 	return toCreate, toDelete
 }
 

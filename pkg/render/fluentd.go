@@ -285,6 +285,9 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.calicoSystemPolicy())
 	objs = append(objs, c.metricsService())
 
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("allow-fluentd-node", LogCollectorNamespace))
+
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
 		// We do this only for GKE as other providers don't (yet?)
 		// automatically add resource quota that constrains whether

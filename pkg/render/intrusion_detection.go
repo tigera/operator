@@ -182,6 +182,10 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		// any resources related to them that might still exist.
 		c.intrusionDetectionPSPClusterRole(),
 		c.intrusionDetectionPSPClusterRoleBinding(),
+		// allow-tigera Tier was renamed to calico-system
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("intrusion-detection-controller", c.cfg.Namespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("intrusion-detection-elastic", c.cfg.Namespace),
 	}
 
 	if !c.cfg.ManagedCluster && !c.cfg.Tenant.MultiTenant() {

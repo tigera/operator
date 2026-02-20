@@ -288,7 +288,11 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	}
 
 	if pcPolicy := render.PacketCaptureAPIPolicy(packetCaptureApiCfg); pcPolicy != nil {
-		components = append(components, pcPolicy)
+		components = append(components,
+			pcPolicy,
+			// allow-tigera Tier was renamed to calico-system
+			render.NewDeletionPassthrough(networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-packetcapture", render.PacketCaptureNamespace)),
+		)
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {

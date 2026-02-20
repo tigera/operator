@@ -300,6 +300,12 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		}
 	}
 
+	// allow-tigera Tier was renamed to calico-system
+	objsToDelete = append(objsToDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("manager-access", c.cfg.Namespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
+	)
+
 	return objsToCreate, objsToDelete
 }
 
@@ -1481,6 +1487,12 @@ func (m *managerComponent) deprecatedResources(tenant *operatorv1.Tenant, instal
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: LegacyVoltronLinseedPublicCert, Namespace: truthNS},
 		},
+	)
+
+	// allow-tigera Tier was renamed to calico-system
+	objs = append(objs,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("manager-access", installNS),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", installNS),
 	)
 
 	return objs

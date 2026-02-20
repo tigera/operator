@@ -485,7 +485,14 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		if err != nil {
 			log.Error(err, "Failed to create NetworkPolicy component for Guardian, policy will be omitted")
 		} else {
-			components = append(components, policyComponent)
+			components = append(components,
+				policyComponent,
+				// allow-tigera Tier was renamed to calico-system
+				render.NewDeletionPassthrough(
+					networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("guardian-access", render.GuardianNamespace),
+					networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", render.GuardianNamespace),
+				),
+			)
 		}
 	}
 

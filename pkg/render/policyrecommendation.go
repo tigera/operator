@@ -492,5 +492,8 @@ func (pr *policyRecommendationComponent) deprecatedObjects(isManagedCluster bool
 			})
 	}
 
+	// allow-tigera Tier was renamed to calico-system
+	deprecatedObjs = append(deprecatedObjs, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-policy-recommendation", pr.cfg.Namespace))
+
 	return deprecatedObjs
 }

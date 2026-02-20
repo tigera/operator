@@ -124,6 +124,10 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	}
 	// Create the deployment last to ensure all secrets have been created
 	toCreate = append(toCreate, e.esGatewayDeployment())
+
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("es-gateway-access", e.cfg.Namespace))
+
 	return toCreate, toDelete
 }
 

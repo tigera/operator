@@ -231,7 +231,7 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		complianceObjs = append(complianceObjs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(c.cfg.Namespace)...)...)
 	}
 
-	var objsToDelete []client.Object
+	objsToDelete := c.deprecatedResources()
 	if c.cfg.ManagementClusterConnection == nil {
 		complianceObjs = append(complianceObjs,
 			c.complianceServerCalicoSystemNetworkPolicy(),
@@ -1760,4 +1760,13 @@ func (c *complianceComponent) multiTenantManagedClustersAccess() []client.Object
 	})
 
 	return objects
+}
+
+func (c *complianceComponent) deprecatedResources() (objs []client.Object) {
+	// allow-tigera Tier was renamed to calico-system
+	objs = append(objs,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("compliance-access", c.cfg.Namespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
+	)
+	return
 }

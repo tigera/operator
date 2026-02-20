@@ -766,8 +766,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		component := render.APIServerPolicy(cfg)
 		resources, _ := component.Objects()
-		policyName := types.NamespacedName{Name: "allow-tigera.apiserver-access", Namespace: "calico-system"}
-		policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+		policyName := types.NamespacedName{Name: "calico-system.apiserver-access", Namespace: "calico-system"}
+		policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 		Expect(policy).ToNot(BeNil())
 		Expect(policy.Spec).ToNot(BeNil())
 		Expect(policy.Spec.Egress).ToNot(BeNil())
@@ -788,8 +788,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		component := render.APIServerPolicy(cfg)
 		resources, _ := component.Objects()
-		policyName := types.NamespacedName{Name: "allow-tigera.apiserver-access", Namespace: "calico-system"}
-		policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+		policyName := types.NamespacedName{Name: "calico-system.apiserver-access", Namespace: "calico-system"}
+		policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 		Expect(policy).ToNot(BeNil())
 		Expect(policy.Spec).ToNot(BeNil())
 		Expect(policy.Spec.Egress).ToNot(BeNil())
@@ -1054,11 +1054,11 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("calico-apiserver", []string{"calico-system", "tigera-system", "calico-apiserver"})))
 	})
 
-	Context("allow-tigera rendering", func() {
-		policyName := types.NamespacedName{Name: "allow-tigera.apiserver-access", Namespace: "calico-system"}
+	Context("calico-system rendering", func() {
+		policyName := types.NamespacedName{Name: "calico-system.apiserver-access", Namespace: "calico-system"}
 
-		DescribeTable("should render allow-tigera policy",
-			func(scenario testutils.AllowTigeraScenario) {
+		DescribeTable("should render calico-system policy",
+			func(scenario testutils.CalicoSystemScenario) {
 				cfg.OpenShift = scenario.OpenShift
 				if scenario.ManagedCluster {
 					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
@@ -1069,14 +1069,14 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 				component := render.APIServerPolicy(cfg)
 				resources, _ := component.Objects()
 
-				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				expectedPolicy := testutils.SelectPolicyByProvider(scenario, apiServerPolicy, apiServerPolicyForOCP)
 				Expect(policy).To(Equal(expectedPolicy))
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+			Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 		)
 	})
 

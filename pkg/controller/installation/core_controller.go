@@ -1043,7 +1043,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 
-		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+		// Ensure the calico-system tier exists, before rendering any network policies within it.
 		//
 		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
 		// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
@@ -1052,7 +1052,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if r.tierWatchReady.IsReady() {
 			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 				if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			} else {
@@ -1572,7 +1572,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		components = append(components,
 			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg),
-			render.NewPassthrough(allowTigeraDefaultDenyForCalicoSystem()),
+			render.NewPassthrough(calicoSystemDefaultDenyForCalicoSystem()),
 		)
 	}
 
@@ -2214,7 +2214,7 @@ func crdPoolsToOperator(crds []v3.IPPool) []operatorv1.IPPool {
 	return pools
 }
 
-func allowTigeraDefaultDenyForCalicoSystem() *v3.NetworkPolicy {
+func calicoSystemDefaultDenyForCalicoSystem() *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{

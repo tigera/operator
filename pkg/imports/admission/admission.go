@@ -16,11 +16,15 @@ package admission
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"fmt"
 	"path"
+	"time"
 
+	"github.com/go-logr/logr"
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -97,6 +101,36 @@ func GetMutatingAdmissionPolicies(variant opv1.ProductVariant, v3 bool) []client
 	}
 
 	return objs
+}
+
+// Ensure ensures that MutatingAdmissionPolicies necessary for bootstrapping exist in the cluster.
+// Further reconciliation is handled by the core controller. If the API is not available (K8s < 1.32),
+// a warning is logged and the function returns nil. MAPs are only installed when v3 CRDs are enabled.
+func Ensure(c client.Client, variant string, v3 bool, log logr.Logger) error {
+	if !v3 {
+		return nil
+	}
+
+	objs := GetMutatingAdmissionPolicies(opv1.ProductVariant(variant), v3)
+
+	for _, obj := range objs {
+		log.Info("ensuring MutatingAdmissionPolicy resource exists", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := c.Create(ctx, obj); err != nil {
+			cancel()
+			if errors.IsAlreadyExists(err) {
+				continue
+			}
+			// If the API is not available (K8s < 1.32), log a warning and skip.
+			if errors.IsNotFound(err) || errors.IsForbidden(err) {
+				log.Info("MutatingAdmissionPolicy API not available, skipping", "error", err)
+				return nil
+			}
+			return fmt.Errorf("failed to create %s %s: %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), err)
+		}
+		cancel()
+	}
+	return nil
 }
 
 // parseAdmissionPolicyYAML parses a YAML document into either a MutatingAdmissionPolicy

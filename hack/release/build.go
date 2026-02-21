@@ -85,14 +85,37 @@ var buildCommand = &cli.Command{
 		enterpriseDirFlag,
 		hashreleaseFlag,
 		skipValidationFlag,
+		hookTimeoutFlag,
 	},
 	Before: buildBefore,
 	Action: buildAction,
 }
 
+// buildBeforeHook is an optional hook called at the start of buildBefore for additional pre-processing.
+// It can be set via init() in separate files to extend the build command behavior.
+var buildBeforeHook cliBeforeHookFunc
+
+// setupHashreleasePreHook is an optional hook called at the start of setupHashreleaseBuild
+// for additional hashrelease setup (e.g., copying image config files).
+var setupHashreleasePreHook cliHookWithRepoDirFunc
+
+// buildAfterHook is an optional hook called in buildAfter for additional post-build tasks.
+// This run regardless of build success or failure, so it can be used for cleanup tasks.
+var buildAfterHooks multiHook
+
 // Pre-action for release build command.
 var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	configureLogging(c)
+
+	// Extract hook timeout once for reuse
+	hookTimeout := c.Duration(hookTimeoutFlag.Name)
+
+	// Call pre-hook if registered.
+	var err error
+	ctx, err = RunBuildBeforeHook(ctx, c, hookTimeout)
+	if err != nil {
+		return ctx, err
+	}
 
 	// Determine build types for Calico and Enterprise
 	if ver := c.String(calicoVersionsConfigFlag.Name); ver != "" {
@@ -112,8 +135,8 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 		logrus.Debug("Enterprise build using specific version selected")
 	}
 
-	// Run verison validations. This is a mandatory check.
-	ctx, err := checkVersion(ctx, c)
+	// Run version validations. This is a mandatory check.
+	ctx, err = checkVersion(ctx, c)
 	if err != nil {
 		return ctx, err
 	}
@@ -174,6 +197,16 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 	version := c.String(versionFlag.Name)
 	buildLog := logrus.WithField("version", version)
 
+	// For hashrelease builds, skip if image is already published.
+	if c.Bool(hashreleaseFlag.Name) {
+		if published, err := operatorImagePublished(c); err != nil {
+			buildLog.WithError(err).Warn("Failed to check if image is already published, proceeding with build")
+		} else if published {
+			buildLog.Warn("Image is already published, skipping build")
+			return nil
+		}
+	}
+
 	// Prepare build environment variables
 	buildEnv := append(os.Environ(), fmt.Sprintf("VERSION=%s", version))
 	if arches := c.StringSlice(archFlag.Name); len(arches) > 0 {
@@ -197,11 +230,7 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 	if c.Bool(hashreleaseFlag.Name) {
 		buildLog = buildLog.WithField("hashrelease", true)
 		buildEnv = append(buildEnv, fmt.Sprintf("GIT_VERSION=%s", c.String(versionFlag.Name)))
-		resetFn, err := setupHashreleaseBuild(ctx, c, repoRootDir)
-		// Ensure git state is reset after build.
-		// If there was an error preparing the build, reset any partial changes first before returning the error.
-		defer resetFn()
-		if err != nil {
+		if err := setupHashreleaseBuild(ctx, c, repoRootDir); err != nil {
 			return fmt.Errorf("preparing hashrelease build environment: %w", err)
 		}
 	} else {
@@ -219,6 +248,15 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 		return fmt.Errorf("asserting operator image version: %w", err)
 	}
 	listImages(registry, image, version)
+	return nil
+})
+
+var buildAfter = cli.AfterFunc(func(ctx context.Context, c *cli.Command) error {
+	hookTimeout := c.Duration(hookTimeoutFlag.Name)
+	if err := RunBuildAfterHook(ctx, c, hookTimeout); err != nil {
+		// Error should not fail the build, but log it for visibility.
+		logrus.WithError(err).Error("Build after hook failed")
+	}
 	return nil
 })
 
@@ -257,45 +295,55 @@ func assertOperatorImageVersion(registry, image, expectedVersion string) error {
 	return nil
 }
 
-// Modify component images config and versions for hashrelease builds as needed.
-// Returns a function to reset the git state and any error encountered.
-func setupHashreleaseBuild(ctx context.Context, c *cli.Command, repoRootDir string) (func(), error) {
-	repoReset := func() {
-		if out, err := gitInDir(repoRootDir, append([]string{"checkout", "-f"}, changedFiles...)...); err != nil {
-			logrus.WithError(err).Errorf("resetting git state: %s", out)
+// Modify component images config and versions for hashrelease builds as needed
+// and adds a build after hook to reset any changes to git state after the build completes.
+func setupHashreleaseBuild(ctx context.Context, c *cli.Command, repoRootDir string) error {
+	buildAfterHooks.Add("Reset repo git state", func(ctx context.Context, c *cli.Command) error {
+		if out, err := gitInDirContext(ctx, repoRootDir, append([]string{"checkout", "-f"}, changedFiles...)...); err != nil {
+			logrus.Error(out)
+			return fmt.Errorf("resetting git state in repo after hashrelease build: %w", err)
 		}
+		return nil
+	})
+
+	// Call pre-hook if registered.
+	var err error
+	hookTimeout := c.Duration(hookTimeoutFlag.Name)
+	if ctx, err = RunSetupHashreleasePreHook(ctx, c, repoRootDir, hookTimeout); err != nil {
+		return fmt.Errorf("setup hashrelease pre-hook failed: %w", err)
 	}
+
 	image := c.String(imageFlag.Name)
 	if image != defaultImageName {
 		imageParts := strings.SplitN(c.String(imageFlag.Name), "/", 2)
-		if err := modifyComponentImageConfig(repoRootDir, operatorImagePathConfigKey, addTrailingSlash(imageParts[0])); err != nil {
-			return repoReset, fmt.Errorf("updating Operator image path: %w", err)
+		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, operatorImagePathConfigKey, addTrailingSlash(imageParts[0])); err != nil {
+			return fmt.Errorf("updating Operator image path: %w", err)
 		}
 	}
 	registry := c.String(registryFlag.Name)
 	if registry != "" && registry != quayRegistry {
-		if err := modifyComponentImageConfig(repoRootDir, operatorRegistryConfigKey, addTrailingSlash(registry)); err != nil {
-			return repoReset, fmt.Errorf("updating Operator registry: %w", err)
+		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, operatorRegistryConfigKey, addTrailingSlash(registry)); err != nil {
+			return fmt.Errorf("updating Operator registry: %w", err)
 		}
 	}
 	if registry := c.String(calicoRegistryFlag.Name); registry != "" {
-		if err := modifyComponentImageConfig(repoRootDir, calicoRegistryConfigKey, addTrailingSlash(registry)); err != nil {
-			return repoReset, fmt.Errorf("updating Calico registry: %w", err)
+		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, calicoRegistryConfigKey, addTrailingSlash(registry)); err != nil {
+			return fmt.Errorf("updating Calico registry: %w", err)
 		}
 	}
 	if imagePath := c.String(calicoImagePathFlag.Name); imagePath != "" {
-		if err := modifyComponentImageConfig(repoRootDir, calicoImagePathConfigKey, imagePath); err != nil {
-			return repoReset, fmt.Errorf("updating Calico image path: %w", err)
+		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, calicoImagePathConfigKey, imagePath); err != nil {
+			return fmt.Errorf("updating Calico image path: %w", err)
 		}
 	}
 	if registry := c.String(enterpriseRegistryFlag.Name); registry != "" {
-		if err := modifyComponentImageConfig(repoRootDir, enterpriseRegistryConfigKey, addTrailingSlash(registry)); err != nil {
-			return repoReset, fmt.Errorf("updating Enterprise registry: %w", err)
+		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, enterpriseRegistryConfigKey, addTrailingSlash(registry)); err != nil {
+			return fmt.Errorf("updating Enterprise registry: %w", err)
 		}
 	}
 	if imagePath := c.String(enterpriseImagePathFlag.Name); imagePath != "" {
-		if err := modifyComponentImageConfig(repoRootDir, enterpriseImagePathConfigKey, imagePath); err != nil {
-			return repoReset, fmt.Errorf("updating Enterprise image path: %w", err)
+		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, enterpriseImagePathConfigKey, imagePath); err != nil {
+			return fmt.Errorf("updating Enterprise image path: %w", err)
 		}
 	}
 
@@ -313,7 +361,7 @@ func setupHashreleaseBuild(ctx context.Context, c *cli.Command, repoRootDir stri
 		switch bt {
 		case versionBuild:
 			if err := updateConfigVersions(repoRootDir, calicoConfig, c.String(calicoVersionFlag.Name)); err != nil {
-				return repoReset, fmt.Errorf("updating Calico config versions: %w", err)
+				return fmt.Errorf("updating Calico config versions: %w", err)
 			}
 		case versionsBuild:
 			genEnv = append(genEnv, fmt.Sprintf("OS_VERSIONS=%s", c.String(calicoVersionsConfigFlag.Name)))
@@ -324,7 +372,7 @@ func setupHashreleaseBuild(ctx context.Context, c *cli.Command, repoRootDir stri
 		switch bt {
 		case versionBuild:
 			if err := updateConfigVersions(repoRootDir, enterpriseConfig, c.String(enterpriseVersionFlag.Name)); err != nil {
-				return repoReset, fmt.Errorf("updating Enterprise config versions: %w", err)
+				return fmt.Errorf("updating Enterprise config versions: %w", err)
 			}
 		case versionsBuild:
 			genEnv = append(genEnv, fmt.Sprintf("EE_VERSIONS=%s", c.String(enterpriseVersionsConfigFlag.Name)))
@@ -332,24 +380,24 @@ func setupHashreleaseBuild(ctx context.Context, c *cli.Command, repoRootDir stri
 	}
 	if out, err := makeInDir(repoRootDir, strings.Join(genMakeTargets, " "), genEnv...); err != nil {
 		logrus.Error(out)
-		return repoReset, fmt.Errorf("generating versions: %w", err)
+		return fmt.Errorf("generating versions: %w", err)
 	}
-	return repoReset, nil
+	return nil
 }
 
-// Modify variables in pkg/components/images.go
-func modifyComponentImageConfig(repoRootDir, configKey, newValue string) error {
+// Modify variables in the specified component image config file.
+func modifyComponentImageConfig(repoRootDir, imageConfigRelPath, configKey, newValue string) error {
 	// Check the configKey is valid
 	desc, ok := componentImageConfigMap[configKey]
 	if !ok {
 		return fmt.Errorf("invalid component image config key: %s", configKey)
 	}
 
-	logrus.WithField("repoDir", repoRootDir).WithField(configKey, newValue).Infof("Updating %s in %s", desc, componentImageConfigRelPath)
+	logrus.WithField("repoDir", repoRootDir).WithField(configKey, newValue).Infof("Updating %s in %s", desc, imageConfigRelPath)
 
-	if out, err := runCommandInDir(repoRootDir, "sed", []string{"-i", fmt.Sprintf(`s|%[1]s.*=.*".*"|%[1]s = "%[2]s"|`, regexp.QuoteMeta(configKey), regexp.QuoteMeta(newValue)), componentImageConfigRelPath}, nil); err != nil {
+	if out, err := runCommandInDir(repoRootDir, "sed", []string{"-i", fmt.Sprintf(`s|%[1]s.*=.*".*"|%[1]s = "%[2]s"|`, regexp.QuoteMeta(configKey), regexp.QuoteMeta(newValue)), imageConfigRelPath}, nil); err != nil {
 		logrus.Error(out)
-		return fmt.Errorf("failed to update %s in %s: %w", desc, componentImageConfigRelPath, err)
+		return fmt.Errorf("failed to update %s in %s: %w", desc, imageConfigRelPath, err)
 	}
 	return nil
 }

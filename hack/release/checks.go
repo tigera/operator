@@ -65,7 +65,7 @@ var checkVersionFormat = func(ctx context.Context, c *cli.Command) (context.Cont
 		return ctx, nil
 	}
 	checkLog.Debug("Checking version format")
-	if isRelease, err := isReleaseVersionFormat(version); err != nil {
+	if isRelease, err := isValidReleaseVersion(version); err != nil {
 		return ctx, fmt.Errorf("checking version format: %w", err)
 	} else if !isRelease {
 		return ctx, fmt.Errorf("provided version %q is not a valid release version. \n"+

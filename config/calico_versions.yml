@@ -47,3 +47,5 @@ components:
     version: master
   istio-proxyv2:
     version: master
+  webhooks:
+    version: master

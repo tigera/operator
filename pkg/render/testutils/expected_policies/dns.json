@@ -2,11 +2,11 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.cluster-dns",
+    "name": "calico-system.cluster-dns",
     "namespace": "kube-system"
   },
   "spec": {
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "order": 1,
     "ingress": [
       {

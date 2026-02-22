@@ -89,12 +89,7 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 		return ctx, nil
 	}
 
-	// If building a hashrelease, publishGithubRelease must be false
-	if c.Bool(hashreleaseFlag.Name) && c.Bool(createGithubReleaseFlag.Name) {
-		return ctx, fmt.Errorf("cannot publish GitHub release for hashrelease builds")
-	}
-
-	if !c.Bool(createGithubReleaseFlag.Name) {
+	if c.Bool(hashreleaseFlag.Name) || !c.Bool(createGithubReleaseFlag.Name) {
 		return ctx, nil
 	}
 

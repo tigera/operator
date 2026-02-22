@@ -80,7 +80,7 @@ var (
 		Category: githubFlagCategory,
 		Usage:    "Create a GitHub release",
 		Sources:  cli.EnvVars("CREATE_GITHUB_RELEASE"),
-		Value:    false,
+		Value:    true,
 		Action: func(ctx context.Context, c *cli.Command, b bool) error {
 			if b && c.String(githubTokenFlag.Name) == "" {
 				return fmt.Errorf("github-token is required to create GitHub releases")

@@ -21,6 +21,7 @@ import (
 	"path"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -78,17 +79,22 @@ var buildCommand = &cli.Command{
 		calicoImagePathFlag,
 		calicoVersionsConfigFlag,
 		calicoDirFlag,
+		calicoGitRepoFlag,
+		calicoGitBranchFlag,
 		enterpriseVersionFlag,
 		enterpriseRegistryFlag,
 		enterpriseImagePathFlag,
 		enterpriseVersionsConfigFlag,
 		enterpriseDirFlag,
+		enterpriseGitRepoFlag,
+		enterpriseGitBranchFlag,
 		hashreleaseFlag,
 		skipValidationFlag,
 		hookTimeoutFlag,
 	},
 	Before: buildBefore,
 	Action: buildAction,
+	After:  buildAfter,
 }
 
 // buildBeforeHook is an optional hook called at the start of buildBefore for additional pre-processing.
@@ -159,8 +165,10 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 	}
 
 	// For hashrelease builds, ensure at least one of Calico or Enterprise version or versions file is specified.
-	// If Calico/Enterprise version build is selected, ensure CRDs directory is specified
-	// as the version will likely not exist as a tag/branch in the corresponding Calico/Enterprise repos.
+	// If Calico/Enterprise version build is selected, setup the dir for CRDs either by:
+	//  - using the provided dir for CRDs if specified, or
+	//  - cloning the corresponding repo at the git hash for the specific version and using the CRDs from there.
+	//
 	// If Calico/Enterprise is built using versions file, log a warning if CRDs directory is not specified.
 	calicoBuildType, calicoBuildOk := ctx.Value(calicoBuildCtxKey).(buildType)
 	enterpriseBuildType, enterpriseBuildOk := ctx.Value(enterpriseBuildCtxKey).(buildType)
@@ -168,16 +176,34 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 		return ctx, fmt.Errorf("for hashrelease builds, at least one of Calico or Enterprise version or versions file must be specified")
 	}
 	if calicoBuildOk {
-		if calicoBuildType == versionBuild && c.String(calicoDirFlag.Name) == "" {
-			return ctx, fmt.Errorf("directory to calico repo must be specified for hashreleases built from calico version using %s flag", calicoDirFlag.Name)
+		if calicoBuildType == versionBuild {
+			repo := hashreleaseRepo{
+				Product:     "calico",
+				DirFlag:     calicoDirFlag,
+				RepoFlag:    calicoGitRepoFlag,
+				BranchFlag:  calicoGitBranchFlag,
+				VersionFlag: calicoVersionFlag,
+			}
+			if err := repo.Setup(c); err != nil {
+				return ctx, fmt.Errorf("setting up Calico repo for hashrelease: %w", err)
+			}
 		}
 		if c.String(calicoDirFlag.Name) == "" {
 			logrus.Warn("Calico directory not specified for hashrelease build, getting CRDs from default location may not be appropriate")
 		}
 	}
 	if enterpriseBuildOk {
-		if enterpriseBuildType == versionBuild && c.String(enterpriseDirFlag.Name) == "" {
-			return ctx, fmt.Errorf("directory to enterprise repo must be specified for hashreleases built from enterprise version using %s flag", enterpriseDirFlag.Name)
+		if enterpriseBuildType == versionBuild {
+			repo := hashreleaseRepo{
+				Product:     "enterprise",
+				DirFlag:     enterpriseDirFlag,
+				RepoFlag:    enterpriseGitRepoFlag,
+				BranchFlag:  enterpriseGitBranchFlag,
+				VersionFlag: enterpriseVersionFlag,
+			}
+			if err := repo.Setup(c); err != nil {
+				return ctx, fmt.Errorf("setting up Enterprise repo for hashrelease: %w", err)
+			}
 		}
 		if c.String(enterpriseDirFlag.Name) == "" {
 			logrus.Warn("Enterprise directory not specified for hashrelease build, getting CRDs from default location may not be appropriate")
@@ -400,4 +426,119 @@ func modifyComponentImageConfig(repoRootDir, imageConfigRelPath, configKey, newV
 		return fmt.Errorf("failed to update %s in %s: %w", desc, imageConfigRelPath, err)
 	}
 	return nil
+}
+
+// extractGitHashFromVersion extracts the git hash from a version string.
+// The version format is not strict, so long as it ends with g<12-char-hash>.
+func extractGitHashFromVersion(version string) (string, error) {
+	re, err := regexp.Compile(`g([a-f0-9]{12})(-dirty)?$`)
+	if err != nil {
+		return "", fmt.Errorf("compiling git hash regex: %w", err)
+	}
+	matches := re.FindStringSubmatch(version)
+	if len(matches) < 2 {
+		return "", fmt.Errorf("no git hash found in version %s", version)
+	}
+	return matches[1], nil
+}
+
+type hashreleaseRepo struct {
+	Product     string
+	RepoFlag    *cli.StringFlag
+	BranchFlag  *cli.StringFlag
+	VersionFlag *cli.StringFlag
+	DirFlag     *cli.StringFlag
+	repo        string
+	branch      string
+	version     string
+}
+
+func (r *hashreleaseRepo) Setup(c *cli.Command) error {
+	if dir := c.String(r.DirFlag.Name); dir != "" {
+		logrus.WithField("dir", dir).Infof("%s directory provided, skipping clone", r.Product)
+		return nil
+	}
+	r.repo = c.String(r.RepoFlag.Name)
+	r.version = c.String(r.VersionFlag.Name)
+	r.branch = c.String(r.BranchFlag.Name)
+	if r.branch == "" {
+		return fmt.Errorf("%s git branch not provided. Either set the %s dir or provide a branch", r.Product, r.Product)
+	}
+	if r.version == "" {
+		return fmt.Errorf("%s version not provided. Either set the %s dir or provide a version", r.Product, r.Product)
+	}
+	dir, err := r.clone()
+	if err != nil {
+		return fmt.Errorf("cloning %s repo: %w", r.Product, err)
+	}
+	if err := c.Set(r.DirFlag.Name, dir); err != nil {
+		return fmt.Errorf("setting %s dir flag: %w", r.Product, err)
+	}
+	return nil
+}
+
+// cloneHashreleaseRepo clones the repo at the git hash that corresponds to the hashrelease version.
+// It uses a shallow clone with incremental deepening (max depth: 100) to fetch the specific commit without downloading the entire history.
+func (r *hashreleaseRepo) clone() (string, error) {
+	gitHash, err := extractGitHashFromVersion(r.version)
+	if err != nil {
+		return "", fmt.Errorf("extracting git hash from version: %w", err)
+	}
+	if gitHash == "" {
+		return "", fmt.Errorf("no git hash found in version %s", r.version)
+	}
+	repoTmpDir, err := os.MkdirTemp("", "enterprise-*")
+	if err != nil {
+		return "", fmt.Errorf("creating temp directory for %s repo: %w", r.Product, err)
+	}
+	buildAfterHooks.Add(fmt.Sprintf("Cleaning up %s repo temp directory", r.Product), func(ctx context.Context, c *cli.Command) error {
+		if err := os.RemoveAll(repoTmpDir); err != nil {
+			return fmt.Errorf("removing temp directory %s for %s repo: %w", repoTmpDir, r.Product, err)
+		}
+		return nil
+	},
+	)
+	remote := "origin"
+	logrus.WithFields(logrus.Fields{
+		"version": r.version,
+		"gitHash": gitHash,
+		"remote":  remote,
+		"dir":     repoTmpDir,
+	}).Infof("Cloning %s repo at git hash", r.Product)
+
+	// Init dir as a git repo to allow sparse checkout, which avoids downloading unnecessary files and history.
+	if _, err := git("-C", repoTmpDir, "init"); err != nil {
+		return repoTmpDir, fmt.Errorf("initializing git repo in %s temp dir: %w", r.Product, err)
+	}
+	if _, err := git("-C", repoTmpDir, "remote", "add", remote, fmt.Sprintf("git@github.com:%s.git", r.repo)); err != nil {
+		return repoTmpDir, fmt.Errorf("adding remote origin in %s temp git dir: %w", r.Product, err)
+	}
+
+	// Shallow clone and incrementally deepen to either the specific commit or max depth
+	depth, deepen, maxDepth := 10, 20, 100
+	if _, err := git("-C", repoTmpDir, "fetch", "--depth", strconv.Itoa(depth), remote, r.branch); err != nil {
+		return repoTmpDir, fmt.Errorf("fetching branch %s from remote in %s temp git dir: %w", r.branch, r.Product, err)
+	}
+	for {
+		// check if the commit is present after the fetch
+		if _, err := git("-C", repoTmpDir, "cat-file", "-e", gitHash+"^{commit}"); err == nil {
+			break
+		}
+		if depth >= maxDepth {
+			return repoTmpDir, fmt.Errorf("git hash %s not found after fetching with depth %d", gitHash, depth)
+		}
+		depth += deepen
+		logrus.WithField("depth", depth).Infof("Deepening git fetch for %s repo", r.Product)
+		if _, err := git("-C", repoTmpDir, "fetch", "--deepen", strconv.Itoa(deepen), "origin", r.branch); err != nil {
+			return repoTmpDir, fmt.Errorf("deepening fetch for branch %s in %s repo: %w", r.branch, r.Product, err)
+		}
+	}
+
+	// Checkout the specific commit
+	if _, err := git("-C", repoTmpDir, "checkout", gitHash); err != nil {
+		return repoTmpDir, fmt.Errorf("checking out git hash %s in %s repo: %w", gitHash, r.Product, err)
+	}
+
+	logrus.WithField("dir", repoTmpDir).Debugf("Successfully cloned %s repo", r.Product)
+	return repoTmpDir, nil
 }

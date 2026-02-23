@@ -407,7 +407,7 @@ var (
 	enterpriseGitBranchFlag = &cli.StringFlag{
 		Name:     "enterprise-branch",
 		Category: enterpriseFlagCategory,
-		Usage:    "The git branch to clone Enterprise from. Use in place of specificing the Enterprise dir for CRDs (development and testing purposes only)",
+		Usage:    "The git branch to clone Enterprise from. Use in place of specifying the Enterprise dir for CRDs (development and testing purposes only)",
 		Sources:  cli.EnvVars("ENTERPRISE_BRANCH", "CALICO_ENTERPRISE_BRANCH"),
 	}
 	exceptEnterpriseFlag = &cli.StringSliceFlag{

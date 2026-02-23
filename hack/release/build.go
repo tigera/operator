@@ -106,7 +106,7 @@ var buildBeforeHook cliBeforeHookFunc
 var setupHashreleasePreHook cliHookWithRepoDirFunc
 
 // buildAfterHook is an optional hook called in buildAfter for additional post-build tasks.
-// This run regardless of build success or failure, so it can be used for cleanup tasks.
+// This runs regardless of build success or failure, so it can be used for cleanup tasks.
 var buildAfterHooks multiHook
 
 // Pre-action for release build command.
@@ -487,7 +487,7 @@ func (r *hashreleaseRepo) clone() (string, error) {
 	if gitHash == "" {
 		return "", fmt.Errorf("no git hash found in version %s", r.version)
 	}
-	repoTmpDir, err := os.MkdirTemp("", "enterprise-*")
+	repoTmpDir, err := os.MkdirTemp("", r.Product+"-*")
 	if err != nil {
 		return "", fmt.Errorf("creating temp directory for %s repo: %w", r.Product, err)
 	}

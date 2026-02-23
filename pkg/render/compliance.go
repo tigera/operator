@@ -171,7 +171,7 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
-	var complianceObjs []client.Object
+	var complianceObjs, objsToDelete []client.Object
 	if c.cfg.Tenant.MultiTenant() {
 		complianceObjs = append(complianceObjs, c.multiTenantManagedClustersAccess()...)
 		// We need to bind compliance components that run inside the managed cluster
@@ -195,6 +195,11 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		complianceObjs = append(complianceObjs,
 			c.complianceAccessCalicoSystemNetworkPolicy(),
 			networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace),
+		)
+		// allow-tigera Tier was renamed to calico-system
+		objsToDelete = append(objsToDelete,
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("compliance-access", c.cfg.Namespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
 		)
 		complianceObjs = append(complianceObjs,
 			c.complianceControllerServiceAccount(),
@@ -231,7 +236,6 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		complianceObjs = append(complianceObjs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(c.cfg.Namespace)...)...)
 	}
 
-	objsToDelete := c.deprecatedResources()
 	if c.cfg.ManagementClusterConnection == nil {
 		complianceObjs = append(complianceObjs,
 			c.complianceServerCalicoSystemNetworkPolicy(),
@@ -1760,13 +1764,4 @@ func (c *complianceComponent) multiTenantManagedClustersAccess() []client.Object
 	})
 
 	return objects
-}
-
-func (c *complianceComponent) deprecatedResources() (objs []client.Object) {
-	// allow-tigera Tier was renamed to calico-system
-	objs = append(objs,
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("compliance-access", c.cfg.Namespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
-	)
-	return
 }

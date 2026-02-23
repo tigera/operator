@@ -489,11 +489,11 @@ func (pr *policyRecommendationComponent) deprecatedObjects(isManagedCluster bool
 			&corev1.Namespace{
 				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"},
-			})
+			},
+			// allow-tigera Tier was renamed to calico-system
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-policy-recommendation", pr.cfg.Namespace),
+		)
 	}
-
-	// allow-tigera Tier was renamed to calico-system
-	deprecatedObjs = append(deprecatedObjs, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-policy-recommendation", pr.cfg.Namespace))
 
 	return deprecatedObjs
 }

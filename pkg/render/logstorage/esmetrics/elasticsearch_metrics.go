@@ -97,12 +97,12 @@ func (e *elasticsearchMetrics) Objects() (objsToCreate, objsToDelete []client.Ob
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(render.ElasticsearchNamespace, e.cfg.ESMetricsCredsSecret)...)...)
 	toCreate = append(toCreate, e.metricsService(), e.metricsDeployment(), e.serviceAccount())
 
+	// allow-tigera Tier was renamed to calico-system
+	objsToDelete = append(objsToDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("elasticsearch-metrics", render.ElasticsearchNamespace))
+
 	if e.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		toCreate = append(toCreate, e.metricsRole(), e.metricsRoleBinding())
 	}
-
-	// allow-tigera Tier was renamed to calico-system
-	objsToDelete = append(objsToDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("elasticsearch-metrics", render.ElasticsearchNamespace))
 
 	return toCreate, objsToDelete
 }

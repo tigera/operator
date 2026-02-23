@@ -70,6 +70,12 @@ func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 
 	if len(t.cfg.DNSEgressCIDRs.IPV4) > 0 || len(t.cfg.DNSEgressCIDRs.IPV6) > 0 {
 		objsToCreate = append(objsToCreate, t.calicoSystemNodeLocalDNSPolicy())
+		// allow-tigera Tier was renamed to calico-system
+		allowTigeraNodeLocalDNSPolicy := &v3.GlobalNetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "GlobalNetworkPolicy", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.node-local-dns"},
+		}
+		objsToDelete = append([]client.Object{allowTigeraNodeLocalDNSPolicy}, objsToDelete...)
 	} else {
 		objsToDelete = append(objsToDelete, t.calicoSystemNodeLocalDNSPolicy())
 	}

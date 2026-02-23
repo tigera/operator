@@ -281,6 +281,12 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	objsToCreate = append(objsToCreate, c.managerService())
 	objsToCreate = append(objsToCreate, c.managerExternalNameService())
 
+	// allow-tigera Tier was renamed to calico-system
+	objsToDelete = append(objsToDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("manager-access", c.cfg.Namespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
+	)
+
 	if c.cfg.VoltronRouteConfig != nil {
 		objsToCreate = append(objsToCreate, c.cfg.VoltronRouteConfig.RoutesConfigMap(c.cfg.Namespace))
 	}
@@ -299,12 +305,6 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 			objsToCreate = append(objsToCreate, CreateCertificateSecret(c.cfg.VoltronLinseedKeyPair.GetCertificatePEM(), VoltronLinseedPublicCert, c.cfg.TruthNamespace))
 		}
 	}
-
-	// allow-tigera Tier was renamed to calico-system
-	objsToDelete = append(objsToDelete,
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("manager-access", c.cfg.Namespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
-	)
 
 	return objsToCreate, objsToDelete
 }

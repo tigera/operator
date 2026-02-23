@@ -243,11 +243,11 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 
 	if c.kubeControllerCalicoSystemPolicy != nil {
 		objectsToCreate = append(objectsToCreate, c.kubeControllerCalicoSystemPolicy)
+		// allow-tigera Tier was renamed to calico-system
+		objectsToDelete = append(objectsToDelete,
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("es-kube-controller-access", c.cfg.Namespace),
+		)
 	}
-	// allow-tigera Tier was renamed to calico-system
-	objectsToDelete = append(objectsToDelete,
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("es-kube-controller-access", c.cfg.Namespace),
-	)
 
 	objectsToCreate = append(objectsToCreate,
 		c.controllersServiceAccount(),

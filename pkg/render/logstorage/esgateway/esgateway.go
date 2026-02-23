@@ -116,6 +116,9 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	toCreate = append(toCreate, e.esGatewayRoleBinding())
 	toCreate = append(toCreate, e.esGatewayServiceAccount())
 
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("es-gateway-access", e.cfg.Namespace))
+
 	// The following secret is used by kube controllers and sent to managed clusters. It is also used by manifests in our docs.
 	if e.cfg.ESGatewayKeyPair.UseCertificateManagement() {
 		toCreate = append(toCreate, render.CreateCertificateSecret(e.cfg.Installation.CertificateManagement.CACert, elasticsearch.PublicCertSecret, e.cfg.TruthNamespace))
@@ -124,9 +127,6 @@ func (e *esGateway) Objects() (toCreate, toDelete []client.Object) {
 	}
 	// Create the deployment last to ensure all secrets have been created
 	toCreate = append(toCreate, e.esGatewayDeployment())
-
-	// allow-tigera Tier was renamed to calico-system
-	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("es-gateway-access", e.cfg.Namespace))
 
 	return toCreate, toDelete
 }

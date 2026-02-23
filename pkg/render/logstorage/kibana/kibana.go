@@ -155,6 +155,12 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(Namespace))
 		toCreate = append(toCreate, k.serviceAccount())
 
+		// allow-tigera Tier was renamed to calico-system
+		toDelete = append(toDelete,
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kibana-access", Namespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", Namespace),
+		)
+
 		if k.cfg.Installation.KubernetesProvider.IsOpenShift() {
 			toCreate = append(toCreate, k.clusterRole(), k.clusterRoleBinding())
 		}
@@ -187,11 +193,6 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 	} else if k.cfg.UnusedTLSSecret != nil {
 		toDelete = append(toDelete, k.cfg.UnusedTLSSecret)
 	}
-	// allow-tigera Tier was renamed to calico-system
-	toDelete = append(toDelete,
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kibana-access", Namespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", Namespace),
-	)
 
 	return toCreate, toDelete
 }

@@ -117,9 +117,6 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 		ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace},
 	})
 
-	// allow-tigera Tier was renamed to calico-system
-	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-dpi", DeepPacketInspectionNamespace))
-
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
 		toDelete = append(toDelete, d.dpiCalicoSystemPolicy())
 		toDelete = append(toDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
@@ -139,6 +136,9 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiClusterRoleBinding(),
 			d.dpiDaemonset(),
 		)
+
+		// allow-tigera Tier was renamed to calico-system
+		toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-dpi", DeepPacketInspectionNamespace))
 	}
 	if d.cfg.ManagementCluster {
 		// We always want to create these permissions when a management

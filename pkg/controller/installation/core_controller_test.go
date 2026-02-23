@@ -2446,9 +2446,9 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 		err := r.updateMutatingAdmissionPolicies(ctx, operator.Calico, log)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
 
-		// Verify we got one MAP and one MAPB.
+		// Verify we got two MAPs and two MAPBs.
 		var mapCount, mapbCount int
 		for _, obj := range componentHandler.objectsToCreate {
 			switch obj.(type) {
@@ -2460,8 +2460,8 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 				Expect(obj.GetLabels()).To(HaveKeyWithValue(admission.ManagedMAPLabel, admission.ManagedMAPLabelValue))
 			}
 		}
-		Expect(mapCount).To(Equal(1))
-		Expect(mapbCount).To(Equal(1))
+		Expect(mapCount).To(Equal(2))
+		Expect(mapbCount).To(Equal(2))
 	})
 
 	It("should not create MAPs when k8s<1.32 and should set degraded", func() {
@@ -2571,7 +2571,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Should have created the desired resources.
-		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
 
 		// Should have marked the stale resources for deletion.
 		Expect(componentHandler.objectsToDelete).To(HaveLen(2))
@@ -2584,21 +2584,35 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 	})
 
 	It("should not delete MAPs that are in the desired set", func() {
-		// Pre-create the desired MAP with the managed label (simulating a previous reconcile).
-		desiredMAP := &admissionv1beta1.MutatingAdmissionPolicy{
+		// Pre-create the desired MAPs with the managed label (simulating a previous reconcile).
+		desiredMAP1 := &admissionv1beta1.MutatingAdmissionPolicy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   "policy.projectcalico.org",
+				Name:   "policytypes.policy.projectcalico.org",
 				Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
 			},
 		}
-		desiredMAPB := &admissionv1beta1.MutatingAdmissionPolicyBinding{
+		desiredMAP2 := &admissionv1beta1.MutatingAdmissionPolicy{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:   "set-networkpolicy-types-binding",
+				Name:   "tierlabel.policy.projectcalico.org",
 				Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
 			},
 		}
-		Expect(c.Create(ctx, desiredMAP)).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, desiredMAPB)).NotTo(HaveOccurred())
+		desiredMAPB1 := &admissionv1beta1.MutatingAdmissionPolicyBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "set-policytypes-binding",
+				Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
+			},
+		}
+		desiredMAPB2 := &admissionv1beta1.MutatingAdmissionPolicyBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "set-tier-label-binding",
+				Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
+			},
+		}
+		Expect(c.Create(ctx, desiredMAP1)).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, desiredMAP2)).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, desiredMAPB1)).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, desiredMAPB2)).NotTo(HaveOccurred())
 
 		r = ReconcileInstallation{
 			client:            c,
@@ -2616,7 +2630,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Should have created the desired resources (update via passthrough).
-		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
 
 		// Should NOT have deleted anything since existing resources match desired set.
 		Expect(componentHandler.objectsToDelete).To(BeEmpty())
@@ -2637,6 +2651,6 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 		err := r.updateMutatingAdmissionPolicies(ctx, operator.TigeraSecureEnterprise, log)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
 	})
 })

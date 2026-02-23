@@ -36,7 +36,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -931,10 +930,6 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		initContainers = append(initContainers, c.bpffsInitContainer())
 	}
 
-	if c.runAsNonPrivileged() {
-		initContainers = append(initContainers, c.hostPathInitContainer())
-	}
-
 	var affinity *corev1.Affinity
 	if c.cfg.Installation.KubernetesProvider.IsAKS() {
 		affinity = &corev1.Affinity{
@@ -1073,18 +1068,10 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		c.cfg.TLS.NodeSecret.Volume(),
 	}
 
-	if c.runAsNonPrivileged() {
-		volumes = append(volumes,
-			corev1.Volume{Name: "var-run", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run"}}},
-			corev1.Volume{Name: "var-lib", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib"}}},
-			corev1.Volume{Name: "var-log", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log"}}},
-		)
-	} else {
-		volumes = append(volumes,
-			c.varRunCalicoVolume(),
-			corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico", Type: &dirOrCreate}}},
-		)
-	}
+	volumes = append(volumes,
+		c.varRunCalicoVolume(),
+		corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico", Type: &dirOrCreate}}},
+	)
 
 	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		volumes = append(volumes,
@@ -1318,19 +1305,6 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 // nodeContainer creates the main node container.
 func (c *nodeComponent) nodeContainer() corev1.Container {
 	sc := securitycontext.NewRootContext(true)
-	if c.runAsNonPrivileged() {
-		sc = securitycontext.NewNonRootContext()
-		// Set the group to be the root user group since all container users should be a member
-		sc.RunAsGroup = ptr.Int64ToPtr(0)
-		sc.Capabilities.Add = []corev1.Capability{
-			"NET_ADMIN",
-			"NET_BIND_SERVICE",
-			"NET_RAW",
-		}
-		// Set the privilege escalation to true so that routes, ipsets can be programmed.
-		sc.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
-		sc.Capabilities.Drop = []corev1.Capability{}
-	}
 
 	lp, rp := c.nodeLivenessReadinessProbes()
 
@@ -1362,18 +1336,10 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		corev1.VolumeMount{MountPath: "/var/run/nodeagent", Name: "policysync"},
 		c.cfg.TLS.NodeSecret.VolumeMount(c.SupportedOSType()),
 	)
-	if c.runAsNonPrivileged() {
-		nodeVolumeMounts = append(nodeVolumeMounts,
-			corev1.VolumeMount{MountPath: "/var/run", Name: "var-run"},
-			corev1.VolumeMount{MountPath: "/var/lib", Name: "var-lib"},
-			corev1.VolumeMount{MountPath: "/var/log", Name: "var-log"},
-		)
-	} else {
-		nodeVolumeMounts = append(nodeVolumeMounts,
-			corev1.VolumeMount{MountPath: "/var/run/calico", Name: "var-run-calico"},
-			corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
-		)
-	}
+	nodeVolumeMounts = append(nodeVolumeMounts,
+		corev1.VolumeMount{MountPath: "/var/run/calico", Name: "var-run-calico"},
+		corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
+	)
 	if c.cfg.Installation.BPFEnabled() || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName})
 	}
@@ -1817,47 +1783,6 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 			Ports:     ports,
 		},
 	}
-}
-
-// hostPathInitContainer creates an init container that changes the permissions on hostPath volumes
-// so that they can be written to by a non-root container.
-func (c *nodeComponent) hostPathInitContainer() corev1.Container {
-	mounts := []corev1.VolumeMount{
-		{
-			MountPath: "/var/run",
-			Name:      "var-run",
-			ReadOnly:  false,
-		},
-		{
-			MountPath: "/var/lib",
-			Name:      "var-lib",
-			ReadOnly:  false,
-		},
-		{
-			MountPath: "/var/log",
-			Name:      "var-log",
-			ReadOnly:  false,
-		},
-	}
-
-	return corev1.Container{
-		Name:            "hostpath-init",
-		Image:           c.nodeImage,
-		ImagePullPolicy: ImagePullPolicy(),
-		Command:         []string{"sh", "-c", "calico-node -hostpath-init"},
-		Env: []corev1.EnvVar{
-			{Name: "NODE_USER_ID", Value: "10001"},
-		},
-		SecurityContext: securitycontext.NewRootContext(true),
-		VolumeMounts:    mounts,
-	}
-}
-
-// runAsNonPrivileged checks to ensure that all of the proper installation values are set for running
-// Calico as non-privileged.
-func (c *nodeComponent) runAsNonPrivileged() bool {
-	// Check that the NonPrivileged flag is set
-	return c.cfg.Installation.NonPrivileged != nil && *c.cfg.Installation.NonPrivileged == operatorv1.NonPrivilegedEnabled
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

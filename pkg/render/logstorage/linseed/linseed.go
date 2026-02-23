@@ -155,7 +155,7 @@ func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
-	toCreate = append(toCreate, l.linseedAllowTigeraPolicy())
+	toCreate = append(toCreate, l.linseedCalicoSystemPolicy())
 	toCreate = append(toCreate, l.linseedService())
 	toCreate = append(toCreate, l.linseedClusterRole())
 	toCreate = append(toCreate, l.linseedClusterRoleBinding(l.cfg.BindNamespaces))
@@ -169,6 +169,10 @@ func (l *linseed) Objects() (toCreate, toDelete []client.Object) {
 		// If using External ES, we need to copy the client certificates into Linseed's naespace to be mounted.
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(l.cfg.Namespace, l.cfg.ElasticClientSecret)...)...)
 	}
+
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("linseed-access", l.namespace))
+
 	return toCreate, toDelete
 }
 
@@ -546,7 +550,7 @@ func (l *linseed) linseedService() *corev1.Service {
 }
 
 // Allow access to Linseed from components that need it.
-func (l *linseed) linseedAllowTigeraPolicy() *v3.NetworkPolicy {
+func (l *linseed) linseedCalicoSystemPolicy() *v3.NetworkPolicy {
 	// Egress needs to be allowed to:
 	// - Kubernetes API
 	// - Cluster DNS

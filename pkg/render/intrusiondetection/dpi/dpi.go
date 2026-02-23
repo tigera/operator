@@ -117,8 +117,11 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 		ObjectMeta: metav1.ObjectMeta{Name: relasticsearch.PublicCertSecret, Namespace: DeepPacketInspectionNamespace},
 	})
 
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-dpi", DeepPacketInspectionNamespace))
+
 	if d.cfg.HasNoDPIResource || d.cfg.HasNoLicense {
-		toDelete = append(toDelete, d.dpiAllowTigeraPolicy())
+		toDelete = append(toDelete, d.dpiCalicoSystemPolicy())
 		toDelete = append(toDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
 		toDelete = append(toDelete,
 			d.dpiServiceAccount(),
@@ -127,7 +130,7 @@ func (d *dpiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 			d.dpiDaemonset(),
 		)
 	} else {
-		toCreate = append(toCreate, d.dpiAllowTigeraPolicy())
+		toCreate = append(toCreate, d.dpiCalicoSystemPolicy())
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace)...)...)
 		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(DeepPacketInspectionNamespace, d.cfg.PullSecrets...)...)...)
 		toCreate = append(toCreate,
@@ -537,7 +540,7 @@ func (c *dpiComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
 }
 
 // This policy uses service selectors.
-func (d *dpiComponent) dpiAllowTigeraPolicy() *v3.NetworkPolicy {
+func (d *dpiComponent) dpiCalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,

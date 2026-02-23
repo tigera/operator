@@ -1244,10 +1244,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Entry("Syslog", render.ForwardingDestinationSyslog),
 		Entry("Splunk", render.ForwardingDestinationSplunk))
 
-	Context("allow-tigera rendering", func() {
-		policyName := types.NamespacedName{Name: "allow-tigera.allow-fluentd-node", Namespace: "tigera-fluentd"}
+	Context("calico-system rendering", func() {
+		policyName := types.NamespacedName{Name: "calico-system.allow-fluentd-node", Namespace: "tigera-fluentd"}
 
-		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+		getExpectedPolicy := func(scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
 			if scenario.ManagedCluster {
 				return expectedFluentdPolicyForManaged
 			} else {
@@ -1255,8 +1255,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			}
 		}
 
-		DescribeTable("should render allow-tigera policy",
-			func(scenario testutils.AllowTigeraScenario) {
+		DescribeTable("should render calico-system policy",
+			func(scenario testutils.CalicoSystemScenario) {
 				if scenario.OpenShift {
 					cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 				} else {
@@ -1267,19 +1267,19 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				component := render.Fluentd(cfg)
 				resources, _ := component.Objects()
 
-				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				expectedPolicy := getExpectedPolicy(scenario)
 				Expect(policy).To(Equal(expectedPolicy))
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+			Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 		)
 
-		It("should render allow-tigera policy for the non-cluster-host scenario", func() {
+		It("should render calico-system policy for the non-cluster-host scenario", func() {
 			resourcesWithoutNonClusterHosts, _ := render.Fluentd(cfg).Objects()
-			policyWithoutNonClusterHosts := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesWithoutNonClusterHosts)
+			policyWithoutNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithoutNonClusterHosts)
 			cfg.NonClusterHost = &operatorv1.NonClusterHost{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "tigera-secure",
@@ -1289,7 +1289,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				},
 			}
 			resourcesWithNonClusterHosts, _ := render.Fluentd(cfg).Objects()
-			policyWithNonClusterHosts := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesWithNonClusterHosts)
+			policyWithNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithNonClusterHosts)
 
 			// Validate that we have a single ingress rule added for the fluentd service.
 			Expect(policyWithoutNonClusterHosts.Spec.Egress).To(Equal(policyWithNonClusterHosts.Spec.Egress))

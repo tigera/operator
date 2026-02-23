@@ -226,9 +226,9 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 
 	// Elasticsearch CRs
 	toCreate = append(toCreate, CreateNamespace(ElasticsearchNamespace, es.cfg.Installation.KubernetesProvider, PSSPrivileged, es.cfg.Installation.Azure))
-	toCreate = append(toCreate, es.elasticsearchAllowTigeraPolicy())
-	toCreate = append(toCreate, es.elasticsearchInternalAllowTigeraPolicy())
-	toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(ElasticsearchNamespace))
+	toCreate = append(toCreate, es.elasticsearchCalicoSystemPolicy())
+	toCreate = append(toCreate, es.elasticsearchInternalCalicoSystemPolicy())
+	toCreate = append(toCreate, networkpolicy.CalicoSystemDefaultDeny(ElasticsearchNamespace))
 
 	toCreate = append(toCreate, CreateOperatorSecretsRoleBinding(ElasticsearchNamespace))
 
@@ -264,6 +264,12 @@ func (es *elasticsearchComponent) Objects() ([]client.Object, []client.Object) {
 	// Curator is no longer supported in ElasticSearch beyond version 8 so remove its resources here unconditionally so
 	// that on upgrade we clean up after ourselves. Eventually we can remove this cleanup code as well.
 	toDelete = append(toDelete, es.curatorDecommissionedResources()...)
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("elasticsearch-access", ElasticsearchNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("elasticsearch-internal", ElasticsearchNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", ElasticsearchNamespace),
+	)
 
 	toCreate = append(toCreate, es.oidcUserRole())
 	toCreate = append(toCreate, es.oidcUserRoleBinding())
@@ -953,7 +959,7 @@ func (es *elasticsearchComponent) oidcUserRoleBinding() client.Object {
 }
 
 // Allow access to Elasticsearch client nodes from Kibana, ECK Operator and ES Gateway.
-func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPolicy {
+func (es *elasticsearchComponent) elasticsearchCalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, es.cfg.Provider.IsOpenShift())
 	egressRules = append(egressRules, []v3.Rule{
@@ -1031,7 +1037,7 @@ func (es *elasticsearchComponent) elasticsearchAllowTigeraPolicy() *v3.NetworkPo
 }
 
 // Allow internal communication within the ElasticSearch cluster
-func (es *elasticsearchComponent) elasticsearchInternalAllowTigeraPolicy() *v3.NetworkPolicy {
+func (es *elasticsearchComponent) elasticsearchInternalCalicoSystemPolicy() *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{

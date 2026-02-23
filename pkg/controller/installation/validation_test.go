@@ -1,4 +1,4 @@
-// Copyright (c) 2019, 2022-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -360,19 +360,9 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should not allow Calico to run in non-privileged mode if BPF is enabled", func() {
-		np := operator.NonPrivilegedEnabled
-		bpf := operator.LinuxDataplaneBPF
-		instance.Spec.NonPrivileged = &np
-		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
-		err := validateCustomResource(instance)
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("should not allow Calico to run in non-privileged mode with Tigera Secure Enterprise", func() {
+	It("should not allow Calico to run in non-privileged mode, since it's deprecated", func() {
 		np := operator.NonPrivilegedEnabled
 		instance.Spec.NonPrivileged = &np
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
 		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})

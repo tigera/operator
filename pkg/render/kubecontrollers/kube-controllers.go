@@ -345,7 +345,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 			// its config.  It creates a default if none exists, and updates status
 			// as well.
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-			Resources: []string{"kubecontrollersconfigurations"},
+			Resources: []string{"kubecontrollersconfigurations", "kubecontrollersconfigurations/status"},
 			Verbs:     []string{"get", "create", "list", "update", "watch"},
 		},
 		{

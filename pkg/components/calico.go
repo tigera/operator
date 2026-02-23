@@ -220,6 +220,14 @@ var (
 		variant:   calicoVariant,
 	}
 
+	ComponentCalicoWebhooks = Component{
+		Version:   "master",
+		Image:     "webhooks",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
 	CalicoImages = []Component{
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
@@ -246,5 +254,6 @@ var (
 		ComponentCalicoEnvoyProxy,
 		ComponentCalicoEnvoyRatelimit,
 		ComponentCalicoGuardian,
+		ComponentCalicoWebhooks,
 	}
 )

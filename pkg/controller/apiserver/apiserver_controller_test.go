@@ -803,4 +803,76 @@ var _ = Describe("apiserver controller tests", func() {
 			})
 		})
 	})
+
+	Context("webhook tests", func() {
+		It("should create webhook deployment when UseV3CRDs is true", func() {
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+
+			r := ReconcileAPIServer{
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+					UseV3CRDs:           true,
+					ClusterDomain:       dns.DefaultClusterDomain,
+				},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := appsv1.Deployment{
+				TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-webhooks", Namespace: common.CalicoNamespace},
+			}
+			Expect(test.GetResource(cli, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-webhooks"))
+		})
+
+		It("should not create webhook deployment when UseV3CRDs is false", func() {
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+
+			r := ReconcileAPIServer{
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+					UseV3CRDs:           false,
+				},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := appsv1.Deployment{
+				TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-webhooks", Namespace: common.CalicoNamespace},
+			}
+			err = test.GetResource(cli, &d)
+			Expect(kerror.IsNotFound(err)).To(BeTrue())
+		})
+
+		It("should reject invalid CalicoWebhooksDeployment on APIServer CR", func() {
+			instance := &operatorv1.APIServer{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.APIServerSpec{
+					CalicoWebhooksDeployment: &operatorv1.CalicoWebhooksDeployment{
+						Metadata: &operatorv1.Metadata{
+							Labels: map[string]string{
+								"NoUppercaseOrSpecialCharsLike=Equals": "b",
+							},
+						},
+					},
+				},
+			}
+			err := validateAPIServerResource(instance)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("CalicoWebhooksDeployment"))
+		})
+	})
 })

@@ -171,7 +171,7 @@ func (c *complianceComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
-	var complianceObjs []client.Object
+	var complianceObjs, objsToDelete []client.Object
 	if c.cfg.Tenant.MultiTenant() {
 		complianceObjs = append(complianceObjs, c.multiTenantManagedClustersAccess()...)
 		// We need to bind compliance components that run inside the managed cluster
@@ -193,8 +193,13 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceSnapshotterClusterRoleBinding())
 	} else {
 		complianceObjs = append(complianceObjs,
-			c.complianceAccessAllowTigeraNetworkPolicy(),
-			networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
+			c.complianceAccessCalicoSystemNetworkPolicy(),
+			networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace),
+		)
+		// allow-tigera Tier was renamed to calico-system
+		objsToDelete = append(objsToDelete,
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("compliance-access", c.cfg.Namespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
 		)
 		complianceObjs = append(complianceObjs,
 			c.complianceControllerServiceAccount(),
@@ -231,10 +236,9 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		complianceObjs = append(complianceObjs, configmap.ToRuntimeObjects(c.cfg.KeyValidatorConfig.RequiredConfigMaps(c.cfg.Namespace)...)...)
 	}
 
-	var objsToDelete []client.Object
 	if c.cfg.ManagementClusterConnection == nil {
 		complianceObjs = append(complianceObjs,
-			c.complianceServerAllowTigeraNetworkPolicy(),
+			c.complianceServerCalicoSystemNetworkPolicy(),
 			c.complianceServerClusterRole(),
 			c.complianceServerService(),
 			c.complianceServerDeployment(),
@@ -1625,7 +1629,7 @@ func (c *complianceComponent) getCISDownloadReportTemplates() []v3.ReportTemplat
 
 // Allow internal communication from compliance-benchmarker, compliance-controller, compliance-snapshotter, compliance-reporter
 // to apiserver, coredns, linseed, and elasticsearch.
-func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+func (c *complianceComponent) complianceAccessCalicoSystemNetworkPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -1667,7 +1671,7 @@ func (c *complianceComponent) complianceAccessAllowTigeraNetworkPolicy() *v3.Net
 }
 
 // Allow internal communication to compliance-server from Manager.
-func (c *complianceComponent) complianceServerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+func (c *complianceComponent) complianceServerCalicoSystemNetworkPolicy() *v3.NetworkPolicy {
 	networkpolicyHelper := networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace)
 	egressRules := []v3.Rule{
 		{

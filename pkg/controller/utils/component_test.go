@@ -2166,11 +2166,11 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "allow-tigera.test-policy",
+				Name:      "calico-system.test-policy",
 				Namespace: "tigera-namespace",
 			},
 			Spec: v3.NetworkPolicySpec{
-				Tier:     "allow-tigera",
+				Tier:     "calico-system",
 				Selector: "k8s-app == 'tigera-component'",
 				Egress: []v3.Rule{
 					{

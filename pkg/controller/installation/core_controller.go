@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -451,12 +451,6 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 	if len(instance.Spec.Variant) == 0 {
 		// Default to installing Calico.
 		instance.Spec.Variant = operator.Calico
-	}
-
-	// Default to running Calico as privileged.
-	if instance.Spec.NonPrivileged == nil {
-		npd := operator.NonPrivilegedDisabled
-		instance.Spec.NonPrivileged = &npd
 	}
 
 	if instance.Spec.TyphaAffinity == nil {

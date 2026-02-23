@@ -179,6 +179,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -277,6 +280,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}
 
 				expectedDeleteResources := []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -341,6 +347,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -440,6 +449,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},

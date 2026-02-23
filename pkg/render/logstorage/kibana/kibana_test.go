@@ -216,6 +216,9 @@ var _ = Describe("Kibana rendering tests", func() {
 
 			expectedDeletedResources := []client.Object{
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: kibana.ServiceName, Namespace: kibana.Namespace}},
+
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.kibana-access", Namespace: kibana.Namespace}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: kibana.Namespace}},
 			}
 
 			component := kibana.Kibana(cfg)

@@ -98,6 +98,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		rtest.ExpectResources(resourcesToCreate, expectedResourcesToCreate)
 
 		expectedResourcesToDelete := []client.Object{
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.manager-access", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersWatchRoleBindingName}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},
@@ -1226,6 +1228,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			rtest.ExpectResources(tenantAResourcesToCreate, expectedTenantAResources)
 
 			expectedTenantAResourcesToDelete := []client.Object{
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.manager-access", Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: tenantANamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-watch", Namespace: tenantANamespace}},
 				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access", Namespace: tenantANamespace}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access", Namespace: tenantANamespace}},
@@ -1274,6 +1278,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			rtest.ExpectResources(tenantBResourcesToCreate, expectedTenantBResources)
 
 			expectedTenantBResourcesToDelete := []client.Object{
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.manager-access", Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: tenantBNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-watch", Namespace: tenantBNamespace}},
 				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access", Namespace: tenantBNamespace}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-managed-cluster-write-access", Namespace: tenantBNamespace}},
@@ -1568,6 +1574,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			})
 
 			expectedTenantAResourcesToDelete := []client.Object{
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.manager-access", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersWatchRoleBindingName}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},

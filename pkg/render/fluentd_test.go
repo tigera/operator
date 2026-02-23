@@ -293,6 +293,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 		}
 
+		expectedDeleteResources := []client.Object{
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.allow-fluentd-node", Namespace: render.LogCollectorNamespace}},
+		}
+
 		// Should render the correct resources.
 		managedCfg := &render.FluentdConfiguration{
 			LogCollector:   cfg.LogCollector,
@@ -306,7 +310,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		component := render.Fluentd(managedCfg)
 		createResources, deleteResources := component.Objects()
 		rtest.ExpectResources(createResources, expectedResources)
-		Expect(deleteResources).To(BeEmpty())
+		rtest.ExpectResources(deleteResources, expectedDeleteResources)
 
 		ds := rtest.GetResource(createResources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
@@ -391,6 +395,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 		}
 
+		expectedDeleteResources := []client.Object{
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.allow-fluentd-node", Namespace: render.LogCollectorNamespace}},
+		}
+
 		pc := &operatorv1.PacketCaptureAPI{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "tigera-secure",
@@ -411,7 +419,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		component := render.Fluentd(managedCfg)
 		createResources, deleteResources := component.Objects()
 		rtest.ExpectResources(createResources, expectedResources)
-		Expect(deleteResources).To(BeEmpty())
+		rtest.ExpectResources(deleteResources, expectedDeleteResources)
 
 		ds := rtest.GetResource(createResources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))

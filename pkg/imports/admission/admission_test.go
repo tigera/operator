@@ -26,9 +26,9 @@ import (
 var _ = Describe("MutatingAdmissionPolicies", func() {
 	It("returns Calico MAPs when v3=true", func() {
 		objs := GetMutatingAdmissionPolicies(opv1.Calico, true)
-		Expect(objs).To(HaveLen(2), "Expected 2 admission objects, got %d", len(objs))
+		Expect(objs).To(HaveLen(4), "Expected 4 admission objects, got %d", len(objs))
 
-		// Verify we get one MAP and one MAPB.
+		// Verify we get two MAPs and two MAPBs.
 		var mapCount, mapbCount int
 		for _, obj := range objs {
 			switch obj.(type) {
@@ -40,13 +40,13 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 			// Verify the managed label is set.
 			Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue), "Expected MAP object to have label %s=%s", ManagedMAPLabel, ManagedMAPLabelValue)
 		}
-		Expect(mapCount).To(Equal(1), "Expected 1 MutatingAdmissionPolicy, got %d", mapCount)
-		Expect(mapbCount).To(Equal(1), "Expected 1 MutatingAdmissionPolicyBinding, got %d", mapbCount)
+		Expect(mapCount).To(Equal(2), "Expected 2 MutatingAdmissionPolicy, got %d", mapCount)
+		Expect(mapbCount).To(Equal(2), "Expected 2 MutatingAdmissionPolicyBinding, got %d", mapbCount)
 	})
 
 	It("returns Enterprise MAPs when v3=true", func() {
 		objs := GetMutatingAdmissionPolicies(opv1.TigeraSecureEnterprise, true)
-		Expect(objs).To(HaveLen(2), "Expected 2 admission objects, got %d", len(objs))
+		Expect(objs).To(HaveLen(4), "Expected 4 admission objects, got %d", len(objs))
 
 		var mapCount, mapbCount int
 		for _, obj := range objs {
@@ -58,8 +58,8 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 			}
 			Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue), "Expected MAP object to have label %s=%s", ManagedMAPLabel, ManagedMAPLabelValue)
 		}
-		Expect(mapCount).To(Equal(1), "Expected 1 MutatingAdmissionPolicy, got %d", mapCount)
-		Expect(mapbCount).To(Equal(1), "Expected 1 MutatingAdmissionPolicyBinding, got %d", mapbCount)
+		Expect(mapCount).To(Equal(2), "Expected 2 MutatingAdmissionPolicy, got %d", mapCount)
+		Expect(mapbCount).To(Equal(2), "Expected 2 MutatingAdmissionPolicyBinding, got %d", mapbCount)
 	})
 
 	It("returns empty when v3=false", func() {

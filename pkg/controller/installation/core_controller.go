@@ -31,6 +31,7 @@ import (
 
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
+	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -71,9 +72,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/imports/admission"
+	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -333,6 +335,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
 		v3CRDs:               opts.UseV3CRDs,
+		kubernetesVersion:    opts.KubernetesVersion,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -388,6 +391,7 @@ type ReconcileInstallation struct {
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
 	v3CRDs                        bool
+	kubernetesVersion             *common.VersionInfo
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
@@ -923,6 +927,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if err = r.updateMutatingAdmissionPolicies(ctx, instance.Spec.Variant, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -2135,6 +2143,71 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating CRD resource", err, log)
 		return err
 	}
+	return nil
+}
+
+func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Context, variant operatorv1.ProductVariant, log logr.Logger) error {
+	if !r.manageCRDs || !r.v3CRDs {
+		return nil
+	}
+	if !r.kubernetesVersion.ProvidesMutatingAdmissionPolicyV1Beta1() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes version does not support MutatingAdmissionPolicy v1beta1 (requires v1.32+); policy defaulting will not be available", nil, log)
+		return nil
+	}
+
+	desired := admission.GetMutatingAdmissionPolicies(variant, r.v3CRDs)
+
+	// Create or update desired MAPs/MAPBs.
+	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
+	if err := handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(desired...), nil); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating MutatingAdmissionPolicy resources", err, log)
+		return err
+	}
+
+	// Build a set of desired resource names for comparison.
+	desiredMAPs := map[string]bool{}
+	desiredMAPBs := map[string]bool{}
+	for _, obj := range desired {
+		switch obj.(type) {
+		case *admissionv1beta1.MutatingAdmissionPolicy:
+			desiredMAPs[obj.GetName()] = true
+		case *admissionv1beta1.MutatingAdmissionPolicyBinding:
+			desiredMAPBs[obj.GetName()] = true
+		}
+	}
+
+	// Delete stale MAPs that are labeled as managed but no longer desired.
+	existingMAPs := &admissionv1beta1.MutatingAdmissionPolicyList{}
+	if err := r.client.List(ctx, existingMAPs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicies", err, log)
+		return err
+	}
+	var toDelete []client.Object
+	for i := range existingMAPs.Items {
+		if !desiredMAPs[existingMAPs.Items[i].Name] {
+			toDelete = append(toDelete, &existingMAPs.Items[i])
+		}
+	}
+
+	// Delete stale MAPBs that are labeled as managed but no longer desired.
+	existingMAPBs := &admissionv1beta1.MutatingAdmissionPolicyBindingList{}
+	if err := r.client.List(ctx, existingMAPBs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicyBindings", err, log)
+		return err
+	}
+	for i := range existingMAPBs.Items {
+		if !desiredMAPBs[existingMAPBs.Items[i].Name] {
+			toDelete = append(toDelete, &existingMAPBs.Items[i])
+		}
+	}
+
+	if len(toDelete) > 0 {
+		if err := handler.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(toDelete...), nil); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error deleting stale MutatingAdmissionPolicy resources", err, log)
+			return err
+		}
+	}
+
 	return nil
 }
 

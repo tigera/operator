@@ -37,7 +37,8 @@ var changedFiles = []string{
 	calicoConfig,
 	enterpriseConfig,
 	"pkg/components",
-	"pkg/crds",
+	"pkg/imports/crds",
+	"pkg/imports/admission",
 }
 
 // Command to prepare repo for a new release.

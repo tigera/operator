@@ -3,9 +3,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: ipamblocks.projectcalico.org
+  name: ipamblocks.crd.projectcalico.org
 spec:
-  group: projectcalico.org
+  group: crd.projectcalico.org
   names:
     kind: IPAMBlock
     listKind: IPAMBlockList
@@ -14,20 +14,7 @@ spec:
   preserveUnknownFields: false
   scope: Cluster
   versions:
-    - additionalPrinterColumns:
-        - description: The block CIDR
-          jsonPath: .spec.cidr
-          name: CIDR
-          type: string
-        - description: The block affinity
-          jsonPath: .spec.affinity
-          name: Affinity
-          type: string
-        - description: The time at which affinity was claimed
-          jsonPath: .spec.affinityClaimTime
-          name: ClaimTime
-          type: date
-      name: v3
+    - name: v1
       schema:
         openAPIV3Schema:
           properties:
@@ -40,7 +27,6 @@ spec:
             spec:
               properties:
                 affinity:
-                  pattern: ^(host|virtual):[a-zA-Z0-9\.\-_]+$
                   type: string
                 affinityClaimTime:
                   format: date-time
@@ -55,6 +41,10 @@ spec:
                 attributes:
                   items:
                     properties:
+                      alternate:
+                        additionalProperties:
+                          type: string
+                        type: object
                       handle_id:
                         type: string
                       secondary:
@@ -64,7 +54,6 @@ spec:
                     type: object
                   type: array
                 cidr:
-                  format: cidr
                   type: string
                 deleted:
                   type: boolean
@@ -90,10 +79,6 @@ spec:
                 - strictAffinity
                 - unallocated
               type: object
-          required:
-            - metadata
-            - spec
           type: object
       served: true
       storage: true
-      subresources: {}

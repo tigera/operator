@@ -3,18 +3,21 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: kubecontrollersconfigurations.crd.projectcalico.org
+  name: kubecontrollersconfigurations.projectcalico.org
 spec:
-  group: crd.projectcalico.org
+  group: projectcalico.org
   names:
     kind: KubeControllersConfiguration
     listKind: KubeControllersConfigurationList
     plural: kubecontrollersconfigurations
+    shortNames:
+      - kcc
+      - kccs
     singular: kubecontrollersconfiguration
   preserveUnknownFields: false
   scope: Cluster
   versions:
-    - name: v1
+    - name: v3
       schema:
         openAPIV3Schema:
           properties:
@@ -263,6 +266,11 @@ spec:
                     - controllers
                   type: object
               type: object
+          required:
+            - metadata
+            - spec
           type: object
       served: true
       storage: true
+      subresources:
+        status: {}

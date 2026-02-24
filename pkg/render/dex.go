@@ -51,7 +51,7 @@ const (
 	DexPort          = 5556
 	DexTLSSecretName = "tigera-dex-tls"
 	DexClientId      = "tigera-manager"
-	DexPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "calico-system-dex"
+	DexPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "dex"
 )
 
 var DexEntityRule = networkpolicy.CreateEntityRule(DexNamespace, DexObjectName, DexPort)

@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,4 +58,10 @@ func (v *VersionInfo) ProvidesCertV1API() bool {
 		return true
 	}
 	return false
+}
+
+// ProvidesMutatingAdmissionPolicyV1Beta1 returns if admissionregistration.k8s.io/v1beta1 MutatingAdmissionPolicy
+// is supported given the current k8s version (introduced in k8s 1.32).
+func (v *VersionInfo) ProvidesMutatingAdmissionPolicyV1Beta1() bool {
+	return v != nil && (v.Major > 1 || (v.Major == 1 && v.Minor >= 32))
 }

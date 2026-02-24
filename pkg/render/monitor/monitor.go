@@ -610,7 +610,12 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 						Name:      CalicoNodeAlertmanager,
 						Namespace: &promNamespace,
 						Port:      intstr.FromString("web"),
-						Scheme:    ptr.To(monitoringv1.SchemeHTTP),
+						RelabelConfigs: []monitoringv1.RelabelConfig{
+							{
+								TargetLabel: "__scheme__",
+								Replacement: ptr.To("http"),
+							},
+						},
 					},
 				},
 			},
@@ -830,7 +835,12 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 			Interval:      "5s",
 			Port:          "calico-metrics-port",
 			ScrapeTimeout: "5s",
-			Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
+			RelabelConfigs: []monitoringv1.RelabelConfig{
+				{
+					TargetLabel: "__scheme__",
+					Replacement: ptr.To("https"),
+				},
+			},
 			HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
 				HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
 					TLSConfig: mc.tlsConfig(render.CalicoNodeMetricsService),
@@ -842,7 +852,12 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 			Interval:      "5s",
 			Port:          "calico-bgp-metrics-port",
 			ScrapeTimeout: "5s",
-			Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
+			RelabelConfigs: []monitoringv1.RelabelConfig{
+				{
+					TargetLabel: "__scheme__",
+					Replacement: ptr.To("https"),
+				},
+			},
 			HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
 				HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
 					TLSConfig: mc.tlsConfig(render.CalicoNodeMetricsService),
@@ -857,7 +872,12 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 			Interval:      "5s",
 			Port:          "felix-metrics-port",
 			ScrapeTimeout: "5s",
-			Scheme:        ptr.To(monitoringv1.SchemeHTTP),
+			RelabelConfigs: []monitoringv1.RelabelConfig{
+				{
+					TargetLabel: "__scheme__",
+					Replacement: ptr.To("http"),
+				},
+			},
 		})
 	}
 
@@ -914,10 +934,15 @@ func (mc *monitorComponent) serviceMonitorElasticsearch() *monitoringv1.ServiceM
 					Interval:      "5s",
 					Port:          "metrics-port",
 					ScrapeTimeout: "5s",
-					Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
 					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
 						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
 							TLSConfig: mc.tlsConfig(esmetrics.ElasticsearchMetricsName),
+						},
+					},
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("https"),
 						},
 					},
 				},
@@ -954,10 +979,15 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 					Interval:      "5s",
 					Port:          render.FluentdMetricsPortName,
 					ScrapeTimeout: "5s",
-					Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
 					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
 						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
 							TLSConfig: mc.tlsConfig(render.FluentdPrometheusTLSSecretName),
+						},
+					},
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("https"),
 						},
 					},
 				},
@@ -980,11 +1010,16 @@ func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMon
 			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{render.QueryserverNamespace}},
 			Endpoints: []monitoringv1.Endpoint{
 				{
-					HonorLabels:     true,
-					Interval:        "5s",
-					Port:            "queryserver",
-					ScrapeTimeout:   "5s",
-					Scheme:          ptr.To(monitoringv1.SchemeHTTPS),
+					HonorLabels:   true,
+					Interval:      "5s",
+					Port:          "queryserver",
+					ScrapeTimeout: "5s",
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("https"),
+						},
+					},
 					BearerTokenFile: bearerTokenFile,
 					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
 						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
@@ -1366,7 +1401,12 @@ func (mc *monitorComponent) serviceMonitorCalicoKubeControllers() *monitoringv1.
 					Interval:      "5s",
 					Port:          "metrics-port",
 					ScrapeTimeout: "5s",
-					Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("https"),
+						},
+					},
 					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
 						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
 							TLSConfig: mc.tlsConfig(KubeControllerMetrics),
@@ -1474,10 +1514,18 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 	var needsRBAC bool
 	endpoints := make([]monitoringv1.Endpoint, len(mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor.Endpoints))
 	for i, ep := range mc.cfg.Monitor.ExternalPrometheus.ServiceMonitor.Endpoints {
+		relabelConfigs := ep.RelabelConfigs
+		if len(relabelConfigs) == 0 {
+			relabelConfigs = []monitoringv1.RelabelConfig{
+				{
+					TargetLabel: "__scheme__",
+					Replacement: ptr.To("https"),
+				},
+			}
+		}
 		endpoints[i] = monitoringv1.Endpoint{
 			Port:          "web",
 			Path:          "/federate",
-			Scheme:        ptr.To(monitoringv1.SchemeHTTPS),
 			Params:        ep.Params,
 			Interval:      ep.Interval,
 			ScrapeTimeout: ep.ScrapeTimeout,
@@ -1503,7 +1551,7 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 			HonorLabels:          ep.HonorLabels,
 			HonorTimestamps:      ep.HonorTimestamps,
 			MetricRelabelConfigs: ep.MetricRelabelConfigs,
-			RelabelConfigs:       ep.RelabelConfigs,
+			RelabelConfigs:       relabelConfigs,
 		}
 		// All requests that go to our prometheus server are first passing through the authn-proxy side-car. This server
 		// will listen to https traffic and performs authn and authz (see also the rbac attributes in externalPrometheusRole()).
@@ -1551,8 +1599,13 @@ func (mc *monitorComponent) typhaServiceMonitor() client.Object {
 					HonorLabels:   true,
 					Interval:      "5s",
 					Port:          render.TyphaMetricsName,
-					Scheme:        ptr.To(monitoringv1.SchemeHTTP),
 					ScrapeTimeout: "5s",
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("http"),
+						},
+					},
 				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{

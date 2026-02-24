@@ -359,7 +359,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Name).To(Equal("calico-node-alertmanager"))
 		Expect(*prometheusObj.Spec.Alerting.Alertmanagers[0].Namespace).To(Equal("tigera-prometheus"))
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Port).To(Equal(intstr.FromString("web")))
-		Expect(*prometheusObj.Spec.Alerting.Alertmanagers[0].Scheme).To(Equal(monitoringv1.SchemeHTTP))
+		Expect(*prometheusObj.Spec.Alerting.Alertmanagers[0].RelabelConfigs[0].Replacement).To(Equal("http"))
 		Expect(*prometheusObj.Spec.ReloadStrategy).To(BeEquivalentTo(monitoringv1.ProcessSignalReloadStrategyType))
 		Expect(*prometheusObj.Spec.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*prometheusObj.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
@@ -506,12 +506,12 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("calico-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[1].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].Port).To(Equal("calico-bgp-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[1].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[1].RelabelConfigs[0].Replacement).To(Equal("https"))
 
 		servicemonitorObj, ok = rtest.GetResource(toCreate, monitor.ElasticsearchMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
@@ -524,7 +524,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
 
 		servicemonitorObj, ok = rtest.GetResource(toCreate, "fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
@@ -544,7 +544,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("fluentd-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
 
 		servicemonitorObj, ok = rtest.GetResource(toCreate, "calico-api", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
@@ -557,7 +557,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("queryserver"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
 		//nolint:staticcheck // Ignore SA1019 deprecated
 		Expect(servicemonitorObj.Spec.Endpoints[0].BearerTokenFile).To(Equal("/var/run/secrets/kubernetes.io/serviceaccount/token"))
 
@@ -936,8 +936,13 @@ var _ = Describe("monitor rendering tests", func() {
 						HonorLabels:   true,
 						Interval:      "5s",
 						Port:          "calico-typha-metrics",
-						Scheme:        ptr.To(monitoringv1.SchemeHTTP),
 						ScrapeTimeout: "5s",
+						RelabelConfigs: []monitoringv1.RelabelConfig{
+							{
+								TargetLabel: "__scheme__",
+								Replacement: ptr.To("http"),
+							},
+						},
 					},
 				},
 				NamespaceSelector: monitoringv1.NamespaceSelector{
@@ -964,17 +969,17 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("calico-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[1].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].Port).To(Equal("calico-bgp-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[1].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[1].RelabelConfigs[0].Replacement).To(Equal("https"))
 		Expect(servicemonitorObj.Spec.Endpoints[2].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[2].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[2].Port).To(Equal("felix-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[2].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[2].Scheme).To(Equal(monitoringv1.SchemeHTTP))
+		Expect(*servicemonitorObj.Spec.Endpoints[2].RelabelConfigs[0].Replacement).To(Equal("http"))
 	})
 })
 

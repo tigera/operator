@@ -71,9 +71,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
-	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -457,12 +457,6 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 	if len(instance.Spec.Variant) == 0 {
 		// Default to installing Calico.
 		instance.Spec.Variant = operatorv1.Calico
-	}
-
-	// Default to running Calico as privileged.
-	if instance.Spec.NonPrivileged == nil {
-		npd := operatorv1.NonPrivilegedDisabled
-		instance.Spec.NonPrivileged = &npd
 	}
 
 	if instance.Spec.TyphaAffinity == nil {

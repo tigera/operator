@@ -365,7 +365,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			}
 		}
 
-		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+		// Ensure the calico-system tier exists, before rendering any network policies within it.
 		//
 		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
 		// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
@@ -374,7 +374,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		if r.tierWatchReady.IsReady() {
 			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 				if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			} else {
@@ -507,7 +507,13 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
 	if !r.opts.UseV3CRDs && includeV3NetworkPolicy {
-		components = append(components, render.APIServerPolicy(&apiServerCfg))
+		components = append(components,
+			render.APIServerPolicy(&apiServerCfg),
+			// allow-tigera Tier was renamed to calico-system
+			render.NewDeletionPassthrough(
+				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("apiserver-access", render.APIServerNamespace),
+			),
+		)
 	}
 
 	component, err := render.APIServer(&apiServerCfg)

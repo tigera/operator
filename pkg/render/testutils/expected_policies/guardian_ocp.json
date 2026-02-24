@@ -2,13 +2,13 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.guardian-access",
+    "name": "calico-system.guardian-access",
     "namespace": "calico-system"
   },
   "spec": {
     "selector": "k8s-app == 'guardian'",
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "types": [
       "Ingress",
       "Egress"

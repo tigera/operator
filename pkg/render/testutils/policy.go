@@ -30,9 +30,9 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 )
 
-// AllowTigeraScenario represents valid render cases for allow-tigera policies. Render components should test that their
-// allow-tigera policies correctly adapt for each relevant potential case. Update if new scenarios arise.
-type AllowTigeraScenario struct {
+// CalicoSystemScenario represents valid render cases for calico-system policies. Render components should test that their
+// calico-system policies correctly adapt for each relevant potential case. Update if new scenarios arise.
+type CalicoSystemScenario struct {
 	ManagedCluster    bool
 	ManagementCluster bool
 	OpenShift         bool
@@ -47,7 +47,7 @@ const (
 	DualStack IPMode = "Dual-stack"
 )
 
-func GetAllowTigeraPolicyFromResources(name types.NamespacedName, resources []client.Object) *v3.NetworkPolicy {
+func GetCalicoSystemPolicyFromResources(name types.NamespacedName, resources []client.Object) *v3.NetworkPolicy {
 	resource := rtest.GetResource(resources, name.Name, name.Namespace, "projectcalico.org", "v3", "NetworkPolicy")
 	if resource == nil {
 		return nil
@@ -56,7 +56,7 @@ func GetAllowTigeraPolicyFromResources(name types.NamespacedName, resources []cl
 	}
 }
 
-func GetAllowTigeraGlobalPolicyFromResources(name string, resources []client.Object) *v3.GlobalNetworkPolicy {
+func GetCalicoSystemGlobalPolicyFromResources(name string, resources []client.Object) *v3.GlobalNetworkPolicy {
 	resource := rtest.GetGlobalResource(resources, name, "projectcalico.org", "v3", "GlobalNetworkPolicy")
 	if resource == nil {
 		return nil
@@ -105,7 +105,7 @@ func GetExpectedGlobalPolicyFromFile(name string) *v3.GlobalNetworkPolicy {
 }
 
 // SelectPolicyByClusterTypeAndProvider selects a variant of a policy that varies depending on cluster and provider type.
-func SelectPolicyByClusterTypeAndProvider(scenario AllowTigeraScenario, policies map[string]*v3.NetworkPolicy) *v3.NetworkPolicy {
+func SelectPolicyByClusterTypeAndProvider(scenario CalicoSystemScenario, policies map[string]*v3.NetworkPolicy) *v3.NetworkPolicy {
 	clusterType := "unmanaged"
 	if scenario.ManagementCluster {
 		clusterType = "management"
@@ -124,7 +124,7 @@ func SelectPolicyByClusterTypeAndProvider(scenario AllowTigeraScenario, policies
 }
 
 // SelectPolicyByProvider simply selects a variant of a policy that varies depending on provider type only.
-func SelectPolicyByProvider(scenario AllowTigeraScenario, noProviderPolicy *v3.NetworkPolicy, openshiftProviderPolicy *v3.NetworkPolicy) *v3.NetworkPolicy {
+func SelectPolicyByProvider(scenario CalicoSystemScenario, noProviderPolicy *v3.NetworkPolicy, openshiftProviderPolicy *v3.NetworkPolicy) *v3.NetworkPolicy {
 	if scenario.OpenShift {
 		return openshiftProviderPolicy
 	} else {

@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024,2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -120,16 +120,22 @@ func (d *dashboards) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (d *dashboards) Objects() (objsToCreate, objsToDelete []client.Object) {
+	// allow-tigera Tier was renamed to calico-system
+	objsToDelete = append(objsToDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("dashboards-installer", d.cfg.Namespace),
+	)
 	if d.cfg.IsManaged {
-		return nil, d.resources()
+		objsToDelete = append(objsToDelete, d.resources()...)
+	} else {
+		objsToCreate = append(objsToCreate, d.resources()...)
 	}
 
-	return d.resources(), nil
+	return objsToCreate, objsToDelete
 }
 
 func (d *dashboards) resources() []client.Object {
 	resources := []client.Object{
-		d.AllowTigeraPolicy(),
+		d.CalicoSystemPolicy(),
 		d.ServiceAccount(),
 		d.Job(),
 	}
@@ -140,7 +146,7 @@ func (d *dashboards) resources() []client.Object {
 	return resources
 }
 
-func (d *dashboards) AllowTigeraPolicy() *v3.NetworkPolicy {
+func (d *dashboards) CalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, d.cfg.Installation.KubernetesProvider.IsOpenShift())
 	if d.cfg.ExternalKibanaClientSecret != nil {

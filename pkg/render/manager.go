@@ -1082,6 +1082,13 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				},
 				Verbs: []string{"dismiss", "delete"},
 			},
+			{
+				// Required by the AuthorizationReview calculator in ui-apis to evaluate
+				// RBAC permissions for users.
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
 		},
 	}
 

@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -431,7 +432,10 @@ func modifyComponentImageConfig(repoRootDir, imageConfigRelPath, configKey, newV
 // extractGitHashFromVersion extracts the git hash from a version string.
 // The version format is not strict, so long as it ends with g<12-char-hash>.
 func extractGitHashFromVersion(version string) (string, error) {
-	re, err := regexp.Compile(`g([a-f0-9]{12})(-dirty)?$`)
+	if strings.HasSuffix(version, "-dirty") {
+		return "", fmt.Errorf("version %s indicates a dirty git state, cannot extract git hash", version)
+	}
+	re, err := regexp.Compile(`g([a-f0-9]{12})?$`)
 	if err != nil {
 		return "", fmt.Errorf("compiling git hash regex: %w", err)
 	}
@@ -461,11 +465,15 @@ func (r *hashreleaseRepo) Setup(c *cli.Command) error {
 	r.repo = c.String(r.RepoFlag.Name)
 	r.version = c.String(r.VersionFlag.Name)
 	r.branch = c.String(r.BranchFlag.Name)
+	var errStack error
 	if r.branch == "" {
-		return fmt.Errorf("%s git branch not provided. Either set the %s dir or provide a branch", r.Product, r.Product)
+		errStack = errors.Join(errStack, fmt.Errorf("%s git branch not provided. Either set the %s dir or provide a branch", r.Product, r.Product))
 	}
 	if r.version == "" {
-		return fmt.Errorf("%s version not provided. Either set the %s dir or provide a version", r.Product, r.Product)
+		errStack = errors.Join(errStack, fmt.Errorf("%s version not provided. Either set the %s dir or provide a version", r.Product, r.Product))
+	}
+	if errStack != nil {
+		return errStack
 	}
 	dir, err := r.clone()
 	if err != nil {
@@ -480,6 +488,13 @@ func (r *hashreleaseRepo) Setup(c *cli.Command) error {
 // cloneHashreleaseRepo clones the repo at the git hash that corresponds to the hashrelease version.
 // It uses a shallow clone with incremental deepening (max depth: 100) to fetch the specific commit without downloading the entire history.
 func (r *hashreleaseRepo) clone() (string, error) {
+	repoPattern, err := regexp.Compile(`^[\w-]+/[\w.-]+$`)
+	if err != nil {
+		return "", fmt.Errorf("compiling repo name regex: %w", err)
+	}
+	if !repoPattern.MatchString(r.repo) {
+		return "", fmt.Errorf("invalid repo format %s, expected format owner/repo", r.repo)
+	}
 	gitHash, err := extractGitHashFromVersion(r.version)
 	if err != nil {
 		return "", fmt.Errorf("extracting git hash from version: %w", err)
@@ -508,16 +523,16 @@ func (r *hashreleaseRepo) clone() (string, error) {
 
 	// Init dir as a git repo to allow sparse checkout, which avoids downloading unnecessary files and history.
 	if _, err := git("-C", repoTmpDir, "init"); err != nil {
-		return repoTmpDir, fmt.Errorf("initializing git repo in %s temp dir: %w", r.Product, err)
+		return "", fmt.Errorf("initializing git repo in %s temp dir: %w", r.Product, err)
 	}
 	if _, err := git("-C", repoTmpDir, "remote", "add", remote, fmt.Sprintf("git@github.com:%s.git", r.repo)); err != nil {
-		return repoTmpDir, fmt.Errorf("adding remote origin in %s temp git dir: %w", r.Product, err)
+		return "", fmt.Errorf("adding remote origin in %s temp git dir: %w", r.Product, err)
 	}
 
 	// Shallow clone and incrementally deepen to either the specific commit or max depth
 	depth, deepen, maxDepth := 10, 20, 100
 	if _, err := git("-C", repoTmpDir, "fetch", "--depth", strconv.Itoa(depth), remote, r.branch); err != nil {
-		return repoTmpDir, fmt.Errorf("fetching branch %s from remote in %s temp git dir: %w", r.branch, r.Product, err)
+		return "", fmt.Errorf("fetching branch %s from remote in %s temp git dir: %w", r.branch, r.Product, err)
 	}
 	for {
 		// check if the commit is present after the fetch
@@ -525,18 +540,18 @@ func (r *hashreleaseRepo) clone() (string, error) {
 			break
 		}
 		if depth >= maxDepth {
-			return repoTmpDir, fmt.Errorf("git hash %s not found after fetching with depth %d", gitHash, depth)
+			return "", fmt.Errorf("git hash %s not found after fetching with depth %d", gitHash, depth)
 		}
 		depth += deepen
 		logrus.WithField("depth", depth).Infof("Deepening git fetch for %s repo", r.Product)
 		if _, err := git("-C", repoTmpDir, "fetch", "--deepen", strconv.Itoa(deepen), "origin", r.branch); err != nil {
-			return repoTmpDir, fmt.Errorf("deepening fetch for branch %s in %s repo: %w", r.branch, r.Product, err)
+			return "", fmt.Errorf("deepening fetch for branch %s in %s repo: %w", r.branch, r.Product, err)
 		}
 	}
 
 	// Checkout the specific commit
 	if _, err := git("-C", repoTmpDir, "checkout", gitHash); err != nil {
-		return repoTmpDir, fmt.Errorf("checking out git hash %s in %s repo: %w", gitHash, r.Product, err)
+		return "", fmt.Errorf("checking out git hash %s in %s repo: %w", gitHash, r.Product, err)
 	}
 
 	logrus.WithField("dir", repoTmpDir).Debugf("Successfully cloned %s repo", r.Product)

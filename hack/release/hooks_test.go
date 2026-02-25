@@ -120,7 +120,7 @@ func TestWithTimeout(t *testing.T) {
 	})
 }
 
-// TestRunBuildAfterHookRunsAll verifies that all build-after hooks run even if earlier ones fail.
+// Run* hook tests must NOT be parallel since it uses package-level hook vars that can be mutated by other tests.
 func TestRunBuildAfterHookRunsAll(t *testing.T) {
 	defer buildAfterHooks.Reset()
 
@@ -158,7 +158,7 @@ func TestRunBuildAfterHookRunsAll(t *testing.T) {
 	}
 }
 
-// Run* hook tests must NOT be parallel since they mutate package-level hook vars.
+// Run* hook tests must NOT be parallel since it uses package-level hook vars that can be mutated by other tests.
 func TestRunHookErrorPropagation(t *testing.T) {
 	cases := []struct {
 		name    string

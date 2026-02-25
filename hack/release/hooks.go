@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -36,10 +37,7 @@ import (
 //
 //   // myhooks.go
 //   func init() {
-//       buildPreHook = myBuildPreHook
-//       setupHashreleasePreHook = mySetupHashreleasePreHook
-//       publishPreHook = myPublishPreHook
-//       postPublishHook = myPostPublishHook
+//       buildBeforeHook = myBuildBeforeHook
 //   }
 //
 // HOOK EXECUTION AND ERROR HANDLING:
@@ -94,7 +92,7 @@ func (h *multiHook) Add(desc string, hook cliHookFunc) {
 func (h *multiHook) Hooks() []cliHook {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return h.hooks
+	return slices.Clone(h.hooks)
 }
 
 func (h *multiHook) Reset() {

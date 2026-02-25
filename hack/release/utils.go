@@ -139,6 +139,9 @@ func runCommandInDirContext(ctx context.Context, dir, name string, args, env []s
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 	if len(env) != 0 {

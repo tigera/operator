@@ -46,7 +46,7 @@ func TestExtractGitHashFromVersion(t *testing.T) {
 		},
 		{
 			version: "v3.22.1-25-g997f6be93484-dirty",
-			want:    "997f6be93484",
+			wantErr: true,
 		},
 		{
 			version: "v3.22.1-948-g997f6be93484",

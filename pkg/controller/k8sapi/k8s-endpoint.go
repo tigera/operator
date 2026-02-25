@@ -26,8 +26,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-const dockerEEProxyLocal = "proxy.local"
-
 // Endpoint is the default ServiceEndpoint learned from environment variables.
 var Endpoint ServiceEndpoint
 

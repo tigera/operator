@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/sirupsen/logrus"
@@ -132,6 +133,48 @@ func runCommandInDir(dir, name string, args, env []string) (string, error) {
 	return strings.TrimSpace(outb.String()), err
 }
 
+// runCommandInDirContext is a context-aware variant of runCommandInDir.
+// When ctx is cancelled, the entire process group is killed to ensure child processes are cleaned up.
+func runCommandInDirContext(ctx context.Context, dir, name string, args, env []string) (string, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	if len(env) != 0 {
+		cmd.Env = env
+	}
+	cmd.Dir = dir
+	var outb, errb bytes.Buffer
+	if logrus.IsLevelEnabled(logrus.DebugLevel) {
+		cmd.Stdout = io.MultiWriter(os.Stdout, &outb)
+		cmd.Stderr = io.MultiWriter(os.Stderr, &errb)
+	} else {
+		cmd.Stdout = io.MultiWriter(&outb)
+		cmd.Stderr = io.MultiWriter(&errb)
+	}
+	logrus.WithFields(logrus.Fields{
+		"cmd": cmd.String(),
+		"dir": dir,
+	}).Debugf("Running %s command (context-aware)", name)
+	err := cmd.Run()
+	if err != nil {
+		errDesc := fmt.Sprintf(`running command "%s %s"`, name, strings.Join(args, " "))
+		if dir != "" {
+			errDesc += fmt.Sprintf(" in directory %s", dir)
+		}
+		err = fmt.Errorf("%s: %w \n%s", errDesc, err, strings.TrimSpace(errb.String()))
+	}
+	return strings.TrimSpace(outb.String()), err
+}
+
+func gitInDirContext(ctx context.Context, dir string, args ...string) (string, error) {
+	return runCommandInDirContext(ctx, dir, "git", args, nil)
+}
+
 func addRepoInfoToCtx(ctx context.Context, repo string) (context.Context, error) {
 	if ctx.Value(githubOrgCtxKey) != nil && ctx.Value(githubRepoCtxKey) != nil {
 		return ctx, nil
@@ -197,6 +240,10 @@ func calicoVersions(repo, rootDir, operatorVersion string, local bool) (map[stri
 	}
 	return versions, nil
 }
+
+// isValidReleaseVersion validates the operator release version format.
+// It defaults to standard release format (vX.Y.Z) but can be overridden if a different format is needed.
+var isValidReleaseVersion = isReleaseVersionFormat
 
 // isReleaseVersionFormat checks if the version in the format vX.Y.Z.
 func isReleaseVersionFormat(version string) (bool, error) {

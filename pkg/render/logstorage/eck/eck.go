@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024,2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -96,8 +96,10 @@ func (e *eck) Objects() ([]client.Object, []client.Object) {
 
 	toCreate = append(toCreate,
 		render.CreateNamespace(OperatorNamespace, e.cfg.Installation.KubernetesProvider, render.PSSRestricted, e.cfg.Installation.Azure),
-		e.operatorAllowTigeraPolicy(),
+		e.operatorCalicoSystemPolicy(),
 	)
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("elastic-operator-access", OperatorNamespace))
 
 	toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(OperatorNamespace))
 
@@ -422,7 +424,7 @@ func (e *eck) elasticEnterpriseTrial() *corev1.Secret {
 }
 
 // Allow the elastic-operator to communicate with API server, DNS and elastic search.
-func (e *eck) operatorAllowTigeraPolicy() *v3.NetworkPolicy {
+func (e *eck) operatorCalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, e.cfg.Provider.IsOpenShift())
 	egressRules = append(egressRules, []v3.Rule{

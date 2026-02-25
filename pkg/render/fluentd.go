@@ -282,8 +282,11 @@ func (c *fluentdComponent) path(path string) string {
 
 func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 	var objs, toDelete []client.Object
-	objs = append(objs, c.allowTigeraPolicy())
+	objs = append(objs, c.calicoSystemPolicy())
 	objs = append(objs, c.metricsService())
+
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("allow-fluentd-node", LogCollectorNamespace))
 
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
 		// We do this only for GKE as other providers don't (yet?)
@@ -1260,7 +1263,7 @@ func (c *fluentdComponent) eksLogForwarderClusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-func (c *fluentdComponent) allowTigeraPolicy() *v3.NetworkPolicy {
+func (c *fluentdComponent) calicoSystemPolicy() *v3.NetworkPolicy {
 	multiTenant := false
 	tenantNamespace := ""
 	if c.cfg.Tenant != nil {

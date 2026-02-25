@@ -87,16 +87,34 @@ func Guardian(cfg *GuardianConfiguration) Component {
 	}
 }
 
+type guardianPolicyComponent struct {
+	PassthroughComponent
+	guardianAccessPolicy *v3.NetworkPolicy
+}
+
+func (c *guardianPolicyComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
+	objsToCreate = append(objsToCreate,
+		c.guardianAccessPolicy,
+		networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
+	)
+
+	// allow-tigera Tier was renamed to calico-system
+	objsToDelete = append(objsToDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("guardian-access", GuardianNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", GuardianNamespace),
+	)
+	return
+}
+
 func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
-	guardianAccessPolicy, err := guardianAllowTigeraPolicy(cfg)
+	guardianAccessPolicy, err := guardianCalicoSystemPolicy(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewPassthrough(
-		guardianAccessPolicy,
-		networkpolicy.AllowTigeraDefaultDeny(GuardianNamespace),
-	), nil
+	return &guardianPolicyComponent{
+		guardianAccessPolicy: guardianAccessPolicy,
+	}, nil
 }
 
 // GuardianConfiguration contains all the config information needed to render the component.
@@ -570,7 +588,7 @@ func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
 	}
 }
 
-func guardianAllowTigeraPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
+func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,

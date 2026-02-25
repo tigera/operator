@@ -587,10 +587,10 @@ var _ = Describe("dex rendering tests", func() {
 			}))
 		})
 
-		Context("allow-tigera rendering", func() {
-			policyName := types.NamespacedName{Name: "allow-tigera.allow-tigera-dex", Namespace: "tigera-dex"}
+		Context("calico-system rendering", func() {
+			policyName := types.NamespacedName{Name: "calico-system.dex", Namespace: "tigera-dex"}
 
-			getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			getExpectedPolicy := func(scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
 				if scenario.ManagedCluster {
 					return nil
 				}
@@ -598,13 +598,13 @@ var _ = Describe("dex rendering tests", func() {
 				return testutils.SelectPolicyByProvider(scenario, expectedDexPolicy, expectedDexOpenshiftPolicy)
 			}
 
-			DescribeTable("should render allow-tigera policy",
-				func(scenario testutils.AllowTigeraScenario) {
+			DescribeTable("should render calico-system policy",
+				func(scenario testutils.CalicoSystemScenario) {
 					cfg.OpenShift = scenario.OpenShift
 					component := render.Dex(cfg)
 					resources, _ := component.Objects()
 
-					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 					expectedPolicy := getExpectedPolicy(scenario)
 					Expect(policy.Spec.Selector).To(Equal(policy.Spec.Selector))
 					Expect(policy.Spec.Tier).To(Equal(policy.Spec.Tier))
@@ -616,8 +616,8 @@ var _ = Describe("dex rendering tests", func() {
 					Expect(policy.Spec.Egress).To(ContainElements(expectedPolicy.Spec.Egress))
 				},
 				// Dex only renders in the presence of an Authentication CR, therefore does not have a config option for managed clusters.
-				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+				Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
 			)
 		})
 	})

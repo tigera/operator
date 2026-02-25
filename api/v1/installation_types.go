@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2025 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -154,6 +154,8 @@ type InstallationSpec struct {
 	// +optional
 	CertificateManagement *CertificateManagement `json:"certificateManagement,omitempty"`
 
+	// Deprecated. NonPrivileged is deprecated and will be removed from the API in a future release.
+	// Enabling this field is not supported and will cause errors.
 	// NonPrivileged configures Calico to be run in non-privileged containers as non-root users where possible.
 	// +optional
 	NonPrivileged *NonPrivilegedType `json:"nonPrivileged,omitempty"`

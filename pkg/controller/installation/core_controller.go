@@ -453,12 +453,6 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 		instance.Spec.Variant = operator.Calico
 	}
 
-	// Default to running Calico as privileged.
-	if instance.Spec.NonPrivileged == nil {
-		npd := operator.NonPrivilegedDisabled
-		instance.Spec.NonPrivileged = &npd
-	}
-
 	if instance.Spec.TyphaAffinity == nil {
 		switch instance.Spec.KubernetesProvider {
 		// in AKS, there is a feature called 'virtual-nodes' which represent azure's container service as a node in the kubernetes cluster.

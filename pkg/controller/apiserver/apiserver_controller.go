@@ -507,13 +507,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
 	if !r.opts.UseV3CRDs && includeV3NetworkPolicy {
-		components = append(components,
-			render.APIServerPolicy(&apiServerCfg),
-			// allow-tigera Tier was renamed to calico-system
-			render.NewDeletionPassthrough(
-				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("apiserver-access", render.APIServerNamespace),
-			),
-		)
+		components = append(components, render.APIServerPolicy(&apiServerCfg))
 	}
 
 	component, err := render.APIServer(&apiServerCfg)

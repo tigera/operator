@@ -29,6 +29,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/ptr"
@@ -103,6 +104,30 @@ type KubeControllersConfiguration struct {
 	Tenant *operatorv1.Tenant
 }
 
+type calicoKubeControllersPolicyComponent struct {
+	render.PassthroughComponent
+	cfg               *KubeControllersConfiguration
+	defaultDenyPolicy *v3.NetworkPolicy
+}
+
+func (c *calicoKubeControllersPolicyComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
+	objsToCreate = append(objsToCreate,
+		kubeControllersCalicoSystemPolicy(c.cfg),
+		c.defaultDenyPolicy,
+	)
+
+	// allow-tigera Tier was renamed to calico-system
+	objsToDelete = append(objsToDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kube-controller-access", c.cfg.Namespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.CalicoNamespace),
+	)
+	return
+}
+
+func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
+	return &calicoKubeControllersPolicyComponent{cfg: cfg, defaultDenyPolicy: defaultDeny}
+}
+
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
 	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg)
 	enabledControllers := []string{"node", "loadbalancer"}
@@ -144,10 +169,6 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 		kubeControllersRules:             kubeControllerRolePolicyRules,
 		enabledControllers:               enabledControllers,
 	}
-}
-
-func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration) render.Component {
-	return render.NewPassthrough(kubeControllersCalicoSystemPolicy(cfg))
 }
 
 func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {

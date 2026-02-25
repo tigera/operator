@@ -1565,13 +1565,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			components = append(components, render.NewTyphaNonClusterHostPolicy(&typhaCfg))
 		}
 		components = append(components,
-			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg),
-			render.NewPassthrough(calicoSystemDefaultDenyForCalicoSystem()),
-			// allow-tigera Tier was renamed to calico-system
-			render.NewDeletionPassthrough(
-				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kube-controller-access", kubeControllersCfg.Namespace),
-				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.CalicoNamespace),
-			),
+			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg, calicoSystemDefaultDenyForCalicoSystem()),
 		)
 	}
 

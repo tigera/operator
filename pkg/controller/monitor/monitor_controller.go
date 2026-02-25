@@ -413,18 +413,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// unavailable and reconciliation of non-NetworkPolicy resources in the monitor controller would resolve it, we
 	// render network policies last to prevent a chicken-and-egg scenario.
 	if includeV3NetworkPolicy {
-		components = append(components,
-			monitor.MonitorPolicy(monitorCfg),
-			// allow-tigera Tier was renamed to calico-system
-			render.NewDeletionPassthrough(
-				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager", common.TigeraPrometheusNamespace),
-				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager-mesh", common.TigeraPrometheusNamespace),
-				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus", common.TigeraPrometheusNamespace),
-				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-prometheus-api", common.TigeraPrometheusNamespace),
-				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus-operator", common.TigeraPrometheusNamespace),
-				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.TigeraPrometheusNamespace),
-			),
-		)
+		components = append(components, monitor.MonitorPolicy(monitorCfg))
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {

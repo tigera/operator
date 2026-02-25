@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.elasticsearch-access",
+    "name": "calico-system.elasticsearch-access",
     "namespace": "tigera-elasticsearch"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "elasticsearch.k8s.elastic.co/cluster-name == 'tigera-secure'",
     "types": [
       "Ingress",

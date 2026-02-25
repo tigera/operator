@@ -330,19 +330,9 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
-	// Verify that we are running in non-privileged mode only with the appropriate feature set
+	// Verify that non-privileged mode is not Enabled, since it's been deprecated.
 	if instance.Spec.NonPrivileged != nil && *instance.Spec.NonPrivileged == operatorv1.NonPrivilegedEnabled {
-		// BPF must be disabled
-		if instance.Spec.CalicoNetwork != nil &&
-			instance.Spec.CalicoNetwork.LinuxDataplane != nil &&
-			*instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF {
-			return fmt.Errorf("non-privileged Calico is not supported when BPF dataplane is enabled")
-		}
-
-		// Only allowed to run as non-privileged for OS Calico
-		if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
-			return fmt.Errorf("non-privileged Calico is not supported for spec.Variant=%s", operatorv1.TigeraSecureEnterprise)
-		}
+		return fmt.Errorf("non-privileged Calico is deprecated and cannot be Enabled; please, remove this field from your installation spec")
 	}
 
 	// Verify the CalicoNodeDaemonSet overrides, if specified, is valid.

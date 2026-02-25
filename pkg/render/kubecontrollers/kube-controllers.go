@@ -104,31 +104,21 @@ type KubeControllersConfiguration struct {
 	Tenant *operatorv1.Tenant
 }
 
-type calicoKubeControllersPolicyComponent struct {
-	render.PassthroughComponent
-	cfg               *KubeControllersConfiguration
-	defaultDenyPolicy *v3.NetworkPolicy
-}
+func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
+	toCreate := []client.Object{kubeControllersCalicoSystemPolicy(cfg)}
 
-func (c *calicoKubeControllersPolicyComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	objsToCreate = append(objsToCreate,
-		kubeControllersCalicoSystemPolicy(c.cfg),
-	)
-
-	if c.defaultDenyPolicy != nil {
-		objsToCreate = append(objsToCreate, c.defaultDenyPolicy)
+	if defaultDeny != nil {
+		toCreate = append(toCreate, defaultDeny)
 	}
 
-	// allow-tigera Tier was renamed to calico-system
-	objsToDelete = append(objsToDelete,
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kube-controller-access", c.cfg.Namespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.CalicoNamespace),
+	return render.NewPassthrough(
+		toCreate,
+		[]client.Object{
+			// allow-tigera Tier was renamed to calico-system
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kube-controller-access", cfg.Namespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.CalicoNamespace),
+		},
 	)
-	return
-}
-
-func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
-	return &calicoKubeControllersPolicyComponent{cfg: cfg, defaultDenyPolicy: defaultDeny}
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {

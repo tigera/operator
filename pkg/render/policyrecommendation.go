@@ -424,7 +424,7 @@ func (pr *policyRecommendationComponent) serviceAccount() client.Object {
 	}
 }
 
-// calicoSystemPolicyForPolicyRecommendation defines an calico-system policy for policy recommendation.
+// calicoSystemPolicyForPolicyRecommendation defines a calico-system policy for policy recommendation.
 func (pr *policyRecommendationComponent) calicoSystemPolicyForPolicyRecommendation() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{

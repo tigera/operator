@@ -137,7 +137,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: DexObjectName, Name: DexObjectName}},
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Namespace: common.OperatorNamespace(), Name: DexObjectName}},
 		// allow-tigera Tier was renamed to calico-system
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-system-dex", DexNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("allow-tigera-dex", DexNamespace),
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", DexNamespace),
 	}
 

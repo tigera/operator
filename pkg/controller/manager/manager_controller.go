@@ -583,7 +583,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 		// We use the CA as the server cert.
 		tunnelServerCert = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
-		tunnelSecretPassthrough = render.NewPassthrough(tunnelCASecret)
+		tunnelSecretPassthrough = render.NewCreationPassthrough(tunnelCASecret)
 	}
 
 	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain)

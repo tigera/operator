@@ -109,35 +109,26 @@ func Monitor(cfg *Config) render.Component {
 	}
 }
 
-type monitorPolicyComponent struct {
-	render.PassthroughComponent
-	cfg *Config
-}
-
-func (c *monitorPolicyComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	objsToCreate = append(objsToCreate,
-		calicoSystemAlertManagerPolicy(c.cfg),
-		calicoSystemAlertManagerMeshPolicy(c.cfg),
-		calicoSystemPrometheusPolicy(c.cfg),
-		calicoSystemPrometheusAPIPolicy(c.cfg),
-		calicoSystemPrometheusOperatorPolicy(c.cfg),
-		networkpolicy.CalicoSystemDefaultDeny(common.TigeraPrometheusNamespace),
-	)
-
-	// allow-tigera Tier was renamed to calico-system
-	objsToDelete = append(objsToDelete,
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager", common.TigeraPrometheusNamespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager-mesh", common.TigeraPrometheusNamespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus", common.TigeraPrometheusNamespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-prometheus-api", common.TigeraPrometheusNamespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus-operator", common.TigeraPrometheusNamespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.TigeraPrometheusNamespace),
-	)
-	return
-}
-
 func MonitorPolicy(cfg *Config) render.Component {
-	return &monitorPolicyComponent{cfg: cfg}
+	return render.NewPassthrough(
+		[]client.Object{
+			calicoSystemAlertManagerPolicy(cfg),
+			calicoSystemAlertManagerMeshPolicy(cfg),
+			calicoSystemPrometheusPolicy(cfg),
+			calicoSystemPrometheusAPIPolicy(cfg),
+			calicoSystemPrometheusOperatorPolicy(cfg),
+			networkpolicy.CalicoSystemDefaultDeny(common.TigeraPrometheusNamespace),
+		},
+		[]client.Object{
+			// allow-tigera Tier was renamed to calico-system
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager", common.TigeraPrometheusNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager-mesh", common.TigeraPrometheusNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus", common.TigeraPrometheusNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-prometheus-api", common.TigeraPrometheusNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus-operator", common.TigeraPrometheusNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.TigeraPrometheusNamespace),
+		},
+	)
 }
 
 // Config contains all the config information needed to render the Monitor component.

@@ -281,7 +281,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		credentialSecrets = append(credentialSecrets, secret.CopyToNamespace(helper.InstallNamespace(), &linseedUserSecret)[0])
 		credentialSecrets = append(credentialSecrets, secret.CopyToNamespace(helper.InstallNamespace(), &dashboardUserSecret)[0])
 	}
-	credentialComponent := render.NewPassthrough(credentialSecrets...)
+	credentialComponent := render.NewCreationPassthrough(credentialSecrets...)
 
 	// In standard installs, the LogStorage owns the secret. For multi-tenant, it's owned by the tenant.
 	var hdler utils.ComponentHandler

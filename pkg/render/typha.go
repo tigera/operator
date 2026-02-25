@@ -137,7 +137,13 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 }
 
 func NewTyphaNonClusterHostPolicy(cfg *TyphaConfiguration) Component {
-	return NewPassthrough(typhaNonClusterHostCalicoSystemPolicy(cfg))
+	return NewPassthrough(
+		[]client.Object{typhaNonClusterHostCalicoSystemPolicy(cfg)},
+		[]client.Object{
+			// allow-tigera Tier was renamed to calico-system
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("typha-noncluster-host-access", common.CalicoNamespace),
+		},
+	)
 }
 
 func (c *typhaComponent) typhaPodDisruptionBudget() *policyv1.PodDisruptionBudget {

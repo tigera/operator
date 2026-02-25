@@ -87,34 +87,23 @@ func Guardian(cfg *GuardianConfiguration) Component {
 	}
 }
 
-type guardianPolicyComponent struct {
-	PassthroughComponent
-	guardianAccessPolicy *v3.NetworkPolicy
-}
-
-func (c *guardianPolicyComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	objsToCreate = append(objsToCreate,
-		c.guardianAccessPolicy,
-		networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
-	)
-
-	// allow-tigera Tier was renamed to calico-system
-	objsToDelete = append(objsToDelete,
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("guardian-access", GuardianNamespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", GuardianNamespace),
-	)
-	return
-}
-
 func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 	guardianAccessPolicy, err := guardianCalicoSystemPolicy(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	return &guardianPolicyComponent{
-		guardianAccessPolicy: guardianAccessPolicy,
-	}, nil
+	return NewPassthrough(
+		[]client.Object{
+			guardianAccessPolicy,
+			networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
+		},
+		[]client.Object{
+			// allow-tigera Tier was renamed to calico-system
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("guardian-access", GuardianNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", GuardianNamespace),
+		},
+	), nil
 }
 
 // GuardianConfiguration contains all the config information needed to render the component.

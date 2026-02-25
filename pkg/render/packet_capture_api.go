@@ -83,23 +83,14 @@ func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) Component {
 	}
 }
 
-type packetCaptureAPIPolicyComponent struct {
-	PassthroughComponent
-	cfg *PacketCaptureApiConfiguration
-}
-
-func (c *packetCaptureAPIPolicyComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	objsToCreate = append(objsToCreate, calicoSystemPolicy(c.cfg))
-
-	// allow-tigera Tier was renamed to calico-system
-	objsToDelete = append(objsToDelete,
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-packetcapture", PacketCaptureNamespace),
-	)
-	return
-}
-
 func PacketCaptureAPIPolicy(cfg *PacketCaptureApiConfiguration) Component {
-	return &packetCaptureAPIPolicyComponent{cfg: cfg}
+	return NewPassthrough(
+		[]client.Object{calicoSystemPolicy(cfg)},
+		[]client.Object{
+			// allow-tigera Tier was renamed to calico-system
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-packetcapture", PacketCaptureNamespace),
+		},
+	)
 }
 
 func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) error {

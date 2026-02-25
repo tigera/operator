@@ -1257,7 +1257,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components := []render.Component{}
 	if newActiveCM != nil && !installationMarkedForDeletion {
 		log.Info("adding active configmap")
-		components = append(components, render.NewPassthrough(newActiveCM))
+		components = append(components, render.NewCreationPassthrough(newActiveCM))
 	}
 
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
@@ -1293,7 +1293,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		criticalPriorityClasses := []string{render.NodePriorityClassName, render.ClusterPriorityClassName}
 		resourceQuotaObj := resourcequota.ResourceQuotaForPriorityClassScope(resourcequota.CalicoCriticalResourceQuotaName,
 			common.CalicoNamespace, criticalPriorityClasses)
-		resourceQuotaComponent := render.NewPassthrough(resourceQuotaObj)
+		resourceQuotaComponent := render.NewCreationPassthrough(resourceQuotaObj)
 		components = append(components, resourceQuotaComponent)
 
 	}
@@ -1411,7 +1411,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if len(needsCleanup) > 0 {
 			// Add a component to remove the finalizers from the objects that need it.
 			reqLogger.Info("Removing finalizers from objects that are wrongly marked for deletion")
-			components = append(components, render.NewPassthrough(needsCleanup...))
+			components = append(components, render.NewCreationPassthrough(needsCleanup...))
 		}
 	}
 
@@ -2120,7 +2120,7 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	if !r.manageCRDs {
 		return nil
 	}
-	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant, r.v3CRDs)...)...)
+	crdComponent := render.NewCreationPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant, r.v3CRDs)...)...)
 	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
 	// Installation CR will not remove the CRDs.
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)

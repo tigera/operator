@@ -113,22 +113,14 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 	}, nil
 }
 
-type apiServerPolicyComponent struct {
-	PassthroughComponent
-	cfg *APIServerConfiguration
-}
-
-func (c *apiServerPolicyComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	objsToCreate = append(objsToCreate, calicoSystemAPIServerPolicy(c.cfg))
-	// allow-tigera Tier was renamed to calico-system
-	objsToDelete = append(objsToDelete,
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("apiserver-access", APIServerNamespace),
-	)
-	return
-}
-
 func APIServerPolicy(cfg *APIServerConfiguration) Component {
-	return &apiServerPolicyComponent{cfg: cfg}
+	return NewPassthrough(
+		[]client.Object{calicoSystemAPIServerPolicy(cfg)},
+		[]client.Object{
+			// allow-tigera Tier was renamed to calico-system
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("apiserver-access", APIServerNamespace),
+		},
+	)
 }
 
 // APIServerConfiguration contains all the config information needed to render the component.

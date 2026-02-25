@@ -117,6 +117,14 @@ func GetContainers(overrides any) []corev1.Container {
 	return valueToContainers(value)
 }
 
+func GetHostNetwork(overrides any) *bool {
+	value := getField(overrides, "Spec", "Template", "Spec", "HostNetwork")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return value.Interface().(*bool)
+}
+
 func GetDNSPolicy(overrides any) (corev1.DNSPolicy, bool) {
 	value := getField(overrides, "Spec", "Template", "Spec", "DNSPolicy")
 
@@ -162,13 +170,16 @@ func valueToContainerPorts(v reflect.Value) []corev1.ContainerPort {
 	if !portOverrides.IsValid() || portOverrides.IsNil() {
 		return nil
 	}
-	customPorts := portOverrides.Interface().([]operator.APIServerDeploymentContainerPort)
-	ports := make([]corev1.ContainerPort, 0, len(customPorts))
-	for _, p := range customPorts {
-		ports = append(ports, corev1.ContainerPort{
-			Name:          p.Name,
-			ContainerPort: p.ContainerPort,
-		})
+	ports := make([]corev1.ContainerPort, 0, portOverrides.Len())
+	for i := 0; i < portOverrides.Len(); i++ {
+		p := portOverrides.Index(i)
+		port := corev1.ContainerPort{
+			ContainerPort: int32(p.FieldByName("ContainerPort").Int()),
+		}
+		if name := p.FieldByName("Name"); name.IsValid() && name.String() != "" {
+			port.Name = name.String()
+		}
+		ports = append(ports, port)
 	}
 	return ports
 }
@@ -353,6 +364,12 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 	// sets `r.podTemplateSpec.Spec.PriorityClassName`.
 	if priorityClassName := GetPriorityClassName(overrides); priorityClassName != "" {
 		r.podTemplateSpec.Spec.PriorityClassName = priorityClassName
+	}
+
+	// If `overrides` has a Spec.Template.Spec.HostNetwork field, and it's non-nil, it sets
+	// `r.podTemplateSpec.Spec.HostNetwork`.
+	if hostNetwork := GetHostNetwork(overrides); hostNetwork != nil {
+		r.podTemplateSpec.Spec.HostNetwork = *hostNetwork
 	}
 
 	// If `overrides` has a Spec.Template.Spec.DNSPolicy field, and it's non-empty, it sets

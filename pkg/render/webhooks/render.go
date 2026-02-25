@@ -324,45 +324,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	// Create a MutatingAdmissionWebhookConfiguration to register mutating hooks for authorization reviews.
-	mwc := &admissionregistrationv1.MutatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "api.projectcalico.org",
-		},
-		Webhooks: []admissionregistrationv1.MutatingWebhook{
-			{
-				// This webhook is for v3.AuthorizationReviews.
-				Name: "authorization-reviews.api.projectcalico.org",
-				Rules: []admissionregistrationv1.RuleWithOperations{
-					{
-						Operations: []admissionregistrationv1.OperationType{
-							admissionregistrationv1.Create,
-						},
-						Rule: admissionregistrationv1.Rule{
-							APIGroups:   []string{"projectcalico.org"},
-							APIVersions: []string{"v3"},
-							Resources:   []string{"authorizationreviews"},
-							Scope:       ptr.To(admissionregistrationv1.ClusterScope),
-						},
-					},
-				},
-				ClientConfig: admissionregistrationv1.WebhookClientConfig{
-					Service: &admissionregistrationv1.ServiceReference{
-						Namespace: common.CalicoNamespace,
-						Name:      WebhooksName,
-						Path:      ptr.To("/authorizationreview"),
-					},
-					CABundle: c.cfg.KeyPair.GetCertificatePEM(),
-				},
-				AdmissionReviewVersions: []string{"v1"},
-				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To[int32](5),
-				FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
-				MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
-			},
-		},
-	}
-
 	// Create a ClusterRole and ClusterRoleBinding for the webhook service account.
 	rules := []rbacv1.PolicyRule{
 		{
@@ -371,45 +332,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			Resources: []string{"subjectaccessreviews"},
 			Verbs:     []string{"create"},
 		},
-	}
-
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		rules = append(rules,
-			rbacv1.PolicyRule{
-				// The webhook needs to be able to update and delete AuthorizationReviews after they are handled.
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"authorizationreviews"},
-				Verbs:     []string{"get", "list", "watch", "update", "delete"},
-			},
-			// The webhook service account needs a ClusterRole granting read access to clusterroles, clusterrolebindings, roles,
-			// rolebindings, namespaces, and the Calico resources (tiers, uisettingsgroups, managedclusters) used by the RBAC calculator
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{
-					"tiers",
-					"uisettingsgroups",
-					"managedclusters",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"rbac.authorization.k8s.io"},
-				Resources: []string{
-					"roles",
-					"rolebindings",
-					"clusterroles",
-					"clusterrolebindings",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{
-					"namespaces",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-		)
 	}
 
 	cr := &rbacv1.ClusterRole{
@@ -439,12 +361,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		// For enterprise, we should create some additional objects (i.e., the mutating webhook).
-		return []client.Object{sa, np, dep, svc, vwc, mwc, cr, crb}, nil
-	}
-
-	// Return the objects to be created for a Calico installation.
 	return []client.Object{sa, np, dep, svc, vwc, cr, crb}, nil
 }
 

@@ -2596,8 +2596,8 @@ var _ = Describe("Node rendering tests", func() {
 			})
 
 			It("should render cni config with k8s endpoint", func() {
-				k8sServiceEp.Host = "k8shost"
-				k8sServiceEp.Port = "1234"
+				k8sServiceEp.HostNetworkHost = "k8shost"
+				k8sServiceEp.HostNetworkPort = "1234"
 				cfg.K8sServiceEp = k8sServiceEp
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
@@ -2892,8 +2892,8 @@ var _ = Describe("Node rendering tests", func() {
 			Context("with k8s overrides set", func() {
 				It("should override k8s endpoints", func() {
 					cfg.K8sServiceEp = k8sapi.ServiceEndpoint{
-						Host: "k8shost",
-						Port: "1234",
+						HostNetworkHost: "k8shost",
+						HostNetworkPort: "1234",
 					}
 					component := render.Node(&cfg)
 					Expect(component.ResolveImages(nil)).To(BeNil())

@@ -735,8 +735,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should set KUBERENETES_SERVICE_... variables if host networked", func() {
-		cfg.K8SServiceEndpoint.Host = "k8shost"
-		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.K8SServiceEndpoint.HostNetworkHost = "k8shost"
+		cfg.K8SServiceEndpoint.HostNetworkPort = "1234"
 		cfg.ForceHostNetwork = true
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
@@ -760,8 +760,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should add egress policy with Enterprise variant and K8SServiceEndpoint defined", func() {
-		cfg.K8SServiceEndpoint.Host = "k8shost"
-		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.K8SServiceEndpoint.HostNetworkHost = "k8shost"
+		cfg.K8SServiceEndpoint.HostNetworkPort = "1234"
 		cfg.ForceHostNetwork = true
 
 		component := render.APIServerPolicy(cfg)
@@ -782,8 +782,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should add egress policy with Enterprise variant and K8SServiceEndpoint as IP defined", func() {
-		cfg.K8SServiceEndpoint.Host = "169.169.169.169"
-		cfg.K8SServiceEndpoint.Port = "4321"
+		cfg.K8SServiceEndpoint.HostNetworkHost = "169.169.169.169"
+		cfg.K8SServiceEndpoint.HostNetworkPort = "4321"
 		cfg.ForceHostNetwork = false
 
 		component := render.APIServerPolicy(cfg)
@@ -804,8 +804,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should not set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with proxy.local", func() {
-		cfg.K8SServiceEndpoint.Host = "proxy.local"
-		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.K8SServiceEndpoint.HostNetworkHost = "proxy.local"
+		cfg.K8SServiceEndpoint.HostNetworkPort = "1234"
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
 
 		component, err := render.APIServer(cfg)
@@ -821,8 +821,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with non-proxy address", func() {
-		cfg.K8SServiceEndpoint.Host = "k8shost"
-		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.K8SServiceEndpoint.PodNetworkHost = "k8shost"
+		cfg.K8SServiceEndpoint.PodNetworkPort = "1234"
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
 
 		component, err := render.APIServer(cfg)
@@ -2014,8 +2014,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	})
 
 	It("should set KUBERNETES_SERVICE_... variables if host networked", func() {
-		cfg.K8SServiceEndpoint.Host = "k8shost"
-		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.K8SServiceEndpoint.HostNetworkHost = "k8shost"
+		cfg.K8SServiceEndpoint.HostNetworkPort = "1234"
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
 		cfg.ForceHostNetwork = true
 
@@ -2041,8 +2041,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 	})
 
 	It("should not set KUBERNETES_SERVICE_... variables if Docker EE using proxy.local", func() {
-		cfg.K8SServiceEndpoint.Host = "proxy.local"
-		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.K8SServiceEndpoint.HostNetworkHost = "proxy.local"
+		cfg.K8SServiceEndpoint.HostNetworkPort = "1234"
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
 
 		component, err := render.APIServer(cfg)
@@ -2057,9 +2057,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
 	})
 
-	It("should not set KUBERNETES_SERVICE_... variables if Docker EE using non-proxy address", func() {
-		cfg.K8SServiceEndpoint.Host = "k8shost"
-		cfg.K8SServiceEndpoint.Port = "1234"
+	It("should set KUBERNETES_SERVICE_... variables if Docker EE using non-proxy address", func() {
+		cfg.K8SServiceEndpoint.PodNetworkHost = "k8shost"
+		cfg.K8SServiceEndpoint.PodNetworkPort = "1234"
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
 
 		component, err := render.APIServer(cfg)

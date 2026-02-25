@@ -103,7 +103,7 @@ var _ = Describe("External ES Controller", func() {
 		})).NotTo(HaveOccurred())
 
 		Expect(cli.Create(ctx, &v3.Tier{
-			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+			ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
 		})).NotTo(HaveOccurred())
 
 		install = &operatorv1.Installation{

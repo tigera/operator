@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.intrusion-detection-controller",
+    "name": "calico-system.intrusion-detection-controller",
     "namespace": "tigera-intrusion-detection"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "k8s-app == 'intrusion-detection-controller'",
     "types": [
       "Ingress",

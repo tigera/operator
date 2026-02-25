@@ -219,7 +219,7 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 	var passthrough render.Component
 	if needsCSRRole {
 		// This controller creates the cluster role for any pod in the cluster that requires certificate management.
-		passthrough = render.NewPassthrough(certificatemanagement.CSRClusterRole())
+		passthrough = render.NewCreationPassthrough(certificatemanagement.CSRClusterRole())
 		err := componentHandler.CreateOrUpdateOrDelete(ctx, passthrough, nil)
 		if err != nil {
 			return reconcile.Result{}, err

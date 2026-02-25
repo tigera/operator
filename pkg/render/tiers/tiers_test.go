@@ -82,14 +82,14 @@ var _ = Describe("Tiers rendering tests", func() {
 		}
 	})
 
-	Context("allow-tigera rendering", func() {
+	Context("calico-system rendering", func() {
 		policyNames := []types.NamespacedName{
-			{Name: "allow-tigera.cluster-dns", Namespace: "kube-system"},
-			{Name: "allow-tigera.cluster-dns", Namespace: "openshift-dns"},
+			{Name: "calico-system.cluster-dns", Namespace: "kube-system"},
+			{Name: "calico-system.cluster-dns", Namespace: "openshift-dns"},
 		}
 
-		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-			if name.Name == "allow-tigera.cluster-dns" &&
+		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
+			if name.Name == "calico-system.cluster-dns" &&
 				((scenario.OpenShift && name.Namespace == "openshift-dns") || (!scenario.OpenShift && name.Namespace == "kube-system")) {
 				return testutils.SelectPolicyByProvider(scenario, clusterDNSPolicy, clusterDNSPolicyForOCP)
 			}
@@ -97,35 +97,35 @@ var _ = Describe("Tiers rendering tests", func() {
 			return nil
 		}
 
-		DescribeTable("should render allow-tigera network policy",
-			func(scenario testutils.AllowTigeraScenario) {
+		DescribeTable("should render calico-system network policy",
+			func(scenario testutils.CalicoSystemScenario) {
 				cfg.OpenShift = scenario.OpenShift
 
 				component := tiers.Tiers(cfg)
 				resourcesToCreate, _ := component.Objects()
 
 				// Validate tier render
-				allowTigera := rtest.GetResource(resourcesToCreate, "allow-tigera", "", "projectcalico.org", "v3", "Tier").(*v3.Tier)
-				Expect(*allowTigera.Spec.Order).To(Equal(100.0))
+				calicoSystem := rtest.GetResource(resourcesToCreate, "calico-system", "", "projectcalico.org", "v3", "Tier").(*v3.Tier)
+				Expect(*calicoSystem.Spec.Order).To(Equal(100.0))
 
 				// Validate created policy render
 				for _, policyName := range policyNames {
-					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesToCreate)
+					policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesToCreate)
 					expectedPolicy := getExpectedPolicy(policyName, scenario)
 					Expect(policy).To(Equal(expectedPolicy))
 				}
 			},
 
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+			Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 		)
 	})
 
-	Context("allow-tigera node-local-dns global policy rendering", func() {
+	Context("calico-system node-local-dns global policy rendering", func() {
 		globalPolicyNames := []string{
-			"allow-tigera.node-local-dns",
+			"calico-system.node-local-dns",
 		}
 
 		getExpectedPolicy := func(ipMode testutils.IPMode) *v3.GlobalNetworkPolicy {
@@ -149,12 +149,12 @@ var _ = Describe("Tiers rendering tests", func() {
 				resourcesToCreate, _ := component.Objects()
 
 				// Validate tier render
-				allowTigera := rtest.GetGlobalResource(resourcesToCreate, "allow-tigera", "projectcalico.org", "v3", "Tier").(*v3.Tier)
-				Expect(*allowTigera.Spec.Order).To(Equal(100.0))
+				calicoSystem := rtest.GetGlobalResource(resourcesToCreate, "calico-system", "projectcalico.org", "v3", "Tier").(*v3.Tier)
+				Expect(*calicoSystem.Spec.Order).To(Equal(100.0))
 
 				// Validate created policy render
 				for _, policyName := range globalPolicyNames {
-					policy := testutils.GetAllowTigeraGlobalPolicyFromResources(policyName, resourcesToCreate)
+					policy := testutils.GetCalicoSystemGlobalPolicyFromResources(policyName, resourcesToCreate)
 					expectedPolicy := getExpectedPolicy(ipMode)
 					Expect(policy).To(Equal(expectedPolicy))
 				}

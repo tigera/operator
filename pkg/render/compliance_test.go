@@ -353,8 +353,8 @@ var _ = Describe("compliance rendering tests", func() {
 				version string
 				kind    string
 			}{
-				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
-				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"calico-system.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"calico-system.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-controller", ns, rbac, "v1", "Role"},
 				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
@@ -377,7 +377,7 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
-				{"allow-tigera.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"calico-system.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
@@ -499,8 +499,8 @@ var _ = Describe("compliance rendering tests", func() {
 				version string
 				kind    string
 			}{
-				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
-				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"calico-system.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"calico-system.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-controller", ns, rbac, "v1", "Role"},
 				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
@@ -523,7 +523,7 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
-				{"allow-tigera.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"calico-system.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
@@ -607,8 +607,8 @@ var _ = Describe("compliance rendering tests", func() {
 				version string
 				kind    string
 			}{
-				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
-				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"calico-system.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"calico-system.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-controller", ns, rbac, "v1", "Role"},
 				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
@@ -758,8 +758,8 @@ var _ = Describe("compliance rendering tests", func() {
 				version string
 				kind    string
 			}{
-				{"allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
-				{"allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"calico-system.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"calico-system.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-controller", ns, "", "v1", "ServiceAccount"},
 				{"tigera-compliance-controller", ns, rbac, "v1", "Role"},
 				{"tigera-compliance-controller", "", rbac, "v1", "ClusterRole"},
@@ -782,7 +782,7 @@ var _ = Describe("compliance rendering tests", func() {
 				{"network-access", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"policy-audit", "", "projectcalico.org", "v3", "GlobalReportType"},
 				{"cis-benchmark", "", "projectcalico.org", "v3", "GlobalReportType"},
-				{"allow-tigera.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
+				{"calico-system.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy"},
 				{"tigera-compliance-server", "", rbac, "v1", "ClusterRole"},
 				{"compliance", ns, "", "v1", "Service"},
 				{"compliance-server", ns, "apps", "v1", "Deployment"},
@@ -1009,14 +1009,14 @@ var _ = Describe("compliance rendering tests", func() {
 		})
 	})
 
-	Context("allow-tigera rendering", func() {
+	Context("calico-system rendering", func() {
 		policyNames := []types.NamespacedName{
-			{Name: "allow-tigera.compliance-access", Namespace: "tigera-compliance"},
-			{Name: "allow-tigera.compliance-server", Namespace: "tigera-compliance"},
+			{Name: "calico-system.compliance-access", Namespace: "tigera-compliance"},
+			{Name: "calico-system.compliance-server", Namespace: "tigera-compliance"},
 		}
 
-		getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-			if policyName.Name == "allow-tigera.compliance-access" {
+		getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
+			if policyName.Name == "calico-system.compliance-access" {
 				return testutils.SelectPolicyByClusterTypeAndProvider(
 					scenario,
 					map[string]*v3.NetworkPolicy{
@@ -1026,15 +1026,15 @@ var _ = Describe("compliance rendering tests", func() {
 						"managed-openshift":   expectedCompliancePolicyForManagedOpenshift,
 					},
 				)
-			} else if !scenario.ManagedCluster && policyName.Name == "allow-tigera.compliance-server" {
+			} else if !scenario.ManagedCluster && policyName.Name == "calico-system.compliance-server" {
 				return testutils.SelectPolicyByProvider(scenario, expectedComplianceServerPolicy, expectedComplianceServerPolicyForOpenshift)
 			}
 
 			return nil
 		}
 
-		DescribeTable("should render allow-tigera policy",
-			func(scenario testutils.AllowTigeraScenario) {
+		DescribeTable("should render calico-system policy",
+			func(scenario testutils.CalicoSystemScenario) {
 				cfg.OpenShift = scenario.OpenShift
 				if scenario.ManagedCluster {
 					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
@@ -1046,15 +1046,15 @@ var _ = Describe("compliance rendering tests", func() {
 				resources, _ := component.Objects()
 
 				for _, policyName := range policyNames {
-					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 					expectedPolicy := getExpectedPolicy(policyName, scenario)
 					Expect(policy).To(Equal(expectedPolicy))
 				}
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+			Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 		)
 	})
 
@@ -1091,7 +1091,7 @@ var _ = Describe("compliance rendering tests", func() {
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceControllerServiceAccount}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceReporterServiceAccount}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceReporterServiceAccount}},
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.compliance-server", Namespace: tenantANamespace}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.compliance-server", Namespace: tenantANamespace}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "compliance", Namespace: tenantANamespace}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "compliance-server", Namespace: tenantANamespace}},
@@ -1133,7 +1133,7 @@ var _ = Describe("compliance rendering tests", func() {
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceControllerServiceAccount}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceReporterServiceAccount}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ComplianceReporterServiceAccount}},
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.compliance-server", Namespace: tenantBNamespace}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.compliance-server", Namespace: tenantBNamespace}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-compliance-server"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "compliance", Namespace: tenantBNamespace}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "compliance-server", Namespace: tenantBNamespace}},

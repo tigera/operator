@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.kibana-access",
+    "name": "calico-system.kibana-access",
     "namespace": "tigera-kibana"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "k8s-app == 'tigera-secure'",
     "types": [
       "Ingress",

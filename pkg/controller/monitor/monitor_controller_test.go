@@ -122,7 +122,7 @@ var _ = Describe("Monitor controller tests", func() {
 		}
 		Expect(cli.Create(ctx, monitorCR)).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, render.CreateCertificateConfigMap("test", render.TyphaCAConfigMapName, common.OperatorNamespace()))).NotTo(HaveOccurred())
-		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 		// Create a certificate manager and provision the CA to unblock the controller. Generally this would be done by
 		// the cluster CA controller and is a prerequisite for the monitor controller to function.
@@ -208,23 +208,23 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should render allow-tigera policy when tier and policy watch are ready", func() {
+		It("should render calico-system policy when tier and policy watch are ready", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(6))
-			Expect(policies.Items[0].Name).To(Equal("allow-tigera.calico-node-alertmanager"))
-			Expect(policies.Items[1].Name).To(Equal("allow-tigera.calico-node-alertmanager-mesh"))
-			Expect(policies.Items[2].Name).To(Equal("allow-tigera.default-deny"))
-			Expect(policies.Items[3].Name).To(Equal("allow-tigera.prometheus"))
-			Expect(policies.Items[4].Name).To(Equal("allow-tigera.prometheus-operator"))
-			Expect(policies.Items[5].Name).To(Equal("allow-tigera.tigera-prometheus-api"))
+			Expect(policies.Items[0].Name).To(Equal("calico-system.calico-node-alertmanager"))
+			Expect(policies.Items[1].Name).To(Equal("calico-system.calico-node-alertmanager-mesh"))
+			Expect(policies.Items[2].Name).To(Equal("calico-system.default-deny"))
+			Expect(policies.Items[3].Name).To(Equal("calico-system.prometheus"))
+			Expect(policies.Items[4].Name).To(Equal("calico-system.prometheus-operator"))
+			Expect(policies.Items[5].Name).To(Equal("calico-system.tigera-prometheus-api"))
 		})
 
-		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {
-			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+		It("should omit calico-system policy and not degrade when tier is not ready", func() {
+			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())

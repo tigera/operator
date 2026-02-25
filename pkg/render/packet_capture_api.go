@@ -84,7 +84,13 @@ func PacketCaptureAPI(cfg *PacketCaptureApiConfiguration) Component {
 }
 
 func PacketCaptureAPIPolicy(cfg *PacketCaptureApiConfiguration) Component {
-	return NewPassthrough(allowTigeraPolicy(cfg))
+	return NewPassthrough(
+		[]client.Object{calicoSystemPolicy(cfg)},
+		[]client.Object{
+			// allow-tigera Tier was renamed to calico-system
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-packetcapture", PacketCaptureNamespace),
+		},
+	)
 }
 
 func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -340,7 +346,7 @@ func (pc *packetCaptureApiComponent) annotations() map[string]string {
 	return annotations
 }
 
-func allowTigeraPolicy(cfg *PacketCaptureApiConfiguration) *v3.NetworkPolicy {
+func calicoSystemPolicy(cfg *PacketCaptureApiConfiguration) *v3.NetworkPolicy {
 	managedCluster := cfg.ManagementClusterConnection != nil
 	egressRules := []v3.Rule{
 		{

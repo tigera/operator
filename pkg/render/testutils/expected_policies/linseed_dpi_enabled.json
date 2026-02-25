@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.linseed-access",
+    "name": "calico-system.linseed-access",
     "namespace": "tigera-elasticsearch"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "k8s-app == 'tigera-linseed'",
     "types": [
       "Ingress",

@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2024,2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -62,16 +62,22 @@ func (t tiersComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 func (t tiersComponent) Objects() ([]client.Object, []client.Object) {
 	objsToCreate := []client.Object{
-		t.allowTigeraTier(),
-		t.allowTigeraClusterDNSPolicy(),
+		t.calicoSystemTier(),
+		t.calicoSystemClusterDNSPolicy(),
 	}
 
-	objsToDelete := []client.Object{}
+	objsToDelete := t.deprecatedResources()
 
 	if len(t.cfg.DNSEgressCIDRs.IPV4) > 0 || len(t.cfg.DNSEgressCIDRs.IPV6) > 0 {
-		objsToCreate = append(objsToCreate, t.allowTigeraNodeLocalDNSPolicy())
+		objsToCreate = append(objsToCreate, t.calicoSystemNodeLocalDNSPolicy())
+		// allow-tigera Tier was renamed to calico-system
+		allowTigeraNodeLocalDNSPolicy := &v3.GlobalNetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "GlobalNetworkPolicy", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.node-local-dns"},
+		}
+		objsToDelete = append([]client.Object{allowTigeraNodeLocalDNSPolicy}, objsToDelete...)
 	} else {
-		objsToDelete = append(objsToDelete, t.allowTigeraNodeLocalDNSPolicy())
+		objsToDelete = append(objsToDelete, t.calicoSystemNodeLocalDNSPolicy())
 	}
 
 	return objsToCreate, objsToDelete
@@ -85,7 +91,7 @@ func (t tiersComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeAny
 }
 
-func (t tiersComponent) allowTigeraTier() *v3.Tier {
+func (t tiersComponent) calicoSystemTier() *v3.Tier {
 	return &v3.Tier{
 		TypeMeta: metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -100,10 +106,10 @@ func (t tiersComponent) allowTigeraTier() *v3.Tier {
 	}
 }
 
-// allowTigeraClusterDNSPolicy creates a NetworkPolicy that applies to the DNS pods in the cluster and
+// calicoSystemClusterDNSPolicy creates a NetworkPolicy that applies to the DNS pods in the cluster and
 // inserts an Ingress rule to ensure all Tigera components can access the DNS pods. It defers other ingress
 // to subsequent tiers using a Pass rule.
-func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
+func (t tiersComponent) calicoSystemClusterDNSPolicy() *v3.NetworkPolicy {
 	var dnsPolicySelector string
 	var dnsPolicyNamespace string
 	if t.cfg.OpenShift {
@@ -146,10 +152,10 @@ func (t tiersComponent) allowTigeraClusterDNSPolicy() *v3.NetworkPolicy {
 	}
 }
 
-// allowTigeraNodeLocalDNSPolicy creates a NetworkPolicy that applies to all Tigera component namespaces and
+// calicoSystemNodeLocalDNSPolicy creates a NetworkPolicy that applies to all Tigera component namespaces and
 // allows egress access to the given DNS egress CIDRs containing the Service ClusterIP(s) of the in-cluster DNS
 // service. This ensures Tigera components access to the node-local DNS instance.
-func (t tiersComponent) allowTigeraNodeLocalDNSPolicy() *v3.GlobalNetworkPolicy {
+func (t tiersComponent) calicoSystemNodeLocalDNSPolicy() *v3.GlobalNetworkPolicy {
 	nodeLocalDNSPolicy := &v3.GlobalNetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "GlobalNetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -188,6 +194,19 @@ func (t tiersComponent) allowTigeraNodeLocalDNSPolicy() *v3.GlobalNetworkPolicy 
 	}
 
 	return nodeLocalDNSPolicy
+}
+
+func (t *tiersComponent) deprecatedResources() (objs []client.Object) {
+	// allow-tigera old tier
+	calicoSystemClusterDNSPolicy := t.calicoSystemClusterDNSPolicy()
+	objs = append(objs,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("cluster-dns", calicoSystemClusterDNSPolicy.Namespace),
+		&v3.Tier{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "projectcalico.org/v3", Kind: "Tier"},
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+		},
+	)
+	return
 }
 
 func createNamespaceSelector(namespaces ...string) string {

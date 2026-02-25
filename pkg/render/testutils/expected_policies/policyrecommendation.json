@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.tigera-policy-recommendation",
+    "name": "calico-system.tigera-policy-recommendation",
     "namespace": "calico-system"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "k8s-app == 'tigera-policy-recommendation'",
     "types": [
       "Egress"

@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.es-gateway-access",
+    "name": "calico-system.es-gateway-access",
     "namespace": "tigera-elasticsearch"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "k8s-app == 'tigera-secure-es-gateway'",
     "types": [
       "Ingress",

@@ -116,7 +116,7 @@ var _ = Describe("authentication controller tests", func() {
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
 		})).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &v3.Tier{
-			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+			ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
 		})).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-dex"}})).ToNot(HaveOccurred())
 		readyFlag = &utils.ReadyFlag{}
@@ -469,7 +469,7 @@ var _ = Describe("authentication controller tests", func() {
 		})
 	})
 
-	Context("allow-tigera reconciliation", func() {
+	Context("calico-system reconciliation", func() {
 		var r *ReconcileAuthentication
 		BeforeEach(func() {
 			Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
@@ -498,9 +498,9 @@ var _ = Describe("authentication controller tests", func() {
 			}
 		})
 
-		It("should wait if allow-tigera tier is unavailable", func() {
+		It("should wait if calico-system tier is unavailable", func() {
 			mockStatus.On("SetMetaData", mock.Anything).Return()
-			test.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
+			test.DeleteCalicoSystemTierAndExpectWait(ctx, cli, r, mockStatus)
 		})
 
 		It("should wait if tier watch is not ready", func() {
@@ -621,12 +621,12 @@ var _ = Describe("authentication controller tests", func() {
 						Expect(err).ShouldNot(HaveOccurred())
 						Expect(objTrackerWithCalls.CallCount(podGVR, test.ObjectTrackerCallList)).To(Equal(1))
 
-						// Resolve the allow-tigera policy for Dex.
+						// Resolve the calico-system policy for Dex.
 						policies := v3.NetworkPolicyList{}
 						Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 						Expect(policies.Items).To(HaveLen(2))
-						Expect(policies.Items[0].Name).To(Equal("allow-tigera.allow-tigera-dex"))
-						policy := policies.Items[0]
+						Expect(policies.Items[1].Name).To(Equal("calico-system.dex"))
+						policy := policies.Items[1]
 
 						// Generate the expectation based on the test case, and compare the rendered rules to our expectations.
 						expectedEgressRules := getExpectedEgressDestinationRulesFromCase(testCase)

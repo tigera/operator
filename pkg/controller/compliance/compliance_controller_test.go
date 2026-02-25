@@ -129,7 +129,7 @@ var _ = Describe("Compliance controller tests", func() {
 		// The compliance reconcile loop depends on a ton of objects that should be available in your client as
 		// prerequisites. Without them, compliance will not even start creating objects. Let's create them now.
 		Expect(c.Create(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}, Status: operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady}})).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{common.ComplianceFeature}}})).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}})).NotTo(HaveOccurred())
 
@@ -624,7 +624,7 @@ var _ = Describe("Compliance controller tests", func() {
 		})
 	})
 
-	Context("allow-tigera reconciliation", func() {
+	Context("calico-system reconciliation", func() {
 		var readyFlag *utils.ReadyFlag
 
 		BeforeEach(func() {
@@ -647,8 +647,8 @@ var _ = Describe("Compliance controller tests", func() {
 			}
 		})
 
-		It("should wait if allow-tigera tier is unavailable", func() {
-			test.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+		It("should wait if calico-system tier is unavailable", func() {
+			test.DeleteCalicoSystemTierAndExpectWait(ctx, c, &r, mockStatus)
 		})
 
 		It("should wait if tier watch is not ready", func() {

@@ -384,7 +384,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	}
 
 	if common.WindowsEnabled(instance.Spec) {
-		if k8sapi.Endpoint.Host == "" || k8sapi.Endpoint.Port == "" {
+		if k8sapi.Endpoint.HostNetworkHost == "" || k8sapi.Endpoint.HostNetworkPort == "" {
 			return fmt.Errorf("services endpoint configmap '%s' does not have all required information for Calico Windows daemonset configuration", render.K8sSvcEndpointConfigMapName)
 		}
 		if instance.Spec.CNI.Type == operatorv1.PluginCalico {

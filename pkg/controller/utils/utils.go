@@ -449,8 +449,10 @@ func PopulateK8sServiceEndPoint(client client.Client) error {
 			return fmt.Errorf("failed to read ConfigMap %q: %s", render.K8sSvcEndpointConfigMapName, err)
 		}
 	} else {
-		k8sapi.Endpoint.Host = cm.Data["KUBERNETES_SERVICE_HOST"]
-		k8sapi.Endpoint.Port = cm.Data["KUBERNETES_SERVICE_PORT"]
+		k8sapi.Endpoint.HostNetworkHost = cm.Data["KUBERNETES_SERVICE_HOST"]
+		k8sapi.Endpoint.HostNetworkPort = cm.Data["KUBERNETES_SERVICE_PORT"]
+		k8sapi.Endpoint.PodNetworkHost = cm.Data["KUBERNETES_SERVICE_HOST_POD_NETWORK"]
+		k8sapi.Endpoint.PodNetworkPort = cm.Data["KUBERNETES_SERVICE_PORT_POD_NETWORK"]
 	}
 	return nil
 }

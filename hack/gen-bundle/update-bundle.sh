@@ -118,12 +118,20 @@ done
 
 # Set some basic required CSV fields
 description_value=$(yq ".metadata.annotations.description" config/manifests/bases/tigera-operator.clusterserviceversion.yaml)
+icon_media_type=$(yq ".spec.icon[0].mediatype" config/manifests/bases/tigera-operator.clusterserviceversion.yaml)
+icon_base64_data=$(yq ".spec.icon[0].base64data" config/manifests/bases/tigera-operator.clusterserviceversion.yaml)
 
 echo " #### DESCRIPTION IS ${description_value} ### "
 
 cat <<- EOF >> ${YAML_UPDATE_FILE}
 	.spec.displayName = "Tigera Operator v1.38" |
 	.spec.description = "${description_value}" |
+EOF
+
+# Add in the icon
+cat <<- EOF >> ${YAML_UPDATE_FILE}
+	.spec.icon[0].mediatype = "${icon_media_type}" |
+	.spec.icon[0].base64data = "${icon_base64_data}" |
 EOF
 
 

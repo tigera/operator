@@ -28,11 +28,11 @@ func NewPassthrough(objsToCreate, objsToDelete []client.Object) Component {
 }
 
 func NewDeletionPassthrough(objs ...client.Object) Component {
-	return &passthroughComponent{toCreate: objs, log: log}
+	return &passthroughComponent{toDelete: objs, log: log}
 }
 
 func NewCreationPassthrough(objs ...client.Object) Component {
-	return &passthroughComponent{toDelete: objs, log: log}
+	return &passthroughComponent{toCreate: objs, log: log}
 }
 
 func NewCreationPassthroughWithLog(l logr.Logger, objs ...client.Object) Component {

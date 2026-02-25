@@ -113,8 +113,11 @@ type calicoKubeControllersPolicyComponent struct {
 func (c *calicoKubeControllersPolicyComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objsToCreate = append(objsToCreate,
 		kubeControllersCalicoSystemPolicy(c.cfg),
-		c.defaultDenyPolicy,
 	)
+
+	if c.defaultDenyPolicy != nil {
+		objsToCreate = append(objsToCreate, c.defaultDenyPolicy)
+	}
 
 	// allow-tigera Tier was renamed to calico-system
 	objsToDelete = append(objsToDelete,

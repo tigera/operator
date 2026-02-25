@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1035,9 +1036,17 @@ var _ = Describe("kube-controllers rendering tests", func() {
 					cfg.ManagementClusterConnection = nil
 				}
 				instance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultDenyPolicy := &v3.NetworkPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "default-deny",
+						Namespace: common.CalicoNamespace,
+					},
+				}
 
-				component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg)
+				component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, defaultDenyPolicy)
 				resources, _ := component.Objects()
+				Expect(resources).To(HaveLen(2))
+				Expect(resources).Should(ContainElement(defaultDenyPolicy))
 
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				expectedPolicy := testutils.SelectPolicyByClusterTypeAndProvider(
@@ -1060,13 +1069,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		It("policy should omit prometheus ingress rule when metrics port is 0", func() {
 			// Baseline
 			cfg.MetricsPort = 9094
-			component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg)
+			component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil)
 			resources, _ := component.Objects()
+			Expect(resources).To(HaveLen(1))
 			baselinePolicy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 
 			// Zeroed policy
 			cfg.MetricsPort = 0
-			component = kubecontrollers.NewCalicoKubeControllersPolicy(&cfg)
+			component = kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil)
 			resources, _ = component.Objects()
 			zeroedPolicy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 
@@ -1141,7 +1151,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should add egress policy with Enterprise variant and K8SServiceEndpoint defined", func() {
 		cfg.K8sServiceEp.Host = "k8shost"
 		cfg.K8sServiceEp.Port = "1234"
-		objects, _ := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg).Objects()
+		objects, _ := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil).Objects()
 		Expect(objects).To(HaveLen(1))
 		policy, ok := objects[0].(*v3.NetworkPolicy)
 		Expect(ok).To(BeTrue())

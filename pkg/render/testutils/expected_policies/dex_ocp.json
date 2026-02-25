@@ -2,7 +2,7 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "calico-system.calico-system-dex",
+    "name": "calico-system.dex",
     "namespace": "tigera-dex"
   },
   "spec": {

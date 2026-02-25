@@ -588,7 +588,7 @@ var _ = Describe("dex rendering tests", func() {
 		})
 
 		Context("calico-system rendering", func() {
-			policyName := types.NamespacedName{Name: "calico-system.calico-system-dex", Namespace: "tigera-dex"}
+			policyName := types.NamespacedName{Name: "calico-system.dex", Namespace: "tigera-dex"}
 
 			getExpectedPolicy := func(scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
 				if scenario.ManagedCluster {

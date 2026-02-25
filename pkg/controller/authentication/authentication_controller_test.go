@@ -625,8 +625,8 @@ var _ = Describe("authentication controller tests", func() {
 						policies := v3.NetworkPolicyList{}
 						Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 						Expect(policies.Items).To(HaveLen(2))
-						Expect(policies.Items[0].Name).To(Equal("calico-system.calico-system-dex"))
-						policy := policies.Items[0]
+						Expect(policies.Items[1].Name).To(Equal("calico-system.dex"))
+						policy := policies.Items[1]
 
 						// Generate the expectation based on the test case, and compare the rendered rules to our expectations.
 						expectedEgressRules := getExpectedEgressDestinationRulesFromCase(testCase)

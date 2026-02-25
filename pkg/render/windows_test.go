@@ -101,8 +101,8 @@ var _ = Describe("Windows rendering tests", func() {
 
 		// Dummy service endpoint for k8s API.
 		k8sServiceEp = k8sapi.ServiceEndpoint{
-			Host: "1.2.3.4",
-			Port: "6443",
+			HostNetworkHost: "1.2.3.4",
+			HostNetworkPort: "6443",
 		}
 
 		// Create a default configuration.

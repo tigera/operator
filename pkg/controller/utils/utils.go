@@ -427,6 +427,8 @@ func PopulateK8sServiceEndPoint(client client.Client) error {
 	} else {
 		k8sapi.Endpoint.Host = cm.Data["KUBERNETES_SERVICE_HOST"]
 		k8sapi.Endpoint.Port = cm.Data["KUBERNETES_SERVICE_PORT"]
+		k8sapi.PodNetworkEndpoint.Host = cm.Data["KUBERNETES_SERVICE_HOST_POD_NETWORK"]
+		k8sapi.PodNetworkEndpoint.Port = cm.Data["KUBERNETES_SERVICE_PORT_POD_NETWORK"]
 	}
 	return nil
 }

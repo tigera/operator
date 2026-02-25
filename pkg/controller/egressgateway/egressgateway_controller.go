@@ -202,7 +202,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 				for index, user := range scc.Users {
 					if user == userString {
 						scc.Users = append(scc.Users[:index], scc.Users[index+1:]...)
-						err := ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(scc), r.status)
+						err := ch.CreateOrUpdateOrDelete(ctx, render.NewCreationPassthrough(scc), r.status)
 						if err != nil {
 							reqLogger.Error(err, "error updating security context constraints")
 						}

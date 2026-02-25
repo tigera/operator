@@ -273,8 +273,8 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objsToCreate = append(objsToCreate,
-		c.managerAllowTigeraNetworkPolicy(),
-		networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
+		c.managerCalicoSystemNetworkPolicy(),
+		networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace),
 		managerServiceAccount(c.cfg.Namespace),
 	)
 	objsToCreate = append(objsToCreate, c.getTLSObjects()...)
@@ -1129,7 +1129,7 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 }
 
 // Allow users to access Calico Enterprise Manager.
-func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy {
 	networkpolicyHelper := networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace)
 	egressRules := []v3.Rule{
 		{
@@ -1481,6 +1481,12 @@ func (m *managerComponent) deprecatedResources(tenant *operatorv1.Tenant, instal
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: LegacyVoltronLinseedPublicCert, Namespace: truthNS},
 		},
+	)
+
+	// allow-tigera Tier was renamed to calico-system
+	objs = append(objs,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("manager-access", installNS),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", installNS),
 	)
 
 	return objs

@@ -376,7 +376,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		handler = utils.NewComponentHandler(log, r.clientv3, r.scheme, nil)
 	}
 
-	passThru := render.NewPassthroughWithLog(log, toCreateOrUpdate...)
+	passThru := render.NewCreationPassthroughWithLog(log, toCreateOrUpdate...)
 	if err := handler.CreateOrUpdateOrDelete(ctx, passThru, nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating IPPools", err, log)
 		return reconcile.Result{}, err

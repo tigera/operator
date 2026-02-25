@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.manager-access",
+    "name": "calico-system.manager-access",
     "namespace": "calico-system"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "k8s-app == 'calico-manager'",
     "types": [
       "Ingress",

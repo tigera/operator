@@ -291,7 +291,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	if passthroughWAFRulesetConfig {
-		err = ch.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(wafRulesetConfig), r.status)
+		err = ch.CreateOrUpdateOrDelete(ctx, render.NewCreationPassthrough(wafRulesetConfig), r.status)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err

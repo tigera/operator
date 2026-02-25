@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -1019,11 +1020,11 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 	})
 
-	Context("kube-controllers allow-tigera rendering", func() {
-		policyName := types.NamespacedName{Name: "allow-tigera.kube-controller-access", Namespace: common.CalicoNamespace}
+	Context("kube-controllers calico-system rendering", func() {
+		policyName := types.NamespacedName{Name: "calico-system.kube-controller-access", Namespace: common.CalicoNamespace}
 
-		DescribeTable("should render allow-tigera policy",
-			func(scenario testutils.AllowTigeraScenario) {
+		DescribeTable("should render calico-system policy",
+			func(scenario testutils.CalicoSystemScenario) {
 				if scenario.OpenShift {
 					cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 				} else {
@@ -1035,11 +1036,19 @@ var _ = Describe("kube-controllers rendering tests", func() {
 					cfg.ManagementClusterConnection = nil
 				}
 				instance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultDenyPolicy := &v3.NetworkPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "default-deny",
+						Namespace: common.CalicoNamespace,
+					},
+				}
 
-				component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg)
+				component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, defaultDenyPolicy)
 				resources, _ := component.Objects()
+				Expect(resources).To(HaveLen(2))
+				Expect(resources).Should(ContainElement(defaultDenyPolicy))
 
-				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				expectedPolicy := testutils.SelectPolicyByClusterTypeAndProvider(
 					scenario,
 					map[string]*v3.NetworkPolicy{
@@ -1051,33 +1060,34 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				)
 				Expect(policy).To(Equal(expectedPolicy))
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+			Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 		)
 
 		It("policy should omit prometheus ingress rule when metrics port is 0", func() {
 			// Baseline
 			cfg.MetricsPort = 9094
-			component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg)
+			component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil)
 			resources, _ := component.Objects()
-			baselinePolicy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+			Expect(resources).To(HaveLen(1))
+			baselinePolicy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 
 			// Zeroed policy
 			cfg.MetricsPort = 0
-			component = kubecontrollers.NewCalicoKubeControllersPolicy(&cfg)
+			component = kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil)
 			resources, _ = component.Objects()
-			zeroedPolicy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+			zeroedPolicy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 
 			Expect(len(zeroedPolicy.Spec.Ingress)).To(Equal(len(baselinePolicy.Spec.Ingress) - 1))
 		})
 	})
 
-	Context("es-kube-controllers allow-tigera rendering", func() {
-		policyName := types.NamespacedName{Name: "allow-tigera.es-kube-controller-access", Namespace: common.CalicoNamespace}
+	Context("es-kube-controllers calico-system rendering", func() {
+		policyName := types.NamespacedName{Name: "calico-system.es-kube-controller-access", Namespace: common.CalicoNamespace}
 
-		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+		getExpectedPolicy := func(scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
 			if scenario.ManagedCluster {
 				return nil
 			}
@@ -1085,8 +1095,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			return testutils.SelectPolicyByProvider(scenario, expectedESPolicy, expectedESPolicyForOpenshift)
 		}
 
-		DescribeTable("should render allow-tigera policy",
-			func(scenario testutils.AllowTigeraScenario) {
+		DescribeTable("should render calico-system policy",
+			func(scenario testutils.CalicoSystemScenario) {
 				if scenario.OpenShift {
 					cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 				} else {
@@ -1104,14 +1114,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 				resources, _ := component.Objects()
 
-				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				expectedPolicy := getExpectedPolicy(scenario)
 				Expect(policy).To(Equal(expectedPolicy))
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+			Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 		)
 	})
 
@@ -1141,7 +1151,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should add egress policy with Enterprise variant and K8SServiceEndpoint defined", func() {
 		cfg.K8sServiceEp.Host = "k8shost"
 		cfg.K8sServiceEp.Port = "1234"
-		objects, _ := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg).Objects()
+		objects, _ := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil).Objects()
 		Expect(objects).To(HaveLen(1))
 		policy, ok := objects[0].(*v3.NetworkPolicy)
 		Expect(ok).To(BeTrue())

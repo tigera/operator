@@ -216,6 +216,9 @@ var _ = Describe("Kibana rendering tests", func() {
 
 			expectedDeletedResources := []client.Object{
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: kibana.ServiceName, Namespace: kibana.Namespace}},
+
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.kibana-access", Namespace: kibana.Namespace}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: kibana.Namespace}},
 			}
 
 			component := kibana.Kibana(cfg)
@@ -245,21 +248,21 @@ var _ = Describe("Kibana rendering tests", func() {
 			rtest.ExpectResources(createdResources, resources)
 		})
 
-		Context("allow-tigera rendering", func() {
+		Context("calico-system rendering", func() {
 			policyNames := []types.NamespacedName{
-				{Name: "allow-tigera.kibana-access", Namespace: "tigera-kibana"},
+				{Name: "calico-system.kibana-access", Namespace: "tigera-kibana"},
 			}
 
-			getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-				if name.Name == "allow-tigera.kibana-access" {
+			getExpectedPolicy := func(name types.NamespacedName, scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
+				if name.Name == "calico-system.kibana-access" {
 					return testutils.SelectPolicyByProvider(scenario, kibanaPolicy, kibanaPolicyForOpenshift)
 				}
 
 				return nil
 			}
 
-			DescribeTable("should render allow-tigera policy",
-				func(scenario testutils.AllowTigeraScenario) {
+			DescribeTable("should render calico-system policy",
+				func(scenario testutils.CalicoSystemScenario) {
 					if scenario.OpenShift {
 						cfg.Provider = operatorv1.ProviderOpenShift
 					} else {
@@ -270,13 +273,13 @@ var _ = Describe("Kibana rendering tests", func() {
 					resources, _ := component.Objects()
 
 					for _, policyName := range policyNames {
-						policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+						policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 						expectedPolicy := getExpectedPolicy(policyName, scenario)
 						Expect(policy).To(Equal(expectedPolicy))
 					}
 				},
-				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+				Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
 			)
 		})
 

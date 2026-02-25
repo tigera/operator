@@ -823,8 +823,8 @@ var _ = Describe("Installation validation tests", func() {
 		}
 		// Populate the k8s service endpoint (required for windows)
 		k8sapi.Endpoint = k8sapi.ServiceEndpoint{
-			Host: "1.2.3.4",
-			Port: "6443",
+			HostNetworkHost: "1.2.3.4",
+			HostNetworkPort: "6443",
 		}
 		Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 		err := validateCustomResource(instance)
@@ -1010,8 +1010,8 @@ var _ = Describe("Installation validation tests", func() {
 			}
 			instance.Spec.CalicoNetwork.BGP = ptr.To(operator.BGPDisabled)
 			k8sapi.Endpoint = k8sapi.ServiceEndpoint{
-				Host: "1.2.3.4",
-				Port: "6443",
+				HostNetworkHost: "1.2.3.4",
+				HostNetworkPort: "6443",
 			}
 		})
 		Context("Windows disabled", func() {

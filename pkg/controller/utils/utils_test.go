@@ -262,8 +262,8 @@ var _ = Describe("PopulateK8sServiceEndPoint", func() {
 
 		Expect(err).To(BeNil())
 
-		Expect(k8sapi.Endpoint.Host).To(Equal("1.2.3.4"))
-		Expect(k8sapi.Endpoint.Port).To(Equal("5678"))
+		Expect(k8sapi.Endpoint.HostNetworkHost).To(Equal("1.2.3.4"))
+		Expect(k8sapi.Endpoint.HostNetworkPort).To(Equal("5678"))
 	})
 
 	It("does not return error if ConfigMap is not found.", func() {

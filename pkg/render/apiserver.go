@@ -113,8 +113,22 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 	}, nil
 }
 
+type apiServerPolicyComponent struct {
+	PassthroughComponent
+	cfg *APIServerConfiguration
+}
+
+func (c *apiServerPolicyComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
+	objsToCreate = append(objsToCreate, calicoSystemAPIServerPolicy(c.cfg))
+	// allow-tigera Tier was renamed to calico-system
+	objsToDelete = append(objsToDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("apiserver-access", APIServerNamespace),
+	)
+	return
+}
+
 func APIServerPolicy(cfg *APIServerConfiguration) Component {
-	return NewPassthrough(allowTigeraAPIServerPolicy(cfg))
+	return &apiServerPolicyComponent{cfg: cfg}
 }
 
 // APIServerConfiguration contains all the config information needed to render the component.
@@ -466,7 +480,7 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
+func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, []v3.Rule{

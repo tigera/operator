@@ -1,4 +1,4 @@
-// Copyright (c) 2021,2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021,2023-2024,2026 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -35,20 +35,42 @@ func NewPassthroughWithLog(l logr.Logger, objs ...client.Object) Component {
 	return &passthroughComponent{isDelete: false, objs: objs, log: l}
 }
 
-// passthroughComponent is an implementation of a Component that simply passes back
-// the objects it was given unmodified.
-type passthroughComponent struct {
-	isDelete bool
-	objs     []client.Object
-	log      logr.Logger
-}
+// PassthroughComponent is a public empty implementation of a Component.
+type PassthroughComponent struct{}
 
 // ResolveImages should call components.GetReference for all images that the Component
 // needs, passing 'is' to the GetReference call and if there are any errors those
 // are returned. It is valid to pass nil for 'is' as GetReference accepts the value.
 // ResolveImages must be called before Objects is called for the component.
-func (p *passthroughComponent) ResolveImages(is *operatorv1.ImageSet) error {
+func (p *PassthroughComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
+}
+
+// Objects returns the lists of objects in this component that should be created and/or deleted during
+// rendering.
+func (p *PassthroughComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
+	return
+}
+
+// Ready returns true if the component is ready to be created.
+func (p *PassthroughComponent) Ready() bool {
+	return true
+}
+
+// SupportedOSTypes returns operating systems that is supported of the components returned by the Objects() function.
+// The "componentHandler" converts the returned OSTypes to a node selectors for the "kubernetes.io/os" label on client.Objects
+// that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
+func (p *PassthroughComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeAny
+}
+
+// passthroughComponent is an implementation of a Component that simply passes back
+// the objects it was given unmodified.
+type passthroughComponent struct {
+	PassthroughComponent
+	isDelete bool
+	objs     []client.Object
+	log      logr.Logger
 }
 
 // Objects returns the lists of objects in this component that should be created and/or deleted during
@@ -68,16 +90,4 @@ func (p *passthroughComponent) Objects() (objsToCreate []client.Object, objsToDe
 		return nil, objs
 	}
 	return objs, nil
-}
-
-// Ready returns true if the component is ready to be created.
-func (p *passthroughComponent) Ready() bool {
-	return true
-}
-
-// SupportedOSTypes returns operating systems that is supported of the components returned by the Objects() function.
-// The "componentHandler" converts the returned OSTypes to a node selectors for the "kubernetes.io/os" label on client.Objects
-// that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
-func (p *passthroughComponent) SupportedOSType() rmeta.OSType {
-	return rmeta.OSTypeAny
 }

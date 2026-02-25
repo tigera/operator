@@ -637,7 +637,7 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 				// The CNI plugin reads KubeVirt resources for IPAM of KubeVirt workloads.
 				APIGroups: []string{"kubevirt.io"},
 				Resources: []string{"virtualmachineinstances", "virtualmachines"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{"get"},
 			},
 		},
 	}

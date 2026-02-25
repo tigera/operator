@@ -379,6 +379,12 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 			},
 			Verbs: []string{"get", "list", "watch", "create", "update", "delete"},
 		},
+		{
+			// The IPAM GC controller reads KubeVirt resources to verify VM/VMI existence for IP garbage collection.
+			APIGroups: []string{"kubevirt.io"},
+			Resources: []string{"virtualmachineinstances", "virtualmachines"},
+			Verbs:     []string{"get"},
+		},
 	}
 
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {

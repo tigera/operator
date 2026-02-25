@@ -196,7 +196,7 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(cniRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 					APIGroups: []string{"kubevirt.io"},
 					Resources: []string{"virtualmachineinstances", "virtualmachines"},
-					Verbs:     []string{"get", "list", "watch"},
+					Verbs:     []string{"get"},
 				}))
 
 				// Check CNI configmap.

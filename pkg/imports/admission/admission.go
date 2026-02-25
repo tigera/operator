@@ -116,11 +116,12 @@ func Ensure(c client.Client, variant string, v3 bool, log logr.Logger) error {
 	for _, obj := range objs {
 		log.Info("ensuring MutatingAdmissionPolicy resource exists", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		if err := c.Create(ctx, obj); err != nil {
-			cancel()
 			if errors.IsAlreadyExists(err) {
 				continue
 			}
+
 			// If the API is not available (K8s < 1.32), log a warning and skip.
 			if errors.IsNotFound(err) || errors.IsForbidden(err) {
 				log.Info("MutatingAdmissionPolicy API not available, skipping", "error", err)
@@ -128,7 +129,6 @@ func Ensure(c client.Client, variant string, v3 bool, log logr.Logger) error {
 			}
 			return fmt.Errorf("failed to create %s %s: %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), err)
 		}
-		cancel()
 	}
 	return nil
 }

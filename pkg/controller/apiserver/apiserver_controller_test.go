@@ -108,7 +108,7 @@ var _ = Describe("apiserver controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).ToNot(HaveOccurred())
-		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 		cryptoCA, err := tls.MakeCA("byo-ca")
 		Expect(err).NotTo(HaveOccurred())
 		apiSecret, err = secret.CreateTLSSecret(cryptoCA, "calico-apiserver-certs", common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.APIServerServiceName, "calico-system", dns.DefaultClusterDomain)...)
@@ -315,7 +315,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
-		It("should render allow-tigera policy when tier and tier watch are ready", func() {
+		It("should render calico-system policy when tier and tier watch are ready", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
@@ -334,12 +334,12 @@ var _ = Describe("apiserver controller tests", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(1))
-			Expect(policies.Items[0].Name).To(Equal("allow-tigera.apiserver-access"))
+			Expect(policies.Items[0].Name).To(Equal("calico-system.apiserver-access"))
 		})
 
-		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {
+		It("should omit calico-system policy and not degrade when tier is not ready", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
-			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			r := ReconcileAPIServer{
 				client:         cli,
@@ -359,7 +359,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(policies.Items).To(HaveLen(0))
 		})
 
-		It("should omit allow-tigera policy and not degrade when tier watch is not ready", func() {
+		It("should omit calico-system policy and not degrade when tier watch is not ready", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
@@ -380,12 +380,12 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(policies.Items).To(HaveLen(0))
 		})
 
-		It("should omit allow-tigera policy and not degrade when installation is calico", func() {
+		It("should omit calico-system policy and not degrade when installation is calico", func() {
 			Expect(netv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			installation.Spec.Variant = operatorv1.Calico
 			installation.Status.Variant = operatorv1.Calico
 			Expect(cli.Create(ctx, installation)).To(BeNil())
-			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			r := ReconcileAPIServer{
 				client: cli,
@@ -409,7 +409,7 @@ var _ = Describe("apiserver controller tests", func() {
 			installation.Spec.Variant = operatorv1.TigeraSecureEnterprise
 			installation.Status.Variant = operatorv1.Calico
 			Expect(cli.Create(ctx, installation)).To(BeNil())
-			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			r := ReconcileAPIServer{
 				client:         cli,

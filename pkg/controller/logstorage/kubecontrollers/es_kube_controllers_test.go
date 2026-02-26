@@ -191,8 +191,8 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 		r, err = NewControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false, readyFlag)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// Create the allow-tigera Tier, since the controller blocks on its existence.
-		tier := &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}}
+		// Create the calico-system Tier, since the controller blocks on its existence.
+		tier := &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}}
 		Expect(cli.Create(ctx, tier)).ShouldNot(HaveOccurred())
 	})
 

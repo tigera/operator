@@ -111,12 +111,23 @@ func Monitor(cfg *Config) render.Component {
 
 func MonitorPolicy(cfg *Config) render.Component {
 	return render.NewPassthrough(
-		allowTigeraAlertManagerPolicy(cfg),
-		allowTigeraAlertManagerMeshPolicy(cfg),
-		allowTigeraPrometheusPolicy(cfg),
-		allowTigeraPrometheusAPIPolicy(cfg),
-		allowTigeraPrometheusOperatorPolicy(cfg),
-		networkpolicy.AllowTigeraDefaultDeny(common.TigeraPrometheusNamespace),
+		[]client.Object{
+			calicoSystemAlertManagerPolicy(cfg),
+			calicoSystemAlertManagerMeshPolicy(cfg),
+			calicoSystemPrometheusPolicy(cfg),
+			calicoSystemPrometheusAPIPolicy(cfg),
+			calicoSystemPrometheusOperatorPolicy(cfg),
+			networkpolicy.CalicoSystemDefaultDeny(common.TigeraPrometheusNamespace),
+		},
+		[]client.Object{
+			// allow-tigera Tier was renamed to calico-system
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager", common.TigeraPrometheusNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager-mesh", common.TigeraPrometheusNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus", common.TigeraPrometheusNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-prometheus-api", common.TigeraPrometheusNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus-operator", common.TigeraPrometheusNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.TigeraPrometheusNamespace),
+		},
 	)
 }
 
@@ -1135,7 +1146,7 @@ func (mc *monitorComponent) operatorRoleBindings() []*rbacv1.RoleBinding {
 }
 
 // Creates a network policy to allow traffic to Alertmanager (TCP port 9093).
-func allowTigeraAlertManagerPolicy(cfg *Config) *v3.NetworkPolicy {
+func calicoSystemAlertManagerPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{
@@ -1170,7 +1181,7 @@ func allowTigeraAlertManagerPolicy(cfg *Config) *v3.NetworkPolicy {
 }
 
 // Creates a network policy to allow traffic between Alertmanagers for HA configuration (TCP port 6783).
-func allowTigeraAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
+func calicoSystemAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:   v3.Allow,
@@ -1226,7 +1237,7 @@ func allowTigeraAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 }
 
 // Creates a network policy to allow traffic to access the Prometheus (TCP port 9095).
-func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
+func calicoSystemPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, []v3.Rule{
@@ -1324,7 +1335,7 @@ func allowTigeraPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 }
 
 // Creates a network policy to allow traffic to access through tigera-prometheus-api
-func allowTigeraPrometheusAPIPolicy(cfg *Config) *v3.NetworkPolicy {
+func calicoSystemPrometheusAPIPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{
@@ -1359,7 +1370,7 @@ func allowTigeraPrometheusAPIPolicy(cfg *Config) *v3.NetworkPolicy {
 }
 
 // Creates a network policy to allow the prometheus-operatorto access the kube-apiserver
-func allowTigeraPrometheusOperatorPolicy(cfg *Config) *v3.NetworkPolicy {
+func calicoSystemPrometheusOperatorPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{

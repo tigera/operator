@@ -188,7 +188,7 @@ var _ = Describe("LogStorage controller", func() {
 				})).NotTo(HaveOccurred())
 
 				Expect(cli.Create(ctx, &v3.Tier{
-					ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
 				})).NotTo(HaveOccurred())
 
 				Expect(cli.Create(
@@ -307,7 +307,7 @@ var _ = Describe("LogStorage controller", func() {
 				})).NotTo(HaveOccurred())
 
 				Expect(cli.Create(ctx, &v3.Tier{
-					ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
 				})).NotTo(HaveOccurred())
 
 				Expect(cli.Create(
@@ -1122,7 +1122,7 @@ var _ = Describe("LogStorage controller", func() {
 				})
 			})
 
-			Context("allow-tigera rendering", func() {
+			Context("calico-system rendering", func() {
 				var r reconcile.Reconciler
 				BeforeEach(func() {
 					Expect(cli.Create(ctx, &storagev1.StorageClass{
@@ -1161,8 +1161,8 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 				})
 
-				It("should wait if allow-tigera tier is unavailable", func() {
-					test.DeleteAllowTigeraTierAndExpectWait(ctx, cli, r, mockStatus)
+				It("should wait if calico-system tier is unavailable", func() {
+					test.DeleteCalicoSystemTierAndExpectWait(ctx, cli, r, mockStatus)
 				})
 
 				It("should wait if tier watch is not ready", func() {
@@ -1198,7 +1198,7 @@ var _ = Describe("LogStorage controller", func() {
 				})).NotTo(HaveOccurred())
 
 				Expect(cli.Create(ctx, &v3.Tier{
-					ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
 				})).NotTo(HaveOccurred())
 
 				Expect(cli.Create(

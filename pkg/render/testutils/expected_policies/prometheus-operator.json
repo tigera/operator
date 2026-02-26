@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.prometheus-operator",
+    "name": "calico-system.prometheus-operator",
     "namespace": "tigera-prometheus"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "operator == 'prometheus'",
     "types": [
       "Egress"

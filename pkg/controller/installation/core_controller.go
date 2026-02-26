@@ -1037,7 +1037,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 
-		// Ensure the allow-tigera tier exists, before rendering any network policies within it.
+		// Ensure the calico-system tier exists, before rendering any network policies within it.
 		//
 		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
 		// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
@@ -1046,7 +1046,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if r.tierWatchReady.IsReady() {
 			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 				if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying allow-tigera tier", err, reqLogger)
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 			} else {
@@ -1257,7 +1257,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components := []render.Component{}
 	if newActiveCM != nil && !installationMarkedForDeletion {
 		log.Info("adding active configmap")
-		components = append(components, render.NewPassthrough(newActiveCM))
+		components = append(components, render.NewCreationPassthrough(newActiveCM))
 	}
 
 	// If we're on OpenShift on AWS render a Job (and needed resources) to
@@ -1293,7 +1293,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		criticalPriorityClasses := []string{render.NodePriorityClassName, render.ClusterPriorityClassName}
 		resourceQuotaObj := resourcequota.ResourceQuotaForPriorityClassScope(resourcequota.CalicoCriticalResourceQuotaName,
 			common.CalicoNamespace, criticalPriorityClasses)
-		resourceQuotaComponent := render.NewPassthrough(resourceQuotaObj)
+		resourceQuotaComponent := render.NewCreationPassthrough(resourceQuotaObj)
 		components = append(components, resourceQuotaComponent)
 
 	}
@@ -1411,7 +1411,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if len(needsCleanup) > 0 {
 			// Add a component to remove the finalizers from the objects that need it.
 			reqLogger.Info("Removing finalizers from objects that are wrongly marked for deletion")
-			components = append(components, render.NewPassthrough(needsCleanup...))
+			components = append(components, render.NewCreationPassthrough(needsCleanup...))
 		}
 	}
 
@@ -1565,8 +1565,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			components = append(components, render.NewTyphaNonClusterHostPolicy(&typhaCfg))
 		}
 		components = append(components,
-			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg),
-			render.NewPassthrough(allowTigeraDefaultDenyForCalicoSystem()),
+			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg, calicoSystemDefaultDenyForCalicoSystem()),
 		)
 	}
 
@@ -2121,7 +2120,7 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	if !r.manageCRDs {
 		return nil
 	}
-	crdComponent := render.NewPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant, r.v3CRDs)...)...)
+	crdComponent := render.NewCreationPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant, r.v3CRDs)...)...)
 	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
 	// Installation CR will not remove the CRDs.
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
@@ -2208,7 +2207,7 @@ func crdPoolsToOperator(crds []v3.IPPool) []operatorv1.IPPool {
 	return pools
 }
 
-func allowTigeraDefaultDenyForCalicoSystem() *v3.NetworkPolicy {
+func calicoSystemDefaultDenyForCalicoSystem() *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{

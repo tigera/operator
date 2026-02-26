@@ -283,21 +283,21 @@ var _ = Describe("ECK rendering tests", func() {
 			}))
 		})
 
-		Context("allow-tigera rendering", func() {
+		Context("calico-system rendering", func() {
 			policyNames := []types.NamespacedName{
-				{Name: "allow-tigera.kibana-access", Namespace: "tigera-kibana"},
+				{Name: "calico-system.kibana-access", Namespace: "tigera-kibana"},
 			}
 
-			getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-				if name.Name == "allow-tigera.elastic-operator-access" {
+			getExpectedPolicy := func(name types.NamespacedName, scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
+				if name.Name == "calico-system.elastic-operator-access" {
 					return testutils.SelectPolicyByProvider(scenario, eckPolicy, eckPolicyForOpenshift)
 				}
 
 				return nil
 			}
 
-			DescribeTable("should render allow-tigera policy",
-				func(scenario testutils.AllowTigeraScenario) {
+			DescribeTable("should render calico-system policy",
+				func(scenario testutils.CalicoSystemScenario) {
 					if scenario.OpenShift {
 						cfg.Provider = operatorv1.ProviderOpenShift
 					} else {
@@ -308,13 +308,13 @@ var _ = Describe("ECK rendering tests", func() {
 					resources, _ := component.Objects()
 
 					for _, policyName := range policyNames {
-						policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+						policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 						expectedPolicy := getExpectedPolicy(policyName, scenario)
 						Expect(policy).To(Equal(expectedPolicy))
 					}
 				},
-				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+				Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
 			)
 		})
 

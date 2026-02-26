@@ -43,23 +43,41 @@ var publishCommand = &cli.Command{
 		createGithubReleaseFlag,
 		githubTokenFlag,
 		draftGithubReleaseFlag,
+		hookTimeoutFlag,
 	},
 	Before: publishBefore,
 	Action: publishAction,
 }
+
+// publishBeforeHook is an optional hook called at the start of publishBefore for additional pre-processing.
+// It can be set via init() in separate files to extend the publish command behavior.
+var publishBeforeHook multiHook[cliBeforeHookFunc]
+
+// publishImageAfterHook is an optional hook called after images are published (or skipped).
+// It receives whether a new release was published. It can be set via init() in separate files.
+var publishImageAfterHook multiHook[imageReleaseHookFunc]
 
 // Pre-action for publish command.
 // It configures logging and performs validations.
 var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	configureLogging(c)
 
+	// Extract hook timeout once for reuse
+	hookTimeout := c.Duration(hookTimeoutFlag.Name)
+
+	// Call pre-hook if registered.
 	var err error
+	ctx, err = RunPublishBeforeHook(ctx, c, hookTimeout)
+	if err != nil {
+		return ctx, err
+	}
+
 	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
 	if err != nil {
 		return ctx, err
 	}
 
-	// Run verison validations. This is a mandatory check.
+	// Run version validations. This is a mandatory check.
 	ctx, err = checkVersion(ctx, c)
 	if err != nil {
 		return ctx, err
@@ -71,12 +89,7 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 		return ctx, nil
 	}
 
-	// If building a hashrelease, publishGithubRelease must be false
-	if c.Bool(hashreleaseFlag.Name) && c.Bool(createGithubReleaseFlag.Name) {
-		return ctx, fmt.Errorf("cannot publish GitHub release for hashrelease builds")
-	}
-
-	if !c.Bool(createGithubReleaseFlag.Name) {
+	if c.Bool(hashreleaseFlag.Name) || !c.Bool(createGithubReleaseFlag.Name) {
 		return ctx, nil
 	}
 
@@ -99,8 +112,17 @@ var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) err
 	}
 
 	// Publish images
-	if err := publishImages(c, repoRootDir); err != nil {
+	isNewRelease, err := publishImages(c, repoRootDir)
+	if err != nil {
 		return err
+	}
+
+	// Call post-publish hook if registered.
+	hookTimeout := c.Duration(hookTimeoutFlag.Name)
+	ctx, err = RunPublishImageAfterHook(ctx, c, isNewRelease, hookTimeout)
+	if err != nil {
+		// Post-publish hook errors are non-fatal - images are already published
+		logrus.WithError(err).Warn("Post-publish hook failed (continuing as images are published)")
 	}
 
 	// Only images are published for hashrelease builds.
@@ -118,15 +140,16 @@ var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) err
 
 // Publish the operator images to the specified registry.
 // If the images are already published, it skips publishing.
-func publishImages(c *cli.Command, repoRootDir string) error {
+// Returns true if images were newly published, false if they already existed.
+func publishImages(c *cli.Command, repoRootDir string) (bool, error) {
 	version := c.String(versionFlag.Name)
 	log := logrus.WithField("version", version)
 	// Check if images are already published
 	if published, err := operatorImagePublished(c); err != nil {
-		return fmt.Errorf("checking if images are already published: %w", err)
+		return false, fmt.Errorf("checking if images are already published: %w", err)
 	} else if published {
 		log.Warn("Images are already published")
-		return nil
+		return false, nil
 	}
 
 	// Set up environment variables for publish
@@ -159,10 +182,10 @@ func publishImages(c *cli.Command, repoRootDir string) error {
 	log.Info("Publishing Operator images")
 	if out, err := makeInDir(repoRootDir, "release-publish-images", publishEnv...); err != nil {
 		log.Error(out)
-		return fmt.Errorf("publishing images: %w", err)
+		return false, fmt.Errorf("publishing images: %w", err)
 	}
 	log.Info("Successfully published Operator images")
-	return nil
+	return true, nil
 }
 
 // Check if the operator image is already published.

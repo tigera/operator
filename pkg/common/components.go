@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,11 +22,12 @@ import (
 
 // MergeMaps merges current and desired maps. If both current and desired maps contain the same key, the
 // desired map's value is used.
-// MergeMaps does not copy hash.operator.tigera.io annotations from the current map, since those are managed by the operator.
+// MergeMaps does not copy hash.operator.tigera.io or certificates.operator.tigera.io annotations from the
+// current map, since those are managed by the operator.
 func MergeMaps(current, desired map[string]string) map[string]string {
 	for k, v := range current {
 		// Copy over key/value that should be copied.
-		if _, ok := desired[k]; !ok && !strings.Contains(k, "hash.operator.tigera.io") {
+		if _, ok := desired[k]; !ok && !strings.Contains(k, "hash.operator.tigera.io") && !strings.Contains(k, "certificates.operator.tigera.io") {
 			desired[k] = v
 		}
 	}

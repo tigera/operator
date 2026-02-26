@@ -158,13 +158,13 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(keyPair).NotTo(BeNil())
-			Expect(keyPair.GetIssuer()).To(Equal(certificateManager.KeyPair()))
+			Expect(keyPair.GetIssuer().GetCertificatePEM()).To(Equal(certificateManager.KeyPair().GetCertificatePEM()))
 
 			By("reconstructing certificateManager2 from the secret that was stored")
 			certificateManager2, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(certificateManager2).NotTo(BeNil())
-			Expect(keyPair.GetIssuer()).To(Equal(certificateManager2.KeyPair())) // Proves that certificateManager & certificateManager2 are identical
+			Expect(keyPair.GetIssuer().GetCertificatePEM()).To(Equal(certificateManager2.KeyPair().GetCertificatePEM())) // Proves that certificateManager & certificateManager2 are identical
 
 			By("deleting the tigera-ca-secret")
 			Expect(cli.Delete(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -173,7 +173,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			certificateManager3, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			Expect(certificateManager3).NotTo(BeNil())
-			Expect(keyPair.GetIssuer()).NotTo(Equal(certificateManager3.KeyPair())) // Proves that certificateManager & certificateManager3 are different
+			Expect(keyPair.GetIssuer().GetCertificatePEM()).NotTo(Equal(certificateManager3.KeyPair().GetCertificatePEM())) // Proves that certificateManager & certificateManager3 are different
 
 			By("Constructing a certificateManager with Certificate management enabled and verifying differences")
 			installation.CertificateManagement = cm
@@ -183,7 +183,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(keyPair.UseCertificateManagement()).To(BeFalse())
 			keyPair2, err := certificateManager4.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(keyPair2.GetIssuer()).NotTo(Equal(certificateManager4.KeyPair())) // We expect the customer to bring an issuer to the cluster
+			Expect(keyPair2.GetIssuer()).To(BeNil()) // We expect the customer to bring an issuer to the cluster.
 			Expect(keyPair2.UseCertificateManagement()).To(BeTrue())
 		})
 

@@ -19,6 +19,8 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"net"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,10 +81,18 @@ func (k *KeyPair) Secret(namespace string) *corev1.Secret {
 	}
 	data[corev1.TLSPrivateKeyKey] = k.PrivateKeyPEM
 	data[corev1.TLSCertKey] = k.CertificatePEM
+
+	labels, annotations := tlsSecretMetadata(k.CertificatePEM)
+
 	return &corev1.Secret{
-		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: k.GetName(), Namespace: namespace},
-		Data:       data,
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        k.GetName(),
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
+		},
+		Data: data,
 	}
 }
 
@@ -145,6 +155,57 @@ func (k *KeyPair) InitContainer(namespace string, securityContext *corev1.Securi
 		securityContext)
 	initContainer.Name = fmt.Sprintf("%s-%s", k.GetName(), initContainer.Name)
 	return initContainer
+}
+
+// tlsSecretMetadata parses certPEM and returns labels and annotations that surface
+// certificate metadata on the owning Secret. On parse failure it returns empty maps.
+func tlsSecretMetadata(certPEM []byte) (labels map[string]string, annotations map[string]string) {
+	labels = map[string]string{}
+	annotations = map[string]string{}
+
+	cert, err := ParseCertificate(certPEM)
+	if err != nil {
+		return labels, annotations
+	}
+
+	// --- labels ---
+	labels["operator.tigera.io/signer"] = signerLabelValue(cert.Issuer.CommonName)
+
+	// --- annotations ---
+	issuerCN := cert.Issuer.CommonName
+	annotations["operator.tigera.io/cert-issuer"] = issuerCN
+	annotations["operator.tigera.io/cert-signer"] = issuerCN
+	annotations["operator.tigera.io/cert-expiry"] = cert.NotAfter.UTC().Format("2006-01-02T15:04:05Z")
+
+	if len(cert.DNSNames) > 0 {
+		annotations["operator.tigera.io/cert-dns-names"] = strings.Join(cert.DNSNames, ",")
+	}
+	if len(cert.IPAddresses) > 0 {
+		annotations["operator.tigera.io/cert-ip-sans"] = strings.Join(ipStrings(cert.IPAddresses), ",")
+	}
+
+	return labels, annotations
+}
+
+// signerLabelValue returns a Kubernetes-label-safe signer identifier from the
+// issuer CN, truncated to 63 chars to satisfy the label value length limit.
+func signerLabelValue(cn string) string {
+	if cn == "" {
+		return "unknown"
+	}
+	if len(cn) > 63 {
+		return cn[:63]
+	}
+	return cn
+}
+
+// ipStrings converts a slice of net.IP to their string representations.
+func ipStrings(ips []net.IP) []string {
+	out := make([]string, len(ips))
+	for i, ip := range ips {
+		out[i] = ip.String()
+	}
+	return out
 }
 
 func ParseCertificate(certBytes []byte) (*x509.Certificate, error) {

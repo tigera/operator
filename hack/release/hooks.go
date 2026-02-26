@@ -31,22 +31,34 @@ import (
 // This package implements an extensible hook system that allows external code to extend
 // the release build and publish workflows without modifying core logic.
 //
+// HOOK NAME AND SIGNATURE CONVENTIONS:
+// - Workflow hooks are multiHook variables that can have multiple registered hooks.
+//   See "HOOKS EXECUTION AND ERROR HANDLING" below for execution order and error handling details.
+// - Hooks are categorized by the phase of the workflow they run in and follow the naming convention: <phase><Before|After>Hook. For example:
+//   - buildBeforeHook: runs before the build phase
+//   - publishImagesAfterHook: runs after the publish images phase
+// - Each hook type has a specific function signature that defines the parameters it receives and if it can modify the context for subsequent actions. For example:
+//   - cliHookFunc does not modify the context: func(ctx context.Context, c *cli.Command) error
+//   - cliBeforeHookFunc can modify the context: func(ctx context.Context, c *cli.Command) (context.Context, error)
+//
 // HOOK REGISTRATION:
 //
-// Hooks are registered via init() functions in separate files, Example:
+// Hooks are registered by calling the Add method on the appropriate multiHook variable, typically from an init() function. For example:
 //
 //   // myhooks.go
 //   func init() {
-//       buildBeforeHook = myBuildBeforeHook
+//       buildBeforeHook.Add("my custom before hook", myCustomBuildBeforeHook)
+//       buildAfterHook.Add("my custom after hook", myCustomBuildAfterHook)
 //   }
 //
 // HOOK EXECUTION AND ERROR HANDLING:
 //
 // - Hooks are executed with a derived context that includes the main operation's context
+// - Hooks that run in the "Before" phase (e.g., buildBeforeHook) run in registration order and stop on the first error (fail-fast).
+// - Hooks that run in the "After" phase (e.g., buildAfterHook) run in reverse registration order and collect all errors, returning them as a single error.
 // - If a hook times out, the error message clearly indicates which hook timed out
 // - If a hook returns an error, it is wrapped with context about which hook failed
 // - If a hook panics, the panic is NOT caught - letting it propagate to the caller
-// - Hook errors are fatal and stop the entire operation
 // - Timeout values can be configured via the --hook-timeout flag,
 //   and should be set based on expected hook execution time and overall operation time budget
 //
@@ -70,32 +82,32 @@ type cliHookWithRepoDirFunc func(ctx context.Context, c *cli.Command, repoRootDi
 // It receives information about whether the release was newly published, allowing it to perform actions accordingly.
 type imageReleaseHookFunc func(ctx context.Context, c *cli.Command, published bool) (context.Context, error)
 
-type cliHook struct {
+type cliHook[T any] struct {
 	Desc string
-	Hook cliHookFunc
+	Hook T
 }
 
-type multiHook struct {
+type multiHook[T any] struct {
 	mu    sync.Mutex
-	hooks []cliHook
+	hooks []cliHook[T]
 }
 
-func (h *multiHook) Add(desc string, hook cliHookFunc) {
+func (h *multiHook[T]) Add(desc string, hook T) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.hooks = append(h.hooks, cliHook{
+	h.hooks = append(h.hooks, cliHook[T]{
 		Desc: desc,
 		Hook: hook,
 	})
 }
 
-func (h *multiHook) Hooks() []cliHook {
+func (h *multiHook[T]) Hooks() []cliHook[T] {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return slices.Clone(h.hooks)
 }
 
-func (h *multiHook) Reset() {
+func (h *multiHook[T]) Reset() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.hooks = nil
@@ -164,68 +176,92 @@ func withTimeout[T any](ctx context.Context, timeout time.Duration, hookName str
 	}
 }
 
-// RunBuildBeforeHook executes the buildBeforeHook with timeout and error handling.
-func RunBuildBeforeHook(ctx context.Context, c *cli.Command, timeout time.Duration) (context.Context, error) {
-	if buildBeforeHook == nil {
+// runHooksFailFast runs all hooks in registration order, stopping on the first error.
+func runHooksFailFast[T any](
+	ctx context.Context,
+	timeout time.Duration,
+	hookName string,
+	mh *multiHook[T],
+	run func(T, context.Context) (context.Context, error),
+) (context.Context, error) {
+	hooks := mh.Hooks()
+	if len(hooks) == 0 {
 		return ctx, nil
 	}
-	return withTimeout(ctx, timeout, "buildBeforeHook", func(hookCtx context.Context) (context.Context, error) {
-		return buildBeforeHook(hookCtx, c)
+	return withTimeout(ctx, timeout, hookName, func(hookCtx context.Context) (context.Context, error) {
+		for _, h := range hooks {
+			var err error
+			hookCtx, err = run(h.Hook, hookCtx)
+			if err != nil {
+				return hookCtx, fmt.Errorf("%s %q failed: %w", hookName, h.Desc, err)
+			}
+		}
+		return hookCtx, nil
 	})
 }
 
-// RunBuildAfterHook executes the buildAfterHook with timeout and error handling.
-func RunBuildAfterHook(ctx context.Context, c *cli.Command, timeout time.Duration) error {
-	hooks := buildAfterHooks.Hooks()
+// runHooksCollectErrors runs all hooks in reverse (LIFO) order, collecting all errors.
+func runHooksCollectErrors[T any](
+	ctx context.Context,
+	timeout time.Duration,
+	hookName string,
+	mh *multiHook[T],
+	run func(T, context.Context) (context.Context, error),
+) (context.Context, error) {
+	hooks := mh.Hooks()
 	if len(hooks) == 0 {
-		return nil
+		return ctx, nil
 	}
-	_, err := withTimeout(ctx, timeout, "buildAfterHook", func(hookCtx context.Context) (context.Context, error) {
-		// Run all registered build after hooks in LIFO order.
-		// All hooks run even if earlier ones fail, to ensure cleanup always happens.
+	return withTimeout(ctx, timeout, hookName, func(hookCtx context.Context) (context.Context, error) {
 		var errs []error
 		for i := len(hooks) - 1; i >= 0; i-- {
-			h := hooks[i]
-			logrus.WithField("hook", h.Desc).Debug("Running build after hook")
-			if err := h.Hook(hookCtx, c); err != nil {
-				logrus.WithError(err).WithField("hook", h.Desc).Error("Build after hook failed")
-				errs = append(errs, fmt.Errorf("build after hook %q failed: %w", h.Desc, err))
+			var err error
+			hookCtx, err = run(hooks[i].Hook, hookCtx)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("%s %q failed: %w", hookName, hooks[i].Desc, err))
 			}
 		}
 		return hookCtx, errors.Join(errs...)
 	})
+}
+
+// RunBuildBeforeHook executes the buildBeforeHook with timeout and error handling.
+func RunBuildBeforeHook(ctx context.Context, c *cli.Command, timeout time.Duration) (context.Context, error) {
+	return runHooksFailFast(ctx, timeout, "buildBeforeHook", &buildBeforeHook,
+		func(h cliBeforeHookFunc, ctx context.Context) (context.Context, error) {
+			return h(ctx, c)
+		})
+}
+
+// RunBuildAfterHook executes the buildAfterHook with timeout and error handling.
+func RunBuildAfterHook(ctx context.Context, c *cli.Command, timeout time.Duration) error {
+	_, err := runHooksCollectErrors(ctx, timeout, "buildAfterHook", &buildAfterHooks,
+		func(h cliHookFunc, ctx context.Context) (context.Context, error) {
+			return ctx, h(ctx, c)
+		})
 	return err
 }
 
-// RunSetupHashreleasePreHook executes the setupHashreleasePreHook with timeout and error handling.
-func RunSetupHashreleasePreHook(ctx context.Context, c *cli.Command, repoRootDir string, timeout time.Duration) (context.Context, error) {
-	if setupHashreleasePreHook == nil {
-		return ctx, nil
-	}
-	logrus.WithField("repoDir", repoRootDir).Debug("Running setupHashreleasePreHook")
-	return withTimeout(ctx, timeout, "setupHashreleasePreHook", func(hookCtx context.Context) (context.Context, error) {
-		return setupHashreleasePreHook(hookCtx, c, repoRootDir)
-	})
+// RunSetupHashreleaseBeforeHook executes the setupHashreleaseBeforeHook with timeout and error handling.
+func RunSetupHashreleaseBeforeHook(ctx context.Context, c *cli.Command, repoRootDir string, timeout time.Duration) (context.Context, error) {
+	return runHooksFailFast(ctx, timeout, "setupHashreleaseBeforeHook", &setupHashreleaseBeforeHook,
+		func(h cliHookWithRepoDirFunc, ctx context.Context) (context.Context, error) {
+			return h(ctx, c, repoRootDir)
+		})
 }
 
 // RunPublishBeforeHook executes the publishBeforeHook with timeout and error handling.
-// It wraps any errors to clearly indicate which hook failed and why.
 func RunPublishBeforeHook(ctx context.Context, c *cli.Command, timeout time.Duration) (context.Context, error) {
-	if publishBeforeHook == nil {
-		return ctx, nil
-	}
-	return withTimeout(ctx, timeout, "publishBeforeHook", func(hookCtx context.Context) (context.Context, error) {
-		return publishBeforeHook(hookCtx, c)
-	})
+	return runHooksFailFast(ctx, timeout, "publishBeforeHook", &publishBeforeHook,
+		func(h cliBeforeHookFunc, ctx context.Context) (context.Context, error) {
+			return h(ctx, c)
+		})
 }
 
-// RunPublishImagePostHook executes the postPublishHook with timeout and error handling.
-func RunPublishImagePostHook(ctx context.Context, c *cli.Command, published bool, timeout time.Duration) (context.Context, error) {
-	if publishImagePostHook == nil {
-		return ctx, nil
-	}
-	logrus.WithField("newlyPublished", published).Debug("Running postPublishHook")
-	return withTimeout(ctx, timeout, "postPublishHook", func(hookCtx context.Context) (context.Context, error) {
-		return publishImagePostHook(hookCtx, c, published)
-	})
+// RunPublishImageAfterHook executes the publishImageAfterHook with timeout and error handling.
+func RunPublishImageAfterHook(ctx context.Context, c *cli.Command, published bool, timeout time.Duration) (context.Context, error) {
+	return runHooksCollectErrors(ctx, timeout, "publishImageAfterHook", &publishImageAfterHook,
+		func(h imageReleaseHookFunc, ctx context.Context) (context.Context, error) {
+			return h(ctx, c, published)
+		})
 }

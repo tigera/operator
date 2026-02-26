@@ -169,15 +169,15 @@ func TestRunHookErrorPropagation(t *testing.T) {
 		{
 			name: "RunBuildBeforeHook",
 			setup: func(errMsg string) {
-				buildBeforeHook = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+				buildBeforeHook.Add("test-hook", func(ctx context.Context, c *cli.Command) (context.Context, error) {
 					return ctx, errors.New(errMsg)
-				}
+				})
 			},
 			run: func() error {
 				_, err := RunBuildBeforeHook(context.Background(), nil, time.Second)
 				return err
 			},
-			cleanup: func() { buildBeforeHook = nil },
+			cleanup: func() { buildBeforeHook.Reset() },
 		},
 		{
 			name: "RunBuildAfterHook",
@@ -195,41 +195,41 @@ func TestRunHookErrorPropagation(t *testing.T) {
 		{
 			name: "RunSetupHashreleasePreHook",
 			setup: func(errMsg string) {
-				setupHashreleasePreHook = func(ctx context.Context, c *cli.Command, dir string) (context.Context, error) {
+				setupHashreleaseBeforeHook.Add("test-hook", func(ctx context.Context, c *cli.Command, dir string) (context.Context, error) {
 					return ctx, errors.New(errMsg)
-				}
+				})
 			},
 			run: func() error {
-				_, err := RunSetupHashreleasePreHook(context.Background(), nil, "/tmp", time.Second)
+				_, err := RunSetupHashreleaseBeforeHook(context.Background(), nil, "/tmp", time.Second)
 				return err
 			},
-			cleanup: func() { setupHashreleasePreHook = nil },
+			cleanup: func() { setupHashreleaseBeforeHook.Reset() },
 		},
 		{
 			name: "RunPublishBeforeHook",
 			setup: func(errMsg string) {
-				publishBeforeHook = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+				publishBeforeHook.Add("test-hook", func(ctx context.Context, c *cli.Command) (context.Context, error) {
 					return ctx, errors.New(errMsg)
-				}
+				})
 			},
 			run: func() error {
 				_, err := RunPublishBeforeHook(context.Background(), nil, time.Second)
 				return err
 			},
-			cleanup: func() { publishBeforeHook = nil },
+			cleanup: func() { publishBeforeHook.Reset() },
 		},
 		{
 			name: "RunPublishImagePostHook",
 			setup: func(errMsg string) {
-				publishImagePostHook = func(ctx context.Context, c *cli.Command, published bool) (context.Context, error) {
+				publishImageAfterHook.Add("test-hook", func(ctx context.Context, c *cli.Command, published bool) (context.Context, error) {
 					return ctx, errors.New(errMsg)
-				}
+				})
 			},
 			run: func() error {
-				_, err := RunPublishImagePostHook(context.Background(), nil, true, time.Second)
+				_, err := RunPublishImageAfterHook(context.Background(), nil, true, time.Second)
 				return err
 			},
-			cleanup: func() { publishImagePostHook = nil },
+			cleanup: func() { publishImageAfterHook.Reset() },
 		},
 	}
 
@@ -268,7 +268,7 @@ func TestRunHooksNilNoOp(t *testing.T) {
 	})
 
 	t.Run("RunSetupHashreleasePreHook", func(t *testing.T) {
-		if rCtx, err := RunSetupHashreleasePreHook(ctx, nil, "/tmp", time.Second); err != nil {
+		if rCtx, err := RunSetupHashreleaseBeforeHook(ctx, nil, "/tmp", time.Second); err != nil {
 			t.Fatalf("RunSetupHashreleasePreHook with nil hook: %v", err)
 		} else if rCtx != ctx {
 			t.Fatal("RunSetupHashreleasePreHook should return the original context when hook is nil")
@@ -284,7 +284,7 @@ func TestRunHooksNilNoOp(t *testing.T) {
 	})
 
 	t.Run("RunPublishImagePostHook", func(t *testing.T) {
-		if rCtx, err := RunPublishImagePostHook(ctx, nil, true, time.Second); err != nil {
+		if rCtx, err := RunPublishImageAfterHook(ctx, nil, true, time.Second); err != nil {
 			t.Fatalf("RunPostPublishHook with nil hook: %v", err)
 		} else if rCtx != ctx {
 			t.Fatal("RunPostPublishHook should return the original context when hook is nil")

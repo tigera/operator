@@ -51,11 +51,11 @@ var publishCommand = &cli.Command{
 
 // publishBeforeHook is an optional hook called at the start of publishBefore for additional pre-processing.
 // It can be set via init() in separate files to extend the publish command behavior.
-var publishBeforeHook cliBeforeHookFunc
+var publishBeforeHook multiHook[cliBeforeHookFunc]
 
-// publishImagePostHook is an optional hook called after images are published (or skipped).
+// publishImageAfterHook is an optional hook called after images are published (or skipped).
 // It receives whether a new release was published. It can be set via init() in separate files.
-var publishImagePostHook imageReleaseHookFunc
+var publishImageAfterHook multiHook[imageReleaseHookFunc]
 
 // Pre-action for publish command.
 // It configures logging and performs validations.
@@ -119,7 +119,7 @@ var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) err
 
 	// Call post-publish hook if registered.
 	hookTimeout := c.Duration(hookTimeoutFlag.Name)
-	ctx, err = RunPublishImagePostHook(ctx, c, isNewRelease, hookTimeout)
+	ctx, err = RunPublishImageAfterHook(ctx, c, isNewRelease, hookTimeout)
 	if err != nil {
 		// Post-publish hook errors are non-fatal - images are already published
 		logrus.WithError(err).Warn("Post-publish hook failed (continuing as images are published)")

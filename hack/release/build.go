@@ -22,7 +22,6 @@ import (
 	"path"
 	"regexp"
 	"runtime"
-	"strconv"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -100,15 +99,15 @@ var buildCommand = &cli.Command{
 
 // buildBeforeHook is an optional hook called at the start of buildBefore for additional pre-processing.
 // It can be set via init() in separate files to extend the build command behavior.
-var buildBeforeHook cliBeforeHookFunc
+var buildBeforeHook multiHook[cliBeforeHookFunc]
 
-// setupHashreleasePreHook is an optional hook called at the start of setupHashreleaseBuild
+// setupHashreleaseBeforeHook is an optional hook called at the start of setupHashreleaseBuild
 // for additional hashrelease setup (e.g., copying image config files).
-var setupHashreleasePreHook cliHookWithRepoDirFunc
+var setupHashreleaseBeforeHook multiHook[cliHookWithRepoDirFunc]
 
 // buildAfterHook is an optional hook called in buildAfter for additional post-build tasks.
 // This runs regardless of build success or failure, so it can be used for cleanup tasks.
-var buildAfterHooks multiHook
+var buildAfterHooks multiHook[cliHookFunc]
 
 // Pre-action for release build command.
 var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
@@ -336,7 +335,7 @@ func setupHashreleaseBuild(ctx context.Context, c *cli.Command, repoRootDir stri
 	// Call pre-hook if registered.
 	var err error
 	hookTimeout := c.Duration(hookTimeoutFlag.Name)
-	if ctx, err = RunSetupHashreleasePreHook(ctx, c, repoRootDir, hookTimeout); err != nil {
+	if ctx, err = RunSetupHashreleaseBeforeHook(ctx, c, repoRootDir, hookTimeout); err != nil {
 		return fmt.Errorf("setup hashrelease pre-hook failed: %w", err)
 	}
 
@@ -486,8 +485,8 @@ func (r *hashreleaseRepo) Setup(c *cli.Command) error {
 }
 
 // cloneHashreleaseRepo clones the repo at the git hash that corresponds to the hashrelease version.
-// It uses a shallow clone with incremental deepening (max depth: 100) to fetch the specific commit without downloading the entire history.
 func (r *hashreleaseRepo) clone() (string, error) {
+	// Validate repo format (owner/repo)
 	repoPattern, err := regexp.Compile(`^[\w-]+/[\w.-]+$`)
 	if err != nil {
 		return "", fmt.Errorf("compiling repo name regex: %w", err)
@@ -495,6 +494,8 @@ func (r *hashreleaseRepo) clone() (string, error) {
 	if !repoPattern.MatchString(r.repo) {
 		return "", fmt.Errorf("invalid repo format %s, expected format owner/repo", r.repo)
 	}
+
+	// Extract git hash from version to know which commit we need.
 	gitHash, err := extractGitHashFromVersion(r.version)
 	if err != nil {
 		return "", fmt.Errorf("extracting git hash from version: %w", err)
@@ -502,6 +503,8 @@ func (r *hashreleaseRepo) clone() (string, error) {
 	if gitHash == "" {
 		return "", fmt.Errorf("no git hash found in version %s", r.version)
 	}
+
+	// Create a temp directory for cloning the repo. We will clean this up in a build after hook.
 	repoTmpDir, err := os.MkdirTemp("", r.Product+"-*")
 	if err != nil {
 		return "", fmt.Errorf("creating temp directory for %s repo: %w", r.Product, err)
@@ -521,39 +524,15 @@ func (r *hashreleaseRepo) clone() (string, error) {
 		"dir":     repoTmpDir,
 	}).Infof("Cloning %s repo at git hash", r.Product)
 
-	// Init dir as a git repo to allow sparse checkout, which avoids downloading unnecessary files and history.
-	if _, err := git("-C", repoTmpDir, "init"); err != nil {
-		return "", fmt.Errorf("initializing git repo in %s temp dir: %w", r.Product, err)
-	}
-	if _, err := git("-C", repoTmpDir, "remote", "add", remote, fmt.Sprintf("git@github.com:%s.git", r.repo)); err != nil {
-		return "", fmt.Errorf("adding remote origin in %s temp git dir: %w", r.Product, err)
+	// Create a treeless clone that gives access to the commit history without downloading all the blobs.
+	if _, err := git("clone", "--filter=tree:0", "--no-checkout", "-b", r.branch, fmt.Sprintf("git@github.com:%s.git", r.repo), repoTmpDir); err != nil {
+		return "", fmt.Errorf("cloning %s git repo intotemp dir: %w", r.Product, err)
 	}
 
-	// Shallow clone and incrementally deepen to either the specific commit or max depth
-	depth, deepen, maxDepth := 10, 20, 100
-	if _, err := git("-C", repoTmpDir, "fetch", "--depth", strconv.Itoa(depth), remote, r.branch); err != nil {
-		return "", fmt.Errorf("fetching branch %s from remote in %s temp git dir: %w", r.branch, r.Product, err)
+	// Detached checkout of the commit we want; this will automatically fetch whatever blobs we need
+	if _, err := gitInDir(repoTmpDir, "switch", "--detach", gitHash); err != nil {
+		return "", fmt.Errorf("switching %s repo to detached commit %s: %w", r.Product, gitHash, err)
 	}
-	for {
-		// check if the commit is present after the fetch
-		if _, err := git("-C", repoTmpDir, "cat-file", "-e", gitHash+"^{commit}"); err == nil {
-			break
-		}
-		if depth >= maxDepth {
-			return "", fmt.Errorf("git hash %s not found after fetching with depth %d", gitHash, depth)
-		}
-		depth += deepen
-		logrus.WithField("depth", depth).Infof("Deepening git fetch for %s repo", r.Product)
-		if _, err := git("-C", repoTmpDir, "fetch", "--deepen", strconv.Itoa(deepen), "origin", r.branch); err != nil {
-			return "", fmt.Errorf("deepening fetch for branch %s in %s repo: %w", r.branch, r.Product, err)
-		}
-	}
-
-	// Checkout the specific commit
-	if _, err := git("-C", repoTmpDir, "checkout", gitHash); err != nil {
-		return "", fmt.Errorf("checking out git hash %s in %s repo: %w", gitHash, r.Product, err)
-	}
-
 	logrus.WithField("dir", repoTmpDir).Debugf("Successfully cloned %s repo", r.Product)
 	return repoTmpDir, nil
 }

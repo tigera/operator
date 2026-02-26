@@ -98,8 +98,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		rtest.ExpectResources(resourcesToCreate, expectedResourcesToCreate)
 
 		expectedResourcesToDelete := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.manager-access", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.manager-access", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersWatchRoleBindingName}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},
@@ -1574,8 +1574,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			})
 
 			expectedTenantAResourcesToDelete := []client.Object{
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.manager-access", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.manager-access", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersWatchRoleBindingName}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerManagedClustersUpdateRBACName}},

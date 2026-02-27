@@ -145,6 +145,7 @@ type Config struct {
 	OpenShift                     bool
 	KubeControllerPort            int
 	FelixPrometheusMetricsEnabled bool
+	LicenseExpired                bool
 }
 
 type monitorComponent struct {
@@ -230,12 +231,22 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheusServiceClusterRole(),
 		mc.prometheusServiceClusterRoleBinding(),
 		mc.prometheusRule(),
+	)
+
+	var toDelete []client.Object
+
+	serviceMonitors := []client.Object{
 		mc.serviceMonitorCalicoNode(),
 		mc.serviceMonitorElasticsearch(),
 		mc.serviceMonitorFluentd(),
 		mc.serviceMonitorQueryServer(),
 		mc.serviceMonitorCalicoKubeControllers(),
-	)
+	}
+	if mc.cfg.LicenseExpired {
+		toDelete = append(toDelete, serviceMonitors...)
+	} else {
+		toCreate = append(toCreate, serviceMonitors...)
+	}
 
 	if mc.cfg.KeyValidatorConfig != nil {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.cfg.KeyValidatorConfig.RequiredSecrets(common.TigeraPrometheusNamespace)...)...)
@@ -254,7 +265,6 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		}
 	}
 
-	var toDelete []client.Object
 	if mc.cfg.Installation.TyphaMetricsPort != nil {
 		toCreate = append(toCreate, mc.typhaServiceMonitor())
 	} else {

@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/tigera/operator/pkg/dns"
 	corev1 "k8s.io/api/core/v1"
@@ -438,6 +439,18 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 
+	gracePeriod := utils.ParseGracePeriod(license.Status.GracePeriod)
+	licenseStatus := utils.GetLicenseStatus(license, gracePeriod)
+	licenseExpired := licenseStatus == utils.LicenseStatusExpired
+
+	// When in the grace period, schedule a requeue so the controller automatically
+	// transitions to expired state when the grace period elapses.
+	var graceRequeueAfter time.Duration
+	if licenseStatus == utils.LicenseStatusInGracePeriod {
+		reqLogger.Info("License has expired and is within the grace period. Please renew your license to avoid service disruption.")
+		graceRequeueAfter = time.Until(license.Status.Expiry.Time.Add(gracePeriod))
+	}
+
 	exportLogs := utils.IsFeatureActive(license, common.ExportLogsFeature)
 	if !exportLogs && instance.Spec.AdditionalStores != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: export-logs", nil, reqLogger)
@@ -595,6 +608,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 		PacketCapture:          packetcaptureapi,
 		NonClusterHost:         nonclusterhost,
+		LicenseExpired:         licenseExpired,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -666,6 +680,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			UseSyslogCertificate:   useSyslogCertificate,
 			FluentdKeyPair:         fluentdKeyPair,
 			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
+			LicenseExpired:         licenseExpired,
 		}
 		comp = render.Fluentd(fluentdCfg)
 
@@ -683,6 +698,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	if licenseExpired {
+		r.status.SetDegraded(operatorv1.ResourceValidationError,
+			"License is expired - Log forwarding is stopped. Contact Tigera support or email licensing@tigera.io", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 
@@ -697,7 +718,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: graceRequeueAfter}, nil
 }
 
 func getS3Credential(client client.Client) (*render.S3Credential, error) {

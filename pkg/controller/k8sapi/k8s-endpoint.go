@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,8 +26,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 )
 
-const dockerEEProxyLocal = "proxy.local"
-
 // Endpoint is the default ServiceEndpoint learned from environment variables.
 var Endpoint ServiceEndpoint
 
@@ -35,47 +33,53 @@ func init() {
 	// We read whatever is in the variable. We would read "" if they were not set.
 	// We decide at the point of usage what to do with the values.
 	Endpoint = ServiceEndpoint{
-		Host: os.Getenv("KUBERNETES_SERVICE_HOST"),
-		Port: os.Getenv("KUBERNETES_SERVICE_PORT"),
+		HostNetworkHost: os.Getenv("KUBERNETES_SERVICE_HOST"),
+		HostNetworkPort: os.Getenv("KUBERNETES_SERVICE_PORT"),
 	}
 }
 
 // ServiceEndpoint is the Host/Port of the K8s endpoint.
+// HostNetworkHost/HostNetworkPort are used for host-networked pods, while
+// PodNetworkHost/PodNetworkPort are used for pod-networked pods.
 type ServiceEndpoint struct {
-	Host string
-	Port string
+	HostNetworkHost string
+	HostNetworkPort string
+	PodNetworkHost  string
+	PodNetworkPort  string
 }
 
-// EnvVars returns a slice of v1.EnvVars KUBERNETES_SERVICE_HOST/PORT if the Host and Port
+// EnvVars returns a slice of v1.EnvVars with the K8s service endpoint if the Host and Port
 // of the ServiceEndpoint were set. It returns a nil slice if either was empty as both
-// need to be set.
+// need to be set. For host-networked pods, it returns KUBERNETES_SERVICE_HOST/PORT.
+// For pod-networked pods, it returns KUBERNETES_SERVICE_HOST_POD_NETWORK/PORT_POD_NETWORK.
 func (k8s ServiceEndpoint) EnvVars(hostNetworked bool, provider operator.Provider) []v1.EnvVar {
-	if k8s.Host == "" || k8s.Port == "" {
-		return nil
+	if !hostNetworked {
+		if k8s.PodNetworkHost == "" || k8s.PodNetworkPort == "" {
+			return nil
+		}
+		return []v1.EnvVar{
+			{Name: "KUBERNETES_SERVICE_HOST", Value: k8s.PodNetworkHost},
+			{Name: "KUBERNETES_SERVICE_PORT", Value: k8s.PodNetworkPort},
+		}
 	}
 
-	if provider == operator.ProviderDockerEE && !hostNetworked && k8s.Host == dockerEEProxyLocal {
-		// Special case: Docker EE (now MKE) has a proxy on each host that is only accessible from the host
-		// namespace.  Don't try to use it from non-host network pods.
-		//
-		// It's also possible for the user to configure a different route to the API server; we let those through.
+	if k8s.HostNetworkHost == "" || k8s.HostNetworkPort == "" {
 		return nil
 	}
-
 	return []v1.EnvVar{
-		{Name: "KUBERNETES_SERVICE_HOST", Value: k8s.Host},
-		{Name: "KUBERNETES_SERVICE_PORT", Value: k8s.Port},
+		{Name: "KUBERNETES_SERVICE_HOST", Value: k8s.HostNetworkHost},
+		{Name: "KUBERNETES_SERVICE_PORT", Value: k8s.HostNetworkPort},
 	}
 }
 
-// DestinationEntityRule returns an EntityRule to match the Host and Port
+// DestinationEntityRule returns an EntityRule to match the HostNetworkHost and HostNetworkPort
 // if the ServiceEndpoint was set. It returns nil if either was empty.
 func (k8s ServiceEndpoint) DestinationEntityRule() (*calicov3.EntityRule, error) {
-	if k8s.Host == "" || k8s.Port == "" {
+	if k8s.HostNetworkHost == "" || k8s.HostNetworkPort == "" {
 		return nil, nil
 	}
 
-	p, err := numorstring.PortFromString(k8s.Port)
+	p, err := numorstring.PortFromString(k8s.HostNetworkPort)
 	if err != nil {
 		return nil, err
 	}
@@ -84,9 +88,9 @@ func (k8s ServiceEndpoint) DestinationEntityRule() (*calicov3.EntityRule, error)
 		Ports: []numorstring.Port{p},
 	}
 
-	ip := net.ParseIP(k8s.Host)
+	ip := net.ParseIP(k8s.HostNetworkHost)
 	if ip == nil {
-		rule.Domains = []string{k8s.Host}
+		rule.Domains = []string{k8s.HostNetworkHost}
 	} else {
 		var netSuffix string
 		if ip.To4() != nil {
@@ -101,12 +105,12 @@ func (k8s ServiceEndpoint) DestinationEntityRule() (*calicov3.EntityRule, error)
 }
 
 func (k8s ServiceEndpoint) CNIAPIRoot() string {
-	if k8s.Host == "" || k8s.Port == "" {
+	if k8s.HostNetworkHost == "" || k8s.HostNetworkPort == "" {
 		return ""
 	}
-	host := k8s.Host
+	host := k8s.HostNetworkHost
 	if strings.Contains(host, ":") {
 		host = "[" + host + "]"
 	}
-	return fmt.Sprintf("https://%s:%s", host, k8s.Port)
+	return fmt.Sprintf("https://%s:%s", host, k8s.HostNetworkPort)
 }

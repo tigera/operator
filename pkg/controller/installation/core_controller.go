@@ -2047,8 +2047,8 @@ func serviceIPsAndPorts(svc *corev1.Service) []k8sapi.ServiceEndpoint {
 	for _, ip := range ips {
 		for _, port := range svc.Spec.Ports {
 			endpoints = append(endpoints, k8sapi.ServiceEndpoint{
-				Host: ip,
-				Port: fmt.Sprintf("%d", port.Port),
+				HostNetworkHost: ip,
+				HostNetworkPort: fmt.Sprintf("%d", port.Port),
 			})
 		}
 	}
@@ -2071,8 +2071,8 @@ func serviceEndpointSlice(endpointSliceList *discoveryv1.EndpointSliceList) []k8
 					}
 
 					endpoints = append(endpoints, k8sapi.ServiceEndpoint{
-						Host: ip,
-						Port: fmt.Sprintf("%d", *port.Port),
+						HostNetworkHost: ip,
+						HostNetworkPort: fmt.Sprintf("%d", *port.Port),
 					})
 				}
 			}

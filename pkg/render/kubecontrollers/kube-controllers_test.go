@@ -977,8 +977,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should add the KUBERNETES_SERVICE_... variables", func() {
-		k8sServiceEp.Host = "k8shost"
-		k8sServiceEp.Port = "1234"
+		k8sServiceEp.PodNetworkHost = "k8shost"
+		k8sServiceEp.PodNetworkPort = "1234"
 		cfg.K8sServiceEp = k8sServiceEp
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
@@ -992,8 +992,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should not add the KUBERNETES_SERVICE_... variables on docker EE using proxy.local", func() {
-		k8sServiceEp.Host = "proxy.local"
-		k8sServiceEp.Port = "1234"
+		k8sServiceEp.HostNetworkHost = "proxy.local"
+		k8sServiceEp.HostNetworkPort = "1234"
 		instance.KubernetesProvider = operatorv1.ProviderDockerEE
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
@@ -1149,8 +1149,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should add egress policy with Enterprise variant and K8SServiceEndpoint defined", func() {
-		cfg.K8sServiceEp.Host = "k8shost"
-		cfg.K8sServiceEp.Port = "1234"
+		cfg.K8sServiceEp.HostNetworkHost = "k8shost"
+		cfg.K8sServiceEp.HostNetworkPort = "1234"
 		objects, _ := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil).Objects()
 		Expect(objects).To(HaveLen(1))
 		policy, ok := objects[0].(*v3.NetworkPolicy)

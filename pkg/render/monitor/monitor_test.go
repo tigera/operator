@@ -981,6 +981,64 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[2].ScrapeTimeout).To(BeEquivalentTo("5s"))
 		Expect(*servicemonitorObj.Spec.Endpoints[2].RelabelConfigs[0].Replacement).To(Equal("http"))
 	})
+
+	It("Should move ServiceMonitors to toDelete when LicenseExpired is true", func() {
+		cfg.LicenseExpired = true
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, toDelete := component.Objects()
+
+		// ServiceMonitors should not be in toCreate.
+		for _, obj := range toCreate {
+			if _, ok := obj.(*monitoringv1.ServiceMonitor); ok {
+				Fail("ServiceMonitor should not be in toCreate when license is expired, but found: " + obj.GetName())
+			}
+		}
+
+		// ServiceMonitors should be in toDelete.
+		serviceMonitorNames := []string{
+			monitor.CalicoNodeMonitor,
+			monitor.ElasticsearchMetrics,
+			monitor.FluentdMetrics,
+			"calico-api",
+			"calico-kube-controllers-metrics",
+		}
+		for _, name := range serviceMonitorNames {
+			found := false
+			for _, obj := range toDelete {
+				if sm, ok := obj.(*monitoringv1.ServiceMonitor); ok && sm.Name == name {
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue(), "Expected ServiceMonitor %s to be in toDelete", name)
+		}
+	})
+
+	It("Should include ServiceMonitors in toCreate when LicenseExpired is false", func() {
+		cfg.LicenseExpired = false
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, _ := component.Objects()
+
+		serviceMonitorNames := []string{
+			monitor.CalicoNodeMonitor,
+			monitor.ElasticsearchMetrics,
+			monitor.FluentdMetrics,
+			"calico-api",
+			"calico-kube-controllers-metrics",
+		}
+		for _, name := range serviceMonitorNames {
+			found := false
+			for _, obj := range toCreate {
+				if sm, ok := obj.(*monitoringv1.ServiceMonitor); ok && sm.Name == name {
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue(), "Expected ServiceMonitor %s to be in toCreate", name)
+		}
+	})
 })
 
 // expectedBaseResources These are the expected resources in the most basic setup.

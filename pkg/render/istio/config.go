@@ -22,6 +22,7 @@ type GlobalConfig struct {
 	Proxy                  *ProxyConfig     `json:"proxy,omitempty"`
 	ProxyInit              *ProxyInitConfig `json:"proxy_init,omitempty"`
 	Platform               string           `json:"platform,omitempty"`
+	ImagePullSecrets       []string         `json:"imagePullSecrets,omitempty"`
 }
 
 type ProxyConfig struct {

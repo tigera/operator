@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -280,6 +281,60 @@ func TestAddTrailingSlash(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestIsValidReleaseVersionOverride(t *testing.T) {
+	orig := isValidReleaseVersion
+	defer func() { isValidReleaseVersion = orig }()
+
+	t.Run("set to isReleaseVersionFormat", func(t *testing.T) {
+		isValidReleaseVersion = isReleaseVersionFormat
+		ok, err := isValidReleaseVersion("v1.2.3")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !ok {
+			t.Fatal("expected v1.2.3 to be valid with default validator")
+		}
+	})
+
+	t.Run("can be overridden", func(t *testing.T) {
+		// Override to accept enterprise format (vX.Y.Z-A.B)
+		isValidReleaseVersion = isEnterpriseReleaseVersionFormat
+
+		ok, err := isValidReleaseVersion("v1.2.3-1.0")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !ok {
+			t.Fatal("expected v1.2.3-1.0 to be valid with enterprise validator")
+		}
+	})
+}
+
+func TestRunCommandInDirContext(t *testing.T) {
+	t.Parallel()
+
+	t.Run("successful execution", func(t *testing.T) {
+		t.Parallel()
+		out, err := runCommandInDirContext(context.Background(), "", "echo", []string{"hello"}, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if out != "hello" {
+			t.Fatalf("expected %q, got %q", "hello", out)
+		}
+	})
+
+	t.Run("context cancellation kills process", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // cancel immediately
+		_, err := runCommandInDirContext(ctx, "", "sleep", []string{"60"}, nil)
+		if err == nil {
+			t.Fatal("expected error from cancelled context, got nil")
+		}
+	})
 }
 
 func TestIsPrereleaseEnterpriseVersion(t *testing.T) {

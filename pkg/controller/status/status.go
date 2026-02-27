@@ -361,7 +361,11 @@ func (m *statusManager) SetDegraded(reason operator.TigeraStatusReason, msg stri
 	defer m.lock.Unlock()
 	m.degraded = true
 	m.explicitDegradedReason = reason
-	m.explicitDegradedMsg = fmt.Sprintf("%s: %s", msg, errormsg)
+	if errormsg != "" {
+		m.explicitDegradedMsg = fmt.Sprintf("%s: %s", msg, errormsg)
+	} else {
+		m.explicitDegradedMsg = msg
+	}
 }
 
 // ClearDegraded clears degraded state.

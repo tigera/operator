@@ -458,6 +458,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				},
 				Verbs: []string{"dismiss", "delete"},
 			},
+			{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettingsgroups"},
+				Verbs:     []string{"list"},
+			},
 		}))
 		roleBindingWatchManagedClusters := rtest.GetResource(resourcesToCreate, render.ManagerManagedClustersWatchRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(roleBindingWatchManagedClusters.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
@@ -778,6 +788,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"events",
 				},
 				Verbs: []string{"dismiss", "delete"},
+			},
+			{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettingsgroups"},
+				Verbs:     []string{"list"},
 			},
 		}))
 	})

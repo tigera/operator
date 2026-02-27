@@ -65,9 +65,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	prometheusReady := &utils.ReadyFlag{}
 	tierWatchReady := &utils.ReadyFlag{}
+	licenseAPIReady := &utils.ReadyFlag{}
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady)
+	reconciler := newReconciler(mgr, opts, prometheusReady, tierWatchReady, licenseAPIReady)
 
 	// Create a new controller
 	c, err := ctrlruntime.NewController("monitor-controller", mgr, controller.Options{Reconciler: reconciler})
@@ -91,10 +92,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	go waitToAddPrometheusWatch(c, opts.K8sClientset, log, prometheusReady)
 
+	go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, licenseAPIReady)
+
 	return add(mgr, c)
 }
 
-func newReconciler(mgr manager.Manager, opts options.ControllerOptions, prometheusReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions, prometheusReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileMonitor{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
@@ -102,6 +105,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions, promethe
 		status:          status.New(mgr.GetClient(), "monitor", opts.KubernetesVersion),
 		prometheusReady: prometheusReady,
 		tierWatchReady:  tierWatchReady,
+		licenseAPIReady: licenseAPIReady,
 		clusterDomain:   opts.ClusterDomain,
 		multiTenant:     opts.MultiTenant,
 	}
@@ -184,6 +188,7 @@ type ReconcileMonitor struct {
 	status          status.StatusManager
 	prometheusReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
+	licenseAPIReady *utils.ReadyFlag
 	clusterDomain   string
 	multiTenant     bool
 }
@@ -242,6 +247,28 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 				instance.Spec.ExternalPrometheus.Namespace), err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
+
+	if !r.licenseAPIReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+
+	license, gracePeriod, err := utils.FetchLicenseKeyWithGracePeriod(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+
+	licenseStatus := utils.GetLicenseStatus(license, gracePeriod)
+	licenseExpired := licenseStatus == utils.LicenseStatusExpired
+
+	if licenseStatus == utils.LicenseStatusInGracePeriod {
+		reqLogger.Info("License has expired and is within the grace period. Please renew your license to avoid service disruption.")
 	}
 
 	variant, install, err := utils.GetInstallation(context.Background(), r.client)
@@ -388,6 +415,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		OpenShift:                     r.provider.IsOpenShift(),
 		KubeControllerPort:            kubeControllersMetricsPort,
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
+		LicenseExpired:                licenseExpired,
 	}
 
 	// Render prometheus component
@@ -430,6 +458,12 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
+
+	if licenseExpired {
+		r.status.SetDegraded(operatorv1.ResourceReadError,
+			"License is expired - Contact Tigera support or email licensing@tigera.io", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
 
 	r.status.ClearDegraded()
 

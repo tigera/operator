@@ -34,6 +34,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/istio/waypoint"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -88,6 +89,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("istio-controller failed to create periodic reconcile watch: %w", err)
+	}
+
+	if err := waypoint.Add(mgr, opts); err != nil {
+		return fmt.Errorf("failed to add waypoint pull secrets controller: %w", err)
 	}
 
 	return nil

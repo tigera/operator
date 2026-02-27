@@ -29,7 +29,7 @@ require (
 	github.com/sirupsen/logrus v1.9.4
 	github.com/snowzach/rotatefilehook v0.0.0-20220211133110-53752135082d
 	github.com/stretchr/testify v1.11.1
-	github.com/tigera/api v0.0.0-20260131232301-9cd5ef33622f
+	github.com/tigera/api v0.0.0-20260227222130-df0b9e289a34
 	github.com/tigera/operator/api v0.0.0-20260120220012-4a3f8a7d8399
 	github.com/urfave/cli/v3 v3.6.2
 	go.uber.org/zap v1.27.1
@@ -39,12 +39,12 @@ require (
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.19.5
-	k8s.io/api v0.34.3
-	k8s.io/apiextensions-apiserver v0.34.3
-	k8s.io/apimachinery v0.34.3
-	k8s.io/apiserver v0.34.3
-	k8s.io/client-go v0.34.3
-	k8s.io/kube-aggregator v0.34.3
+	k8s.io/api v0.34.4
+	k8s.io/apiextensions-apiserver v0.34.4
+	k8s.io/apimachinery v0.34.4
+	k8s.io/apiserver v0.34.4
+	k8s.io/client-go v0.34.4
+	k8s.io/kube-aggregator v0.34.4
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 	sigs.k8s.io/controller-runtime v0.22.5
 	sigs.k8s.io/gateway-api v1.3.1-0.20250527223622-54df0a899c1c
@@ -183,11 +183,11 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	howett.net/plist v1.0.1 // indirect
-	k8s.io/cli-runtime v0.34.3 // indirect
-	k8s.io/component-base v0.34.3 // indirect
+	k8s.io/cli-runtime v0.34.4 // indirect
+	k8s.io/component-base v0.34.4 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b // indirect
-	k8s.io/kubectl v0.34.3 // indirect
+	k8s.io/kubectl v0.34.4 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kustomize/api v0.20.1 // indirect

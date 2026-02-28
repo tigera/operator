@@ -45,7 +45,7 @@ var _ = Describe("License helpers", func() {
 			Entry("empty string", "", time.Duration(0)),
 			Entry("invalid string", "abc", time.Duration(0)),
 			Entry("negative days", "-5d", time.Duration(0)),
-			Entry("number without d suffix", "90", 90*24*time.Hour),
+			Entry("bare number without unit", "90", time.Duration(0)),
 		)
 	})
 

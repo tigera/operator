@@ -70,13 +70,18 @@ func IsFeatureActive(license v3.LicenseKey, featureName string) bool {
 	return false
 }
 
-// ParseGracePeriod parses a grace period string (e.g. "90d") and returns the
-// corresponding duration. Returns 0 if the string is empty or cannot be parsed.
+// ParseGracePeriod parses a grace period string in the format "Nd" (e.g. "90d")
+// where N is a non-negative number of days. This is the format produced by the
+// license controller. Returns 0 if the string is empty, cannot be parsed, or
+// represents a negative duration.
 func ParseGracePeriod(gracePeriod string) time.Duration {
 	if gracePeriod == "" {
 		return 0
 	}
-	s := strings.TrimSuffix(gracePeriod, "d")
+	s, ok := strings.CutSuffix(gracePeriod, "d")
+	if !ok {
+		return 0
+	}
 	days, err := strconv.Atoi(s)
 	if err != nil || days < 0 {
 		return 0

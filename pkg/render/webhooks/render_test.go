@@ -112,6 +112,23 @@ var _ = Describe("Webhooks rendering tests", func() {
 		}
 		rtest.ExpectResources(resources, expectedResources)
 
+		// Verify the MutatingWebhookConfiguration has the expected webhooks.
+		mwc, err := rtest.GetResourceOfType[*admissionregistrationv1.MutatingWebhookConfiguration](resources, "api.projectcalico.org", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mwc.Webhooks).To(HaveLen(2))
+		Expect(mwc.Webhooks[0].Name).To(Equal("authorization-reviews.api.projectcalico.org"))
+		Expect(mwc.Webhooks[1].Name).To(Equal("uisettings.api.projectcalico.org"))
+		Expect(*mwc.Webhooks[1].ClientConfig.Service.Path).To(Equal("/uisettings"))
+		Expect(*mwc.Webhooks[1].FailurePolicy).To(Equal(admissionregistrationv1.Fail))
+		Expect(*mwc.Webhooks[1].TimeoutSeconds).To(Equal(int32(10)))
+		Expect(mwc.Webhooks[1].Rules).To(HaveLen(1))
+		Expect(mwc.Webhooks[1].Rules[0].Operations).To(ConsistOf(
+			admissionregistrationv1.Create,
+			admissionregistrationv1.Update,
+			admissionregistrationv1.Delete,
+		))
+		Expect(mwc.Webhooks[1].Rules[0].Rule.Resources).To(Equal([]string{"uisettings"}))
+
 		// Verify Enterprise uses the Tigera webhooks image.
 		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))

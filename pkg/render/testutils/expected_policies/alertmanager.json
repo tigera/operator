@@ -2,12 +2,12 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "allow-tigera.calico-node-alertmanager",
+    "name": "calico-system.calico-node-alertmanager",
     "namespace": "tigera-prometheus"
   },
   "spec": {
     "order": 1,
-    "tier": "allow-tigera",
+    "tier": "calico-system",
     "selector": "(app == 'alertmanager' && alertmanager == 'calico-node-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'calico-node-alertmanager')",
     "types": [
       "Ingress",

@@ -1,4 +1,4 @@
-// Copyright (c) 2021,2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021,2023-2024,2026 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -23,24 +23,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+func NewPassthrough(objsToCreate, objsToDelete []client.Object) Component {
+	return &passthroughComponent{toCreate: objsToCreate, toDelete: objsToDelete, log: log}
+}
+
 func NewDeletionPassthrough(objs ...client.Object) Component {
-	return &passthroughComponent{isDelete: true, objs: objs, log: log}
+	return &passthroughComponent{toDelete: objs, log: log}
 }
 
-func NewPassthrough(objs ...client.Object) Component {
-	return &passthroughComponent{isDelete: false, objs: objs, log: log}
+func NewCreationPassthrough(objs ...client.Object) Component {
+	return &passthroughComponent{toCreate: objs, log: log}
 }
 
-func NewPassthroughWithLog(l logr.Logger, objs ...client.Object) Component {
-	return &passthroughComponent{isDelete: false, objs: objs, log: l}
+func NewCreationPassthroughWithLog(l logr.Logger, objs ...client.Object) Component {
+	return &passthroughComponent{toCreate: objs, log: l}
 }
 
 // passthroughComponent is an implementation of a Component that simply passes back
 // the objects it was given unmodified.
 type passthroughComponent struct {
-	isDelete bool
-	objs     []client.Object
-	log      logr.Logger
+	toCreate, toDelete []client.Object
+	log                logr.Logger
 }
 
 // ResolveImages should call components.GetReference for all images that the Component
@@ -51,23 +54,27 @@ func (p *passthroughComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
-// Objects returns the lists of objects in this component that should be created and/or deleted during
+// Objects returns the lists of objects in this component that should be created and deleted during
 // rendering.
-func (p *passthroughComponent) Objects() (objsToCreate []client.Object, objsToDelete []client.Object) {
+func (p *passthroughComponent) Objects() (toCreate, toDelete []client.Object) {
 	// Filter out nil objects. This makes it easier for the calling code, so we don't need to duplicate
-	// this filtering logic in all the controllers that user this component.
-	objs := []client.Object{}
-	for _, o := range p.objs {
+	// this filtering logic in all the controllers that uses this component.
+	for _, o := range p.toCreate {
 		if o == nil {
 			continue
 		}
 		p.log.V(1).Info("PassThrough processing object", "type", reflect.TypeOf(o), "name", o.GetName(), "namespace", o.GetNamespace())
-		objs = append(objs, o)
+		toCreate = append(toCreate, o)
 	}
-	if p.isDelete {
-		return nil, objs
+
+	for _, o := range p.toDelete {
+		if o == nil {
+			continue
+		}
+		p.log.V(1).Info("PassThrough processing object", "type", reflect.TypeOf(o), "name", o.GetName(), "namespace", o.GetNamespace())
+		toDelete = append(toDelete, o)
 	}
-	return objs, nil
+	return
 }
 
 // Ready returns true if the component is ready to be created.

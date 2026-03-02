@@ -210,11 +210,17 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	res := c.resources
 
-	objs := []client.Object{}
+	var objs, toDelete []client.Object
 	objs = append(objs,
-		c.istiodAllowTigeraPolicy(),
-		c.istioCNIAllowTigeraPolicy(),
-		c.ztunnelAllowTigeraPolicy(),
+		c.istiodCalicoSystemPolicy(),
+		c.istioCNICalicoSystemPolicy(),
+		c.ztunnelCalicoSystemPolicy(),
+	)
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istiod", IstioNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istio-cni-node", IstioNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("ztunnel", IstioNamespace),
 	)
 
 	if overrides := c.cfg.Istio.Spec.IstiodDeployment; overrides != nil {
@@ -271,7 +277,7 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, res.CNI...)
 	objs = append(objs, res.ZTunnel...)
 
-	return objs, nil
+	return objs, toDelete
 }
 
 func (c *IstioComponent) Ready() bool {
@@ -282,7 +288,7 @@ func (c *IstioComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *IstioComponent) istiodAllowTigeraPolicy() *v3.NetworkPolicy {
+func (c *IstioComponent) istiodCalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -325,7 +331,7 @@ func (c *IstioComponent) istiodAllowTigeraPolicy() *v3.NetworkPolicy {
 	}
 }
 
-func (c *IstioComponent) istioCNIAllowTigeraPolicy() *v3.NetworkPolicy {
+func (c *IstioComponent) istioCNICalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -349,7 +355,7 @@ func (c *IstioComponent) istioCNIAllowTigeraPolicy() *v3.NetworkPolicy {
 	}
 }
 
-func (c *IstioComponent) ztunnelAllowTigeraPolicy() *v3.NetworkPolicy {
+func (c *IstioComponent) ztunnelCalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,

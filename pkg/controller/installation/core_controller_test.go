@@ -204,7 +204,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(
@@ -858,7 +858,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 		})
 
 		AfterEach(func() {
@@ -1068,7 +1068,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 			pullSecrets := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}}
 			Expect(c.Create(ctx, pullSecrets)).NotTo(HaveOccurred())
 		})
@@ -1999,7 +1999,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(cr.Status.Conditions[2].ObservedGeneration).To(Equal(int64(2)))
 		})
 
-		It("should render allow-tigera policy when tier and tier watch are ready", func() {
+		It("should render calico-system policy when tier and tier watch are ready", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -2008,16 +2008,16 @@ var _ = Describe("Testing core-controller installation", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(2))
-			Expect(policies.Items[0].Name).To(Equal("allow-tigera.default-deny"))
-			Expect(policies.Items[1].Name).To(Equal("allow-tigera.kube-controller-access"))
+			Expect(policies.Items[0].Name).To(Equal("calico-system.default-deny"))
+			Expect(policies.Items[1].Name).To(Equal("calico-system.kube-controller-access"))
 
 			defaultDenyPolicy := policies.Items[0]
 			Expect(defaultDenyPolicy.Spec.Selector).To(Equal("k8s-app != 'calico-apiserver'"))
 		})
 
-		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {
+		It("should omit calico-system policy and not degrade when tier is not ready", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
-			Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -2027,7 +2027,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(policies.Items).To(HaveLen(0))
 		})
 
-		It("should omit allow-tigera policy and not degrade when tier watch is not ready", func() {
+		It("should omit calico-system policy and not degrade when tier watch is not ready", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			r.tierWatchReady = notReady
 
@@ -2039,12 +2039,12 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(policies.Items).To(HaveLen(0))
 		})
 
-		It("should omit allow-tigera policy and not degrade when installation is calico", func() {
+		It("should omit calico-system policy and not degrade when installation is calico", func() {
 			cr.Spec.Variant = operator.Calico
 			cr.Status.Variant = operator.Calico
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			r.enterpriseCRDsExist = false
-			Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -2201,7 +2201,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 		})
 
 		AfterEach(func() {
@@ -2311,7 +2311,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			// We start off with a 'standard' installation, with nothing special
 			Expect(c.Create(

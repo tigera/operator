@@ -103,6 +103,15 @@ func getCommonExpectedResources() []client.Object {
 	}
 }
 
+// getCommonExpectedResources returns the list of resources to delete expected for standard platforms
+func getCommonExpectedDeleteResources() []client.Object {
+	return []client.Object{
+		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.istiod", Namespace: istio.IstioNamespace}},
+		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.istio-cni-node", Namespace: istio.IstioNamespace}},
+		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.ztunnel", Namespace: istio.IstioNamespace}},
+	}
+}
+
 var _ = Describe("Istio Component Rendering", func() {
 	var (
 		testScheme *runtime.Scheme
@@ -204,11 +213,13 @@ var _ = Describe("Istio Component Rendering", func() {
 			objsToCreate, objsToDelete := component.Objects()
 
 			Expect(objsToCreate).To(HaveLen(32))
-			Expect(objsToDelete).To(BeEmpty())
+			Expect(objsToDelete).To(HaveLen(3))
 
 			expectedResources := getCommonExpectedResources()
+			expectedDeleteResources := getCommonExpectedDeleteResources()
 
 			rtest.ExpectResources(objsToCreate, expectedResources)
+			rtest.ExpectResources(objsToDelete, expectedDeleteResources)
 		})
 
 		It("should render network policies with correct tier, selector, and ingress/egress rules", func() {
@@ -720,7 +731,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			objsToCreate, objsToDelete := component.Objects()
 
 			Expect(objsToCreate).To(HaveLen(33))
-			Expect(objsToDelete).To(BeEmpty())
+			Expect(objsToDelete).To(HaveLen(3))
 
 			// Start with common resources and append GKE-specific ones
 			expectedResources := getCommonExpectedResources()
@@ -728,8 +739,10 @@ var _ = Describe("Istio Component Rendering", func() {
 				// ResourceQuota (GKE specific)
 				&corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni-resource-quota", Namespace: istio.IstioNamespace}},
 			)
+			expectedDeleteResources := getCommonExpectedDeleteResources()
 
 			rtest.ExpectResources(objsToCreate, expectedResources)
+			rtest.ExpectResources(objsToDelete, expectedDeleteResources)
 		})
 	})
 
@@ -750,7 +763,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			// OpenShift adds: NetworkAttachmentDefinition (CNI/Multus) +
 			// ztunnel ClusterRole + ztunnel ClusterRoleBinding (SCC)
 			Expect(objsToCreate).To(HaveLen(35))
-			Expect(objsToDelete).To(BeEmpty())
+			Expect(objsToDelete).To(HaveLen(3))
 		})
 
 		It("should include SCC use rule in istio-cni ClusterRole", func() {

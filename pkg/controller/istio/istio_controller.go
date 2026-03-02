@@ -199,12 +199,12 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	// Check CRDs are present and only create it if not
 	handler := utils.NewComponentHandler(log, r, r.scheme, nil)
 	handler.SetCreateOnly()
-	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(essentialCRDs...), nil)
+	err = handler.CreateOrUpdateOrDelete(ctx, render.NewCreationPassthrough(essentialCRDs...), nil)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating gateway API CRDs", err, log)
 		return reconcile.Result{}, err
 	}
-	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(optionalCRDs...), nil)
+	err = handler.CreateOrUpdateOrDelete(ctx, render.NewCreationPassthrough(optionalCRDs...), nil)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		reqLogger.Info("Could not render all optional gateway API CRDs", "err", err)
 	}

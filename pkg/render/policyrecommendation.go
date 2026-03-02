@@ -120,7 +120,7 @@ func (pr *policyRecommendationComponent) Objects() ([]client.Object, []client.Ob
 	// Management and managed clusters need API access to the resources defined in the policy
 	// recommendation cluster role
 	objs = []client.Object{
-		pr.allowTigeraPolicyForPolicyRecommendation(),
+		pr.calicoSystemPolicyForPolicyRecommendation(),
 		pr.serviceAccount(),
 		pr.clusterRole(),
 		pr.clusterRoleBinding(),
@@ -424,8 +424,8 @@ func (pr *policyRecommendationComponent) serviceAccount() client.Object {
 	}
 }
 
-// allowTigeraPolicyForPolicyRecommendation defines an allow-tigera policy for policy recommendation.
-func (pr *policyRecommendationComponent) allowTigeraPolicyForPolicyRecommendation() *v3.NetworkPolicy {
+// calicoSystemPolicyForPolicyRecommendation defines a calico-system policy for policy recommendation.
+func (pr *policyRecommendationComponent) calicoSystemPolicyForPolicyRecommendation() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -489,7 +489,10 @@ func (pr *policyRecommendationComponent) deprecatedObjects(isManagedCluster bool
 			&corev1.Namespace{
 				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-policy-recommendation"},
-			})
+			},
+			// allow-tigera Tier was renamed to calico-system
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-policy-recommendation", pr.cfg.Namespace),
+		)
 	}
 
 	return deprecatedObjs

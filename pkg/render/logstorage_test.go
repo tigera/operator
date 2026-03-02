@@ -64,16 +64,16 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		expectedESPolicyForOpenshift = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elasticsearch_ocp.json")
 		expectedESInternalPolicy     = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elasticsearch-internal.json")
 	)
-	getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+	getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
 		if scenario.ManagedCluster {
 			return nil
 		}
 
 		switch policyName.Name {
-		case "allow-tigera.elasticsearch-access":
+		case "calico-system.elasticsearch-access":
 			return testutils.SelectPolicyByProvider(scenario, expectedESPolicy, expectedESPolicyForOpenshift)
 
-		case "allow-tigera.elasticsearch-internal":
+		case "calico-system.elasticsearch-internal":
 			return expectedESInternalPolicy
 
 		default:
@@ -179,6 +179,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -277,6 +280,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}
 
 				expectedDeleteResources := []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -341,6 +347,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -440,6 +449,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -449,14 +461,14 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				})
 			})
 
-			Context("allow-tigera rendering", func() {
+			Context("calico-system rendering", func() {
 				policyNames := []types.NamespacedName{
-					{Name: "allow-tigera.elasticsearch-access", Namespace: "tigera-elasticsearch"},
-					{Name: "allow-tigera.elasticsearch-internal", Namespace: "tigera-elasticsearch"},
+					{Name: "calico-system.elasticsearch-access", Namespace: "tigera-elasticsearch"},
+					{Name: "calico-system.elasticsearch-internal", Namespace: "tigera-elasticsearch"},
 				}
 
-				DescribeTable("should render allow-tigera policy",
-					func(scenario testutils.AllowTigeraScenario) {
+				DescribeTable("should render calico-system policy",
+					func(scenario testutils.CalicoSystemScenario) {
 						if scenario.OpenShift {
 							cfg.Provider = operatorv1.ProviderOpenShift
 						} else {
@@ -467,13 +479,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						resources, _ := component.Objects()
 
 						for _, policyName := range policyNames {
-							policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+							policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 							expectedPolicy := getExpectedPolicy(policyName, scenario)
 							Expect(policy).To(Equal(expectedPolicy))
 						}
 					},
-					Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-					Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+					Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+					Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
 				)
 			})
 		})
@@ -628,16 +640,16 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		Context("Deleting LogStorage", deleteLogStorageTests(nil, managementClusterConnection))
 
-		Context("allow-tigera rendering", func() {
+		Context("calico-system rendering", func() {
 			policyNames := []types.NamespacedName{
-				{Name: "allow-tigera.elasticsearch-access", Namespace: "tigera-elasticsearch"},
-				{Name: "allow-tigera.kibana-access", Namespace: "tigera-kibana"},
-				{Name: "allow-tigera.elastic-operator-access", Namespace: "tigera-eck-operator"},
-				{Name: "allow-tigera.elasticsearch-internal", Namespace: "tigera-elasticsearch"},
+				{Name: "calico-system.elasticsearch-access", Namespace: "tigera-elasticsearch"},
+				{Name: "calico-system.kibana-access", Namespace: "tigera-kibana"},
+				{Name: "calico-system.elastic-operator-access", Namespace: "tigera-eck-operator"},
+				{Name: "calico-system.elasticsearch-internal", Namespace: "tigera-elasticsearch"},
 			}
 
-			DescribeTable("should render allow-tigera policy",
-				func(scenario testutils.AllowTigeraScenario) {
+			DescribeTable("should render calico-system policy",
+				func(scenario testutils.CalicoSystemScenario) {
 					if scenario.OpenShift {
 						cfg.Provider = operatorv1.ProviderOpenShift
 					} else {
@@ -648,13 +660,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					resources, _ := component.Objects()
 
 					for _, policyName := range policyNames {
-						policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+						policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 						expectedPolicy := getExpectedPolicy(policyName, scenario)
 						Expect(policy).To(Equal(expectedPolicy))
 					}
 				},
-				Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-				Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+				Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+				Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 			)
 		})
 	})

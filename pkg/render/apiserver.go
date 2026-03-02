@@ -114,7 +114,13 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 }
 
 func APIServerPolicy(cfg *APIServerConfiguration) Component {
-	return NewPassthrough(allowTigeraAPIServerPolicy(cfg))
+	return NewPassthrough(
+		[]client.Object{calicoSystemAPIServerPolicy(cfg)},
+		[]client.Object{
+			// allow-tigera Tier was renamed to calico-system
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("apiserver-access", APIServerNamespace),
+		},
+	)
 }
 
 // APIServerConfiguration contains all the config information needed to render the component.
@@ -466,7 +472,7 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-func allowTigeraAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
+func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, []v3.Rule{
@@ -1490,17 +1496,6 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 				"patch",
 			},
 		},
-		{
-			// this rbac group (authorizationreview) is required for apiserver service account because:
-			// - queryserver (part of the apiserver pod) needs to authorize users for tiered resources (policies) to return the
-			// appropriate result set where user is authorized to have access to all items in the result set.
-			// - for authorization, queryserver needs to create authorizationReview resource.
-			// - queryserver needs to have "create" on "authorizationreviews" to be able to create authrozationreview
-			// and get user's permissions on both tiered and non-tiered resources.
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authorizationreviews"},
-			Verbs:     []string{"create"},
-		},
 	}
 
 	return &rbacv1.ClusterRole{
@@ -1754,12 +1749,6 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			},
 			Verbs: []string{"get", "watch", "list"},
 		},
-		// A POST to AuthorizationReviews lets the UI determine what features it can enable.
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authorizationreviews"},
-			Verbs:     []string{"create"},
-		},
 		// User can:
 		// - read UISettings in the cluster-settings group
 		// - read and write UISettings in the user-settings group
@@ -1962,12 +1951,6 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"securityeventwebhooks",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
-		},
-		// A POST to AuthorizationReviews lets the UI determine what features it can enable.
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authorizationreviews"},
-			Verbs:     []string{"create"},
 		},
 		// User can:
 		// - read and write UISettings in the cluster-settings group, and rename the group

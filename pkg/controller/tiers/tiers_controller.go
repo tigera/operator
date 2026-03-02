@@ -24,6 +24,7 @@ import (
 	"github.com/go-logr/logr"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -34,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 
 	"github.com/tigera/operator/pkg/common"
@@ -229,6 +231,20 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 
 		}
 	}
+
+	// Check if the is there any Calico NetworkPolicy with the allow-tigera
+	// tier and properly set the EmptyAllowTigeraTier flag.
+	allowTigeraPolicies := &v3.NetworkPolicyList{}
+	if err := r.client.List(ctx, allowTigeraPolicies, &client.ListOptions{
+		LabelSelector: labels.SelectorFromSet(map[string]string{
+			"projectcalico.org/tier": "allow-tigera",
+		}),
+		Limit: 1,
+	}); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying deprecated allow-tigera network policies", err, reqLogger)
+		return nil, &reconcile.Result{RequeueAfter: utils.StandardRetry}
+	}
+	tiersConfig.EmptyAllowTigeraTier = len(allowTigeraPolicies.Items) == 0
 
 	return &tiersConfig, nil
 }

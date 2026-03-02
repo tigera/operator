@@ -196,13 +196,6 @@ func CalicoSystemDefaultDeny(namespace string) *v3.NetworkPolicy {
 }
 
 // Entity rules not belonging to Calico/Tigera components.
-var KubeAPIServerEntityRule = v3.EntityRule{
-	Services: &v3.ServiceMatch{
-		Name:      "kubernetes",
-		Namespace: "default",
-	},
-}
-
 var KubeAPIServerServiceSelectorEntityRule = v3.EntityRule{
 	Services: &v3.ServiceMatch{
 		Namespace: "default",

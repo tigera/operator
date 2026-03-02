@@ -22,11 +22,11 @@ import (
 	netv1 "k8s.io/api/networking/v1"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	_ "embed"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -37,7 +37,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
-	"github.com/tigera/operator/pkg/render/common/selector"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -47,6 +46,7 @@ const (
 	WhiskerNamespace          = common.CalicoNamespace
 	WhiskerServiceAccountName = WhiskerName
 	WhiskerDeploymentName     = WhiskerName
+	WhiskerPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + WhiskerName
 
 	WhiskerContainerName        = "whisker"
 	WhiskerBackendContainerName = "whisker-backend"
@@ -121,7 +121,7 @@ func (c *Component) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *Component) Objects() ([]client.Object, []client.Object) {
+func (c *Component) Objects() (toCreate, toDelete []client.Object) {
 	deployment := c.deployment()
 	if overrides := c.cfg.Whisker.Spec.WhiskerDeployment; overrides != nil {
 		rcomp.ApplyDeploymentOverrides(deployment, overrides)
@@ -139,10 +139,14 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 
 	// Whisker needs to be removed if the installation is not Calico, since it's not supported (yet!) for any other variant.
 	if c.cfg.Installation.Variant == operatorv1.Calico {
-		return objs, nil
+		toCreate = objs
 	} else {
-		return nil, objs
+		toDelete = objs
 	}
+
+	toDelete = append(toDelete, c.deprecatedObjects()...)
+
+	return
 }
 
 func (c *Component) Ready() bool {
@@ -267,27 +271,27 @@ func (c *Component) deployment() *appsv1.Deployment {
 	}
 }
 
-func (c *Component) networkPolicy() *netv1.NetworkPolicy {
-	egressRules := []netv1.NetworkPolicyEgressRule{
+func (c *Component) networkPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{
 		{
-			To: []netv1.NetworkPolicyPeer{
-				{
-					PodSelector: selector.PodLabelSelector(GoldmaneDeploymentName),
-				},
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Selector: networkpolicy.KubernetesAppSelector(GoldmaneDeploymentName),
+				Ports:    networkpolicy.Ports(GoldmaneServicePort),
 			},
-			Ports: []netv1.NetworkPolicyPort{{
-				Protocol: ptr.ToPtr(corev1.ProtocolTCP),
-				Port:     ptr.ToPtr(intstr.FromInt32(GoldmaneServicePort)),
-			}},
 		},
 	}
-	return &netv1.NetworkPolicy{
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
+
+	return &v3.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: WhiskerName, Namespace: WhiskerNamespace},
-		Spec: netv1.NetworkPolicySpec{
-			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress, netv1.PolicyTypeEgress},
-			PodSelector: *selector.PodLabelSelector(WhiskerDeploymentName),
-			Egress:      append(egressRules, networkpolicy.K8sDNSEgressRules(c.cfg.OpenShift)...),
+		ObjectMeta: metav1.ObjectMeta{Name: WhiskerPolicyName, Namespace: WhiskerNamespace},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Selector: networkpolicy.KubernetesAppSelector(WhiskerDeploymentName),
+			Egress:   egressRules,
 		},
 	}
 }
@@ -307,6 +311,15 @@ func (c *Component) nginxConfigMap() *corev1.ConfigMap {
 		},
 		Data: map[string]string{
 			"default.conf": config,
+		},
+	}
+}
+
+func (c *Component) deprecatedObjects() []client.Object {
+	return []client.Object{
+		&netv1.NetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "whisker", Namespace: WhiskerNamespace},
 		},
 	}
 }

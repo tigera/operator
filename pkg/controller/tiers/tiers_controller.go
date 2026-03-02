@@ -56,11 +56,6 @@ var log = logf.Log.WithName("controller_tiers")
 // Add creates a new Tiers Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
-		// No need to start this controller.
-		return nil
-	}
-
 	r := &ReconcileTiers{
 		client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),
@@ -125,21 +120,6 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	// Ensure a license is present that enables this controller to create/manage tiers.
-	license, err := utils.FetchLicenseKey(ctx, r.client)
-	if err != nil {
-		if apierrors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-	}
-	if !utils.IsFeatureActive(license, common.TiersFeature) {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support feature: tiers", err, reqLogger)
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-	}
-
 	tiersConfig, reconcileResult := r.prepareTiersConfig(ctx, reqLogger)
 	if reconcileResult != nil {
 		return *reconcileResult, nil
@@ -148,7 +128,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	component := tiers.Tiers(tiersConfig)
 
 	componentHandler := utils.NewComponentHandler(log, r.client, r.scheme, nil)
-	err = componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
+	err := componentHandler.CreateOrUpdateOrDelete(ctx, component, nil)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
@@ -169,16 +149,20 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 	// well-known list of namespaces that contain product code.
 	namespaces := []string{
 		common.CalicoNamespace,
-		render.ComplianceNamespace,
-		render.DexNamespace,
-		render.ElasticsearchNamespace,
-		render.LogCollectorNamespace,
-		render.IntrusionDetectionNamespace,
-		kibana.Namespace,
-		eck.OperatorNamespace,
-		render.PacketCaptureNamespace,
-		common.TigeraPrometheusNamespace,
-		"tigera-skraper",
+	}
+	if r.opts.EnterpriseCRDExists {
+		namespaces = append(namespaces,
+			render.ComplianceNamespace,
+			render.DexNamespace,
+			render.ElasticsearchNamespace,
+			render.LogCollectorNamespace,
+			render.IntrusionDetectionNamespace,
+			kibana.Namespace,
+			eck.OperatorNamespace,
+			render.PacketCaptureNamespace,
+			common.TigeraPrometheusNamespace,
+			"tigera-skraper",
+		)
 	}
 	if r.opts.MultiTenant {
 		// For multi-tenant clusters, we need to include well-known namespaces as well as per-tenant namespaces.

@@ -144,15 +144,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
-	if opts.EnterpriseCRDExists {
-		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, ri.tierWatchReady)
+	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, ri.tierWatchReady)
 
-		go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
-			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
-		},
-		)
-	}
+	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
+		{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
+	})
 
 	// Watch for changes to primary resource Installation
 	err = c.WatchObject(&operatorv1.Installation{}, &handler.EnqueueRequestForObject{})
@@ -1009,7 +1006,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	var logCollector *operatorv1.LogCollector
-	includeV3NetworkPolicy := false
 	if r.enterpriseCRDsExist {
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
 		if logCollector != nil {
@@ -1036,22 +1032,23 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
 
-		// Ensure the calico-system tier exists, before rendering any network policies within it.
-		//
-		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
-		// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
-		// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
-		// We also exclude NetworkPolicy and do not degrade when the Tier watch is not ready, as this means the API server is not available.
-		if r.tierWatchReady.IsReady() {
-			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
-				if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
-					return reconcile.Result{}, err
-				}
-			} else {
-				includeV3NetworkPolicy = true
+	includeV3NetworkPolicy := false
+	// Ensure the calico-system tier exists, before rendering any network policies within it.
+	//
+	// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
+	// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
+	// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
+	// We also exclude NetworkPolicy and do not degrade when the Tier watch is not ready, as this means the API server is not available.
+	if r.tierWatchReady.IsReady() {
+		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+			if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
+				return reconcile.Result{}, err
 			}
+		} else {
+			includeV3NetworkPolicy = true
 		}
 	}
 

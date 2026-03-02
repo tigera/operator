@@ -423,31 +423,21 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 
-		tierAvailable := false
-		// Ensure the calico-system tier exists, before rendering any network policies within it.
-		if err := r.cli.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err == nil {
-			tierAvailable = true
-		} else if !k8serrors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		licenseActive := false
 		// Ensure the license can support enterprise policy, before rendering any network policies within it.
 		if license, err := utils.FetchLicenseKey(ctx, r.cli); err == nil {
 			if utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
-				licenseActive = true
+				includeEgressNetworkPolicy = true
 			}
 		} else if !k8serrors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
 
-		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that the
-		// License becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from reconciliation
-		// and tolerate errors arising from the Tier not being created.
-		includeEgressNetworkPolicy = tierAvailable && licenseActive
-
+	// Ensure the calico-system tier exists, before rendering any network policies within it.
+	if err := r.cli.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, managementClusterConnection)
@@ -480,7 +470,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// In managed clusters, the clusterconnection controller is a dependency for the License to be created. In case the
 	// License is unavailable and reconciliation of non-NetworkPolicy resources in the clusterconnection controller
 	// would resolve it, we render network policies last to prevent a chicken-and-egg scenario.
-	if includeEgressNetworkPolicy {
+	if includeEgressNetworkPolicy || variant == operatorv1.Calico {
 		policyComponent, err := render.GuardianPolicy(guardianCfg)
 		if err != nil {
 			log.Error(err, "Failed to create NetworkPolicy component for Guardian, policy will be omitted")

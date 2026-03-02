@@ -955,6 +955,8 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
+					"uisettings",
+					"uisettingsgroups",
 				},
 				Verbs: []string{"list"},
 			},

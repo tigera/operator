@@ -290,7 +290,12 @@ var _ = Describe("Monitor controller tests", func() {
 					Params: map[string][]string{"match[]": {"{__name__=~\".+\"}"}},
 					Port:   "web",
 					Path:   "/federate",
-					Scheme: ptr.To(monitoringv1.SchemeHTTPS),
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("https"),
+						},
+					},
 					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
 						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
 							TLSConfig: &monitoringv1.TLSConfig{

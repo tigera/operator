@@ -106,10 +106,27 @@ var _ = Describe("Webhooks rendering tests", func() {
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&admissionregistrationv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "api.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "ValidatingWebhookConfiguration", APIVersion: "admissionregistration.k8s.io/v1"}},
+			&admissionregistrationv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "api.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "MutatingWebhookConfiguration", APIVersion: "admissionregistration.k8s.io/v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
 		rtest.ExpectResources(resources, expectedResources)
+
+		// Verify the MutatingWebhookConfiguration has the expected webhooks.
+		mwc, err := rtest.GetResourceOfType[*admissionregistrationv1.MutatingWebhookConfiguration](resources, "api.projectcalico.org", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mwc.Webhooks).To(HaveLen(1))
+		Expect(mwc.Webhooks[0].Name).To(Equal("uisettings.api.projectcalico.org"))
+		Expect(*mwc.Webhooks[0].ClientConfig.Service.Path).To(Equal("/uisettings"))
+		Expect(*mwc.Webhooks[0].FailurePolicy).To(Equal(admissionregistrationv1.Fail))
+		Expect(*mwc.Webhooks[0].TimeoutSeconds).To(Equal(int32(10)))
+		Expect(mwc.Webhooks[0].Rules).To(HaveLen(1))
+		Expect(mwc.Webhooks[0].Rules[0].Operations).To(ConsistOf(
+			admissionregistrationv1.Create,
+			admissionregistrationv1.Update,
+			admissionregistrationv1.Delete,
+		))
+		Expect(mwc.Webhooks[0].Rules[0].Rule.Resources).To(Equal([]string{"uisettings"}))
 
 		// Verify Enterprise uses the Tigera webhooks image.
 		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)

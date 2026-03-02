@@ -127,7 +127,9 @@ func Ensure(c client.Client, variant string, v3 bool, log logr.Logger) error {
 				log.Info("MutatingAdmissionPolicy API not available, skipping", "error", err)
 				return nil
 			}
-			return fmt.Errorf("failed to create %s %s: %s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName(), err)
+
+			// Log an error but continue. We'll handle any persistent issues in the core controller's reconciliation loop.
+			log.Error(err, "Failed to create MutatingAdmissionPolicy resource", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
 		}
 	}
 	return nil

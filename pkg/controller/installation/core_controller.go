@@ -2150,14 +2150,7 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 
 	desired := admission.GetMutatingAdmissionPolicies(variant, r.v3CRDs)
 
-	// Create or update desired MAPs/MAPBs.
-	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
-	if err := handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(desired...), nil); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating MutatingAdmissionPolicy resources", err, log)
-		return err
-	}
-
-	// Build a set of desired resource names for comparison.
+	// Build a set of desired resource names so we can identify stale objects to clean up.
 	desiredMAPs := map[string]bool{}
 	desiredMAPBs := map[string]bool{}
 	for _, obj := range desired {
@@ -2169,7 +2162,7 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 		}
 	}
 
-	// Delete stale MAPs that are labeled as managed but no longer desired.
+	// Find stale MAPs that are labeled as managed but no longer desired.
 	existingMAPs := &admissionv1beta1.MutatingAdmissionPolicyList{}
 	if err := r.client.List(ctx, existingMAPs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicies", err, log)
@@ -2182,7 +2175,7 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 		}
 	}
 
-	// Delete stale MAPBs that are labeled as managed but no longer desired.
+	// Find stale MAPBs that are labeled as managed but no longer desired.
 	existingMAPBs := &admissionv1beta1.MutatingAdmissionPolicyBindingList{}
 	if err := r.client.List(ctx, existingMAPBs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicyBindings", err, log)
@@ -2194,11 +2187,11 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 		}
 	}
 
-	if len(toDelete) > 0 {
-		if err := handler.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(toDelete...), nil); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error deleting stale MutatingAdmissionPolicy resources", err, log)
-			return err
-		}
+	// Create or update desired MAPs/MAPBs and delete any stale ones in a single pass.
+	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
+	if err := handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(desired, toDelete), nil); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error syncing MutatingAdmissionPolicy resources", err, log)
+		return err
 	}
 
 	return nil

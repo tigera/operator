@@ -49,7 +49,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	netv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -1833,7 +1832,6 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"}},
 		}
 
 		dnsNames := dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, clusterDomain)
@@ -1844,9 +1842,10 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
-		resources, _ := component.Objects()
+		resources, deleteResources := component.Objects()
 
 		rtest.ExpectResources(resources, expectedResources)
+		rtest.ExpectResourceInList(deleteResources, "allow-apiserver", "calico-system", "networking.k8s.io", "v1", "NetworkPolicy")
 
 		apiService, ok := rtest.GetResource(resources, "v3.projectcalico.org", "", "apiregistration.k8s.io", "v1", "APIService").(*apiregv1.APIService)
 		Expect(ok).To(BeTrue(), "Expected v1.APIService")
@@ -1951,13 +1950,12 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			&policyv1.PodDisruptionBudget{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{APIVersion: "policy/v1", Kind: "PodDisruptionBudget"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-webhook-reader"}, TypeMeta: metav1.TypeMeta{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRole"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver-webhook-reader"}, TypeMeta: metav1.TypeMeta{APIVersion: "rbac.authorization.k8s.io/v1", Kind: "ClusterRoleBinding"}},
-			&netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{APIVersion: "networking.k8s.io/v1", Kind: "NetworkPolicy"}},
 		}
 
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, deleteResources := component.Objects()
 
 		// Should render the correct resources.
 		By("Checking each expected resource is actually rendered")
@@ -1971,6 +1969,8 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			gvk := r.GetObjectKind().GroupVersionKind()
 			rtest.ExpectResourceInList(expectedResources, r.GetName(), r.GetNamespace(), gvk.Group, gvk.Version, gvk.Kind)
 		}
+
+		rtest.ExpectResourceInList(deleteResources, "allow-apiserver", "calico-system", "networking.k8s.io", "v1", "NetworkPolicy")
 
 		// Expect same number as above
 		Expect(len(resources)).To(Equal(len(expectedResources)))

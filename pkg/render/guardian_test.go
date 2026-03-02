@@ -20,6 +20,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -84,6 +85,7 @@ var _ = Describe("Rendering tests", func() {
 			TrustedCertBundle:           bundle,
 			OpenShift:                   openshift,
 			ManagementClusterConnection: &operatorv1.ManagementClusterConnection{},
+			IncludeEgressNetworkPolicy:  true,
 		}
 	}
 
@@ -123,6 +125,7 @@ var _ = Describe("Rendering tests", func() {
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-role"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "guardian", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"}},
 			}
 
 			rtest.ExpectResources(resources, expectedResources)

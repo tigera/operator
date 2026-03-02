@@ -746,7 +746,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Destination: networkpolicy.KubeAPIServerEntityRule,
+					Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 				},
 				{
 					Action: v3.Pass,

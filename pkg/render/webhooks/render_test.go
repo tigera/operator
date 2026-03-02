@@ -138,4 +138,173 @@ var _ = Describe("Webhooks rendering tests", func() {
 		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
 	})
+
+	It("should use default container port (6443) when no override is set", func() {
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		// Verify the container port defaults to 6443.
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(int32(6443)))
+
+		// Verify the service target port defaults to 6443.
+		svc, err := rtest.GetResourceOfType[*corev1.Service](resources, webhooks.WebhooksName, common.CalicoNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(svc.Spec.Ports[0].TargetPort.IntValue()).To(Equal(6443))
+
+		// Verify the network policy defaults to 6443.
+		np := rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+		Expect(np.Spec.Ingress[0].Destination.Ports[0].MinPort).To(Equal(uint16(6443)))
+		Expect(np.Spec.Ingress[0].Destination.Ports[0].MaxPort).To(Equal(uint16(6443)))
+	})
+
+	It("should use custom container port", func() {
+		var customPort int32 = 8443
+		apiServerSpec.CalicoWebhooksDeployment = &operatorv1.CalicoWebhooksDeployment{
+			Spec: &operatorv1.CalicoWebhooksDeploymentSpec{
+				Template: &operatorv1.CalicoWebhooksDeploymentPodTemplateSpec{
+					Spec: &operatorv1.CalicoWebhooksDeploymentPodSpec{
+						Containers: []operatorv1.CalicoWebhooksDeploymentContainer{
+							{
+								Name: "calico-webhooks",
+								Ports: []operatorv1.CalicoWebhooksDeploymentContainerPort{
+									{Name: "calico-webhooks", ContainerPort: customPort},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		// Verify the container port is set to the custom value.
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(customPort))
+
+		// Verify the service target port uses the custom value.
+		svc, err := rtest.GetResourceOfType[*corev1.Service](resources, webhooks.WebhooksName, common.CalicoNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(svc.Spec.Ports[0].TargetPort.IntValue()).To(Equal(int(customPort)))
+
+		// Verify the network policy uses the custom port.
+		np := rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+		Expect(np.Spec.Ingress[0].Destination.Ports).To(HaveLen(1))
+		Expect(np.Spec.Ingress[0].Destination.Ports[0].MinPort).To(Equal(uint16(customPort)))
+		Expect(np.Spec.Ingress[0].Destination.Ports[0].MaxPort).To(Equal(uint16(customPort)))
+	})
+
+	It("should not use host network by default on non-EKS", func() {
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.HostNetwork).To(BeFalse())
+		Expect(dep.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSPolicy("")))
+	})
+
+	It("should use host network when configured", func() {
+		hostNetwork := true
+		apiServerSpec.CalicoWebhooksDeployment = &operatorv1.CalicoWebhooksDeployment{
+			Spec: &operatorv1.CalicoWebhooksDeploymentSpec{
+				Template: &operatorv1.CalicoWebhooksDeploymentPodTemplateSpec{
+					Spec: &operatorv1.CalicoWebhooksDeploymentPodSpec{
+						HostNetwork: &hostNetwork,
+					},
+				},
+			},
+		}
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.HostNetwork).To(BeTrue())
+		Expect(dep.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
+
+		// Network policy should not be installed for host-networked pods.
+		Expect(rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy")).To(BeNil())
+	})
+
+	It("should auto-detect host network on EKS with Calico CNI", func() {
+		installation.KubernetesProvider = operatorv1.ProviderEKS
+		installation.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginCalico}
+
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.HostNetwork).To(BeTrue())
+		Expect(dep.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
+
+		// Network policy should not be installed for host-networked pods.
+		Expect(rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy")).To(BeNil())
+	})
+
+	It("should allow HostNetwork=false to override auto-detection on EKS", func() {
+		installation.KubernetesProvider = operatorv1.ProviderEKS
+		installation.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginCalico}
+
+		hostNetwork := false
+		apiServerSpec.CalicoWebhooksDeployment = &operatorv1.CalicoWebhooksDeployment{
+			Spec: &operatorv1.CalicoWebhooksDeploymentSpec{
+				Template: &operatorv1.CalicoWebhooksDeploymentPodTemplateSpec{
+					Spec: &operatorv1.CalicoWebhooksDeploymentPodSpec{
+						HostNetwork: &hostNetwork,
+					},
+				},
+			},
+		}
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.HostNetwork).To(BeFalse())
+		Expect(dep.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSPolicy("")))
+	})
+
+	It("should apply both custom container port and host network together", func() {
+		var customPort int32 = 9443
+		hostNetwork := true
+		apiServerSpec.CalicoWebhooksDeployment = &operatorv1.CalicoWebhooksDeployment{
+			Spec: &operatorv1.CalicoWebhooksDeploymentSpec{
+				Template: &operatorv1.CalicoWebhooksDeploymentPodTemplateSpec{
+					Spec: &operatorv1.CalicoWebhooksDeploymentPodSpec{
+						Containers: []operatorv1.CalicoWebhooksDeploymentContainer{
+							{
+								Name: "calico-webhooks",
+								Ports: []operatorv1.CalicoWebhooksDeploymentContainerPort{
+									{Name: "calico-webhooks", ContainerPort: customPort},
+								},
+							},
+						},
+						HostNetwork: &hostNetwork,
+					},
+				},
+			},
+		}
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		// Verify the container port uses the custom value.
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(customPort))
+		Expect(dep.Spec.Template.Spec.HostNetwork).To(BeTrue())
+		Expect(dep.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSClusterFirstWithHostNet))
+
+		// Verify the service target port uses the custom value.
+		svc, err := rtest.GetResourceOfType[*corev1.Service](resources, webhooks.WebhooksName, common.CalicoNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(svc.Spec.Ports[0].TargetPort.IntValue()).To(Equal(int(customPort)))
+
+		// Network policy should not be installed for host-networked pods.
+		Expect(rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy")).To(BeNil())
+	})
 })

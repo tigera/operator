@@ -502,7 +502,7 @@ func (cm *certificateManager) getKeyPair(cli client.Client, secretName, secretNa
 	}
 
 	var issuer certificatemanagement.KeyPairInterface
-	if x509Cert.Issuer.CommonName == rmeta.TigeraOperatorCAIssuerPrefix {
+	if strings.HasPrefix(x509Cert.Issuer.CommonName, rmeta.TigeraOperatorCAIssuerPrefix) {
 		if cm.keyPair.CertificateManagement != nil {
 			return certificateManagementKeyPair(cm, secretName, secretNamespace, dnsNames), nil, nil
 		}

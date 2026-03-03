@@ -54,70 +54,80 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-var _ = Describe("Test CertificateManagement suite", func() {
-	const (
-		appSecretName       = "my-app-tls"
-		appSecretName2      = "my-app-tls-2"
-		legacySecretName    = "legacy-secret"
-		appNs               = "my-app"
-		legacyKeyFieldName  = "key"
-		legacyCertFieldName = "cert"
-	)
+const (
+	appSecretName       = "my-app-tls"
+	appSecretName2      = "my-app-tls-2"
+	legacySecretName    = "legacy-secret"
+	appNs               = "my-app"
+	legacyKeyFieldName  = "key"
+	legacyCertFieldName = "cert"
+)
 
-	var (
-		cli                      client.Client
-		scheme                   *k8sruntime.Scheme
-		installation             *operatorv1.InstallationSpec
-		cm                       *operatorv1.CertificateManagement
-		clusterDomain            = "cluster.local"
-		appDNSNames              = []string{appSecretName}
-		ctx                      = context.TODO()
-		certificateManager       certificatemanager.CertificateManager
-		expiredSecret            *corev1.Secret
-		legacySecret             *corev1.Secret
-		expiredLegacySecret      *corev1.Secret
-		byoSecret                *corev1.Secret
-		expiredBYOSecret         *corev1.Secret
-		legacyBYOSecret          *corev1.Secret
-		legacyWithClientKeyUsage *corev1.Secret
-	)
+var (
 	// Configure certs to match legacy operator-generated cert extensions - i.e., only valid for use as a server certificate.
-	legacyOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth}
-	modernOpts := []crypto.CertificateExtensionFunc{tls.SetServerAuth, tls.SetClientAuth}
+	legacyOpts = []crypto.CertificateExtensionFunc{tls.SetServerAuth}
+	modernOpts = []crypto.CertificateExtensionFunc{tls.SetServerAuth, tls.SetClientAuth}
 
-	// Precompute expensive operations once.
-	BeforeSuite(func() {
-		var err error
+	legacySecret             *corev1.Secret
+	expiredLegacySecret      *corev1.Secret
+	validLegacyCASecret      *corev1.Secret
+	byoSecret                *corev1.Secret
+	expiredBYOSecret         *corev1.Secret
+	legacyBYOSecret          *corev1.Secret
+	legacyWithClientKeyUsage *corev1.Secret
+)
 
-		certkeyusage.SetCertKeyUsage(legacySecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
-		// Create a legacy secret (how certs were before v1.24) with non-standardized legacy key and cert name, and no CA.
-		// Use a secret
-		legacySecret, err = secret.CreateTLSSecret(nil, legacySecretName, appNs, legacyKeyFieldName, legacyCertFieldName, time.Hour, legacyOpts, legacySecretName)
-		Expect(err).NotTo(HaveOccurred())
+// Precompute expensive operations once.
+var _ = BeforeSuite(func() {
+	var err error
 
-		// This is a special case, which may or may not exist in the wild. It's a legacy-style certificate signed by tigera-operator but also with client usage.
-		legacyWithClientKeyUsage, err = secret.CreateTLSSecret(nil, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, time.Hour, modernOpts, appSecretName)
-		Expect(err).NotTo(HaveOccurred())
+	certkeyusage.SetCertKeyUsage(legacySecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})
+	// Create a legacy secret (how certs were before v1.24) with non-standardized legacy key and cert name, and no CA.
+	// Use a secret
+	legacySecret, err = secret.CreateTLSSecret(nil, legacySecretName, appNs, legacyKeyFieldName, legacyCertFieldName, time.Hour, legacyOpts, legacySecretName)
+	Expect(err).NotTo(HaveOccurred())
 
-		// Create a byo secret with non-standardized legacy key and cert name (like our docs for felix/typha).
-		cryptoCA, err := tls.MakeCA("byo-ca")
-		Expect(err).NotTo(HaveOccurred())
-		byoSecret, err = secret.CreateTLSSecret(cryptoCA, appSecretName, appNs, "key.key", "cert.crt", time.Hour, modernOpts, appSecretName)
-		Expect(err).NotTo(HaveOccurred())
-		legacyBYOSecret, err = secret.CreateTLSSecret(cryptoCA, legacySecretName, appNs, "key.key", "cert.crt", time.Hour, legacyOpts, legacySecretName)
-		Expect(err).NotTo(HaveOccurred())
-		expiredBYOSecret, err = secret.CreateTLSSecret(cryptoCA, appSecretName, appNs, "key.key", "cert.crt", -time.Hour, modernOpts, appSecretName)
-		Expect(err).NotTo(HaveOccurred())
+	// This is a special case, which may or may not exist in the wild. It's a legacy-style certificate signed by tigera-operator but also with client usage.
+	legacyWithClientKeyUsage, err = secret.CreateTLSSecret(nil, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, time.Hour, modernOpts, appSecretName)
+	Expect(err).NotTo(HaveOccurred())
 
-		// Create a CA in the manner of older operator versions.
-		legacyCryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix + "@some-hash")
-		Expect(err).NotTo(HaveOccurred())
-		expiredLegacySecret, err = secret.CreateTLSSecret(legacyCryptoCA, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, -time.Hour, legacyOpts, appSecretName)
-		Expect(err).NotTo(HaveOccurred())
-	})
+	// Create a byo secret with non-standardized legacy key and cert name (like our docs for felix/typha).
+	cryptoCA, err := tls.MakeCA("byo-ca")
+	Expect(err).NotTo(HaveOccurred())
+	byoSecret, err = secret.CreateTLSSecret(cryptoCA, appSecretName, appNs, "key.key", "cert.crt", time.Hour, modernOpts, appSecretName)
+	Expect(err).NotTo(HaveOccurred())
+	legacyBYOSecret, err = secret.CreateTLSSecret(cryptoCA, legacySecretName, appNs, "key.key", "cert.crt", time.Hour, legacyOpts, legacySecretName)
+	Expect(err).NotTo(HaveOccurred())
+	expiredBYOSecret, err = secret.CreateTLSSecret(cryptoCA, appSecretName, appNs, "key.key", "cert.crt", -time.Hour, modernOpts, appSecretName)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Create a CA in the manner of older operator versions.
+	legacyCryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix + "@some-hash")
+	Expect(err).NotTo(HaveOccurred())
+	expiredLegacySecret, err = secret.CreateTLSSecret(legacyCryptoCA, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, -time.Hour, legacyOpts, appSecretName)
+	Expect(err).NotTo(HaveOccurred())
+
+	// Create a valid (non-expired) cert signed by the legacy CA with modern key usage. This simulates a
+	// long-lived cluster where the cert is still valid but has stale DNS SANs (e.g., after the
+	// calico-apiserver namespace migration from calico-apiserver to calico-system).
+	validLegacyCASecret, err = secret.CreateTLSSecret(legacyCryptoCA, appSecretName, appNs, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, time.Hour, modernOpts, "old-dns-name")
+	Expect(err).NotTo(HaveOccurred())
+})
+var _ = Describe("Test CertificateManagement suite", func() {
+	var (
+		cli                client.Client
+		scheme             *k8sruntime.Scheme
+		installation       *operatorv1.InstallationSpec
+		cm                 *operatorv1.CertificateManagement
+		clusterDomain      = "cluster.local"
+		appDNSNames        = []string{appSecretName}
+		ctx                = context.TODO()
+		certificateManager certificatemanager.CertificateManager
+		expiredSecret      *corev1.Secret
+	)
 
 	BeforeEach(func() {
-		for _, secret := range []*corev1.Secret{legacySecret, byoSecret, legacyWithClientKeyUsage, legacyBYOSecret, expiredBYOSecret, expiredLegacySecret} {
+		for _, secret := range []*corev1.Secret{legacySecret, byoSecret, legacyWithClientKeyUsage, legacyBYOSecret, expiredBYOSecret, expiredLegacySecret, validLegacyCASecret} {
 			// Clean up secret state.
 			secret.ResourceVersion = ""
 		}
@@ -309,6 +319,21 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				kp, err := certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(kp.GetCertificatePEM()).NotTo(Equal(secret.Data[corev1.TLSCertKey]))
+			})
+
+			It("should reissue a valid legacy CA-signed cert when DNS names don't match", func() {
+				// Simulates the calico-apiserver namespace migration: the cert is still valid
+				// but has SANs for the old namespace. Certs signed by the legacy operator CA
+				// (tigera-operator-signer@<hash>) should be recognized as operator-signed and
+				// reissued, not treated as BYO.
+				secret := validLegacyCASecret
+				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
+				newDNSNames := []string{"new-dns-name"}
+				kp, err := certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, newDNSNames)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(kp.GetCertificatePEM()).NotTo(Equal(secret.Data[corev1.TLSCertKey]))
+				Expect(kp.BYO()).To(BeFalse())
+				test.VerifyCertSANs(kp.GetCertificatePEM(), newDNSNames...)
 			})
 
 			It("should return an error on creating, but return nil on fetching expired byo certificates", func() {

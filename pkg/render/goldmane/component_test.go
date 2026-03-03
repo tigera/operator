@@ -58,7 +58,7 @@ var _ = Describe("ComponentRendering", func() {
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
 				Goldmane:              &operatorv1.Goldmane{},
 			},
-			7, 0,
+			7, 1,
 		),
 		Entry("Should return objects to delete when variant is not Calico",
 			&goldmane.Configuration{
@@ -70,7 +70,7 @@ var _ = Describe("ComponentRendering", func() {
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
 				Goldmane:              &operatorv1.Goldmane{},
 			},
-			0, 7,
+			0, 8,
 		),
 	)
 

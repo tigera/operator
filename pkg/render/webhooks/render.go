@@ -194,7 +194,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			v3.Rule{
 				Action:      v3.Allow,
 				Protocol:    &networkpolicy.TCPProtocol,
-				Destination: networkpolicy.KubeAPIServerEntityRule,
+				Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 			},
 			v3.Rule{
 				Action: v3.Pass,

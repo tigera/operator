@@ -1054,7 +1054,7 @@ func MaintainInstallationFinalizer(
 		log.Error(err, "An error occurred when querying the Installation resource")
 		return finalizerSet, err
 	}
-	patchFrom := client.MergeFrom(installation.DeepCopy())
+	patchFrom := client.MergeFromWithOptions(installation.DeepCopy(), client.MergeFromWithOptimisticLock{})
 
 	// Determine the correct finalizers to apply to the Installation.
 	if mainResource != nil {

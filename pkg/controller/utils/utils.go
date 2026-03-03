@@ -1054,7 +1054,11 @@ func MaintainInstallationFinalizer(
 		log.Error(err, "An error occurred when querying the Installation resource")
 		return finalizerSet, err
 	}
-	patchFrom := client.MergeFrom(installation.DeepCopy())
+	// Use optimistic locking so that concurrent finalizer patches from different controllers
+	// (e.g., whisker and goldmane) produce a conflict error instead of silently overwriting
+	// each other. JSON merge patch replaces the entire finalizers array, so without the lock
+	// the second writer wins and the first controller's finalizer is lost until re-reconciliation.
+	patchFrom := client.MergeFromWithOptions(installation.DeepCopy(), client.MergeFromWithOptimisticLock{})
 
 	// Determine the correct finalizers to apply to the Installation.
 	if mainResource != nil {

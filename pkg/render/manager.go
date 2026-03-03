@@ -1466,6 +1466,10 @@ func (m *managerComponent) deprecatedResources(tenant *operatorv1.Tenant, instal
 				TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			},
 		}
+		objs = append(objs,
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("manager-access", legacyNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", legacyNamespace),
+		)
 	}
 
 	managedClustersWatchObj.SetName(managedClustersWatchRoleBindingName)

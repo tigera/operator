@@ -1550,11 +1550,6 @@ var (
 			Verbs: []string{"get", "watch", "list"},
 		},
 		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authorizationreviews"},
-			Verbs:     []string{"create"},
-		},
-		{
 			APIGroups:     []string{"projectcalico.org"},
 			Resources:     []string{"uisettingsgroups"},
 			Verbs:         []string{"get"},
@@ -1714,11 +1709,6 @@ var (
 				"securityeventwebhooks",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"authorizationreviews"},
-			Verbs:     []string{"create"},
 		},
 		{
 			APIGroups:     []string{"projectcalico.org"},

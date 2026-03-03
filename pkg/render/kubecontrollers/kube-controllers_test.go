@@ -147,7 +147,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
 			APIGroups: []string{"kubevirt.io"},
 			Resources: []string{"virtualmachineinstances", "virtualmachines"},
-			Verbs:     []string{"get"},
+			Verbs:     []string{"get", "list", "watch"},
 		}))
 	})
 

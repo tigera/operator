@@ -70,6 +70,7 @@ var (
 
 	legacySecret             *corev1.Secret
 	expiredLegacySecret      *corev1.Secret
+	validLegacyCASecret      *corev1.Secret
 	byoSecret                *corev1.Secret
 	expiredBYOSecret         *corev1.Secret
 	legacyBYOSecret          *corev1.Secret
@@ -105,6 +106,12 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	expiredLegacySecret, err = secret.CreateTLSSecret(legacyCryptoCA, appSecretName, appNs, legacyKeyFieldName, legacyCertFieldName, -time.Hour, legacyOpts, appSecretName)
 	Expect(err).NotTo(HaveOccurred())
+
+	// Create a valid (non-expired) cert signed by the legacy CA with modern key usage. This simulates a
+	// long-lived cluster where the cert is still valid but has stale DNS SANs (e.g., after the
+	// calico-apiserver namespace migration from calico-apiserver to calico-system).
+	validLegacyCASecret, err = secret.CreateTLSSecret(legacyCryptoCA, appSecretName, appNs, corev1.TLSPrivateKeyKey, corev1.TLSCertKey, time.Hour, modernOpts, "old-dns-name")
+	Expect(err).NotTo(HaveOccurred())
 })
 
 var _ = Describe("Test CertificateManagement suite", func() {
@@ -121,7 +128,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 	)
 
 	BeforeEach(func() {
-		for _, secret := range []*corev1.Secret{legacySecret, byoSecret, legacyWithClientKeyUsage, legacyBYOSecret, expiredBYOSecret, expiredLegacySecret} {
+		for _, secret := range []*corev1.Secret{legacySecret, byoSecret, legacyWithClientKeyUsage, legacyBYOSecret, expiredBYOSecret, expiredLegacySecret, validLegacyCASecret} {
 			// Clean up secret state.
 			secret.ResourceVersion = ""
 		}
@@ -313,6 +320,21 @@ var _ = Describe("Test CertificateManagement suite", func() {
 				kp, err := certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, []string{appSecretName})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(kp.GetCertificatePEM()).NotTo(Equal(secret.Data[corev1.TLSCertKey]))
+			})
+
+			It("should reissue a valid legacy CA-signed cert when DNS names don't match", func() {
+				// Simulates the calico-apiserver namespace migration: the cert is still valid
+				// but has SANs for the old namespace. Certs signed by the legacy operator CA
+				// (tigera-operator-signer@<hash>) should be recognized as operator-signed and
+				// reissued, not treated as BYO.
+				secret := validLegacyCASecret
+				Expect(cli.Create(ctx, secret)).NotTo(HaveOccurred())
+				newDNSNames := []string{"new-dns-name"}
+				kp, err := certificateManager.GetOrCreateKeyPair(cli, secret.Name, secret.Namespace, newDNSNames)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(kp.GetCertificatePEM()).NotTo(Equal(secret.Data[corev1.TLSCertKey]))
+				Expect(kp.BYO()).To(BeFalse())
+				test.VerifyCertSANs(kp.GetCertificatePEM(), newDNSNames...)
 			})
 
 			It("should return an error on creating, but return nil on fetching expired byo certificates", func() {

@@ -115,9 +115,11 @@ func Ensure(c client.Client, variant string, v3 bool, log logr.Logger) error {
 
 	for _, obj := range objs {
 		log.Info("ensuring MutatingAdmissionPolicy resource exists", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+		// Cancel explicitly rather than using defer, since defer only runs at
+		// function return and would leak contexts across loop iterations.
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
 		if err := c.Create(ctx, obj); err != nil {
+			cancel()
 			if errors.IsAlreadyExists(err) {
 				continue
 			}
@@ -130,6 +132,8 @@ func Ensure(c client.Client, variant string, v3 bool, log logr.Logger) error {
 
 			// Log an error but continue. We'll handle any persistent issues in the core controller's reconciliation loop.
 			log.Error(err, "Failed to create MutatingAdmissionPolicy resource", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+		} else {
+			cancel()
 		}
 	}
 	return nil

@@ -422,7 +422,7 @@ func (c *dexComponent) calicoSystemNetworkPolicy(installationVariant operatorv1.
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 	}...)
 	for _, egressRule := range c.resolveEgressRulesByDestination() {

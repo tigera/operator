@@ -58,7 +58,7 @@ var _ = Describe("ComponentRendering", func() {
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
 			},
-			numExpectedObjects, 0,
+			numExpectedObjects, 1,
 		),
 		Entry("Should return objects to delete when variant is not Calico",
 			&whisker.Configuration{
@@ -70,7 +70,7 @@ var _ = Describe("ComponentRendering", func() {
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
 			},
-			0, numExpectedObjects,
+			0, numExpectedObjects+1,
 		),
 	)
 

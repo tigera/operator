@@ -397,6 +397,12 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 			},
 			Verbs: []string{"get", "list", "watch", "create", "update", "delete"},
 		},
+		{
+			// The IPAM GC controller uses informers to list/watch KubeVirt VMs/VMIs for IP garbage collection.
+			APIGroups: []string{"kubevirt.io"},
+			Resources: []string{"virtualmachineinstances", "virtualmachines"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}
 
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {

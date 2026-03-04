@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v3"
 )
@@ -33,11 +34,11 @@ var debugFlag = &cli.BoolFlag{
 	Sources: cli.EnvVars("DEBUG"),
 }
 
-var hookTimeoutFlag = &cli.DurationFlag{
-	Name:    "hook-timeout",
-	Usage:   "Timeout duration for hook execution",
-	Sources: cli.EnvVars("HOOK_TIMEOUT"),
-	Value:   DefaultHookTimeout,
+var extensionTimeoutFlag = &cli.DurationFlag{
+	Name:    "timeout",
+	Usage:   "Timeout duration for extension execution",
+	Sources: cli.EnvVars("EXTENSION_TIMEOUT"),
+	Value:   5 * time.Minute,
 }
 
 // Git/GitHub related flags.

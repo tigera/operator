@@ -90,38 +90,25 @@ var buildCommand = &cli.Command{
 		enterpriseGitBranchFlag,
 		hashreleaseFlag,
 		skipValidationFlag,
-		hookTimeoutFlag,
+		extensionTimeoutFlag,
 	},
 	Before: buildBefore,
 	Action: buildAction,
 	After:  buildAfter,
 }
 
-// buildBeforeHook is an optional hook called at the start of buildBefore for additional pre-processing.
-// It can be set via init() in separate files to extend the build command behavior.
-var buildBeforeHook multiHook[cliBeforeHookFunc]
-
-// setupHashreleaseBeforeHook is an optional hook called at the start of setupHashreleaseBuild
-// for additional hashrelease setup (e.g., copying image config files).
-var setupHashreleaseBeforeHook multiHook[cliHookWithRepoDirFunc]
-
-// buildAfterHook is an optional hook called in buildAfter for additional post-build tasks.
-// This runs regardless of build success or failure, so it can be used for cleanup tasks.
-var buildAfterHooks multiHook[cliHookFunc]
+// buildCleanupFns collects cleanup functions to run after the build completes (e.g., git reset, temp dir removal).
+// Functions are run in reverse order (LIFO) and all errors are collected.
+var buildCleanupFns []func(ctx context.Context) error
 
 // Pre-action for release build command.
 var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	configureLogging(c)
 
-	// Extract hook timeout once for reuse
-	hookTimeout := c.Duration(hookTimeoutFlag.Name)
+	// Start with a clean slate for build cleanup functions.
+	buildCleanupFns = nil
 
-	// Call pre-hook if registered.
 	var err error
-	ctx, err = RunBuildBeforeHook(ctx, c, hookTimeout)
-	if err != nil {
-		return ctx, err
-	}
 
 	// Determine build types for Calico and Enterprise
 	if ver := c.String(calicoVersionsConfigFlag.Name); ver != "" {
@@ -277,11 +264,28 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 	return nil
 })
 
+// runBuildCleanup runs all registered cleanup functions in reverse order (LIFO),
+// logging each failure individually. It returns the joined errors and resets the slice.
+func runBuildCleanup(ctx context.Context) error {
+	var errs []error
+	for i := len(buildCleanupFns) - 1; i >= 0; i-- {
+		if err := buildCleanupFns[i](ctx); err != nil {
+			logrus.WithError(err).Error("Build cleanup failed")
+			errs = append(errs, err)
+		}
+	}
+	buildCleanupFns = nil
+	return errors.Join(errs...)
+}
+
+// buildAfter runs all registered cleanup functions after the build completes.
+// Cleanup errors are logged but intentionally not returned to the CLI framework
+// as the build result (success or failure) is what matters.
 var buildAfter = cli.AfterFunc(func(ctx context.Context, c *cli.Command) error {
-	hookTimeout := c.Duration(hookTimeoutFlag.Name)
-	if err := RunBuildAfterHook(ctx, c, hookTimeout); err != nil {
-		// Error should not fail the build, but log it for visibility.
-		logrus.WithError(err).Error("Build after hook failed")
+	cleanupCtx, cancel := context.WithTimeout(ctx, c.Duration(extensionTimeoutFlag.Name))
+	defer cancel()
+	if err := runBuildCleanup(cleanupCtx); err != nil {
+		logrus.WithError(err).Error("One or more build cleanup functions failed")
 	}
 	return nil
 })
@@ -321,23 +325,16 @@ func assertOperatorImageVersion(registry, image, expectedVersion string) error {
 	return nil
 }
 
-// Modify component images config and versions for hashrelease builds as needed
-// and adds a build after hook to reset any changes to git state after the build completes.
-func setupHashreleaseBuild(ctx context.Context, c *cli.Command, repoRootDir string) error {
-	buildAfterHooks.Add("Reset repo git state", func(ctx context.Context, c *cli.Command) error {
+// setupHashreleaseBuild modifies component image config and versions for hashrelease builds.
+// It registers a cleanup function to reset git state after the build completes.
+var setupHashreleaseBuild = func(ctx context.Context, c *cli.Command, repoRootDir string) error {
+	buildCleanupFns = append(buildCleanupFns, func(ctx context.Context) error {
 		if out, err := gitInDirContext(ctx, repoRootDir, append([]string{"checkout", "-f"}, changedFiles...)...); err != nil {
 			logrus.Error(out)
 			return fmt.Errorf("resetting git state in repo after hashrelease build: %w", err)
 		}
 		return nil
 	})
-
-	// Call pre-hook if registered.
-	var err error
-	hookTimeout := c.Duration(hookTimeoutFlag.Name)
-	if ctx, err = RunSetupHashreleaseBeforeHook(ctx, c, repoRootDir, hookTimeout); err != nil {
-		return fmt.Errorf("setup hashrelease pre-hook failed: %w", err)
-	}
 
 	image := c.String(imageFlag.Name)
 	if image != defaultImageName {
@@ -504,18 +501,17 @@ func (r *hashreleaseRepo) clone() (string, error) {
 		return "", fmt.Errorf("no git hash found in version %s", r.version)
 	}
 
-	// Create a temp directory for cloning the repo. We will clean this up in a build after hook.
+	// Create a temp directory for cloning the repo. Cleaned up by buildCleanupFns.
 	repoTmpDir, err := os.MkdirTemp("", r.Product+"-*")
 	if err != nil {
 		return "", fmt.Errorf("creating temp directory for %s repo: %w", r.Product, err)
 	}
-	buildAfterHooks.Add(fmt.Sprintf("Cleaning up %s repo temp directory", r.Product), func(ctx context.Context, c *cli.Command) error {
+	buildCleanupFns = append(buildCleanupFns, func(ctx context.Context) error {
 		if err := os.RemoveAll(repoTmpDir); err != nil {
 			return fmt.Errorf("removing temp directory %s for %s repo: %w", repoTmpDir, r.Product, err)
 		}
 		return nil
-	},
-	)
+	})
 	remote := "origin"
 	logrus.WithFields(logrus.Fields{
 		"version": r.version,

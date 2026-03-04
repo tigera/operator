@@ -38,6 +38,7 @@ var changedFiles = []string{
 	enterpriseConfig,
 	"pkg/components",
 	"pkg/imports/crds",
+	"pkg/imports/admission",
 }
 
 // Command to prepare repo for a new release.

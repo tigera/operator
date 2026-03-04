@@ -955,6 +955,8 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
+					"uisettings",
+					"uisettingsgroups",
 				},
 				Verbs: []string{"list"},
 			},
@@ -1081,6 +1083,20 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 					"events",
 				},
 				Verbs: []string{"dismiss", "delete"},
+			},
+			{
+				// Required by the AuthorizationReview calculator in ui-apis to evaluate
+				// RBAC permissions for users.
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				// Required by the AuthorizationReview calculator in ui-apis to evaluate
+				// RBAC permissions for UISettingsGroups.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettingsgroups"},
+				Verbs:     []string{"list"},
 			},
 		},
 	}
@@ -1450,6 +1466,10 @@ func (m *managerComponent) deprecatedResources(tenant *operatorv1.Tenant, instal
 				TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			},
 		}
+		objs = append(objs,
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("manager-access", legacyNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", legacyNamespace),
+		)
 	}
 
 	managedClustersWatchObj.SetName(managedClustersWatchRoleBindingName)

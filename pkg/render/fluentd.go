@@ -185,6 +185,9 @@ type FluentdConfiguration struct {
 	PacketCapture *operatorv1.PacketCaptureAPI
 
 	NonClusterHost *operatorv1.NonClusterHost
+
+	// LicenseExpired indicates the license has expired and fluentd DaemonSet should be removed.
+	LicenseExpired bool
 }
 
 type fluentdComponent struct {
@@ -332,7 +335,11 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	}
 
-	objs = append(objs, c.daemonset())
+	if c.cfg.LicenseExpired {
+		toDelete = append(toDelete, c.daemonset())
+	} else {
+		objs = append(objs, c.daemonset())
+	}
 
 	if c.cfg.NonClusterHost != nil && c.cfg.OSType == rmeta.OSTypeLinux {
 		objs = append(objs, c.nonClusterHostInputService())

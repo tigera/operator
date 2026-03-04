@@ -781,7 +781,7 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		// Common rules required to handle requests from multiple components in the management cluster.
 		{
-			// ID uses read-only permissions and KubeController uses both read and write verbs.
+			// ID uses read-only permissions and kube-controllers uses both read and write verbs.
 			APIGroups: []string{""},
 			Resources: []string{"configmaps"},
 			Verbs:     []string{"create", "delete", "get", "list", "update", "watch"},
@@ -789,20 +789,20 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 		{
 			// Allows Linseed to watch namespaces before copying its token.
 			// Also enables PolicyRecommendation to watch namespaces,
-			// and Manager/KubeController to list them.
+			// and Manager/kube-controllers to list them.
 			APIGroups: []string{""},
 			Resources: []string{"namespaces"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			// KubeController watches Nodes to monitor for deletions.
+			// kube-controllers watches Nodes to monitor for deletions.
 			// Manager performs a list operation on Nodes.
 			APIGroups: []string{""},
 			Resources: []string{"nodes"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			// KubeController watches Pods to verify existence for IPAM garbage collection.
+			// kube-controllers watches Pods to verify existence for IPAM garbage collection.
 			// Manager performs get operations on Pods.
 			APIGroups: []string{""},
 			Resources: []string{"pods"},
@@ -816,13 +816,13 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			// Manager uses list; KubeController uses 'get', 'list', 'watch', 'update'.
+			// Manager uses list; kube-controllers uses 'get', 'list', 'watch', 'update'.
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "update", "watch"},
 		},
 		{
-			// Needed by KubeController to validate licenses; also used by ID.
+			// Needed by kube-controllers to validate licenses; also used by ID.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch"},
@@ -845,8 +845,19 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			Resources: []string{"tiers"},
 			Verbs:     []string{"create", "delete", "get", "list", "patch", "update", "watch"},
 		},
+		// Rules needed by guardian to handle manager authorization reviews.
+		{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
+			Verbs:     []string{"list", "get"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"uisettings", "uisettingsgroups"},
+			Verbs:     []string{"list", "get"},
+		},
 
-		// Rules needed by guardian to handle manager requests.
+		// Rules needed by guardian to handle other manager requests.
 		{
 			APIGroups: []string{""},
 			Resources: []string{"events"},

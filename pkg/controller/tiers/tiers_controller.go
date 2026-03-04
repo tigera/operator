@@ -24,7 +24,7 @@ import (
 	"github.com/go-logr/logr"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -156,6 +156,15 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
+	// Try to delete allow-tigera deprecated tier
+	err = componentHandler.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(&v3.Tier{
+		TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+	}), nil)
+	if err != nil {
+		log.V(1).Info("Error deleting deprecated allow-tigera tier", "error", err)
+	}
+
 	r.status.ReadyToMonitor()
 	r.status.ClearDegraded()
 	return reconcile.Result{}, nil
@@ -231,20 +240,6 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 
 		}
 	}
-
-	// Check if the is there any Calico NetworkPolicy with the allow-tigera
-	// tier and properly set the EmptyAllowTigeraTier flag.
-	allowTigeraPolicies := &v3.NetworkPolicyList{}
-	if err := r.client.List(ctx, allowTigeraPolicies, &client.ListOptions{
-		LabelSelector: labels.SelectorFromSet(map[string]string{
-			"projectcalico.org/tier": "allow-tigera",
-		}),
-		Limit: 1,
-	}); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying deprecated allow-tigera network policies", err, reqLogger)
-		return nil, &reconcile.Result{RequeueAfter: utils.StandardRetry}
-	}
-	tiersConfig.EmptyAllowTigeraTier = len(allowTigeraPolicies.Items) == 0
 
 	return &tiersConfig, nil
 }

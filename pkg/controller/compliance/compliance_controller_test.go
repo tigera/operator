@@ -249,7 +249,8 @@ var _ = Describe("Compliance controller tests", func() {
 
 		// Custom cert has the compliance svc DNS names as well as other DNS names
 		dnsNames := append(expectedDNSNames, "compliance.example.com", "192.168.10.13")
-		newSecret, err := secret.CreateTLSSecret(nil,
+		testCA := test.MakeTestCA("compliance-test")
+		newSecret, err := secret.CreateTLSSecret(testCA,
 			render.ComplianceServerCertSecret, common.OperatorNamespace(), corev1.TLSPrivateKeyKey,
 			corev1.TLSCertKey, tls.DefaultCertificateDuration, nil, dnsNames...,
 		)

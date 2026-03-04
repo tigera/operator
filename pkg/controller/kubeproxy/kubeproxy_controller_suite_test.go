@@ -17,17 +17,17 @@ package kubeproxy
 import (
 	"testing"
 
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/reporters"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 	uzap "go.uber.org/zap"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func TestStatus(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
-	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/ut/kubeproxy_controller_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/kubeproxy Suite", []Reporter{junitReporter})
+	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
+	gomega.RegisterFailHandler(ginkgo.Fail)
+	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
+	reporterConfig.JUnitReport = "../../../report/ut/kubeproxy_controller_suite.xml"
+	ginkgo.RunSpecs(t, "pkg/controller/kubeproxy Suite", suiteConfig, reporterConfig)
 }

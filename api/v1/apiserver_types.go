@@ -32,6 +32,10 @@ type APIServerSpec struct {
 	// used in conjunction with ControlPlaneNodeSelector or ControlPlaneTolerations, then these overrides
 	// take precedence.
 	APIServerDeployment *APIServerDeployment `json:"apiServerDeployment,omitempty"`
+
+	// CalicoWebhooksDeployment configures the calico-webhooks Deployment.
+	// +optional
+	CalicoWebhooksDeployment *CalicoWebhooksDeployment `json:"calicoWebhooksDeployment,omitempty"`
 }
 
 // APIServerStatus defines the observed state of Tigera API server.

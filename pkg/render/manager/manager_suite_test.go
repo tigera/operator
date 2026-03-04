@@ -1,4 +1,4 @@
-// Copyright (c) 2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,18 +19,17 @@ import (
 
 	uzap "go.uber.org/zap"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/onsi/ginkgo/reporters"
 )
 
 func TestRender(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
-	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/ut/manager_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render/manager Suite", []Reporter{junitReporter})
+	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
+	gomega.RegisterFailHandler(ginkgo.Fail)
+	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
+	reporterConfig.JUnitReport = "../../../report/ut/manager_suite.xml"
+	ginkgo.RunSpecs(t, "pkg/render/manager Suite", suiteConfig, reporterConfig)
 }

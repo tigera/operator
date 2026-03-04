@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +36,6 @@ type MonitorReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=monitors,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=monitors/status,verbs=get;update;patch
 
-func (r *MonitorReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *MonitorReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return monitor.Add(mgr, opts)
 }

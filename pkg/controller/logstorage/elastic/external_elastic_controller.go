@@ -44,15 +44,13 @@ import (
 type ExternalESController struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client        client.Client
-	scheme        *runtime.Scheme
-	status        status.StatusManager
-	provider      operatorv1.Provider
-	clusterDomain string
-	multiTenant   bool
+	client client.Client
+	scheme *runtime.Scheme
+	status status.StatusManager
+	opts   options.ControllerOptions
 }
 
-func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
+func AddExternalES(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}
@@ -62,12 +60,10 @@ func AddExternalES(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	r := &ExternalESController{
-		client:        mgr.GetClient(),
-		scheme:        mgr.GetScheme(),
-		status:        status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
-		clusterDomain: opts.ClusterDomain,
-		provider:      opts.DetectedProvider,
-		multiTenant:   opts.MultiTenant,
+		client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		status: status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
+		opts:   opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -133,7 +129,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	if !utils.IsAPIServerReady(r.client, reqLogger) {
+	if !utils.IsProjectCalicoV3Available(r.client, r.opts, reqLogger) {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -157,7 +153,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	clusterConfig := relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
-	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets, r.multiTenant)
+	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets, r.opts.MultiTenant)
 	for _, component := range []render.Component{externalElasticsearch} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

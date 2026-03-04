@@ -91,7 +91,7 @@ func relevantCSR(csr *certificatesv1.CertificateSigningRequest) bool {
 
 // Add creates a new CSR Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	reconciler, err := newReconciler(mgr, opts)
 	if err != nil {
 		return err
@@ -121,7 +121,7 @@ type tlsAsset struct {
 	validDNSNames           []string
 }
 
-func newReconciler(mgr manager.Manager, opts options.AddOptions) (reconcile.Reconciler, error) {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (reconcile.Reconciler, error) {
 	calicoClient, err := calicoclient.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return nil, err
@@ -219,7 +219,7 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 	var passthrough render.Component
 	if needsCSRRole {
 		// This controller creates the cluster role for any pod in the cluster that requires certificate management.
-		passthrough = render.NewPassthrough(certificatemanagement.CSRClusterRole())
+		passthrough = render.NewCreationPassthrough(certificatemanagement.CSRClusterRole())
 		err := componentHandler.CreateOrUpdateOrDelete(ctx, passthrough, nil)
 		if err != nil {
 			return reconcile.Result{}, err

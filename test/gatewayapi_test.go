@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
@@ -53,14 +53,14 @@ var _ = Describe("GatewayAPI tests", func() {
 	var operatorDone chan struct{}
 	BeforeEach(func() {
 		log = logf.Log.WithName("gatewayapi-test-logger")
-		c, clientset, mgr = setupManagerNoControllers(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist)
+		c, clientset, mgr = setupManagerNoControllers()
 
 		// Start the GatewayAPI controller.
 		shutdownContext, cancel = context.WithCancel(context.TODO())
 		err := (&controller.GatewayAPIReconciler{
 			Client: c,
 			Scheme: mgr.GetScheme(),
-		}).SetupWithManager(mgr, options.AddOptions{
+		}).SetupWithManager(mgr, options.ControllerOptions{
 			DetectedProvider:    operator.ProviderNone,
 			EnterpriseCRDExists: EnterpriseCRDsExist,
 			ManageCRDs:          ManageCRDsDisable,

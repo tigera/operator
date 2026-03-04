@@ -37,9 +37,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-var log = logf.Log.WithName("AWS_SG_Setup")
-var TRACE = 7
-var DEBUG = 5
+var (
+	log   = logf.Log.WithName("AWS_SG_Setup")
+	TRACE = 7
+	DEBUG = 5
+)
 
 type errorSecurityGroupNotFound struct {
 	FilterKey   string
@@ -312,7 +314,7 @@ func allowIngressToSG(cli *ec2.EC2, toSG *ec2.SecurityGroup, sources []ingressSr
 		if skip {
 			continue
 		}
-		in.SetIpPermissions([]*ec2.IpPermission{&ec2.IpPermission{
+		in.SetIpPermissions([]*ec2.IpPermission{{
 			UserIdGroupPairs: []*ec2.UserIdGroupPair{{
 				GroupId: aws.String(s.srcSGId),
 			}},

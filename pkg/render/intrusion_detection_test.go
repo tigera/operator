@@ -17,8 +17,7 @@ package render_test
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -84,7 +83,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -117,8 +116,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		resources, _ := component.Objects()
 
 		expected := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-intrusion-detection"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
@@ -212,12 +211,12 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"securityeventwebhooks"},
 				Verbs:     []string{"get", "list", "watch", "update"},
 			},
 			rbacv1.PolicyRule{
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"alertexceptions"},
 				Verbs:     []string{"get", "list"},
 			},
@@ -259,7 +258,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				Namespace: render.IntrusionDetectionNamespace,
 			},
 		}))
-
 	})
 
 	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {
@@ -295,8 +293,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		resources, _ := component.Objects()
 
 		expected := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-intrusion-detection"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
@@ -369,8 +367,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		resources, _ := component.Objects()
 
 		expected := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-intrusion-detection"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
@@ -484,14 +482,14 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		}))
 	})
 
-	Context("allow-tigera rendering", func() {
+	Context("calico-system rendering", func() {
 		policyNames := []types.NamespacedName{
-			{Name: "allow-tigera.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"},
-			{Name: "allow-tigera.intrusion-detection-elastic", Namespace: "tigera-intrusion-detection"},
+			{Name: "calico-system.intrusion-detection-controller", Namespace: "tigera-intrusion-detection"},
+			{Name: "calico-system.intrusion-detection-elastic", Namespace: "tigera-intrusion-detection"},
 		}
 
-		getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-			if policyName.Name == "allow-tigera.intrusion-detection-controller" {
+		getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
+			if policyName.Name == "calico-system.intrusion-detection-controller" {
 				return testutils.SelectPolicyByClusterTypeAndProvider(scenario,
 					map[string]*v3.NetworkPolicy{
 						"standalone":           expectedIDPolicyForStandalone,
@@ -507,8 +505,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			return nil
 		}
 
-		DescribeTable("should render allow-tigera policy",
-			func(scenario testutils.AllowTigeraScenario) {
+		DescribeTable("should render calico-system policy",
+			func(scenario testutils.CalicoSystemScenario) {
 				cfg.OpenShift = scenario.OpenShift
 				cfg.ManagedCluster = scenario.ManagedCluster
 				cfg.ManagementCluster = scenario.ManagementCluster
@@ -516,17 +514,17 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				resources, _ := component.Objects()
 
 				for _, policyName := range policyNames {
-					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 					expectedPolicy := getExpectedPolicy(policyName, scenario)
 					Expect(policy).To(Equal(expectedPolicy))
 				}
 			},
-			Entry("for standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false, ManagementCluster: false}),
-			Entry("for standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true, ManagementCluster: false}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false, ManagementCluster: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true, ManagementCluster: false}),
-			Entry("for management, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false, ManagementCluster: true}),
-			Entry("for management, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true, ManagementCluster: true}),
+			Entry("for standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false, ManagementCluster: false}),
+			Entry("for standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true, ManagementCluster: false}),
+			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false, ManagementCluster: false}),
+			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true, ManagementCluster: false}),
+			Entry("for management, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false, ManagementCluster: true}),
+			Entry("for management, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true, ManagementCluster: true}),
 		)
 	})
 
@@ -552,7 +550,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 	})
 
 	It("should render container and init container with resource requests/limits when configured", func() {
-
 		intrusionDetectionResources := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":     resource.MustParse("2"),
@@ -647,7 +644,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 				"memory": resource.MustParse("50Mi"),
 			},
 		}))
-
 	})
 
 	It("should NOT render impersonation permissions as part of intrusion detection ClusterRole", func() {
@@ -700,8 +696,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			toCreate, _ := component.Objects()
 
 			expected := []client.Object{
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.intrusion-detection-controller", Namespace: tenantANamespace}},
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: tenantANamespace}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.intrusion-detection-controller", Namespace: tenantANamespace}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: tenantANamespace}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: tenantANamespace}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller"}},
@@ -771,7 +767,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", tenantANamespace)}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(tenantA)}))
-
 		})
 
 		It("should render impersonation permissions as part of tigera-intrusion-detection ClusterRole", func() {
@@ -840,7 +835,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			Expect(deployment.Spec.Template.Spec.Containers).To(HaveLen(1))
 			Expect(deployment.Spec.Template.Spec.Containers[0].Name).To(Equal("controller"))
 		})
-
 	})
 })
 

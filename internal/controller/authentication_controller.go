@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +36,6 @@ type AuthenticationReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=authentications,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=authentications/status,verbs=get;update;patch
 
-func (r *AuthenticationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *AuthenticationReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return authentication.Add(mgr, opts)
 }

@@ -23,8 +23,7 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/stretchr/testify/mock"
@@ -75,7 +74,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		clientScheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(clientScheme)).ShouldNot(HaveOccurred())
+		Expect(apis.AddToScheme(clientScheme, false)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(clientScheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(clientScheme)).ShouldNot(HaveOccurred())
 		err := operatorv1.SchemeBuilder.AddToScheme(clientScheme)
@@ -274,7 +273,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		})
 	})
 
-	Context("allow-tigera reconciliation", func() {
+	Context("calico-system reconciliation", func() {
 		var licenseKey *v3.LicenseKey
 		BeforeEach(func() {
 			licenseKey = &v3.LicenseKey{
@@ -287,12 +286,12 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				},
 			}
 			Expect(c.Create(ctx, licenseKey)).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready, ready)
 		})
 
 		Context("IP-based management cluster address", func() {
-			It("should render allow-tigera policy when tier and watch are ready", func() {
+			It("should render calico-system policy when tier and watch are ready", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -300,12 +299,12 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
 
 				Expect(policies.Items).To(HaveLen(2))
-				Expect(policies.Items[0].Name).To(Equal("allow-tigera.default-deny"))
-				Expect(policies.Items[1].Name).To(Equal("allow-tigera.guardian-access"))
+				Expect(policies.Items[0].Name).To(Equal("calico-system.default-deny"))
+				Expect(policies.Items[1].Name).To(Equal("calico-system.guardian-access"))
 			})
 
-			It("should omit allow-tigera policy and not degrade when tier is not ready", func() {
-				Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			It("should omit calico-system policy and not degrade when tier is not ready", func() {
+				Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -335,7 +334,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Expect(c.Update(ctx, cfg)).NotTo(HaveOccurred())
 			})
 
-			It("should render allow-tigera policy when license and tier are ready", func() {
+			It("should render calico-system policy when license and tier are ready", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -343,11 +342,11 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
 
 				Expect(policies.Items).To(HaveLen(2))
-				Expect(policies.Items[0].Name).To(Equal("allow-tigera.default-deny"))
-				Expect(policies.Items[1].Name).To(Equal("allow-tigera.guardian-access"))
+				Expect(policies.Items[0].Name).To(Equal("calico-system.default-deny"))
+				Expect(policies.Items[1].Name).To(Equal("calico-system.guardian-access"))
 			})
 
-			It("should omit allow-tigera policy when tier is ready, but license is not sufficient", func() {
+			It("should omit calico-system policy when tier is ready, but license is not sufficient", func() {
 				licenseKey.Status.Features = []string{common.TiersFeature}
 				Expect(c.Update(ctx, licenseKey)).NotTo(HaveOccurred())
 
@@ -373,7 +372,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Expect(policies.Items).To(HaveLen(0))
 			})
 
-			It("should omit allow-tigera policy when tier is ready but license is not ready", func() {
+			It("should omit calico-system policy when tier is ready but license is not ready", func() {
 				Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
@@ -383,8 +382,8 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Expect(policies.Items).To(HaveLen(0))
 			})
 
-			It("should omit allow-tigera policy when license is ready but tier is not ready", func() {
-				Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			It("should omit calico-system policy when license is ready but tier is not ready", func() {
+				Expect(c.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -470,7 +469,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 						policies := v3.NetworkPolicyList{}
 						Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
 						Expect(policies.Items).To(HaveLen(2))
-						Expect(policies.Items[1].Name).To(Equal("allow-tigera.guardian-access"))
+						Expect(policies.Items[1].Name).To(Equal("calico-system.guardian-access"))
 						policy := policies.Items[1]
 
 						// Generate the expectation based on the test case, and compare the rendered rule to our expectation.

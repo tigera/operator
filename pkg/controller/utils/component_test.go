@@ -20,8 +20,7 @@ import (
 
 	rbacv1 "k8s.io/api/rbac/v1"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
@@ -70,7 +69,7 @@ var _ = Describe("Component handler tests", func() {
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -443,7 +442,13 @@ var _ = Describe("Component handler tests", func() {
 
 		By("checking that the namespace is created and desired label is present")
 		expectedLabels := map[string]string{
-			fakeComponentLabelKey: fakeComponentLabelValue,
+			fakeComponentLabelKey:          fakeComponentLabelValue,
+			"app.kubernetes.io/instance":   "tigera-secure",
+			"app.kubernetes.io/managed-by": "tigera-operator",
+			"app.kubernetes.io/part-of":    "Calico",
+			"app.kubernetes.io/name":       "test-namespace",
+			"k8s-app":                      "test-namespace",
+			"app.kubernetes.io/component":  "Manager.operator.tigera.io",
 		}
 		nsKey := client.ObjectKey{
 			Name: "test-namespace",
@@ -492,8 +497,14 @@ var _ = Describe("Component handler tests", func() {
 
 		By("retrieving the namespace and checking that both current and desired labels are still present")
 		expectedLabels = map[string]string{
-			"extra":               "extra-value",
-			fakeComponentLabelKey: fakeComponentLabelValue,
+			"extra":                        "extra-value",
+			fakeComponentLabelKey:          fakeComponentLabelValue,
+			"k8s-app":                      "test-namespace",
+			"app.kubernetes.io/component":  "Manager.operator.tigera.io",
+			"app.kubernetes.io/instance":   "tigera-secure",
+			"app.kubernetes.io/managed-by": "tigera-operator",
+			"app.kubernetes.io/name":       "test-namespace",
+			"app.kubernetes.io/part-of":    "Calico",
 		}
 		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
@@ -502,9 +513,15 @@ var _ = Describe("Component handler tests", func() {
 
 		By("changing a desired label")
 		labels = map[string]string{
-			"extra":               "extra-value",
-			"cattle-not-pets":     "indeed",
-			fakeComponentLabelKey: "not-present",
+			"extra":                        "extra-value",
+			"cattle-not-pets":              "indeed",
+			fakeComponentLabelKey:          "not-present",
+			"app.kubernetes.io/part-of":    "Calico",
+			"k8s-app":                      "test-namespace",
+			"app.kubernetes.io/name":       "test-namespace",
+			"app.kubernetes.io/component":  "Manager.operator.tigera.io",
+			"app.kubernetes.io/managed-by": "tigera-operator",
+			"app.kubernetes.io/instance":   "tigera-secure",
 		}
 		ns.Labels = labels
 		err = c.Update(ctx, ns)
@@ -512,9 +529,15 @@ var _ = Describe("Component handler tests", func() {
 
 		By("checking that the namespace is updated with new modified label")
 		expectedLabels = map[string]string{
-			"cattle-not-pets":     "indeed",
-			"extra":               "extra-value",
-			fakeComponentLabelKey: "not-present",
+			"cattle-not-pets":              "indeed",
+			"extra":                        "extra-value",
+			fakeComponentLabelKey:          "not-present",
+			"app.kubernetes.io/component":  "Manager.operator.tigera.io",
+			"app.kubernetes.io/instance":   "tigera-secure",
+			"app.kubernetes.io/managed-by": "tigera-operator",
+			"app.kubernetes.io/name":       "test-namespace",
+			"app.kubernetes.io/part-of":    "Calico",
+			"k8s-app":                      "test-namespace",
 		}
 		nsKey = client.ObjectKey{
 			Name: "test-namespace",
@@ -544,9 +567,15 @@ var _ = Describe("Component handler tests", func() {
 
 		By("retrieving the namespace and checking that desired label is reconciled, everything else is left as-is")
 		expectedLabels = map[string]string{
-			"cattle-not-pets":     "indeed",
-			"extra":               "extra-value",
-			fakeComponentLabelKey: fakeComponentLabelValue,
+			"cattle-not-pets":              "indeed",
+			"extra":                        "extra-value",
+			fakeComponentLabelKey:          fakeComponentLabelValue,
+			"app.kubernetes.io/component":  "Manager.operator.tigera.io",
+			"app.kubernetes.io/managed-by": "tigera-operator",
+			"app.kubernetes.io/name":       "test-namespace",
+			"k8s-app":                      "test-namespace",
+			"app.kubernetes.io/instance":   "tigera-secure",
+			"app.kubernetes.io/part-of":    "Calico",
 		}
 		ns = &corev1.Namespace{}
 		err = c.Get(ctx, nsKey, ns)
@@ -595,56 +624,47 @@ var _ = Describe("Component handler tests", func() {
 					Expect(envVarFound).To(Equal(expectedEnvVar != ""), "%s env var not found in container %s", TLS_CIPHERS_ENV_VAR_NAME, c.Name)
 				}
 			},
-			TableEntry{
-				Description: "set TLS Ciphers on a DaemonSet",
-				Parameters: []interface{}{
-					&apps.DaemonSet{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-						Spec: apps.DaemonSetSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									Containers: []corev1.Container{{Image: "foo"}, {Image: "bar"}},
-								},
+			Entry("set TLS Ciphers on a DaemonSet",
+				&apps.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+					Spec: apps.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Image: "foo"}, {Image: "bar"}},
 							},
 						},
 					},
-					cipherList,
-					ciphersToString,
 				},
-			},
-			TableEntry{
-				Description: "set TLS Ciphers on a Deployment",
-				Parameters: []interface{}{
-					&apps.Deployment{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-						Spec: apps.DeploymentSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									Containers: []corev1.Container{{Image: "foo"}, {Image: "bar"}},
-								},
+				cipherList,
+				ciphersToString,
+			),
+			Entry("set TLS Ciphers on a Deployment",
+				&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Image: "foo"}, {Image: "bar"}},
 							},
 						},
 					},
-					cipherList,
-					ciphersToString,
 				},
-			},
-			TableEntry{
-				Description: "set TLS Ciphers env var explicitly in the object",
-				Parameters: []interface{}{
-					&apps.Deployment{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-						Spec: apps.DeploymentSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									Containers: []corev1.Container{
-										{
-											Image: "foo",
-											Env: []corev1.EnvVar{
-												{
-													Name:  TLS_CIPHERS_ENV_VAR_NAME,
-													Value: "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
-												},
+				cipherList,
+				ciphersToString,
+			),
+			Entry("set TLS Ciphers env var explicitly in the object",
+				&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{
+									{
+										Image: "foo",
+										Env: []corev1.EnvVar{
+											{
+												Name:  TLS_CIPHERS_ENV_VAR_NAME,
+												Value: "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256",
 											},
 										},
 									},
@@ -652,27 +672,24 @@ var _ = Describe("Component handler tests", func() {
 							},
 						},
 					},
-					cipherList,
-					string(operatorv1.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256),
 				},
-			},
-			TableEntry{
-				Description: "empty TLS Ciphers configuration",
-				Parameters: []interface{}{
-					&apps.Deployment{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-						Spec: apps.DeploymentSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									Containers: []corev1.Container{{Image: "foo"}},
-								},
+				cipherList,
+				string(operatorv1.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256),
+			),
+			Entry("empty TLS Ciphers configuration",
+				&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Image: "foo"}},
 							},
 						},
 					},
-					nil,
-					"",
 				},
-			},
+				nil,
+				"",
+			),
 		)
 	})
 	DescribeTable("ensuring ImagePullPolicy is set", func(obj client.Object) {
@@ -691,44 +708,38 @@ var _ = Describe("Component handler tests", func() {
 			Expect(true).To(Equal(false), "Unexpected kind in test")
 		}
 	},
-		TableEntry{
-			Description: "set ImagePullPolicy on a DaemonSet",
-			Parameters: []interface{}{
-				&apps.DaemonSet{
-					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-					Spec: apps.DaemonSetSpec{
-						Template: corev1.PodTemplateSpec{
-							Spec: corev1.PodSpec{
-								NodeSelector: map[string]string{},
-								Containers: []corev1.Container{
-									{Image: "foo"},
-									{Image: "bar"},
-								},
+		Entry("set ImagePullPolicy on a DaemonSet",
+			&apps.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+				Spec: apps.DaemonSetSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							NodeSelector: map[string]string{},
+							Containers: []corev1.Container{
+								{Image: "foo"},
+								{Image: "bar"},
 							},
 						},
 					},
 				},
 			},
-		},
-		TableEntry{
-			Description: "set ImagePullPolicy on a Deployment",
-			Parameters: []interface{}{
-				&apps.Deployment{
-					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-					Spec: apps.DeploymentSpec{
-						Template: corev1.PodTemplateSpec{
-							Spec: corev1.PodSpec{
-								NodeSelector: map[string]string{},
-								Containers: []corev1.Container{
-									{Image: "foo"},
-									{Image: "bar"},
-								},
+		),
+		Entry("set ImagePullPolicy on a Deployment",
+			&apps.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+				Spec: apps.DeploymentSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							NodeSelector: map[string]string{},
+							Containers: []corev1.Container{
+								{Image: "foo"},
+								{Image: "bar"},
 							},
 						},
 					},
 				},
 			},
-		},
+		),
 	)
 
 	DescribeTable("ensuring os node selectors", func(component render.Component, key client.ObjectKey, obj client.Object, expectedNodeSelectors map[string]string) {
@@ -768,457 +779,403 @@ var _ = Describe("Component handler tests", func() {
 
 		Expect(nodeSelectors).Should(Equal(expectedNodeSelectors))
 	},
-		TableEntry{
-			Description: "linux - sets the required annotations for a podtemplate when they're not set",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&corev1.PodTemplate{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-						Template: corev1.PodTemplateSpec{
-							Spec: corev1.PodSpec{
-								NodeSelector: map[string]string{},
-							},
-						},
-					}},
-				},
-				client.ObjectKey{Name: "test-podtemplate"},
-				&corev1.PodTemplate{},
-				map[string]string{
-					"kubernetes.io/os": "linux",
-				},
-			},
-		},
-		TableEntry{
-			Description: "windows - sets the required annotations for a podtemplate when they're not set",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{&corev1.PodTemplate{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
-						Template: corev1.PodTemplateSpec{
-							Spec: corev1.PodSpec{
-								NodeSelector: map[string]string{},
-							},
-						},
-					}},
-				},
-				client.ObjectKey{Name: "test-podtemplate"},
-				&corev1.PodTemplate{},
-				map[string]string{
-					"kubernetes.io/os": "windows",
-				},
-			},
-		},
-		TableEntry{
-			Description: "linux - sets the required annotations for a deployment when they're not set",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{
-						&apps.Deployment{
-							ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
-							Spec: apps.DeploymentSpec{
-								Template: corev1.PodTemplateSpec{
-									Spec: corev1.PodSpec{
-										NodeSelector: map[string]string{},
-									},
-								},
-							},
+		Entry("linux - sets the required annotations for a podtemplate when they're not set",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&corev1.PodTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							NodeSelector: map[string]string{},
 						},
 					},
-				},
-				client.ObjectKey{Name: "test-deployment"},
-				&apps.Deployment{},
-				map[string]string{
-					"kubernetes.io/os": "linux",
-				},
+				}},
 			},
-		},
-		TableEntry{
-			Description: "windows - sets the required annotations for a deployment when they're not set",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{
-						&apps.Deployment{
-							ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
-							Spec: apps.DeploymentSpec{
-								Template: corev1.PodTemplateSpec{
-									Spec: corev1.PodSpec{
-										NodeSelector: map[string]string{},
-									},
-								},
-							},
+			client.ObjectKey{Name: "test-podtemplate"},
+			&corev1.PodTemplate{},
+			map[string]string{
+				"kubernetes.io/os": "linux",
+			},
+		),
+		Entry("windows - sets the required annotations for a podtemplate when they're not set",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeWindows,
+				objs: []client.Object{&corev1.PodTemplate{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-podtemplate"},
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							NodeSelector: map[string]string{},
 						},
 					},
-				},
-				client.ObjectKey{Name: "test-deployment"},
-				&apps.Deployment{},
-				map[string]string{
-					"kubernetes.io/os": "windows",
-				},
+				}},
 			},
-		},
-		TableEntry{
-			Description: "linux - sets the required annotations for a daemonset when they're not set",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{
-						&apps.DaemonSet{
-							ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
-							Spec: apps.DaemonSetSpec{
-								Template: corev1.PodTemplateSpec{
-									Spec: corev1.PodSpec{
-										NodeSelector: map[string]string{},
-									},
-								},
-							},
-						},
-					},
-				},
-				client.ObjectKey{Name: "test-daemonset"},
-				&apps.DaemonSet{},
-				map[string]string{
-					"kubernetes.io/os": "linux",
-				},
+			client.ObjectKey{Name: "test-podtemplate"},
+			&corev1.PodTemplate{},
+			map[string]string{
+				"kubernetes.io/os": "windows",
 			},
-		},
-		TableEntry{
-			Description: "windows - sets the required annotations for a daemonset when they're not set",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{
-						&apps.DaemonSet{
-							ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
-							Spec: apps.DaemonSetSpec{
-								Template: corev1.PodTemplateSpec{
-									Spec: corev1.PodSpec{
-										NodeSelector: map[string]string{},
-									},
-								},
-							},
-						},
-					},
-				},
-				client.ObjectKey{Name: "test-daemonset"},
-				&apps.DaemonSet{},
-				map[string]string{
-					"kubernetes.io/os": "windows",
-				},
-			},
-		},
-		TableEntry{
-			Description: "linux - sets the required annotations for a statefulset when they're not set",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{
-						&apps.StatefulSet{
-							ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
-							Spec: apps.StatefulSetSpec{
-								Template: corev1.PodTemplateSpec{
-									Spec: corev1.PodSpec{
-										NodeSelector: map[string]string{},
-									},
-								},
-							},
-						},
-					},
-				},
-				client.ObjectKey{Name: "test-statefulset"},
-				&apps.StatefulSet{},
-				map[string]string{
-					"kubernetes.io/os": "linux",
-				},
-			},
-		},
-		TableEntry{
-			Description: "windows - sets the required annotations for a statefulset when they're not set",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{
-						&apps.StatefulSet{
-							ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
-							Spec: apps.StatefulSetSpec{
-								Template: corev1.PodTemplateSpec{
-									Spec: corev1.PodSpec{
-										NodeSelector: map[string]string{},
-									},
-								},
-							},
-						},
-					},
-				},
-				client.ObjectKey{Name: "test-statefulset"},
-				&apps.StatefulSet{},
-				map[string]string{
-					"kubernetes.io/os": "windows",
-				},
-			},
-		},
-		TableEntry{
-			Description: "linux - sets the required annotations for a cronjob when they're not set",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{
-						&batchv1.CronJob{
-							ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
-							Spec: batchv1.CronJobSpec{
-								JobTemplate: batchv1.JobTemplateSpec{
-									Spec: batchv1.JobSpec{
-										Template: corev1.PodTemplateSpec{
-											Spec: corev1.PodSpec{
-												NodeSelector: map[string]string{},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				client.ObjectKey{Name: "test-cronjob"},
-				&batchv1.CronJob{},
-				map[string]string{
-					"kubernetes.io/os": "linux",
-				},
-			},
-		},
-		TableEntry{
-			Description: "windows - sets the required annotations for a cronjob when they're not set",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{
-						&batchv1.CronJob{
-							ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
-							Spec: batchv1.CronJobSpec{
-								JobTemplate: batchv1.JobTemplateSpec{
-									Spec: batchv1.JobSpec{
-										Template: corev1.PodTemplateSpec{
-											Spec: corev1.PodSpec{
-												NodeSelector: map[string]string{},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-				client.ObjectKey{Name: "test-cronjob"},
-				&batchv1.CronJob{},
-				map[string]string{
-					"kubernetes.io/os": "windows",
-				},
-			},
-		},
-		TableEntry{
-			Description: "linux - sets the required annotations for a job",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&batchv1.Job{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
-						Spec: batchv1.JobSpec{
+		),
+		Entry("linux - sets the required annotations for a deployment when they're not set",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
+						Spec: apps.DeploymentSpec{
 							Template: corev1.PodTemplateSpec{
 								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
 						},
-					}},
-				},
-				client.ObjectKey{Name: "test-job"},
-				&batchv1.Job{},
-				map[string]string{
-					"kubernetes.io/os": "linux",
+					},
 				},
 			},
-		},
-		TableEntry{
-			Description: "windows - sets the required annotations for a job",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{&batchv1.Job{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
-						Spec: batchv1.JobSpec{
+			client.ObjectKey{Name: "test-deployment"},
+			&apps.Deployment{},
+			map[string]string{
+				"kubernetes.io/os": "linux",
+			},
+		),
+		Entry("windows - sets the required annotations for a deployment when they're not set",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeWindows,
+				objs: []client.Object{
+					&apps.Deployment{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
+						Spec: apps.DeploymentSpec{
 							Template: corev1.PodTemplateSpec{
 								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
 						},
-					}},
-				},
-				client.ObjectKey{Name: "test-job"},
-				&batchv1.Job{},
-				map[string]string{
-					"kubernetes.io/os": "windows",
+					},
 				},
 			},
-		},
-		TableEntry{
-			Description: "sets the required annotations for kibana",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&kbv1.Kibana{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-kibana"},
-						Spec: kbv1.KibanaSpec{
-							PodTemplate: corev1.PodTemplateSpec{
+			client.ObjectKey{Name: "test-deployment"},
+			&apps.Deployment{},
+			map[string]string{
+				"kubernetes.io/os": "windows",
+			},
+		),
+		Entry("linux - sets the required annotations for a daemonset when they're not set",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{
+					&apps.DaemonSet{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
+						Spec: apps.DaemonSetSpec{
+							Template: corev1.PodTemplateSpec{
 								Spec: corev1.PodSpec{
 									NodeSelector: map[string]string{},
 								},
 							},
 						},
-					}},
-				},
-				client.ObjectKey{Name: "test-kibana"},
-				&kbv1.Kibana{},
-				map[string]string{
-					"kubernetes.io/os": "linux",
+					},
 				},
 			},
-		},
-		TableEntry{
-			Description: "sets the required annotations for an elasticsearch nodeset",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&esv1.Elasticsearch{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-elasticsearch"},
-						Spec: esv1.ElasticsearchSpec{
-							NodeSets: []esv1.NodeSet{
-								{
-									PodTemplate: corev1.PodTemplateSpec{
+			client.ObjectKey{Name: "test-daemonset"},
+			&apps.DaemonSet{},
+			map[string]string{
+				"kubernetes.io/os": "linux",
+			},
+		),
+		Entry("windows - sets the required annotations for a daemonset when they're not set",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeWindows,
+				objs: []client.Object{
+					&apps.DaemonSet{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-daemonset"},
+						Spec: apps.DaemonSetSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									NodeSelector: map[string]string{},
+								},
+							},
+						},
+					},
+				},
+			},
+			client.ObjectKey{Name: "test-daemonset"},
+			&apps.DaemonSet{},
+			map[string]string{
+				"kubernetes.io/os": "windows",
+			},
+		),
+		Entry("linux - sets the required annotations for a statefulset when they're not set",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{
+					&apps.StatefulSet{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
+						Spec: apps.StatefulSetSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									NodeSelector: map[string]string{},
+								},
+							},
+						},
+					},
+				},
+			},
+			client.ObjectKey{Name: "test-statefulset"},
+			&apps.StatefulSet{},
+			map[string]string{
+				"kubernetes.io/os": "linux",
+			},
+		),
+		Entry("windows - sets the required annotations for a statefulset when they're not set",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeWindows,
+				objs: []client.Object{
+					&apps.StatefulSet{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-statefulset"},
+						Spec: apps.StatefulSetSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									NodeSelector: map[string]string{},
+								},
+							},
+						},
+					},
+				},
+			},
+			client.ObjectKey{Name: "test-statefulset"},
+			&apps.StatefulSet{},
+			map[string]string{
+				"kubernetes.io/os": "windows",
+			},
+		),
+		Entry("linux - sets the required annotations for a cronjob when they're not set",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{
+					&batchv1.CronJob{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
+						Spec: batchv1.CronJobSpec{
+							JobTemplate: batchv1.JobTemplateSpec{
+								Spec: batchv1.JobSpec{
+									Template: corev1.PodTemplateSpec{
 										Spec: corev1.PodSpec{
 											NodeSelector: map[string]string{},
 										},
 									},
 								},
-								{
-									PodTemplate: corev1.PodTemplateSpec{
+							},
+						},
+					},
+				},
+			},
+			client.ObjectKey{Name: "test-cronjob"},
+			&batchv1.CronJob{},
+			map[string]string{
+				"kubernetes.io/os": "linux",
+			},
+		),
+		Entry("windows - sets the required annotations for a cronjob when they're not set",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeWindows,
+				objs: []client.Object{
+					&batchv1.CronJob{
+						ObjectMeta: metav1.ObjectMeta{Name: "test-cronjob"},
+						Spec: batchv1.CronJobSpec{
+							JobTemplate: batchv1.JobTemplateSpec{
+								Spec: batchv1.JobSpec{
+									Template: corev1.PodTemplateSpec{
 										Spec: corev1.PodSpec{
-											NodeSelector: nil,
+											NodeSelector: map[string]string{},
 										},
 									},
 								},
 							},
 						},
-					}},
-				},
-				client.ObjectKey{Name: "test-elasticsearch"},
-				&esv1.Elasticsearch{},
-				map[string]string{
-					"kubernetes.io/os": "linux",
+					},
 				},
 			},
-		},
-		TableEntry{
-			Description: "linux - leaves other annotations alone and sets the required ones",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&apps.Deployment{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
-						Spec: apps.DeploymentSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									NodeSelector: map[string]string{
-										"kubernetes.io/foo": "bar",
+			client.ObjectKey{Name: "test-cronjob"},
+			&batchv1.CronJob{},
+			map[string]string{
+				"kubernetes.io/os": "windows",
+			},
+		),
+		Entry("linux - sets the required annotations for a job",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&batchv1.Job{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								NodeSelector: map[string]string{},
+							},
+						},
+					},
+				}},
+			},
+			client.ObjectKey{Name: "test-job"},
+			&batchv1.Job{},
+			map[string]string{
+				"kubernetes.io/os": "linux",
+			},
+		),
+		Entry("windows - sets the required annotations for a job",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeWindows,
+				objs: []client.Object{&batchv1.Job{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								NodeSelector: map[string]string{},
+							},
+						},
+					},
+				}},
+			},
+			client.ObjectKey{Name: "test-job"},
+			&batchv1.Job{},
+			map[string]string{
+				"kubernetes.io/os": "windows",
+			},
+		),
+		Entry("sets the required annotations for kibana",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&kbv1.Kibana{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-kibana"},
+					Spec: kbv1.KibanaSpec{
+						PodTemplate: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								NodeSelector: map[string]string{},
+							},
+						},
+					},
+				}},
+			},
+			client.ObjectKey{Name: "test-kibana"},
+			&kbv1.Kibana{},
+			map[string]string{
+				"kubernetes.io/os": "linux",
+			},
+		),
+		Entry("sets the required annotations for an elasticsearch nodeset",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&esv1.Elasticsearch{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-elasticsearch"},
+					Spec: esv1.ElasticsearchSpec{
+						NodeSets: []esv1.NodeSet{
+							{
+								PodTemplate: corev1.PodTemplateSpec{
+									Spec: corev1.PodSpec{
+										NodeSelector: map[string]string{},
+									},
+								},
+							},
+							{
+								PodTemplate: corev1.PodTemplateSpec{
+									Spec: corev1.PodSpec{
+										NodeSelector: nil,
 									},
 								},
 							},
 						},
-					}},
-				},
-				client.ObjectKey{Name: "test-deployment"},
-				&apps.Deployment{},
-				map[string]string{
-					"kubernetes.io/foo": "bar",
-					"kubernetes.io/os":  "linux",
-				},
+					},
+				}},
 			},
-		},
-		TableEntry{
-			Description: "windows - leaves other annotations alone and sets the required ones",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeWindows,
-					objs: []client.Object{&apps.Deployment{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
-						Spec: apps.DeploymentSpec{
-							Template: corev1.PodTemplateSpec{
-								Spec: corev1.PodSpec{
-									NodeSelector: map[string]string{
-										"kubernetes.io/foo": "bar",
-									},
+			client.ObjectKey{Name: "test-elasticsearch"},
+			&esv1.Elasticsearch{},
+			map[string]string{
+				"kubernetes.io/os": "linux",
+			},
+		),
+		Entry("linux - leaves other annotations alone and sets the required ones",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								NodeSelector: map[string]string{
+									"kubernetes.io/foo": "bar",
 								},
 							},
 						},
-					}},
-				},
-				client.ObjectKey{Name: "test-deployment"},
-				&apps.Deployment{},
-				map[string]string{
-					"kubernetes.io/foo": "bar",
-					"kubernetes.io/os":  "windows",
-				},
+					},
+				}},
 			},
-		},
-		TableEntry{
-			Description: "linux - sets the required annotations for Prometheus Alertmanager nodes",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&monitoringv1.Alertmanager{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-alertmanager"},
-						Spec: monitoringv1.AlertmanagerSpec{
+			client.ObjectKey{Name: "test-deployment"},
+			&apps.Deployment{},
+			map[string]string{
+				"kubernetes.io/foo": "bar",
+				"kubernetes.io/os":  "linux",
+			},
+		),
+		Entry("windows - leaves other annotations alone and sets the required ones",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeWindows,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-deployment"},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{
+								NodeSelector: map[string]string{
+									"kubernetes.io/foo": "bar",
+								},
+							},
+						},
+					},
+				}},
+			},
+			client.ObjectKey{Name: "test-deployment"},
+			&apps.Deployment{},
+			map[string]string{
+				"kubernetes.io/foo": "bar",
+				"kubernetes.io/os":  "windows",
+			},
+		),
+		Entry("linux - sets the required annotations for Prometheus Alertmanager nodes",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&monitoringv1.Alertmanager{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-alertmanager"},
+					Spec: monitoringv1.AlertmanagerSpec{
+						NodeSelector: map[string]string{
+							"kubernetes.io/a": "b",
+						},
+					},
+				}},
+			},
+			client.ObjectKey{Name: "test-alertmanager"},
+			&monitoringv1.Alertmanager{},
+			map[string]string{
+				"kubernetes.io/a":  "b",
+				"kubernetes.io/os": "linux",
+			},
+		),
+		Entry("linux - sets the required annotations for Prometheus nodes",
+			&fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&monitoringv1.Prometheus{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-prometheus"},
+					Spec: monitoringv1.PrometheusSpec{
+						CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
 							NodeSelector: map[string]string{
 								"kubernetes.io/a": "b",
 							},
 						},
-					}},
-				},
-				client.ObjectKey{Name: "test-alertmanager"},
-				&monitoringv1.Alertmanager{},
-				map[string]string{
-					"kubernetes.io/a":  "b",
-					"kubernetes.io/os": "linux",
-				},
+					},
+				}},
 			},
-		},
-		TableEntry{
-			Description: "linux - sets the required annotations for Prometheus nodes",
-			Parameters: []interface{}{
-				&fakeComponent{
-					supportedOSType: rmeta.OSTypeLinux,
-					objs: []client.Object{&monitoringv1.Prometheus{
-						ObjectMeta: metav1.ObjectMeta{Name: "test-prometheus"},
-						Spec: monitoringv1.PrometheusSpec{
-							CommonPrometheusFields: monitoringv1.CommonPrometheusFields{
-								NodeSelector: map[string]string{
-									"kubernetes.io/a": "b",
-								},
-							},
-						},
-					}},
-				},
-				client.ObjectKey{Name: "test-prometheus"},
-				&monitoringv1.Prometheus{},
-				map[string]string{
-					"kubernetes.io/a":  "b",
-					"kubernetes.io/os": "linux",
-				},
+			client.ObjectKey{Name: "test-prometheus"},
+			&monitoringv1.Prometheus{},
+			map[string]string{
+				"kubernetes.io/a":  "b",
+				"kubernetes.io/os": "linux",
 			},
-		},
+		),
 	)
 
 	It("recreates a service if its ClusterIP is removed", func() {
@@ -1227,7 +1184,13 @@ var _ = Describe("Component handler tests", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "my-service",
 				Labels: map[string]string{
-					"old": "should-be-preserved",
+					"old":                          "should-be-preserved",
+					"app.kubernetes.io/instance":   "tigera-secure",
+					"app.kubernetes.io/managed-by": "tigera-operator",
+					"app.kubernetes.io/name":       "my-service",
+					"app.kubernetes.io/part-of":    "Calico",
+					"k8s-app":                      "my-service",
+					"app.kubernetes.io/component":  "Manager.operator.tigera.io",
 				},
 			},
 			Spec: corev1.ServiceSpec{
@@ -1245,7 +1208,13 @@ var _ = Describe("Component handler tests", func() {
 		Expect(c.Get(ctx, client.ObjectKey{Name: "my-service"}, svcWithIP)).NotTo(HaveOccurred())
 		Expect(svcWithIP.Spec.ClusterIP).To(Equal("10.96.0.1"))
 		Expect(svcWithIP.Labels).To(Equal(map[string]string{
-			"old": "should-be-preserved",
+			"old":                          "should-be-preserved",
+			"app.kubernetes.io/instance":   "tigera-secure",
+			"app.kubernetes.io/managed-by": "tigera-operator",
+			"app.kubernetes.io/name":       "my-service",
+			"app.kubernetes.io/part-of":    "Calico",
+			"k8s-app":                      "my-service",
+			"app.kubernetes.io/component":  "Manager.operator.tigera.io",
 		}))
 
 		// Now pretend we're the new operator version, wanting to remove the cluster IP.
@@ -1271,8 +1240,14 @@ var _ = Describe("Component handler tests", func() {
 		Expect(c.Get(ctx, client.ObjectKey{Name: "my-service"}, svcNoIP)).NotTo(HaveOccurred())
 		Expect(svcNoIP.Spec.ClusterIP).To(Equal("None"))
 		Expect(svcNoIP.Labels).To(Equal(map[string]string{
-			"old": "should-be-preserved",
-			"new": "should-be-added",
+			"old":                          "should-be-preserved",
+			"new":                          "should-be-added",
+			"k8s-app":                      "my-service",
+			"app.kubernetes.io/name":       "my-service",
+			"app.kubernetes.io/instance":   "tigera-secure",
+			"app.kubernetes.io/managed-by": "tigera-operator",
+			"app.kubernetes.io/part-of":    "Calico",
+			"app.kubernetes.io/component":  "Manager.operator.tigera.io",
 		}))
 
 		// The fake client resets the resource version to 1 on create.
@@ -1285,9 +1260,15 @@ var _ = Describe("Component handler tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Get(ctx, client.ObjectKey{Name: "my-service"}, svcNoIP)).NotTo(HaveOccurred())
 		Expect(svcNoIP.Labels).To(Equal(map[string]string{
-			"old":   "should-be-preserved",
-			"new":   "should-be-added",
-			"newer": "should-be-added",
+			"old":                          "should-be-preserved",
+			"new":                          "should-be-added",
+			"newer":                        "should-be-added",
+			"k8s-app":                      "my-service",
+			"app.kubernetes.io/instance":   "tigera-secure",
+			"app.kubernetes.io/component":  "Manager.operator.tigera.io",
+			"app.kubernetes.io/managed-by": "tigera-operator",
+			"app.kubernetes.io/name":       "my-service",
+			"app.kubernetes.io/part-of":    "Calico",
 		}))
 		Expect(svcNoIP.ObjectMeta.ResourceVersion).To(Equal("2"),
 			"Expected update to rev ResourceVersion")
@@ -1755,8 +1736,12 @@ var _ = Describe("Component handler tests", func() {
 
 			By("checking that the daemonset is created and labels are added")
 			expectedLabels := map[string]string{
-				"k8s-app":                "test-daemonset",
-				"app.kubernetes.io/name": "test-daemonset",
+				"k8s-app":                      "test-daemonset",
+				"app.kubernetes.io/name":       "test-daemonset",
+				"app.kubernetes.io/component":  "Manager.operator.tigera.io",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/part-of":    "Calico",
 			}
 			expectedSelector := metav1.LabelSelector{
 				MatchLabels: map[string]string{"k8s-app": "test-daemonset"},
@@ -1793,8 +1778,12 @@ var _ = Describe("Component handler tests", func() {
 			Expect(err).To(BeNil())
 
 			expectedLabels := map[string]string{
-				"k8s-app":                "test-daemonset",
-				"app.kubernetes.io/name": "test-daemonset",
+				"k8s-app":                      "test-daemonset",
+				"app.kubernetes.io/name":       "test-daemonset",
+				"app.kubernetes.io/component":  "Manager.operator.tigera.io",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/part-of":    "Calico",
 			}
 			expectedSelector := metav1.LabelSelector{
 				MatchLabels: map[string]string{"preset-key": "preset-value"},
@@ -1826,8 +1815,12 @@ var _ = Describe("Component handler tests", func() {
 			Expect(err).To(BeNil())
 
 			expectedLabels := map[string]string{
-				"k8s-app":                "test-deployment",
-				"app.kubernetes.io/name": "test-deployment",
+				"k8s-app":                      "test-deployment",
+				"app.kubernetes.io/name":       "test-deployment",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/part-of":    "Calico",
+				"app.kubernetes.io/component":  "Manager.operator.tigera.io",
 			}
 			expectedSelector := metav1.LabelSelector{
 				MatchLabels: map[string]string{"k8s-app": "test-deployment"},
@@ -1865,8 +1858,12 @@ var _ = Describe("Component handler tests", func() {
 			Expect(err).To(BeNil())
 
 			expectedLabels := map[string]string{
-				"k8s-app":                "test-deployment",
-				"app.kubernetes.io/name": "test-deployment",
+				"k8s-app":                      "test-deployment",
+				"app.kubernetes.io/name":       "test-deployment",
+				"app.kubernetes.io/component":  "Manager.operator.tigera.io",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/part-of":    "Calico",
 			}
 			expectedSelector := metav1.LabelSelector{
 				MatchLabels: map[string]string{"preset-key": "preset-value"},
@@ -1881,6 +1878,20 @@ var _ = Describe("Component handler tests", func() {
 			Expect(d.Spec.Template.GetLabels()).To(Equal(expectedLabels))
 			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
 		})
+		DescribeTable("should sanitize common labels so that they pass regexp validation", func(in string) {
+			Expect(sanitizeLabel(in)).To(MatchRegexp(`(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?`))
+		},
+			Entry("Valid, should remain unchanged", "My-Test_String.123"),
+			Entry("Invalid start/end, should be trimmed", "__My-Test_String.123.."),
+			Entry("Invalid characters (spaces)", "String with spaces"),
+			Entry("Invalid characters", "special-chars!@#$%^&*"),
+			Entry("Invalid start/end", "-leading-and-trailing-"),
+			Entry("Invalid start/end (multiple)", "____-leading-and-trailing-____"),
+			Entry("Empty string, should remain empty", ""),
+			Entry("Invalid, should become empty", "."),
+			Entry("Valid single character", "a"),
+			Entry("Valid", "a-b_c.d"),
+			Entry("Valid", "1.2.3.4"))
 	})
 	Context("services account updates should not result in removal of data", func() {
 		It("preserves secrets and image pull secrets that were present before object updates", func() {
@@ -2155,11 +2166,11 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				APIVersion: "projectcalico.org/v3",
 			},
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "allow-tigera.test-policy",
+				Name:      "calico-system.test-policy",
 				Namespace: "tigera-namespace",
 			},
 			Spec: v3.NetworkPolicySpec{
-				Tier:     "allow-tigera",
+				Tier:     "calico-system",
 				Selector: "k8s-app == 'tigera-component'",
 				Egress: []v3.Rule{
 					{

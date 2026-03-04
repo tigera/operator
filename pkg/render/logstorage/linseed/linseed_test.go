@@ -18,8 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -371,13 +370,12 @@ var _ = Describe("Linseed rendering tests", func() {
 			initContainer = test.GetContainer(d.Spec.Template.Spec.InitContainers, "tigera-secure-linseed-cert-key-cert-provisioner")
 			Expect(initContainer).NotTo(BeNil())
 			Expect(initContainer.Resources).To(Equal(linseedResources))
-
 		})
 
-		Context("allow-tigera rendering", func() {
-			policyName := types.NamespacedName{Name: "allow-tigera.linseed-access", Namespace: "tigera-elasticsearch"}
+		Context("calico-system rendering", func() {
+			policyName := types.NamespacedName{Name: "calico-system.linseed-access", Namespace: "tigera-elasticsearch"}
 
-			getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			getExpectedPolicy := func(scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
 				if scenario.ManagedCluster {
 					return nil
 				}
@@ -389,8 +387,8 @@ var _ = Describe("Linseed rendering tests", func() {
 				return testutils.SelectPolicyByProvider(scenario, expectedPolicy, expectedPolicyForOpenshift)
 			}
 
-			DescribeTable("should render allow-tigera policy",
-				func(scenario testutils.AllowTigeraScenario) {
+			DescribeTable("should render calico-system policy",
+				func(scenario testutils.CalicoSystemScenario) {
 					if scenario.OpenShift {
 						cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 					} else {
@@ -400,16 +398,16 @@ var _ = Describe("Linseed rendering tests", func() {
 					component := Linseed(cfg)
 					resources, _ := component.Objects()
 
-					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 					expectedPolicy := getExpectedPolicy(scenario)
 					Expect(policy).To(Equal(expectedPolicy))
 				},
 				// Linseed only renders in the presence of an LogStorage CR and absence of a ManagementClusterConnection CR, therefore
 				// does not have a config option for managed clusters.
-				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-				Entry("for management/standalone, kube-dns with dpi", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false, DPIEnabled: true}),
-				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
-				Entry("for management/standalone, openshift-dns with dpi", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true, DPIEnabled: true}),
+				Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+				Entry("for management/standalone, kube-dns with dpi", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false, DPIEnabled: true}),
+				Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
+				Entry("for management/standalone, openshift-dns with dpi", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true, DPIEnabled: true}),
 			)
 		})
 	})
@@ -839,7 +837,7 @@ var _ = Describe("Linseed rendering tests", func() {
 
 func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
 	scheme := runtime.NewScheme()
-	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())

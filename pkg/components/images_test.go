@@ -17,8 +17,7 @@ package components
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	op "github.com/tigera/operator/api/v1"
@@ -52,7 +51,7 @@ var _ = Describe("test GetReference", func() {
 					tigeraImageEntries()...,
 				),
 				Entry("an operator init image correctly", ComponentOperatorInit, OperatorRegistry, OperatorImagePath),
-			)...,
+			),
 		)
 	})
 
@@ -68,7 +67,7 @@ var _ = Describe("test GetReference", func() {
 					tigeraImageEntries()...,
 				),
 				Entry("an operator init image correctly", ComponentOperatorInit, OperatorRegistry, OperatorImagePath),
-			)...,
+			),
 		)
 	})
 

@@ -36,8 +36,9 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
-	"github.com/tigera/operator/pkg/crds"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/imports/admission"
+	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
 	"github.com/tigera/operator/pkg/render/istio"
@@ -81,15 +82,12 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(operatortigeraiov1.AddToScheme(scheme))
-	utilruntime.Must(apis.AddToScheme(scheme))
 }
 
 func printVersion() {
 	log.Info(fmt.Sprintf("Version: %v", version.VERSION))
 	log.Info(fmt.Sprintf("Go Version: %s", goruntime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", goruntime.GOOS, goruntime.GOARCH))
-	// TODO: Add this back if we can
-	// log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
 }
 
 func main() {
@@ -140,12 +138,13 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	ctrl.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseFlagOptions(&opts)))
 
 	if showVersion {
-		// If the following line is updated then it might be necessary to update the release-verify target in the Makefile
+		// If the following line is updated then it might be necessary to update the assertOperatorImageVersion in hack/release/build.go
 		fmt.Println("Operator:", version.VERSION)
 		fmt.Println("Calico:", components.CalicoRelease)
 		fmt.Println("Enterprise:", components.EnterpriseRelease)
 		os.Exit(0)
 	}
+
 	if printImages != "" {
 		var cmpnts []components.Component
 		if strings.ToLower(printImages) == "list" {
@@ -166,6 +165,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		}
 		os.Exit(0)
 	}
+
 	if printCalicoCRDs != "" {
 		if err := showCRDs(operatortigeraiov1.Calico, printCalicoCRDs); err != nil {
 			fmt.Println(err)
@@ -210,6 +210,15 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		log.Error(err, "")
 		os.Exit(1)
 	}
+
+	v3CRDs, err := apis.UseV3CRDS(cs)
+	if err != nil {
+		log.Error(err, "Failed to determine CRD version to use")
+		os.Exit(1)
+	}
+
+	// Add the Calico API to the scheme, now that we know which backing CRD version to use.
+	utilruntime.Must(apis.AddToScheme(scheme, v3CRDs))
 
 	// Because we only run this as a job that is set up by the operator, it should not be
 	// launched except by an operator that is the active operator. So we do not need to
@@ -280,8 +289,15 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	// If configured to manage CRDs, do a preliminary install of them here. The Installation controller
 	// will reconcile them as well, but we need to make sure they are installed before we start the rest of the controllers.
 	if bootstrapCRDs || manageCRDs {
-		if err := crds.Ensure(mgr.GetClient(), variant); err != nil {
+		setupLog.WithValues("v3", v3CRDs).Info("Ensuring CRDs are installed")
+
+		if err := crds.Ensure(mgr.GetClient(), variant, v3CRDs, setupLog); err != nil {
 			setupLog.Error(err, "Failed to ensure CRDs are created")
+			os.Exit(1)
+		}
+
+		if err := admission.Ensure(mgr.GetClient(), variant, v3CRDs, setupLog); err != nil {
+			setupLog.Error(err, "Failed to ensure MutatingAdmissionPolicies are created")
 			os.Exit(1)
 		}
 
@@ -433,7 +449,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
-	options := options.AddOptions{
+	options := options.ControllerOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
 		ClusterDomain:       clusterDomain,
@@ -443,6 +459,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		K8sClientset:        clientset,
 		MultiTenant:         multiTenant,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
+		UseV3CRDs:           v3CRDs,
 	}
 
 	// Before we start any controllers, make sure our options are valid.
@@ -520,7 +537,7 @@ func metricsAddr() string {
 
 func showCRDs(variant operatortigeraiov1.ProductVariant, outputType string) error {
 	first := true
-	for _, v := range crds.GetCRDs(variant) {
+	for _, v := range crds.GetCRDs(variant, os.Getenv("CALICO_API_GROUP") == "projectcalico.org/v3") {
 		if outputType != "all" {
 			if !strings.HasPrefix(v.Name, outputType) {
 				continue
@@ -586,7 +603,7 @@ func executePreDeleteHook(ctx context.Context, c client.Client) error {
 }
 
 // verifyConfiguration verifies that the final configuration of the operator is correct before starting any controllers.
-func verifyConfiguration(ctx context.Context, cs kubernetes.Interface, opts options.AddOptions) error {
+func verifyConfiguration(ctx context.Context, cs kubernetes.Interface, opts options.ControllerOptions) error {
 	if opts.ElasticExternal {
 		// There should not be an internal-es cert
 		if _, err := cs.CoreV1().Secrets(render.ElasticsearchNamespace).Get(ctx, render.TigeraElasticsearchInternalCertSecret, metav1.GetOptions{}); err != nil {

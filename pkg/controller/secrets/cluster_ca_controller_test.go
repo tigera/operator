@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -68,7 +68,7 @@ var _ = Describe("ClusterCA controller", func() {
 	BeforeEach(func() {
 		// Any test-specific preparation should be done in subsequen BeforeEach blocks in the Contexts below.
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).ShouldNot(HaveOccurred())
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())

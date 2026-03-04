@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -40,7 +40,7 @@ type APIServerReconciler struct {
 //	return r.ras.Reconcile(req)
 //}
 
-func (r *APIServerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *APIServerReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return apiserver.Add(mgr, opts)
 	//	return ctrl.NewControllerManagedBy(mgr).
 	//		For(&operatorv1.APIServer{}).

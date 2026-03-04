@@ -17,8 +17,7 @@ package render_test
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"gopkg.in/yaml.v2"
@@ -138,7 +137,7 @@ var _ = Describe("dex rendering tests", func() {
 
 		BeforeEach(func() {
 			scheme := runtime.NewScheme()
-			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 			cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -554,7 +553,6 @@ var _ = Describe("dex rendering tests", func() {
 			initContainer := test.GetContainer(deploy.Spec.Template.Spec.InitContainers, "tigera-dex-tls-key-cert-provisioner")
 			Expect(initContainer).NotTo(BeNil())
 			Expect(initContainer.Resources).To(Equal(dexInitContainerResources))
-
 		})
 		It("should render configuration with default Init container resource requests and limits", func() {
 			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
@@ -587,13 +585,12 @@ var _ = Describe("dex rendering tests", func() {
 					"memory": resource.MustParse("50Mi"),
 				},
 			}))
-
 		})
 
-		Context("allow-tigera rendering", func() {
-			policyName := types.NamespacedName{Name: "allow-tigera.allow-tigera-dex", Namespace: "tigera-dex"}
+		Context("calico-system rendering", func() {
+			policyName := types.NamespacedName{Name: "calico-system.dex", Namespace: "tigera-dex"}
 
-			getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+			getExpectedPolicy := func(scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
 				if scenario.ManagedCluster {
 					return nil
 				}
@@ -601,13 +598,13 @@ var _ = Describe("dex rendering tests", func() {
 				return testutils.SelectPolicyByProvider(scenario, expectedDexPolicy, expectedDexOpenshiftPolicy)
 			}
 
-			DescribeTable("should render allow-tigera policy",
-				func(scenario testutils.AllowTigeraScenario) {
+			DescribeTable("should render calico-system policy",
+				func(scenario testutils.CalicoSystemScenario) {
 					cfg.OpenShift = scenario.OpenShift
 					component := render.Dex(cfg)
 					resources, _ := component.Objects()
 
-					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 					expectedPolicy := getExpectedPolicy(scenario)
 					Expect(policy.Spec.Selector).To(Equal(policy.Spec.Selector))
 					Expect(policy.Spec.Tier).To(Equal(policy.Spec.Tier))
@@ -619,14 +616,14 @@ var _ = Describe("dex rendering tests", func() {
 					Expect(policy.Spec.Egress).To(ContainElements(expectedPolicy.Spec.Egress))
 				},
 				// Dex only renders in the presence of an Authentication CR, therefore does not have a config option for managed clusters.
-				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+				Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
 			)
 		})
 	})
 })
 
-// ConfigYAML is a slimmed down version of https://github.com/dexidp/dex/blob/v2.41.1/cmd/dex/config.go
+// ConfigYAML is a slimmed down version of https://github.com/dexidp/dex/blob/v2.45.0/cmd/dex/config.go
 type ConfigYAML struct {
 	Web           Web             `yaml:"web"`
 	StaticClients []StaticClients `yaml:"staticClients"`

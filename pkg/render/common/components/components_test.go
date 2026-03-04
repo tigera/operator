@@ -18,8 +18,7 @@ import (
 	"reflect"
 	"strings"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/ptr"
@@ -151,6 +150,7 @@ var _ = Describe("Common components render tests", func() {
 		},
 		Entry("APIServerDeployment", &v1.APIServerDeployment{}, false),
 		Entry("CalicoKubeControllersDeployment", &v1.CalicoKubeControllersDeployment{}, false),
+		Entry("CalicoWebhooksDeployment", &v1.CalicoWebhooksDeployment{}, false),
 		Entry("CalicoNodeDaemonSet", &v1.CalicoNodeDaemonSet{}, false),
 		Entry("CalicoNodeWindowsDaemonSet", &v1.CalicoNodeWindowsDaemonSet{}, false),
 		Entry("CalicoWindowsUpgradeDaemonSet", &v1.CalicoWindowsUpgradeDaemonSet{}, false),

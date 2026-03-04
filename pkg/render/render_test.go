@@ -21,7 +21,7 @@ import (
 	glog "log"
 	"reflect"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -76,7 +76,7 @@ func allCalicoComponents(
 	if bgpLayout != nil {
 		objs = append(objs, bgpLayout)
 	}
-	secretsAndConfigMaps := render.NewPassthrough(objs...)
+	secretsAndConfigMaps := render.NewCreationPassthrough(objs...)
 
 	nodeCfg := &render.NodeConfiguration{
 		K8sServiceEp:            k8sServiceEp,
@@ -186,7 +186,7 @@ var _ = Describe("Rendering tests", func() {
 			},
 		}
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 
 		cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -201,7 +201,7 @@ var _ = Describe("Rendering tests", func() {
 	})
 
 	AfterEach(func() {
-		if CurrentGinkgoTestDescription().Failed {
+		if CurrentSpecReport().Failed() {
 			err := logWriter.Flush()
 			Expect(err).NotTo(HaveOccurred())
 			fmt.Printf("Logs:\n%s\n", logBuffer.String())

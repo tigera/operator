@@ -63,9 +63,7 @@ const (
 	defaultMaxUnavailable int32 = 1
 )
 
-var (
-	migratedNodeLabel = map[string]string{nodeSelectorKey: nodeSelectorValuePost}
-)
+var migratedNodeLabel = map[string]string{nodeSelectorKey: nodeSelectorValuePost}
 
 type NamespaceMigration interface {
 	NeedsCoreNamespaceMigration(ctx context.Context) (bool, error)

@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -68,7 +69,7 @@ var _ = Describe("packet capture controller tests", func() {
 	BeforeEach(func() {
 		// Set up the scheme
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
@@ -106,7 +107,7 @@ var _ = Describe("packet capture controller tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Status:     operatorv1.APIServerStatus{State: operatorv1.TigeraStatusReady},
 		})).ToNot(HaveOccurred())
-		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 		cryptoCA, err := tls.MakeCA("byo-ca")
 		Expect(err).NotTo(HaveOccurred())
 		packetCaptureSecret, err = secret.CreateTLSSecret(cryptoCA, render.PacketCaptureServerCert, common.OperatorNamespace(), "key.key", "cert.crt", time.Hour, nil, dns.GetServiceDNSNames(render.PacketCaptureServiceName, render.PacketCaptureNamespace, dns.DefaultClusterDomain)...)
@@ -148,12 +149,14 @@ var _ = Describe("packet capture controller tests", func() {
 		mockStatus.On("SetDegraded", operatorv1.ResourceCreateError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 
 		r = ReconcilePacketCapture{
-			client:              cli,
-			scheme:              scheme,
-			provider:            operatorv1.ProviderNone,
-			enterpriseCRDsExist: true,
-			status:              mockStatus,
-			tierWatchReady:      ready,
+			client:         cli,
+			scheme:         scheme,
+			status:         mockStatus,
+			tierWatchReady: ready,
+			opts: options.ControllerOptions{
+				DetectedProvider:    operatorv1.ProviderNone,
+				EnterpriseCRDExists: true,
+			},
 		}
 
 		// Apply the packetcapture CR to the fake cluster.
@@ -287,7 +290,7 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
-		It("should render allow-tigera policy when tier and tier watch are ready", func() {
+		It("should render calico-system policy when tier and tier watch are ready", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -296,11 +299,11 @@ var _ = Describe("packet capture controller tests", func() {
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(1))
-			Expect(policies.Items[0].Name).To(Equal("allow-tigera.tigera-packetcapture"))
+			Expect(policies.Items[0].Name).To(Equal("calico-system.tigera-packetcapture"))
 		})
 	})
 
-	Context("allow-tigera reconciliation", func() {
+	Context("calico-system reconciliation", func() {
 		var readyFlag *utils.ReadyFlag
 
 		BeforeEach(func() {
@@ -311,18 +314,20 @@ var _ = Describe("packet capture controller tests", func() {
 			readyFlag = &utils.ReadyFlag{}
 			readyFlag.MarkAsReady()
 			r = ReconcilePacketCapture{
-				client:              cli,
-				scheme:              scheme,
-				provider:            operatorv1.ProviderNone,
-				enterpriseCRDsExist: true,
-				status:              mockStatus,
-				tierWatchReady:      readyFlag,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: readyFlag,
+				opts: options.ControllerOptions{
+					DetectedProvider:    operatorv1.ProviderNone,
+					EnterpriseCRDExists: true,
+				},
 			}
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 		})
 
-		It("should wait if allow-tigera tier is unavailable", func() {
-			test.DeleteAllowTigeraTierAndExpectWait(ctx, cli, &r, mockStatus)
+		It("should wait if calico-system tier is unavailable", func() {
+			test.DeleteCalicoSystemTierAndExpectWait(ctx, cli, &r, mockStatus)
 		})
 
 		It("should wait if tier watch is not ready", func() {
@@ -546,13 +551,15 @@ var _ = Describe("packet capture controller tests", func() {
 
 			It("Should reconcile and not create packet capture resources for a management cluster in multi tenant mode", func() {
 				r := ReconcilePacketCapture{
-					client:              cli,
-					scheme:              scheme,
-					provider:            operatorv1.ProviderNone,
-					enterpriseCRDsExist: true,
-					status:              mockStatus,
-					tierWatchReady:      ready,
-					multiTenant:         true,
+					client:         cli,
+					scheme:         scheme,
+					status:         mockStatus,
+					tierWatchReady: ready,
+					opts: options.ControllerOptions{
+						DetectedProvider:    operatorv1.ProviderNone,
+						EnterpriseCRDExists: true,
+						MultiTenant:         true,
+					},
 				}
 
 				// Reconcile the API server
@@ -573,13 +580,15 @@ var _ = Describe("packet capture controller tests", func() {
 			})
 			It("Should reconcile and create packet capture resources for a management cluster in single tenant mode", func() {
 				r := ReconcilePacketCapture{
-					client:              cli,
-					scheme:              scheme,
-					provider:            operatorv1.ProviderNone,
-					enterpriseCRDsExist: true,
-					status:              mockStatus,
-					tierWatchReady:      ready,
-					multiTenant:         false,
+					client:         cli,
+					scheme:         scheme,
+					status:         mockStatus,
+					tierWatchReady: ready,
+					opts: options.ControllerOptions{
+						DetectedProvider:    operatorv1.ProviderNone,
+						EnterpriseCRDExists: true,
+						MultiTenant:         false,
+					},
 				}
 
 				// Reconcile the API server

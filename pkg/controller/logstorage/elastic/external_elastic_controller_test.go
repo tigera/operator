@@ -17,7 +17,7 @@ package elastic
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -61,7 +61,7 @@ var _ = Describe("External ES Controller", func() {
 
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).ShouldNot(HaveOccurred())
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -103,7 +103,7 @@ var _ = Describe("External ES Controller", func() {
 		})).NotTo(HaveOccurred())
 
 		Expect(cli.Create(ctx, &v3.Tier{
-			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+			ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
 		})).NotTo(HaveOccurred())
 
 		install = &operatorv1.Installation{
@@ -212,7 +212,7 @@ func NewExternalESReconcilerWithShims(
 	provider operatorv1.Provider,
 	clusterDomain string,
 ) (*ExternalESController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),
@@ -220,11 +220,10 @@ func NewExternalESReconcilerWithShims(
 	}
 
 	r := &ExternalESController{
-		client:        cli,
-		scheme:        scheme,
-		status:        status,
-		clusterDomain: opts.ClusterDomain,
-		provider:      opts.DetectedProvider,
+		client: cli,
+		scheme: scheme,
+		status: status,
+		opts:   opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil

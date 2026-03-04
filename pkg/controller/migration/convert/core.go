@@ -373,7 +373,6 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 			component: ComponentCalicoNode,
 			fix:       "remove the nodeSelector",
 		}
-
 	}
 
 	// check typha nodeSelectors
@@ -436,7 +435,7 @@ func handleNodeSelectors(c *components, install *operatorv1.Installation) error 
 
 // removeOSNodeSelectors returns the given nodeSelectors with [beta.]kubernetes.io/os=linux nodeSelectors removed.
 func removeOSNodeSelectors(existing map[string]string) map[string]string {
-	var nodeSel = map[string]string{}
+	nodeSel := map[string]string{}
 	for key, val := range existing {
 		if (key == "kubernetes.io/os" || key == "beta.kubernetes.io/os") && val == "linux" {
 			continue

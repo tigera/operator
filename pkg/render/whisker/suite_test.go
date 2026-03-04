@@ -17,14 +17,13 @@ package whisker_test
 import (
 	"testing"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-
-	"github.com/onsi/ginkgo/reporters"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 )
 
 func TestRender(t *testing.T) {
-	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/ut/whisker_render_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render/whisker Suite", []Reporter{junitReporter})
+	gomega.RegisterFailHandler(ginkgo.Fail)
+	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
+	reporterConfig.JUnitReport = "../../../report/ut/whisker_render_suite.xml"
+	ginkgo.RunSpecs(t, "pkg/render/whisker Suite", suiteConfig, reporterConfig)
 }

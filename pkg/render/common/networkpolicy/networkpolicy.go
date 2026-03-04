@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
@@ -28,7 +29,7 @@ import (
 )
 
 const (
-	TigeraComponentTierName              = "allow-tigera"
+	TigeraComponentTierName              = "calico-system"
 	TigeraComponentPolicyPrefix          = TigeraComponentTierName + "."
 	TigeraComponentDefaultDenyPolicyName = TigeraComponentPolicyPrefix + "default-deny"
 )
@@ -179,7 +180,7 @@ func Ports(ports ...uint16) []numorstring.Port {
 	return nsPorts
 }
 
-func AllowTigeraDefaultDeny(namespace string) *v3.NetworkPolicy {
+func CalicoSystemDefaultDeny(namespace string) *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -196,9 +197,10 @@ func AllowTigeraDefaultDeny(namespace string) *v3.NetworkPolicy {
 
 // Entity rules not belonging to Calico/Tigera components.
 var KubeAPIServerEntityRule = v3.EntityRule{
-	NamespaceSelector: "projectcalico.org/name == 'default'",
-	Selector:          "(provider == 'kubernetes' && component == 'apiserver' && endpoints.projectcalico.org/serviceName == 'kubernetes')",
-	Ports:             Ports(443, 6443, 12388),
+	Services: &v3.ServiceMatch{
+		Name:      "kubernetes",
+		Namespace: "default",
+	},
 }
 
 var KubeAPIServerServiceSelectorEntityRule = v3.EntityRule{
@@ -315,6 +317,21 @@ func (h *NetworkPolicyHelper) ComplianceReporterSourceEntityRule() v3.EntityRule
 
 func (h *NetworkPolicyHelper) IntrusionDetectionSourceEntityRule() v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("tigera-intrusion-detection"), "intrusion-detection-controller")
+}
+
+// DeprecatedAllowTigeraNetworkPolicyObject returns a CNP object with the
+// allow-tigera tier on the name as helper for deprecating this old Tier.
+func DeprecatedAllowTigeraNetworkPolicyObject(name, namespace string) client.Object {
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "NetworkPolicy",
+			APIVersion: "projectcalico.org/v3",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "allow-tigera." + name,
+			Namespace: namespace,
+		},
+	}
 }
 
 const PrometheusSelector = "k8s-app == 'tigera-prometheus'"

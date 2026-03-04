@@ -121,8 +121,17 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 			},
 		},
 	}
+	// Set platform on all charts that have platform-specific behavior.
+	// The embedded Helm charts use zzz_profile.yaml to load platform profiles
+	// (e.g., profile-platform-openshift.yaml) which configure CNI paths, SCC
+	// RBAC rules, SELinux options, and sidecar injection settings.
 	if cfg.Installation.KubernetesProvider.IsGKE() {
 		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
+	}
+	if cfg.Installation.KubernetesProvider.IsOpenShift() {
+		istioResOpts.IstioCNIOpts.Global.Platform = "openshift"
+		istioResOpts.IstiodOpts.Global.Platform = "openshift"
+		istioResOpts.ZTunnelOpts.Global.Platform = "openshift"
 	}
 	resources, err := istioResOpts.GetResources(cfg.Scheme)
 	if err != nil {
@@ -132,7 +141,6 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 	crds := &IstioComponentCRDs{resources: resources}
 	istio := &IstioComponent{cfg: cfg, resources: resources}
 	return crds, istio, nil
-
 }
 
 func (c *IstioComponent) patchImages() (err error) {
@@ -202,11 +210,17 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	res := c.resources
 
-	objs := []client.Object{}
+	var objs, toDelete []client.Object
 	objs = append(objs,
-		c.istiodAllowTigeraPolicy(),
-		c.istioCNIAllowTigeraPolicy(),
-		c.ztunnelAllowTigeraPolicy(),
+		c.istiodCalicoSystemPolicy(),
+		c.istioCNICalicoSystemPolicy(),
+		c.ztunnelCalicoSystemPolicy(),
+	)
+	// allow-tigera Tier was renamed to calico-system
+	toDelete = append(toDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istiod", IstioNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istio-cni-node", IstioNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("ztunnel", IstioNamespace),
 	)
 
 	if overrides := c.cfg.Istio.Spec.IstiodDeployment; overrides != nil {
@@ -263,7 +277,7 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, res.CNI...)
 	objs = append(objs, res.ZTunnel...)
 
-	return objs, nil
+	return objs, toDelete
 }
 
 func (c *IstioComponent) Ready() bool {
@@ -274,7 +288,7 @@ func (c *IstioComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *IstioComponent) istiodAllowTigeraPolicy() *v3.NetworkPolicy {
+func (c *IstioComponent) istiodCalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -317,7 +331,7 @@ func (c *IstioComponent) istiodAllowTigeraPolicy() *v3.NetworkPolicy {
 	}
 }
 
-func (c *IstioComponent) istioCNIAllowTigeraPolicy() *v3.NetworkPolicy {
+func (c *IstioComponent) istioCNICalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -341,7 +355,7 @@ func (c *IstioComponent) istioCNIAllowTigeraPolicy() *v3.NetworkPolicy {
 	}
 }
 
-func (c *IstioComponent) ztunnelAllowTigeraPolicy() *v3.NetworkPolicy {
+func (c *IstioComponent) ztunnelCalicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,

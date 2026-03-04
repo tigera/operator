@@ -15,8 +15,7 @@
 package render_test
 
 import (
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -63,7 +62,7 @@ var _ = Describe("Rendering tests", func() {
 			},
 		}
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -323,33 +322,33 @@ var _ = Describe("Rendering tests", func() {
 			resources, _ = g.Objects()
 		}
 
-		Context("allow-tigera rendering", func() {
-			policyName := types.NamespacedName{Name: "allow-tigera.guardian-access", Namespace: "calico-system"}
+		Context("calico-system rendering", func() {
+			policyName := types.NamespacedName{Name: "calico-system.guardian-access", Namespace: "calico-system"}
 
-			getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-				if name.Name == "allow-tigera.guardian-access" && scenario.ManagedCluster {
+			getExpectedPolicy := func(name types.NamespacedName, scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
+				if name.Name == "calico-system.guardian-access" && scenario.ManagedCluster {
 					return testutils.SelectPolicyByProvider(scenario, guardianPolicy, guardianPolicyForOCP)
 				}
 
 				return nil
 			}
 
-			DescribeTable("should render allow-tigera policy",
-				func(scenario testutils.AllowTigeraScenario) {
+			DescribeTable("should render calico-system policy",
+				func(scenario testutils.CalicoSystemScenario) {
 					renderGuardianPolicy("127.0.0.1:1234", scenario.OpenShift)
-					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+					policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 					expectedPolicy := getExpectedPolicy(policyName, scenario)
 					Expect(policy).To(Equal(expectedPolicy))
 				},
-				Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-				Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+				Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+				Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 			)
 
 			// The test matrix above validates against an IP-based management cluster address.
 			// Validate policy adaptation for domain-based management cluster address here.
 			It("should adapt Guardian policy if ManagementClusterAddr is domain-based", func() {
 				renderGuardianPolicy("mydomain.io:8080", false)
-				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				managementClusterEgressRule := policy.Spec.Egress[5]
 				Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{"mydomain.io"}))
 				Expect(managementClusterEgressRule.Destination.Ports).To(Equal(networkpolicy.Ports(8080)))
@@ -363,7 +362,7 @@ var _ = Describe("guardian", func() {
 		var cfg *render.GuardianConfiguration
 		BeforeEach(func() {
 			scheme := runtime.NewScheme()
-			Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 			certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())

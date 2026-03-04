@@ -37,6 +37,6 @@ type GoldmaneReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=goldmanes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=goldmanes/status,verbs=get;update;patch
 
-func (r *GoldmaneReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *GoldmaneReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return goldmane.Add(mgr, opts)
 }

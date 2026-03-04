@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,8 +17,7 @@ package status
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -53,7 +52,7 @@ var _ = Describe("Status reporting tests", func() {
 		// Setup Scheme for all resources
 		scheme := runtime.NewScheme()
 		Expect(certV1.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		err := apis.AddToScheme(scheme)
+		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(appsv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -64,7 +63,7 @@ var _ = Describe("Status reporting tests", func() {
 
 		oldScheme := runtime.NewScheme()
 		Expect(certV1beta1.AddToScheme(oldScheme)).ShouldNot(HaveOccurred())
-		err = apis.AddToScheme(oldScheme)
+		err = apis.AddToScheme(oldScheme, false)
 		Expect(err).NotTo(HaveOccurred())
 		oldVersionClient = fake.NewClientBuilder().WithScheme(oldScheme).Build()
 
@@ -456,7 +455,7 @@ var _ = Describe("Status reporting tests", func() {
 			sm.failing = []string{"This pod has died"}
 			Expect(sm.degradedMessage()).To(Equal("This pod has died"))
 			sm.SetDegraded(operator.ResourceNotFound, "Controller set us degraded", nil, log)
-			Expect(sm.degradedMessage()).To(Equal("Controller set us degraded: \nThis pod has died"))
+			Expect(sm.degradedMessage()).To(Equal("Controller set us degraded\nThis pod has died"))
 		})
 
 		It("should contain all the NamespacesNames for all the resources added by multiple calls to Set<Resources>", func() {
@@ -548,44 +547,67 @@ var _ = Describe("Status reporting tests", func() {
 			Entry("no CSR is present - k8s v1.18", nil, false, false),
 			Entry("1 pending CSR is present - k8s v1.18",
 				[]*certV1beta1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels}}},
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels}},
+				},
 				false, true),
 			Entry("1 pending CSR is present, but no labels - k8s v1.18",
 				[]*certV1beta1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1"}}},
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr1"}},
+				},
 				false, false),
 			Entry("1 approved CSR is present - k8s v1.18",
 				[]*certV1beta1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
-						Status: certV1beta1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
-							Conditions: []certV1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1beta1.CertificateApproved}}}},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status: certV1beta1.CertificateSigningRequestStatus{
+							Certificate: []byte("cert"),
+							Conditions:  []certV1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1beta1.CertificateApproved}},
+						},
+					},
 				}, false, false),
 			Entry("2 approved CSR are present - k8s v1.18",
 				[]*certV1beta1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
-						Status: certV1beta1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
-							Conditions: []certV1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1beta1.CertificateApproved}}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels},
-						Status: certV1beta1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
-							Conditions: []certV1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1beta1.CertificateApproved}}}},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status: certV1beta1.CertificateSigningRequestStatus{
+							Certificate: []byte("cert"),
+							Conditions:  []certV1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1beta1.CertificateApproved}},
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels},
+						Status: certV1beta1.CertificateSigningRequestStatus{
+							Certificate: []byte("cert"),
+							Conditions:  []certV1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1beta1.CertificateApproved}},
+						},
+					},
 				}, false, false),
 			Entry("1 approved, 1 pending CSR are present - k8s v1.18",
 				[]*certV1beta1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
-						Status: certV1beta1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
-							Conditions: []certV1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1beta1.CertificateApproved}}}},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status: certV1beta1.CertificateSigningRequestStatus{
+							Certificate: []byte("cert"),
+							Conditions:  []certV1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1beta1.CertificateApproved}},
+						},
+					},
 					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels}},
 				}, false, true),
 			Entry("1 pending CSR are present (approved: no, cert: yes) - k8s v1.18",
 				[]*certV1beta1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
-						Status: certV1beta1.CertificateSigningRequestStatus{Certificate: []byte("cert")}},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status:     certV1beta1.CertificateSigningRequestStatus{Certificate: []byte("cert")},
+					},
 				}, false, true),
 			Entry("1 pending CSR are present (approved: yes, cert: no) - k8s v1.18",
 				[]*certV1beta1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
 						Status: certV1beta1.CertificateSigningRequestStatus{
-							Conditions: []certV1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1beta1.CertificateApproved}}}},
+							Conditions: []certV1beta1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1beta1.CertificateApproved}},
+						},
+					},
 					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels}},
 				}, false, true),
 		)
@@ -602,44 +624,67 @@ var _ = Describe("Status reporting tests", func() {
 			Entry("no CSR is present - k8s v1.19", nil, false, false),
 			Entry("1 pending CSR is present - k8s v1.19",
 				[]*certV1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels}}},
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels}},
+				},
 				false, true),
 			Entry("1 pending CSR is present, but no labels - k8s v1.19",
 				[]*certV1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1"}}},
+					{ObjectMeta: metav1.ObjectMeta{Name: "csr1"}},
+				},
 				false, false),
 			Entry("1 approved CSR is present - k8s v1.19",
 				[]*certV1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
-						Status: certV1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
-							Conditions: []certV1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1.CertificateApproved}}}},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status: certV1.CertificateSigningRequestStatus{
+							Certificate: []byte("cert"),
+							Conditions:  []certV1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1.CertificateApproved}},
+						},
+					},
 				}, false, false),
 			Entry("2 approved CSR are present - k8s v1.19",
 				[]*certV1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
-						Status: certV1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
-							Conditions: []certV1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1.CertificateApproved}}}},
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels},
-						Status: certV1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
-							Conditions: []certV1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1.CertificateApproved}}}},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status: certV1.CertificateSigningRequestStatus{
+							Certificate: []byte("cert"),
+							Conditions:  []certV1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1.CertificateApproved}},
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels},
+						Status: certV1.CertificateSigningRequestStatus{
+							Certificate: []byte("cert"),
+							Conditions:  []certV1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1.CertificateApproved}},
+						},
+					},
 				}, false, false),
 			Entry("1 approved, 1 pending CSR are present - k8s v1.19",
 				[]*certV1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
-						Status: certV1.CertificateSigningRequestStatus{Certificate: []byte("cert"),
-							Conditions: []certV1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1.CertificateApproved}}}},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status: certV1.CertificateSigningRequestStatus{
+							Certificate: []byte("cert"),
+							Conditions:  []certV1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1.CertificateApproved}},
+						},
+					},
 					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels}},
 				}, false, true),
 			Entry("1 pending CSR are present (approved: no, cert: yes) - k8s v1.19",
 				[]*certV1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
-						Status: certV1.CertificateSigningRequestStatus{Certificate: []byte("cert")}},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+						Status:     certV1.CertificateSigningRequestStatus{Certificate: []byte("cert")},
+					},
 				}, false, true),
 			Entry("1 pending CSR are present (approved: yes, cert: no) - k8s v1.19",
 				[]*certV1.CertificateSigningRequest{
-					{ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
+					{
+						ObjectMeta: metav1.ObjectMeta{Name: "csr1", Labels: labels},
 						Status: certV1.CertificateSigningRequestStatus{
-							Conditions: []certV1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1.CertificateApproved}}}},
+							Conditions: []certV1.CertificateSigningRequestCondition{{Status: corev1.ConditionTrue, Type: certV1.CertificateApproved}},
+						},
+					},
 					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels}},
 				}, false, true),
 		)

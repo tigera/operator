@@ -1,0 +1,97 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: remoteclusterconfigurations.projectcalico.org
+spec:
+  group: projectcalico.org
+  names:
+    kind: RemoteClusterConfiguration
+    listKind: RemoteClusterConfigurationList
+    plural: remoteclusterconfigurations
+    singular: remoteclusterconfiguration
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v3
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              properties:
+                clusterAccessSecret:
+                  properties:
+                    apiVersion:
+                      type: string
+                    fieldPath:
+                      type: string
+                    kind:
+                      type: string
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                    resourceVersion:
+                      type: string
+                    uid:
+                      type: string
+                  type: object
+                  x-kubernetes-map-type: atomic
+                datastoreType:
+                  type: string
+                etcdCACert:
+                  type: string
+                etcdCACertFile:
+                  type: string
+                etcdCert:
+                  type: string
+                etcdCertFile:
+                  type: string
+                etcdEndpoints:
+                  type: string
+                etcdKey:
+                  type: string
+                etcdKeyFile:
+                  type: string
+                etcdPassword:
+                  type: string
+                etcdUsername:
+                  type: string
+                k8sAPIEndpoint:
+                  type: string
+                k8sAPIToken:
+                  type: string
+                k8sCAFile:
+                  type: string
+                k8sCertFile:
+                  type: string
+                k8sInsecureSkipTLSVerify:
+                  type: boolean
+                k8sKeyFile:
+                  type: string
+                kubeconfig:
+                  type: string
+                kubeconfigInline:
+                  type: string
+                syncOptions:
+                  default:
+                    overlayRoutingMode: Disabled
+                  properties:
+                    overlayRoutingMode:
+                      default: Disabled
+                      type: string
+                  type: object
+              type: object
+          required:
+            - metadata
+            - spec
+          type: object
+      served: true
+      storage: true

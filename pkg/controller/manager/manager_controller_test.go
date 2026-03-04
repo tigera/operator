@@ -22,8 +22,7 @@ import (
 	"fmt"
 	"time"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/stretchr/testify/mock"
@@ -45,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -69,7 +69,7 @@ var _ = Describe("Manager controller tests", func() {
 	BeforeEach(func() {
 		// Create a Kubernetes client.
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -157,11 +157,13 @@ var _ = Describe("Manager controller tests", func() {
 			r = ReconcileManager{
 				client:          c,
 				scheme:          scheme,
-				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
-				clusterDomain:   clusterDomain,
 				licenseAPIReady: &utils.ReadyFlag{},
 				tierWatchReady:  &utils.ReadyFlag{},
+				opts: options.ControllerOptions{
+					ClusterDomain:    clusterDomain,
+					DetectedProvider: operatorv1.ProviderNone,
+				},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -171,7 +173,7 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.Tier{
-				ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
 			})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -265,7 +267,7 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			}
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
-			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.clusterDomain)
+			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.opts.ClusterDomain)
 			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
@@ -290,7 +292,7 @@ var _ = Describe("Manager controller tests", func() {
 			}
 
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
-			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.clusterDomain)
+			legacyDNSNames := dns.GetServiceDNSNames(render.LegacyManagerServiceName, render.LegacyManagerNamespace, r.opts.ClusterDomain)
 			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalManagerTLSSecret)).To(BeNil())
 			test.VerifyCert(internalManagerTLSSecret, dnsNames...)
@@ -366,7 +368,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			secret := &corev1.Secret{}
 			dnsNames := append([]string{"localhost"}, dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)...)
-			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.clusterDomain)
+			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.opts.ClusterDomain)
 			dnsNames = append(dnsNames, legacyDNSNames...)
 			// Verify that the operator managed cert secrets exist. These cert
 			// secrets should have the manager service DNS names plus localhost only.
@@ -423,7 +425,7 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, clusterDomain)
-			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.clusterDomain)
+			legacyDNSNames := dns.GetServiceDNSNames("tigera-manager", "tigera-manager", r.opts.ClusterDomain)
 			dnsNames = append(dnsNames, legacyDNSNames...)
 			Expect(test.GetResource(c, internalTLS)).To(BeNil())
 			test.VerifyCert(internalTLS, dnsNames...)
@@ -445,10 +447,12 @@ var _ = Describe("Manager controller tests", func() {
 			r = ReconcileManager{
 				client:          c,
 				scheme:          scheme,
-				provider:        operatorv1.ProviderNone,
 				status:          mockStatus,
 				licenseAPIReady: &utils.ReadyFlag{},
 				tierWatchReady:  &utils.ReadyFlag{},
+				opts: options.ControllerOptions{
+					DetectedProvider: operatorv1.ProviderNone,
+				},
 			}
 
 			Expect(c.Create(ctx, &operatorv1.APIServer{
@@ -459,7 +463,7 @@ var _ = Describe("Manager controller tests", func() {
 			})).NotTo(HaveOccurred())
 
 			Expect(c.Create(ctx, &v3.Tier{
-				ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-system"},
 			})).NotTo(HaveOccurred())
 
 			licenseKey = &v3.LicenseKey{
@@ -691,7 +695,7 @@ var _ = Describe("Manager controller tests", func() {
 				})
 			})
 
-			Context("allow-tigera reconciliation", func() {
+			Context("calico-system reconciliation", func() {
 				var readyFlag *utils.ReadyFlag
 				BeforeEach(func() {
 					mockStatus = &status.MockStatus{}
@@ -703,15 +707,17 @@ var _ = Describe("Manager controller tests", func() {
 					r = ReconcileManager{
 						client:          c,
 						scheme:          scheme,
-						provider:        operatorv1.ProviderNone,
 						status:          mockStatus,
 						licenseAPIReady: readyFlag,
 						tierWatchReady:  readyFlag,
+						opts: options.ControllerOptions{
+							DetectedProvider: operatorv1.ProviderNone,
+						},
 					}
 				})
 
-				It("should wait if allow-tigera tier is unavailable", func() {
-					test.DeleteAllowTigeraTierAndExpectWait(ctx, c, &r, mockStatus)
+				It("should wait if calico-system tier is unavailable", func() {
+					test.DeleteCalicoSystemTierAndExpectWait(ctx, c, &r, mockStatus)
 				})
 
 				It("should wait if tier watch is not ready", func() {
@@ -1188,7 +1194,7 @@ var _ = Describe("Manager controller tests", func() {
 				mockStatus.On("ClearDegraded")
 				mockStatus.On("IsAvailable").Return(true)
 
-				r.multiTenant = true
+				r.opts.MultiTenant = true
 				r.licenseAPIReady.MarkAsReady()
 				r.tierWatchReady.MarkAsReady()
 

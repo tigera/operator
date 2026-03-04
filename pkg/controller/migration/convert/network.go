@@ -210,7 +210,6 @@ func handleCalicoCNI(c *components, install *operatorv1.Installation) error {
 		// parse JSON data
 		var tuningSpecData TuningSpec
 		if err := json.Unmarshal([]byte(pluginData.Bytes), &tuningSpecData); err != nil {
-
 			return ErrIncompatibleCluster{
 				err:       "error parsing CNI config plugin type 'tuning'",
 				component: ComponentCNIConfig,
@@ -506,7 +505,7 @@ func getAutoDetectionMethod(method *string) (*operatorv1.NodeAddressAutodetectio
 
 	// first-found
 	if *method == "" || *method == AutodetectionMethodFirst {
-		var t = true
+		t := true
 		return &operatorv1.NodeAddressAutodetection{FirstFound: &t}, nil
 	}
 
@@ -537,7 +536,7 @@ func getAutoDetectionMethod(method *string) (*operatorv1.NodeAddressAutodetectio
 
 	// kubernetes-internal-ip
 	if *method == "" || *method == AutodetectionMethodNodeIP {
-		var k = operatorv1.NodeInternalIP
+		k := operatorv1.NodeInternalIP
 		return &operatorv1.NodeAddressAutodetection{Kubernetes: &k}, nil
 	}
 

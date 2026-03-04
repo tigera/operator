@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,18 +17,18 @@ package secrets
 import (
 	"testing"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 
-	"github.com/onsi/ginkgo/reporters"
 	uzap "go.uber.org/zap"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
 func TestStatus(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
-	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/ut/secrets_controller_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/controller/secrets Suite", []Reporter{junitReporter})
+	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
+	gomega.RegisterFailHandler(ginkgo.Fail)
+	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
+	reporterConfig.JUnitReport = "../../../report/ut/secrets_controller_suite.xml"
+	ginkgo.RunSpecs(t, "pkg/controller/secrets Suite", suiteConfig, reporterConfig)
 }

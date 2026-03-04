@@ -160,8 +160,8 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 	}
 
 	objs = append(objs,
-		c.intrusionDetectionControllerAllowTigeraPolicy(),
-		networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
+		c.intrusionDetectionControllerCalicoSystemPolicy(),
+		networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace),
 		c.intrusionDetectionServiceAccount(),
 		c.intrusionDetectionClusterRole(),
 		c.intrusionDetectionClusterRoleBinding(),
@@ -182,6 +182,9 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		// any resources related to them that might still exist.
 		c.intrusionDetectionPSPClusterRole(),
 		c.intrusionDetectionPSPClusterRoleBinding(),
+		// allow-tigera Tier was renamed to calico-system
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("intrusion-detection-controller", c.cfg.Namespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
 	}
 
 	if !c.cfg.ManagedCluster && !c.cfg.Tenant.MultiTenant() {
@@ -194,7 +197,7 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		// For now, we don't create the installer job in multi-tenant clusters.
 		idsObjs := []client.Object{
 			c.intrusionDetectionJobServiceAccount(),
-			c.intrusionDetectionElasticsearchAllowTigeraPolicy(),
+			c.intrusionDetectionElasticsearchCalicoSystemPolicy(),
 			c.intrusionDetectionElasticsearchJob(),
 		}
 		objsToDelete = append(objsToDelete, idsObjs...)
@@ -269,6 +272,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		},
 		{
 			APIGroups: []string{
+				"projectcalico.org",
 				"crd.projectcalico.org",
 			},
 			Resources: []string{
@@ -319,12 +323,12 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "watch", "update"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"alertexceptions"},
 			Verbs:     []string{"get", "list"},
 		},
@@ -422,7 +426,6 @@ func (c *intrusionDetectionComponent) managedClustersWatchRoleBinding() client.O
 	} else {
 		return rcomponents.ClusterRoleBinding(IntrusionDetectionManagedClustersWatchRoleBindingName, ManagedClustersWatchClusterRoleName, IntrusionDetectionName, []string{c.cfg.Namespace})
 	}
-
 }
 
 func (c *intrusionDetectionComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
@@ -1004,7 +1007,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionAnnotations() map[string
 	return c.cfg.TrustedCertBundle.HashAnnotations()
 }
 
-func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPolicy() *v3.NetworkPolicy {
+func (c *intrusionDetectionComponent) intrusionDetectionControllerCalicoSystemPolicy() *v3.NetworkPolicy {
 	helper := networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace)
 
 	egressRules := []v3.Rule{
@@ -1079,7 +1082,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerAllowTigeraPol
 	}
 }
 
-func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchAllowTigeraPolicy() *v3.NetworkPolicy {
+func (c *intrusionDetectionComponent) intrusionDetectionElasticsearchCalicoSystemPolicy() *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{

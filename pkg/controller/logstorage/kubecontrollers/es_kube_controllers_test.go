@@ -20,7 +20,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/stretchr/testify/mock"
@@ -68,7 +68,7 @@ func NewControllerWithShims(
 	multiTenant bool,
 	tierWatchReady *utils.ReadyFlag,
 ) (*ESKubeControllersController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),
@@ -100,7 +100,7 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).ShouldNot(HaveOccurred())
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -191,8 +191,8 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 		r, err = NewControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain, false, readyFlag)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// Create the allow-tigera Tier, since the controller blocks on its existence.
-		tier := &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}}
+		// Create the calico-system Tier, since the controller blocks on its existence.
+		tier := &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}}
 		Expect(cli.Create(ctx, tier)).ShouldNot(HaveOccurred())
 	})
 

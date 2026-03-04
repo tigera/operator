@@ -18,8 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -64,7 +63,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		// Initialize a default instance to use. Each test can override this to its
 		// desired configuration.
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -219,7 +218,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render fluentd Daemonset with resources requests/limits", func() {
-
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
@@ -295,6 +293,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 		}
 
+		expectedDeleteResources := []client.Object{
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.allow-fluentd-node", Namespace: render.LogCollectorNamespace}},
+		}
+
 		// Should render the correct resources.
 		managedCfg := &render.FluentdConfiguration{
 			LogCollector:   cfg.LogCollector,
@@ -308,7 +310,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		component := render.Fluentd(managedCfg)
 		createResources, deleteResources := component.Objects()
 		rtest.ExpectResources(createResources, expectedResources)
-		Expect(deleteResources).To(BeEmpty())
+		rtest.ExpectResources(deleteResources, expectedDeleteResources)
 
 		ds := rtest.GetResource(createResources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
@@ -393,6 +395,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 		}
 
+		expectedDeleteResources := []client.Object{
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.allow-fluentd-node", Namespace: render.LogCollectorNamespace}},
+		}
+
 		pc := &operatorv1.PacketCaptureAPI{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "tigera-secure",
@@ -413,7 +419,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		component := render.Fluentd(managedCfg)
 		createResources, deleteResources := component.Objects()
 		rtest.ExpectResources(createResources, expectedResources)
-		Expect(deleteResources).To(BeEmpty())
+		rtest.ExpectResources(deleteResources, expectedDeleteResources)
 
 		ds := rtest.GetResource(createResources, "fluentd-node", "tigera-fluentd", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
@@ -519,7 +525,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render for Windows nodes", func() {
-
 		expectedResources := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsServiceWindows, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
@@ -664,7 +669,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with Syslog configuration", func() {
-
 		expectedResources := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
@@ -983,16 +987,19 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "EKS_CLOUDWATCH_LOG_STREAM_PREFIX", Value: ""},
 			{Name: "EKS_CLOUDWATCH_LOG_FETCH_INTERVAL", Value: "900"},
 			{Name: "AWS_REGION", Value: "us-west-1", ValueFrom: nil},
-			{Name: "AWS_ACCESS_KEY_ID",
+			{
+				Name: "AWS_ACCESS_KEY_ID",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
 							Name: "tigera-eks-log-forwarder-secret",
 						},
 						Key: "aws-id",
-					}},
+					},
+				},
 			},
-			{Name: "AWS_SECRET_ACCESS_KEY",
+			{
+				Name: "AWS_SECRET_ACCESS_KEY",
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{
 						LocalObjectReference: corev1.LocalObjectReference{
@@ -1000,7 +1007,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 						},
 						Key:      "aws-key",
 						Optional: nil,
-					}},
+					},
+				},
 			},
 			{Name: "LINSEED_ENABLED", Value: "true"},
 			{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
@@ -1031,7 +1039,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with EKS Cloudwatch Log with resources", func() {
-
 		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
 		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
 		cfg.Installation = &operatorv1.InstallationSpec{
@@ -1081,11 +1088,9 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		initContainer := test.GetContainer(deploy.Spec.Template.Spec.InitContainers, "eks-log-forwarder-startup")
 		Expect(initContainer).NotTo(BeNil())
 		Expect(initContainer.Resources).To(Equal(corev1.ResourceRequirements{}))
-
 	})
 
 	It("should render with EKS Cloudwatch Log with multi tenant envvars", func() {
-
 		expectedResources := getExpectedResourcesForEKS(false)
 		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
 		cfg.ESClusterConfig = relasticsearch.NewClusterConfig("clusterTestName", 1, 1, 1)
@@ -1122,7 +1127,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 	})
 
 	It("should render with EKS Cloudwatch Log for managed cluster with linseed token volume", func() {
-
 		expectedResources := getExpectedResourcesForEKS(true)
 
 		expectedResources = append(expectedResources,
@@ -1248,10 +1252,10 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 		Entry("Syslog", render.ForwardingDestinationSyslog),
 		Entry("Splunk", render.ForwardingDestinationSplunk))
 
-	Context("allow-tigera rendering", func() {
-		policyName := types.NamespacedName{Name: "allow-tigera.allow-fluentd-node", Namespace: "tigera-fluentd"}
+	Context("calico-system rendering", func() {
+		policyName := types.NamespacedName{Name: "calico-system.allow-fluentd-node", Namespace: "tigera-fluentd"}
 
-		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+		getExpectedPolicy := func(scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
 			if scenario.ManagedCluster {
 				return expectedFluentdPolicyForManaged
 			} else {
@@ -1259,8 +1263,8 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			}
 		}
 
-		DescribeTable("should render allow-tigera policy",
-			func(scenario testutils.AllowTigeraScenario) {
+		DescribeTable("should render calico-system policy",
+			func(scenario testutils.CalicoSystemScenario) {
 				if scenario.OpenShift {
 					cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 				} else {
@@ -1271,19 +1275,19 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				component := render.Fluentd(cfg)
 				resources, _ := component.Objects()
 
-				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				expectedPolicy := getExpectedPolicy(scenario)
 				Expect(policy).To(Equal(expectedPolicy))
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+			Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 		)
 
-		It("should render allow-tigera policy for the non-cluster-host scenario", func() {
+		It("should render calico-system policy for the non-cluster-host scenario", func() {
 			resourcesWithoutNonClusterHosts, _ := render.Fluentd(cfg).Objects()
-			policyWithoutNonClusterHosts := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesWithoutNonClusterHosts)
+			policyWithoutNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithoutNonClusterHosts)
 			cfg.NonClusterHost = &operatorv1.NonClusterHost{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "tigera-secure",
@@ -1293,7 +1297,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				},
 			}
 			resourcesWithNonClusterHosts, _ := render.Fluentd(cfg).Objects()
-			policyWithNonClusterHosts := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesWithNonClusterHosts)
+			policyWithNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithNonClusterHosts)
 
 			// Validate that we have a single ingress rule added for the fluentd service.
 			Expect(policyWithoutNonClusterHosts.Spec.Egress).To(Equal(policyWithNonClusterHosts.Spec.Egress))
@@ -1311,7 +1315,46 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 				},
 			}))
 		})
+	})
 
+	It("should move DaemonSet to toDelete when LicenseExpired is true", func() {
+		cfg.LicenseExpired = true
+		component := render.Fluentd(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		toCreate, toDelete := component.Objects()
+
+		// DaemonSet should not be in toCreate.
+		for _, obj := range toCreate {
+			if ds, ok := obj.(*appsv1.DaemonSet); ok {
+				Fail("DaemonSet should not be in toCreate when license is expired, but found: " + ds.Name)
+			}
+		}
+
+		// DaemonSet should be in toDelete.
+		found := false
+		for _, obj := range toDelete {
+			if ds, ok := obj.(*appsv1.DaemonSet); ok && ds.Name == "fluentd-node" {
+				found = true
+				break
+			}
+		}
+		Expect(found).To(BeTrue(), "Expected fluentd-node DaemonSet to be in toDelete")
+	})
+
+	It("should include DaemonSet in toCreate when LicenseExpired is false", func() {
+		cfg.LicenseExpired = false
+		component := render.Fluentd(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		toCreate, _ := component.Objects()
+
+		found := false
+		for _, obj := range toCreate {
+			if ds, ok := obj.(*appsv1.DaemonSet); ok && ds.Name == "fluentd-node" {
+				found = true
+				break
+			}
+		}
+		Expect(found).To(BeTrue(), "Expected fluentd-node DaemonSet to be in toCreate")
 	})
 })
 
@@ -1328,8 +1371,10 @@ func setupEKSCloudwatchLogConfig() *render.EksCloudwatchLogConfig {
 
 func getExpectedResourcesForEKS(isManagedcluster bool) []client.Object {
 	expectedResources := []client.Object{
-		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
-			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+		&v3.NetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
+			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		},
 
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentdMetricsService, Namespace: render.LogCollectorNamespace}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder"}},

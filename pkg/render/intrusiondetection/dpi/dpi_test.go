@@ -15,8 +15,7 @@
 package dpi_test
 
 import (
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -72,12 +71,12 @@ var (
 
 	expectedClusterRoleRules = []rbacv1.PolicyRule{
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"deeppacketinspections"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"deeppacketinspections/status"},
 			Verbs:     []string{"update"},
 		},
@@ -199,7 +198,7 @@ var _ = Describe("DPI rendering tests", func() {
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
@@ -586,10 +585,10 @@ var _ = Describe("DPI rendering tests", func() {
 		}))
 	})
 
-	Context("allow-tigera rendering", func() {
-		policyName := types.NamespacedName{Name: "allow-tigera.tigera-dpi", Namespace: "tigera-dpi"}
+	Context("calico-system rendering", func() {
+		policyName := types.NamespacedName{Name: "calico-system.tigera-dpi", Namespace: "tigera-dpi"}
 
-		getExpectedPolicy := func(scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+		getExpectedPolicy := func(scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
 			return testutils.SelectPolicyByClusterTypeAndProvider(
 				scenario,
 				map[string]*v3.NetworkPolicy{
@@ -601,21 +600,21 @@ var _ = Describe("DPI rendering tests", func() {
 			)
 		}
 
-		DescribeTable("should render allow-tigera policy",
-			func(scenario testutils.AllowTigeraScenario) {
+		DescribeTable("should render calico-system policy",
+			func(scenario testutils.CalicoSystemScenario) {
 				cfg.ManagedCluster = scenario.ManagedCluster
 				cfg.OpenShift = scenario.OpenShift
 				component := dpi.DPI(cfg)
 				resources, _ := component.Objects()
 
-				policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				expectedPolicy := getExpectedPolicy(scenario)
 				Expect(policy).To(Equal(expectedPolicy))
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+			Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 		)
 	})
 

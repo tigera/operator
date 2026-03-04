@@ -1,0 +1,62 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: egressgatewaypolicies.projectcalico.org
+spec:
+  group: projectcalico.org
+  names:
+    kind: EgressGatewayPolicy
+    listKind: EgressGatewayPolicyList
+    plural: egressgatewaypolicies
+    singular: egressgatewaypolicy
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v3
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              type: string
+            kind:
+              type: string
+            metadata:
+              type: object
+            spec:
+              properties:
+                rules:
+                  items:
+                    properties:
+                      description:
+                        type: string
+                      destination:
+                        properties:
+                          cidr:
+                            type: string
+                        type: object
+                      gateway:
+                        properties:
+                          maxNextHops:
+                            type: integer
+                          namespaceSelector:
+                            type: string
+                          selector:
+                            type: string
+                        type: object
+                      gatewayPreference:
+                        default: None
+                        enum:
+                          - None
+                          - PreferNodeLocal
+                        type: string
+                    type: object
+                  type: array
+              type: object
+          required:
+            - metadata
+            - spec
+          type: object
+      served: true
+      storage: true

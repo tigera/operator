@@ -19,8 +19,7 @@ import (
 	"fmt"
 
 	v1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/tigera/operator/pkg/ptr"
 
@@ -65,16 +64,16 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 		expectedESPolicyForOpenshift = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elasticsearch_ocp.json")
 		expectedESInternalPolicy     = testutils.GetExpectedPolicyFromFile("testutils/expected_policies/elasticsearch-internal.json")
 	)
-	getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+	getExpectedPolicy := func(policyName types.NamespacedName, scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
 		if scenario.ManagedCluster {
 			return nil
 		}
 
 		switch policyName.Name {
-		case "allow-tigera.elasticsearch-access":
+		case "calico-system.elasticsearch-access":
 			return testutils.SelectPolicyByProvider(scenario, expectedESPolicy, expectedESPolicyForOpenshift)
 
-		case "allow-tigera.elasticsearch-internal":
+		case "calico-system.elasticsearch-internal":
 			return expectedESInternalPolicy
 
 		default:
@@ -180,6 +179,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -278,6 +280,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				}
 
 				expectedDeleteResources := []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -297,7 +302,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
-				//compareResources(createResources, expectedCreateResources)
+				// compareResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, expectedDeleteResources)
 			})
 
@@ -342,6 +347,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -441,6 +449,9 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				createResources, deleteResources := component.Objects()
 				rtest.ExpectResources(createResources, expectedCreateResources)
 				compareResources(deleteResources, []resourceTestObj{
+					{"allow-tigera.elasticsearch-access", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.elasticsearch-internal", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
+					{"allow-tigera.default-deny", render.ElasticsearchNamespace, &v3.NetworkPolicy{}, nil},
 					{render.ESCuratorName, render.ElasticsearchNamespace, &batchv1.CronJob{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRole{}, nil},
 					{render.ESCuratorName, "", &rbacv1.ClusterRoleBinding{}, nil},
@@ -450,14 +461,14 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				})
 			})
 
-			Context("allow-tigera rendering", func() {
+			Context("calico-system rendering", func() {
 				policyNames := []types.NamespacedName{
-					{Name: "allow-tigera.elasticsearch-access", Namespace: "tigera-elasticsearch"},
-					{Name: "allow-tigera.elasticsearch-internal", Namespace: "tigera-elasticsearch"},
+					{Name: "calico-system.elasticsearch-access", Namespace: "tigera-elasticsearch"},
+					{Name: "calico-system.elasticsearch-internal", Namespace: "tigera-elasticsearch"},
 				}
 
-				DescribeTable("should render allow-tigera policy",
-					func(scenario testutils.AllowTigeraScenario) {
+				DescribeTable("should render calico-system policy",
+					func(scenario testutils.CalicoSystemScenario) {
 						if scenario.OpenShift {
 							cfg.Provider = operatorv1.ProviderOpenShift
 						} else {
@@ -468,13 +479,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 						resources, _ := component.Objects()
 
 						for _, policyName := range policyNames {
-							policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+							policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 							expectedPolicy := getExpectedPolicy(policyName, scenario)
 							Expect(policy).To(Equal(expectedPolicy))
 						}
 					},
-					Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-					Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+					Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+					Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
 				)
 			})
 		})
@@ -601,9 +612,11 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 			It("creates Managed cluster logstorage components", func() {
 				expectedCreateResources := []client.Object{
 					&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-secrets"}},
-					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-operator"},
-						RoleRef:  rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "ClusterRole", Name: "tigera-linseed-secrets"},
-						Subjects: []rbacv1.Subject{{Kind: "ServiceAccount", Name: "guardian", Namespace: "calico-system"}}},
+					&rbacv1.RoleBinding{
+						ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "tigera-operator"},
+						RoleRef:    rbacv1.RoleRef{APIGroup: "rbac.authorization.k8s.io", Kind: "ClusterRole", Name: "tigera-linseed-secrets"},
+						Subjects:   []rbacv1.Subject{{Kind: "ServiceAccount", Name: "guardian", Namespace: "calico-system"}},
+					},
 					&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 					&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoKubeControllerSecret, Namespace: common.OperatorNamespace()}},
 				}
@@ -627,16 +640,16 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 		Context("Deleting LogStorage", deleteLogStorageTests(nil, managementClusterConnection))
 
-		Context("allow-tigera rendering", func() {
+		Context("calico-system rendering", func() {
 			policyNames := []types.NamespacedName{
-				{Name: "allow-tigera.elasticsearch-access", Namespace: "tigera-elasticsearch"},
-				{Name: "allow-tigera.kibana-access", Namespace: "tigera-kibana"},
-				{Name: "allow-tigera.elastic-operator-access", Namespace: "tigera-eck-operator"},
-				{Name: "allow-tigera.elasticsearch-internal", Namespace: "tigera-elasticsearch"},
+				{Name: "calico-system.elasticsearch-access", Namespace: "tigera-elasticsearch"},
+				{Name: "calico-system.kibana-access", Namespace: "tigera-kibana"},
+				{Name: "calico-system.elastic-operator-access", Namespace: "tigera-eck-operator"},
+				{Name: "calico-system.elasticsearch-internal", Namespace: "tigera-elasticsearch"},
 			}
 
-			DescribeTable("should render allow-tigera policy",
-				func(scenario testutils.AllowTigeraScenario) {
+			DescribeTable("should render calico-system policy",
+				func(scenario testutils.CalicoSystemScenario) {
 					if scenario.OpenShift {
 						cfg.Provider = operatorv1.ProviderOpenShift
 					} else {
@@ -647,13 +660,13 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 					resources, _ := component.Objects()
 
 					for _, policyName := range policyNames {
-						policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+						policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 						expectedPolicy := getExpectedPolicy(policyName, scenario)
 						Expect(policy).To(Equal(expectedPolicy))
 					}
 				},
-				Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-				Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+				Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+				Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 			)
 		})
 	})
@@ -1162,7 +1175,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 
 func getTLS(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
 	scheme := runtime.NewScheme()
-	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())

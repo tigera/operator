@@ -17,8 +17,7 @@ package render_test
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
 
@@ -93,7 +92,7 @@ var _ = Describe("Windows rendering tests", func() {
 		defaultInstance.CalicoNetwork.NodeAddressAutodetectionV4 = &operatorv1.NodeAddressAutodetection{FirstFound: &ff}
 		defaultInstance.ServiceCIDRs = []string{"10.96.0.0/12"}
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
@@ -141,7 +140,7 @@ var _ = Describe("Windows rendering tests", func() {
 			} else {
 				defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operatorv1.EncapsulationNone
 			}
-			Context(fmt.Sprintf("BGP enabled: %v, VXLAN enabled: %v", enableBGP, enableVXLAN), func() {
+			By(fmt.Sprintf("BGP enabled: %v, VXLAN enabled: %v", enableBGP, enableVXLAN), func() {
 				expectedResources := []struct {
 					name    string
 					ns      string
@@ -687,7 +686,7 @@ var _ = Describe("Windows rendering tests", func() {
 			} else {
 				defaultInstance.CalicoNetwork.IPPools[0].Encapsulation = operatorv1.EncapsulationNone
 			}
-			Context(fmt.Sprintf("BGP enabled: %v, VXLAN enabled: %v", enableBGP, enableVXLAN), func() {
+			By(fmt.Sprintf("BGP enabled: %v, VXLAN enabled: %v", enableBGP, enableVXLAN), func() {
 				expectedResources := []struct {
 					name    string
 					ns      string

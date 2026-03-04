@@ -17,8 +17,9 @@ package monitor
 import (
 	"bytes"
 	"context"
+	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
@@ -66,7 +67,7 @@ var _ = Describe("Monitor controller tests", func() {
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
@@ -96,6 +97,7 @@ var _ = Describe("Monitor controller tests", func() {
 			status:          mockStatus,
 			prometheusReady: &utils.ReadyFlag{},
 			tierWatchReady:  &utils.ReadyFlag{},
+			licenseAPIReady: &utils.ReadyFlag{},
 		}
 
 		// We start off with a 'standard' installation, with nothing special
@@ -122,7 +124,7 @@ var _ = Describe("Monitor controller tests", func() {
 		}
 		Expect(cli.Create(ctx, monitorCR)).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, render.CreateCertificateConfigMap("test", render.TyphaCAConfigMapName, common.OperatorNamespace()))).NotTo(HaveOccurred())
-		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 		// Create a certificate manager and provision the CA to unblock the controller. Generally this would be done by
 		// the cluster CA controller and is a prerequisite for the monitor controller to function.
@@ -131,9 +133,18 @@ var _ = Describe("Monitor controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
+		// Create a valid (non-expired) license.
+		Expect(cli.Create(ctx, &v3.LicenseKey{
+			ObjectMeta: metav1.ObjectMeta{Name: "default", CreationTimestamp: metav1.Now()},
+			Status: v3.LicenseKeyStatus{
+				Expiry: metav1.Time{Time: time.Now().Add(24 * time.Hour)},
+			},
+		})).NotTo(HaveOccurred())
+
 		// Mark that watches were successful.
 		r.prometheusReady.MarkAsReady()
 		r.tierWatchReady.MarkAsReady()
+		r.licenseAPIReady.MarkAsReady()
 	})
 
 	Context("controller reconciliation", func() {
@@ -165,6 +176,25 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+
+			// Verify the recommended labels are correct on these resources.
+			Expect(p.Labels).To(Equal(map[string]string{
+				"k8s-app":                      "tigera-prometheus",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/name":       "tigera-prometheus",
+				"app.kubernetes.io/part-of":    "Calico",
+				"app.kubernetes.io/component":  "",
+			}))
+			Expect(am.Labels).To(Equal(map[string]string{
+				"k8s-app":                      "calico-node-alertmanager",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/name":       "calico-node-alertmanager",
+				"app.kubernetes.io/part-of":    "Calico",
+				"app.kubernetes.io/component":  "",
+			}))
+
 		})
 
 		It("should create Prometheus related resources even when a cert with missing key usages is configured for other components", func() {
@@ -189,23 +219,23 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should render allow-tigera policy when tier and policy watch are ready", func() {
+		It("should render calico-system policy when tier and policy watch are ready", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			policies := v3.NetworkPolicyList{}
 			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
 			Expect(policies.Items).To(HaveLen(6))
-			Expect(policies.Items[0].Name).To(Equal("allow-tigera.calico-node-alertmanager"))
-			Expect(policies.Items[1].Name).To(Equal("allow-tigera.calico-node-alertmanager-mesh"))
-			Expect(policies.Items[2].Name).To(Equal("allow-tigera.default-deny"))
-			Expect(policies.Items[3].Name).To(Equal("allow-tigera.prometheus"))
-			Expect(policies.Items[4].Name).To(Equal("allow-tigera.prometheus-operator"))
-			Expect(policies.Items[5].Name).To(Equal("allow-tigera.tigera-prometheus-api"))
+			Expect(policies.Items[0].Name).To(Equal("calico-system.calico-node-alertmanager"))
+			Expect(policies.Items[1].Name).To(Equal("calico-system.calico-node-alertmanager-mesh"))
+			Expect(policies.Items[2].Name).To(Equal("calico-system.default-deny"))
+			Expect(policies.Items[3].Name).To(Equal("calico-system.prometheus"))
+			Expect(policies.Items[4].Name).To(Equal("calico-system.prometheus-operator"))
+			Expect(policies.Items[5].Name).To(Equal("calico-system.tigera-prometheus-api"))
 		})
 
-		It("should omit allow-tigera policy and not degrade when tier is not ready", func() {
-			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+		It("should omit calico-system policy and not degrade when tier is not ready", func() {
+			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -260,12 +290,23 @@ var _ = Describe("Monitor controller tests", func() {
 
 				Expect(serviceMonitor.Spec.Endpoints).To(HaveLen(1))
 				// Verify that the default settings are propagated.
-				Expect(serviceMonitor.Labels).To(Equal(map[string]string{render.AppLabelName: monitor.TigeraExternalPrometheus}))
+				Expect(serviceMonitor.Labels).Should(And(
+					HaveKeyWithValue(render.AppLabelName, monitor.TigeraExternalPrometheus),
+					HaveKeyWithValue("app.kubernetes.io/instance", "tigera-secure"),
+					HaveKeyWithValue("app.kubernetes.io/managed-by", "tigera-operator"),
+					HaveKeyWithValue("app.kubernetes.io/name", "tigera-external-prometheus"),
+					HaveKeyWithValue("app.kubernetes.io/part-of", "Calico"),
+				))
 				Expect(serviceMonitor.Spec.Endpoints[0]).To(Equal(monitoringv1.Endpoint{
 					Params: map[string][]string{"match[]": {"{__name__=~\".+\"}"}},
 					Port:   "web",
 					Path:   "/federate",
-					Scheme: ptr.To(monitoringv1.SchemeHTTPS),
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("https"),
+						},
+					},
 					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
 						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
 							TLSConfig: &monitoringv1.TLSConfig{
@@ -601,6 +642,73 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(instance.Status.Conditions[2].Reason).To(Equal(string(operatorv1.NotApplicable)))
 			Expect(instance.Status.Conditions[2].Message).To(Equal("Not Applicable"))
 			Expect(instance.Status.Conditions[2].ObservedGeneration).To(Equal(generation))
+		})
+	})
+
+	Context("License expiry", func() {
+		It("should set degraded status when license is expired", func() {
+			// Replace the valid license with an expired one.
+			Expect(cli.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, &v3.LicenseKey{
+				ObjectMeta: metav1.ObjectMeta{Name: "default", CreationTimestamp: metav1.Now()},
+				Status: v3.LicenseKeyStatus{
+					Expiry: metav1.Time{Time: time.Now().Add(-24 * time.Hour)},
+				},
+			})).NotTo(HaveOccurred())
+
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError,
+				"License is expired - Contact Tigera support or email licensing@tigera.io", mock.Anything, mock.Anything).Return()
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify that ServiceMonitors are not created when license is expired.
+			sm := &monitoringv1.ServiceMonitor{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
+
+			// Verify that other Prometheus resources are still created.
+			am := &monitoringv1.Alertmanager{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).NotTo(HaveOccurred())
+			p := &monitoringv1.Prometheus{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).NotTo(HaveOccurred())
+		})
+
+		It("should not set degraded status when license is valid", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// ServiceMonitors should be created with a valid license.
+			sm := &monitoringv1.ServiceMonitor{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+		})
+
+		It("should requeue when license is in the grace period", func() {
+			// Replace the valid license with one that expired 1 day ago but has a 90-day grace period.
+			Expect(cli.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, &v3.LicenseKey{
+				ObjectMeta: metav1.ObjectMeta{Name: "default", CreationTimestamp: metav1.Now()},
+				Status: v3.LicenseKeyStatus{
+					Expiry:      metav1.Time{Time: time.Now().Add(-24 * time.Hour)},
+					GracePeriod: "90d",
+				},
+			})).NotTo(HaveOccurred())
+
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Should requeue to re-reconcile when the grace period expires.
+			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+			Expect(result.RequeueAfter).To(BeNumerically("~", 89*24*time.Hour, 1*time.Hour))
+
+			// ServiceMonitors should still be created during the grace period.
+			sm := &monitoringv1.ServiceMonitor{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 		})
 	})
 })

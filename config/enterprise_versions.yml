@@ -183,3 +183,5 @@ components:
   istio-proxyv2:
     image: istio-proxyv2
     version: master
+  webhooks:
+    version: master

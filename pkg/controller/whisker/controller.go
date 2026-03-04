@@ -28,8 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -55,7 +55,7 @@ var log = logf.Log.WithName(controllerName)
 
 // Add creates a new Reconciler Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	statusManager := status.New(mgr.GetClient(), "whisker", opts.KubernetesVersion)
 	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts)
 
@@ -102,7 +102,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("whisker-controller failed to watch Tigerastatus: %w", err)
 	}
 
-	if err = c.WatchObject(&crdv1.ClusterInformation{}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&v3.ClusterInformation{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("whisker-controller failed to watch ClusterInformation")
 	}
 
@@ -121,7 +121,7 @@ func newReconciler(
 	schema *runtime.Scheme,
 	statusMgr status.StatusManager,
 	p operatorv1.Provider,
-	opts options.AddOptions,
+	opts options.ControllerOptions,
 ) *Reconciler {
 	c := &Reconciler{
 		cli:           cli,
@@ -245,7 +245,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		ClusterDomain:         r.clusterDomain,
 	}
 
-	clusterInfo := &crdv1.ClusterInformation{}
+	clusterInfo := &v3.ClusterInformation{}
 	err = r.cli.Get(ctx, utils.DefaultInstanceKey, clusterInfo)
 	if err != nil {
 		reqLogger.Info("Unable to retrieve ClusterInformation", "error", err)

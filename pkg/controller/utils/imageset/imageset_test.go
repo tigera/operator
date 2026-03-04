@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	//"k8s.io/client-go/kubernetes/fake"
@@ -35,7 +34,7 @@ import (
 
 var _ = Describe("imageset tests", func() {
 	BeforeEach(func() {
-		Expect(apis.AddToScheme(kscheme.Scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(kscheme.Scheme, false)).NotTo(HaveOccurred())
 	})
 
 	Context("no imageset is fine", func() {

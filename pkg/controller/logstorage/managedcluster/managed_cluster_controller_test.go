@@ -17,7 +17,7 @@ package managedcluster
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
@@ -43,7 +43,7 @@ func NewReconcilerWithShims(
 	provider operatorv1.Provider,
 	clusterDomain string,
 ) (*LogStorageManagedClusterController, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),
@@ -68,7 +68,7 @@ var _ = Describe("LogStorageManagedCluster controller", func() {
 
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).ShouldNot(HaveOccurred())
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())

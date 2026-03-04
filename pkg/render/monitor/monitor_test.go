@@ -17,8 +17,7 @@ package monitor_test
 import (
 	"fmt"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -77,7 +76,7 @@ var _ = Describe("monitor rendering tests", func() {
 
 	BeforeEach(func() {
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -360,7 +359,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Name).To(Equal("calico-node-alertmanager"))
 		Expect(*prometheusObj.Spec.Alerting.Alertmanagers[0].Namespace).To(Equal("tigera-prometheus"))
 		Expect(prometheusObj.Spec.Alerting.Alertmanagers[0].Port).To(Equal(intstr.FromString("web")))
-		Expect(*prometheusObj.Spec.Alerting.Alertmanagers[0].Scheme).To(Equal(monitoringv1.SchemeHTTP))
+		Expect(*prometheusObj.Spec.Alerting.Alertmanagers[0].RelabelConfigs[0].Replacement).To(Equal("http"))
 		Expect(*prometheusObj.Spec.ReloadStrategy).To(BeEquivalentTo(monitoringv1.ProcessSignalReloadStrategyType))
 		Expect(*prometheusObj.Spec.SecurityContext.RunAsGroup).To(BeEquivalentTo(10001))
 		Expect(*prometheusObj.Spec.SecurityContext.RunAsNonRoot).To(BeTrue())
@@ -507,12 +506,12 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("calico-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[1].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].Port).To(Equal("calico-bgp-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[1].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[1].RelabelConfigs[0].Replacement).To(Equal("https"))
 
 		servicemonitorObj, ok = rtest.GetResource(toCreate, monitor.ElasticsearchMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
@@ -525,7 +524,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
 
 		servicemonitorObj, ok = rtest.GetResource(toCreate, "fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
@@ -545,7 +544,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("fluentd-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
 
 		servicemonitorObj, ok = rtest.GetResource(toCreate, "calico-api", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
@@ -558,7 +557,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("queryserver"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
 		//nolint:staticcheck // Ignore SA1019 deprecated
 		Expect(servicemonitorObj.Spec.Endpoints[0].BearerTokenFile).To(Equal("/var/run/secrets/kubernetes.io/serviceaccount/token"))
 
@@ -775,34 +774,34 @@ var _ = Describe("monitor rendering tests", func() {
 		}))
 	})
 
-	Context("allow-tigera rendering", func() {
+	Context("calico-system rendering", func() {
 		policyNames := []types.NamespacedName{
-			{Name: "allow-tigera.calico-node-alertmanager", Namespace: "tigera-prometheus"},
-			{Name: "allow-tigera.calico-node-alertmanager-mesh", Namespace: "tigera-prometheus"},
-			{Name: "allow-tigera.prometheus", Namespace: "tigera-prometheus"},
-			{Name: "allow-tigera.tigera-prometheus-api", Namespace: "tigera-prometheus"},
-			{Name: "allow-tigera.prometheus-operator", Namespace: "tigera-prometheus"},
+			{Name: "calico-system.calico-node-alertmanager", Namespace: "tigera-prometheus"},
+			{Name: "calico-system.calico-node-alertmanager-mesh", Namespace: "tigera-prometheus"},
+			{Name: "calico-system.prometheus", Namespace: "tigera-prometheus"},
+			{Name: "calico-system.tigera-prometheus-api", Namespace: "tigera-prometheus"},
+			{Name: "calico-system.prometheus-operator", Namespace: "tigera-prometheus"},
 		}
 
-		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
+		getExpectedPolicy := func(name types.NamespacedName, scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
 			switch name.Name {
-			case "allow-tigera.calico-node-alertmanager":
+			case "calico-system.calico-node-alertmanager":
 				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerPolicy, expectedAlertmanagerPolicyForOpenshift)
-			case "allow-tigera.calico-node-alertmanager-mesh":
+			case "calico-system.calico-node-alertmanager-mesh":
 				return testutils.SelectPolicyByProvider(scenario, expectedAlertmanagerMeshPolicy, expectedAlertmanagerMeshPolicyForOpenshift)
-			case "allow-tigera.prometheus":
+			case "calico-system.prometheus":
 				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusPolicy, expectedPrometheusPolicyForOpenshift)
-			case "allow-tigera.tigera-prometheus-api":
+			case "calico-system.tigera-prometheus-api":
 				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusApiPolicy, expectedPrometheusApiPolicyForOpenshift)
-			case "allow-tigera.prometheus-operator":
+			case "calico-system.prometheus-operator":
 				return testutils.SelectPolicyByProvider(scenario, expectedPrometheusOperatorPolicy, expectedPrometheusOperatorPolicyOpenshift)
 			}
 
 			return nil
 		}
 
-		DescribeTable("should render allow-tigera policy",
-			func(scenario testutils.AllowTigeraScenario) {
+		DescribeTable("should render calico-system policy",
+			func(scenario testutils.CalicoSystemScenario) {
 				cfg.OpenShift = scenario.OpenShift
 				cfg.KubeControllerPort = 9094
 
@@ -810,15 +809,15 @@ var _ = Describe("monitor rendering tests", func() {
 				resourcesToCreate, _ := component.Objects()
 
 				for _, policyName := range policyNames {
-					policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resourcesToCreate)
+					policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesToCreate)
 					expectedPolicy := getExpectedPolicy(policyName, scenario)
 					Expect(policy).To(Equal(expectedPolicy))
 				}
 			},
-			Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
-			Entry("for managed, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: false}),
-			Entry("for managed, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: true, OpenShift: true}),
+			Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+			Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
+			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
+			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 		)
 
 		It("prometheus policy should omit kube-controller egress rule when kube-controller port is 0", func() {
@@ -826,13 +825,13 @@ var _ = Describe("monitor rendering tests", func() {
 			cfg.KubeControllerPort = 9094
 			component := monitor.MonitorPolicy(cfg)
 			resourcesToCreate, _ := component.Objects()
-			baselinePolicy := testutils.GetAllowTigeraPolicyFromResources(types.NamespacedName{Name: "allow-tigera.prometheus", Namespace: "tigera-prometheus"}, resourcesToCreate)
+			baselinePolicy := testutils.GetCalicoSystemPolicyFromResources(types.NamespacedName{Name: "calico-system.prometheus", Namespace: "tigera-prometheus"}, resourcesToCreate)
 
 			// kube-controllers port set to 0
 			cfg.KubeControllerPort = 0
 			component = monitor.MonitorPolicy(cfg)
 			resourcesToCreate, _ = component.Objects()
-			zeroedPolicy := testutils.GetAllowTigeraPolicyFromResources(types.NamespacedName{Name: "allow-tigera.prometheus", Namespace: "tigera-prometheus"}, resourcesToCreate)
+			zeroedPolicy := testutils.GetCalicoSystemPolicyFromResources(types.NamespacedName{Name: "calico-system.prometheus", Namespace: "tigera-prometheus"}, resourcesToCreate)
 
 			Expect(len(zeroedPolicy.Spec.Egress)).To(Equal(len(baselinePolicy.Spec.Egress) - 1))
 		})
@@ -937,8 +936,13 @@ var _ = Describe("monitor rendering tests", func() {
 						HonorLabels:   true,
 						Interval:      "5s",
 						Port:          "calico-typha-metrics",
-						Scheme:        ptr.To(monitoringv1.SchemeHTTP),
 						ScrapeTimeout: "5s",
+						RelabelConfigs: []monitoringv1.RelabelConfig{
+							{
+								TargetLabel: "__scheme__",
+								Replacement: ptr.To("http"),
+							},
+						},
 					},
 				},
 				NamespaceSelector: monitoringv1.NamespaceSelector{
@@ -965,17 +969,75 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("calico-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[0].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[1].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].Port).To(Equal("calico-bgp-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[1].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[1].Scheme).To(Equal(monitoringv1.SchemeHTTPS))
+		Expect(*servicemonitorObj.Spec.Endpoints[1].RelabelConfigs[0].Replacement).To(Equal("https"))
 		Expect(servicemonitorObj.Spec.Endpoints[2].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[2].Interval).To(BeEquivalentTo("5s"))
 		Expect(servicemonitorObj.Spec.Endpoints[2].Port).To(Equal("felix-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[2].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[2].Scheme).To(Equal(monitoringv1.SchemeHTTP))
+		Expect(*servicemonitorObj.Spec.Endpoints[2].RelabelConfigs[0].Replacement).To(Equal("http"))
+	})
+
+	It("Should move ServiceMonitors to toDelete when LicenseExpired is true", func() {
+		cfg.LicenseExpired = true
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, toDelete := component.Objects()
+
+		// ServiceMonitors should not be in toCreate.
+		for _, obj := range toCreate {
+			if _, ok := obj.(*monitoringv1.ServiceMonitor); ok {
+				Fail("ServiceMonitor should not be in toCreate when license is expired, but found: " + obj.GetName())
+			}
+		}
+
+		// ServiceMonitors should be in toDelete.
+		serviceMonitorNames := []string{
+			monitor.CalicoNodeMonitor,
+			monitor.ElasticsearchMetrics,
+			monitor.FluentdMetrics,
+			"calico-api",
+			"calico-kube-controllers-metrics",
+		}
+		for _, name := range serviceMonitorNames {
+			found := false
+			for _, obj := range toDelete {
+				if sm, ok := obj.(*monitoringv1.ServiceMonitor); ok && sm.Name == name {
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue(), "Expected ServiceMonitor %s to be in toDelete", name)
+		}
+	})
+
+	It("Should include ServiceMonitors in toCreate when LicenseExpired is false", func() {
+		cfg.LicenseExpired = false
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, _ := component.Objects()
+
+		serviceMonitorNames := []string{
+			monitor.CalicoNodeMonitor,
+			monitor.ElasticsearchMetrics,
+			monitor.FluentdMetrics,
+			"calico-api",
+			"calico-kube-controllers-metrics",
+		}
+		for _, name := range serviceMonitorNames {
+			found := false
+			for _, obj := range toCreate {
+				if sm, ok := obj.(*monitoringv1.ServiceMonitor); ok && sm.Name == name {
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue(), "Expected ServiceMonitor %s to be in toCreate", name)
+		}
 	})
 })
 

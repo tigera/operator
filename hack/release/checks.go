@@ -18,9 +18,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli/v3"
 )
 
-// checkGitClean ensures that the git working tree is clean.
+// check that the git working tree is clean.
 var checkGitClean = func(ctx context.Context) (context.Context, error) {
 	version, err := gitVersion()
 	if err != nil {
@@ -30,4 +33,51 @@ var checkGitClean = func(ctx context.Context) (context.Context, error) {
 		return ctx, fmt.Errorf("git working tree is dirty, please commit or stash changes before proceeding")
 	}
 	return ctx, nil
+}
+
+// check that the provided version matches the git version.
+// This is required for releases, but skipped for hashreleases.
+var checkVersionMatchesGitVersion = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	version := c.String(versionFlag.Name)
+	checkLog := logrus.WithField("version", version)
+	if c.Bool(hashreleaseFlag.Name) {
+		checkLog.Debug("Skipping version check for hashrelease")
+		return ctx, nil
+	}
+	gitVer, err := gitVersion()
+	if err != nil {
+		return ctx, fmt.Errorf("getting git version: %w", err)
+	}
+	checkLog.WithField("git-version", gitVer).Debug("Checking version matches git version")
+	checkLog.Info("Using versions")
+	if version != gitVer {
+		return ctx, fmt.Errorf("provided version %q does not match git version %q. This is required for releases. \n"+
+			"If building a hashrelease, use either the --%s flag or set environment variable %s=true", version, gitVer, hashreleaseFlag.Name, hashreleaseFlagEnvVar)
+	}
+	return ctx, nil
+}
+
+var checkVersionFormat = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	version := c.String(versionFlag.Name)
+	checkLog := logrus.WithField("version", version)
+	if c.Bool(hashreleaseFlag.Name) {
+		checkLog.Debug("Skipping version check for hashrelease")
+		return ctx, nil
+	}
+	checkLog.Debug("Checking version format")
+	if isRelease, err := isReleaseVersionFormat(version); err != nil {
+		return ctx, fmt.Errorf("checking version format: %w", err)
+	} else if !isRelease {
+		return ctx, fmt.Errorf("provided version %q is not a valid release version. \n"+
+			"If building a hashrelease, use either the --%s flag or set environment variable %s=true", version, hashreleaseFlag.Name, hashreleaseFlagEnvVar)
+	}
+	return ctx, nil
+}
+
+var checkVersion = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	ctx, err := checkVersionFormat(ctx, c)
+	if err != nil {
+		return ctx, err
+	}
+	return checkVersionMatchesGitVersion(ctx, c)
 }

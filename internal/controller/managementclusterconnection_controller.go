@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +36,6 @@ type ManagementClusterConnectionReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=managementclusterconnections,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=managementclusterconnections/status,verbs=get;update;patch
 
-func (r *ManagementClusterConnectionReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *ManagementClusterConnectionReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return clusterconnection.Add(mgr, opts)
 }

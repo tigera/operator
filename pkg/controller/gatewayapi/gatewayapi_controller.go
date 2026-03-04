@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -60,7 +60,7 @@ var log = logf.Log.WithName("controller_gatewayapi")
 //
 // Start Watches within the Add function for any resources that this controller creates or monitors. This will trigger
 // calls to Reconcile() when an instance of one of the watched resources is modified.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	r := &ReconcileGatewayAPI{
 		client:              mgr.GetClient(),
 		scheme:              mgr.GetScheme(),
@@ -218,7 +218,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
 	}
-	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(essentialCRDs...), nil)
+	err = handler.CreateOrUpdateOrDelete(ctx, render.NewCreationPassthrough(essentialCRDs...), nil)
 	if gatewayAPI.Spec.CRDManagement == nil && (err == nil || errors.IsAlreadyExists(err)) {
 		// The GatewayAPI CR does not yet have a specified value for its CRDManagement
 		// field, and we can now infer a reasonable value.
@@ -257,7 +257,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering essential GatewayAPI CRDs", err, log)
 		return reconcile.Result{}, err
 	}
-	err = handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(optionalCRDs...), nil)
+	err = handler.CreateOrUpdateOrDelete(ctx, render.NewCreationPassthrough(optionalCRDs...), nil)
 	if err != nil && !errors.IsAlreadyExists(err) {
 		reqLogger.Info("Could not render all optional GatewayAPI CRDs", "err", err)
 	}
@@ -458,8 +458,8 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 
 // patchFelixConfiguration patches the FelixConfiguration resource with the desired policy sync path prefix.
 func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error {
-	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *crdv1.FelixConfiguration) (bool, error) {
-		policySyncPrefix := fc.Spec.PolicySyncPathPrefix
+	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
+		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec)
 		policySyncPrefixSetDesired := DefaultPolicySyncPrefix == policySyncPrefix
 
 		if !policySyncPrefixSetDesired && policySyncPrefix != "" {
@@ -476,6 +476,17 @@ func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error
 	})
 
 	return err
+}
+
+func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *v3.FelixConfigurationSpec) string {
+	// Respect existing policySyncPathPrefix if it's already set (e.g. EGW)
+	// This will cause policySyncPathPrefix value to remain when ApplicationLayer is disabled.
+	existing := fcSpec.PolicySyncPathPrefix
+	if existing != "" {
+		return existing
+	}
+
+	return DefaultPolicySyncPrefix
 }
 
 // maintainFinalizer manages this controller's finalizer on the Installation resource.

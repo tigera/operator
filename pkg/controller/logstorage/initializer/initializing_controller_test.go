@@ -19,7 +19,7 @@ import (
 	"reflect"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 
@@ -54,7 +54,7 @@ func NewTestInitializer(
 	provider operatorv1.Provider,
 	clusterDomain string,
 ) (*LogStorageInitializer, error) {
-	opts := options.AddOptions{
+	opts := options.ControllerOptions{
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),
@@ -83,7 +83,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).ShouldNot(HaveOccurred())
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())

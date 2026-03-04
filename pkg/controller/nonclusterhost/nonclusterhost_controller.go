@@ -40,7 +40,7 @@ const controllerName = "nonclusterhost-controller"
 
 var log = logf.Log.WithName("controller_nonclusterhost")
 
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
 	}
@@ -57,7 +57,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 	return add(mgr, c)
 }
 
-func newReconciler(mgr manager.Manager, opts options.AddOptions) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions) reconcile.Reconciler {
 	r := &ReconcileNonClusterHost{
 		client: mgr.GetClient(),
 		scheme: mgr.GetScheme(),

@@ -64,9 +64,7 @@ const (
 	FlowsDashboardName = "Calico Flow Logs"
 )
 
-var (
-	EntityRule = networkpolicy.CreateEntityRule(Namespace, CRName, Port)
-)
+var EntityRule = networkpolicy.CreateEntityRule(Namespace, CRName, Port)
 
 // Kibana renders the components necessary for kibana and elasticsearch
 func Kibana(cfg *Configuration) render.Component {
@@ -152,10 +150,16 @@ func (k *kibana) Objects() ([]client.Object, []client.Object) {
 		// - securityContext.runAsNonRoot=true
 		// - securityContext.seccompProfile.type to "RuntimeDefault" or "Localhost"
 		toCreate = append(toCreate, render.CreateNamespace(Namespace, k.cfg.Installation.KubernetesProvider, render.PSSBaseline, k.cfg.Installation.Azure))
-		toCreate = append(toCreate, k.allowTigeraPolicy())
-		toCreate = append(toCreate, networkpolicy.AllowTigeraDefaultDeny(Namespace))
+		toCreate = append(toCreate, k.calicoSystemPolicy())
+		toCreate = append(toCreate, networkpolicy.CalicoSystemDefaultDeny(Namespace))
 		toCreate = append(toCreate, render.CreateOperatorSecretsRoleBinding(Namespace))
 		toCreate = append(toCreate, k.serviceAccount())
+
+		// allow-tigera Tier was renamed to calico-system
+		toDelete = append(toDelete,
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kibana-access", Namespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", Namespace),
+		)
 
 		if k.cfg.Installation.KubernetesProvider.IsOpenShift() {
 			toCreate = append(toCreate, k.clusterRole(), k.clusterRoleBinding())
@@ -427,7 +431,7 @@ func (k *kibana) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 }
 
 // Allow access to Kibana
-func (k *kibana) allowTigeraPolicy() *v3.NetworkPolicy {
+func (k *kibana) calicoSystemPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,

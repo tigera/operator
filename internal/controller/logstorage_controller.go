@@ -48,7 +48,7 @@ type LogStorageReconciler struct {
 // Each of these controllers reconciles independently, but they work together in order to implement log storage
 // capabilities. These controllers do not communicate directly with each other, but instead communicate through
 // the Kubernetes API.
-func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *LogStorageReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	// The initializer controller is responsible for performing validation and defaulting on the LogStorage object,
 	// and creating the base namespaces for other controllers to deploy into. It updates the status of the LogStorage
 	// object to indicate that it has completed its work to other controllers.

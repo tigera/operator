@@ -31,6 +31,6 @@ type KubeProxyReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func (r *KubeProxyReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *KubeProxyReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return kubeproxy.Add(mgr, opts)
 }

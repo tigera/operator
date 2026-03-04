@@ -41,7 +41,7 @@ global_job_config:
       - 'cache restore go-mod-cache-s390x-${SEMAPHORE_GIT_SHA}'
 
 blocks:
-  - name: Push Images / Maybe Release
+  - name: Push Images
     task:
       secrets:
         - name: quay-robot-semaphore_v2

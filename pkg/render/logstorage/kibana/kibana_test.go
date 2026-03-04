@@ -17,8 +17,7 @@ package kibana_test
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
@@ -142,8 +141,7 @@ var _ = Describe("Kibana rendering tests", func() {
 				&corev1.SeccompProfile{
 					Type: corev1.SeccompProfileTypeRuntimeDefault,
 				}))
-			resultKB := rtest.GetResource(createResources, kibana.CRName, kibana.Namespace,
-				"kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
+			resultKB := rtest.GetResource(createResources, kibana.CRName, kibana.Namespace, "kibana.k8s.elastic.co", "v1", "Kibana").(*kbv1.Kibana)
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.lifespan"]).To(Equal("8h"))
 			Expect(resultKB.Spec.Config.Data["xpack.security.session.idleTimeout"]).To(Equal("30m"))
 			Expect(resultKB.Spec.Config.Data["xpack.fleet.enabled"]).To(BeFalse())
@@ -186,7 +184,7 @@ var _ = Describe("Kibana rendering tests", func() {
 		})
 
 		It("should configures Kibana publicBaseUrl when BaseURL is specified", func() {
-			//cfg.ElasticLicenseType = render.ElasticsearchLicenseTypeBasic
+			// cfg.ElasticLicenseType = render.ElasticsearchLicenseTypeBasic
 			cfg.BaseURL = "https://test.domain.com"
 
 			component := kibana.Kibana(cfg)
@@ -218,6 +216,9 @@ var _ = Describe("Kibana rendering tests", func() {
 
 			expectedDeletedResources := []client.Object{
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: kibana.ServiceName, Namespace: kibana.Namespace}},
+
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.kibana-access", Namespace: kibana.Namespace}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: kibana.Namespace}},
 			}
 
 			component := kibana.Kibana(cfg)
@@ -247,21 +248,21 @@ var _ = Describe("Kibana rendering tests", func() {
 			rtest.ExpectResources(createdResources, resources)
 		})
 
-		Context("allow-tigera rendering", func() {
+		Context("calico-system rendering", func() {
 			policyNames := []types.NamespacedName{
-				{Name: "allow-tigera.kibana-access", Namespace: "tigera-kibana"},
+				{Name: "calico-system.kibana-access", Namespace: "tigera-kibana"},
 			}
 
-			getExpectedPolicy := func(name types.NamespacedName, scenario testutils.AllowTigeraScenario) *v3.NetworkPolicy {
-				if name.Name == "allow-tigera.kibana-access" {
+			getExpectedPolicy := func(name types.NamespacedName, scenario testutils.CalicoSystemScenario) *v3.NetworkPolicy {
+				if name.Name == "calico-system.kibana-access" {
 					return testutils.SelectPolicyByProvider(scenario, kibanaPolicy, kibanaPolicyForOpenshift)
 				}
 
 				return nil
 			}
 
-			DescribeTable("should render allow-tigera policy",
-				func(scenario testutils.AllowTigeraScenario) {
+			DescribeTable("should render calico-system policy",
+				func(scenario testutils.CalicoSystemScenario) {
 					if scenario.OpenShift {
 						cfg.Provider = operatorv1.ProviderOpenShift
 					} else {
@@ -272,13 +273,13 @@ var _ = Describe("Kibana rendering tests", func() {
 					resources, _ := component.Objects()
 
 					for _, policyName := range policyNames {
-						policy := testutils.GetAllowTigeraPolicyFromResources(policyName, resources)
+						policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 						expectedPolicy := getExpectedPolicy(policyName, scenario)
 						Expect(policy).To(Equal(expectedPolicy))
 					}
 				},
-				Entry("for management/standalone, kube-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: false}),
-				Entry("for management/standalone, openshift-dns", testutils.AllowTigeraScenario{ManagedCluster: false, OpenShift: true}),
+				Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
+				Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
 			)
 		})
 
@@ -317,7 +318,6 @@ var _ = Describe("Kibana rendering tests", func() {
 						State: "",
 					},
 				}
-
 			})
 
 			It("returns Kibana CR's to delete and keeps the finalizers on the LogStorage CR", func() {
@@ -326,7 +326,6 @@ var _ = Describe("Kibana rendering tests", func() {
 				createdResources, deletedResources := component.Objects()
 				rtest.ExpectResources(deletedResources, expectedDeletedResources)
 				Expect(createdResources).To(BeEmpty())
-
 			})
 
 			It("doesn't return anything to delete when Kibana have their deletion times stamps set and the LogStorage finalizers are still set", func() {
@@ -432,7 +431,6 @@ var _ = Describe("Kibana rendering tests", func() {
 			})
 
 			It("should render the kibana pod template with resource requests and limits when set", func() {
-
 				cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{
 					CACert:             cfg.KibanaKeyPair.GetCertificatePEM(),
 					SignerName:         "my signer name",
@@ -462,7 +460,8 @@ var _ = Describe("Kibana rendering tests", func() {
 								Containers: []operatorv1.KibanaContainer{
 									{
 										Name:      "kibana",
-										Resources: &expectedResourcesRequirements},
+										Resources: &expectedResourcesRequirements,
+									},
 								},
 								InitContainers: []operatorv1.KibanaInitContainer{
 									{
@@ -488,16 +487,14 @@ var _ = Describe("Kibana rendering tests", func() {
 				initcontainer := test.GetContainer(kibana.Spec.PodTemplate.Spec.InitContainers, "key-cert-provisioner")
 				Expect(initcontainer).NotTo(BeNil())
 				Expect(initcontainer.Resources).To(Equal(expectedResourcesRequirements))
-
 			})
 		})
-
 	})
 })
 
 func getX509Certs(installation *operatorv1.InstallationSpec) (certificatemanagement.KeyPairInterface, certificatemanagement.TrustedBundle) {
 	scheme := runtime.NewScheme()
-	Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 	certificateManager, err := certificatemanager.Create(cli, installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())

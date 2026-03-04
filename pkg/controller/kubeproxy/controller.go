@@ -28,8 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -46,7 +46,7 @@ var log = logf.Log.WithName(controllerName)
 
 // Add creates a new Reconciler Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and start it when the Manager is started.
-func Add(mgr manager.Manager, opts options.AddOptions) error {
+func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	statusManager := status.New(mgr.GetClient(), ResourceName, opts.KubernetesVersion)
 	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, opts)
 
@@ -59,7 +59,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		return fmt.Errorf("%s failed to watch Installation resource: %w", controllerName, err)
 	}
 
-	if err = c.WatchObject(&crdv1.FelixConfiguration{}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&v3.FelixConfiguration{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("%s failed to watch for Felix Configuration resource: %w", controllerName, err)
 	}
 
@@ -87,7 +87,7 @@ func newReconciler(
 	schema *runtime.Scheme,
 	statusMgr status.StatusManager,
 	p operatorv1.Provider,
-	opts options.AddOptions,
+	opts options.ControllerOptions,
 ) *Reconciler {
 	c := &Reconciler{
 		cli:           cli,

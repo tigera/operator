@@ -17,8 +17,7 @@ package ippool
 import (
 	"context"
 
-	. "github.com/onsi/ginkgo"
-	"github.com/onsi/ginkgo/extensions/table"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/stretchr/testify/mock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,9 +26,9 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/render"
@@ -47,9 +46,6 @@ import (
 var twentySix int32 = 26
 
 var _ = Describe("IP Pool controller tests", func() {
-	// var cli client.Client
-	// var currentPools *crdv1.IPPoolList
-	// var instance *operator.Installation
 	var ctx context.Context
 	var cancel context.CancelFunc
 	var c client.Client
@@ -59,7 +55,7 @@ var _ = Describe("IP Pool controller tests", func() {
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(schedv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
@@ -152,7 +148,7 @@ var _ = Describe("IP Pool controller tests", func() {
 		Expect(pool.CIDR).To(Equal("192.168.0.0/16"))
 
 		// Expect the IP pool to be created in the API server as well.
-		ipPools := crdv1.IPPoolList{}
+		ipPools := v3.IPPoolList{}
 		err = c.List(ctx, &ipPools)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(ipPools.Items).To(HaveLen(1))
@@ -177,9 +173,9 @@ var _ = Describe("IP Pool controller tests", func() {
 		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
 
 		// Create an IP pool. This simulates a user creating an IP pool before the operator has a chance to.
-		ipPool := crdv1.IPPool{
+		ipPool := v3.IPPool{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pool"},
-			Spec:       crdv1.IPPoolSpec{},
+			Spec:       v3.IPPoolSpec{},
 		}
 		Expect(c.Create(ctx, &ipPool)).ShouldNot(HaveOccurred())
 
@@ -203,7 +199,7 @@ var _ = Describe("IP Pool controller tests", func() {
 		Expect(installation.Spec.CalicoNetwork.IPPools).To(HaveLen(0))
 
 		// No new IP pools should exist.
-		ipPools := crdv1.IPPoolList{}
+		ipPools := v3.IPPoolList{}
 		err = c.List(ctx, &ipPools)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(ipPools.Items).To(HaveLen(1))
@@ -246,19 +242,19 @@ var _ = Describe("IP Pool controller tests", func() {
 		mockStatus.AssertExpectations(GinkgoT())
 
 		// Expect all IP pools to have been created.
-		ipPools := crdv1.IPPoolList{}
+		ipPools := v3.IPPoolList{}
 		err = c.List(ctx, &ipPools)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(ipPools.Items).To(HaveLen(len(instance.Spec.CalicoNetwork.IPPools)))
 
 		// Verify basic data about the created pools.
-		poolsByCIDR := map[string]crdv1.IPPool{}
+		poolsByCIDR := map[string]v3.IPPool{}
 		for _, pool := range ipPools.Items {
 			poolsByCIDR[pool.Spec.CIDR] = pool
 		}
 		for _, pool := range instance.Spec.CalicoNetwork.IPPools {
 			Expect(poolsByCIDR).To(HaveKey(pool.CIDR))
-			Expect(poolsByCIDR[pool.CIDR].Labels).To(Equal(map[string]string{"app.kubernetes.io/managed-by": "tigera-operator"}))
+			Expect(poolsByCIDR[pool.CIDR].Labels).To(HaveKeyWithValue("app.kubernetes.io/managed-by", "tigera-operator"))
 		}
 	})
 
@@ -354,14 +350,14 @@ var _ = Describe("IP Pool controller tests", func() {
 		mockStatus.AssertExpectations(GinkgoT())
 
 		// Expect the IP pool to still exist.
-		ipPools := crdv1.IPPoolList{}
+		ipPools := v3.IPPoolList{}
 		err = c.List(ctx, &ipPools)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(ipPools.Items).To(HaveLen(1))
 	})
 })
 
-var _ = table.DescribeTable("cidrWithinCidr",
+var _ = DescribeTable("cidrWithinCidr",
 	func(CIDR, pool string, expectedResult bool) {
 		if expectedResult {
 			Expect(cidrWithinCidr(CIDR, pool)).To(BeTrue(), "Expected pool %s to be within CIDR %s", pool, CIDR)
@@ -370,23 +366,23 @@ var _ = table.DescribeTable("cidrWithinCidr",
 		}
 	},
 
-	table.Entry("Default as CIDR and pool", "192.168.0.0/16", "192.168.0.0/16", true),
-	table.Entry("Pool larger than CIDR should fail", "192.168.0.0/16", "192.168.0.0/15", false),
-	table.Entry("Pool larger than CIDR should fail", "192.168.2.0/24", "192.168.0.0/16", false),
-	table.Entry("Non overlapping CIDR and pool should fail", "192.168.0.0/16", "172.168.0.0/16", false),
-	table.Entry("CIDR with smaller pool", "192.168.0.0/16", "192.168.2.0/24", true),
-	table.Entry("IPv6 matching CIDR and pool", "fd00:1234::/32", "fd00:1234::/32", true),
-	table.Entry("IPv6 Pool larger than CIDR should fail", "fd00:1234::/32", "fd00:1234::/31", false),
-	table.Entry("IPv6 Pool larger than CIDR should fail", "fd00:1234:5600::/40", "fd00:1234::/32", false),
-	table.Entry("IPv6 Non overlapping CIDR and pool should fail", "fd00:1234::/32", "fd00:5678::/32", false),
-	table.Entry("IPv6 CIDR with smaller pool", "fd00:1234::/32", "fd00:1234:5600::/40", true),
+	Entry("Default as CIDR and pool", "192.168.0.0/16", "192.168.0.0/16", true),
+	Entry("Pool larger than CIDR should fail", "192.168.0.0/16", "192.168.0.0/15", false),
+	Entry("Pool larger than CIDR should fail", "192.168.2.0/24", "192.168.0.0/16", false),
+	Entry("Non overlapping CIDR and pool should fail", "192.168.0.0/16", "172.168.0.0/16", false),
+	Entry("CIDR with smaller pool", "192.168.0.0/16", "192.168.2.0/24", true),
+	Entry("IPv6 matching CIDR and pool", "fd00:1234::/32", "fd00:1234::/32", true),
+	Entry("IPv6 Pool larger than CIDR should fail", "fd00:1234::/32", "fd00:1234::/31", false),
+	Entry("IPv6 Pool larger than CIDR should fail", "fd00:1234:5600::/40", "fd00:1234::/32", false),
+	Entry("IPv6 Non overlapping CIDR and pool should fail", "fd00:1234::/32", "fd00:5678::/32", false),
+	Entry("IPv6 CIDR with smaller pool", "fd00:1234::/32", "fd00:1234:5600::/40", true),
 )
 
-var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
+var _ = DescribeTable("Test OpenShift IP pool defaulting",
 	func(i *operator.Installation, on *configv1.Network, expectSuccess bool, expected *operator.CalicoNetworkSpec) {
 		// Perform test setup.
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(configv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -396,7 +392,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 			on.Name = "cluster"
 			Expect(cli.Create(ctx, on)).To(BeNil())
 		}
-		currentPools := &crdv1.IPPoolList{}
+		currentPools := &v3.IPPoolList{}
 
 		// The core Installation controller will normally handle defaulting the provider based on user input and
 		// auto-detected cluster information. For this test, explicitly set it to OpenShift.
@@ -433,7 +429,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		Expect(pool).To(Equal(expectedPool))
 	},
 
-	table.Entry("Empty config (with OpenShift) defaults IPPool", &operator.Installation{},
+	Entry("Empty config (with OpenShift) defaults IPPool", &operator.Installation{},
 		&configv1.Network{
 			Spec: configv1.NetworkSpec{
 				ClusterNetwork: []configv1.ClusterNetworkEntry{
@@ -458,7 +454,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 			},
 		}),
 
-	table.Entry("Openshift only CIDR",
+	Entry("Openshift only CIDR",
 		&operator.Installation{
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{},
@@ -488,7 +484,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 			},
 		}),
 
-	table.Entry("CIDR specified from OpenShift config and Calico config",
+	Entry("CIDR specified from OpenShift config and Calico config",
 		&operator.Installation{
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{
@@ -526,7 +522,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 			},
 		}),
 
-	table.Entry("Failure when IPPool is smaller than OpenShift Network",
+	Entry("Failure when IPPool is smaller than OpenShift Network",
 		&operator.Installation{
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{
@@ -551,7 +547,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		nil,
 	),
 
-	table.Entry("Empty IPPool list results in no IPPool with OpenShift",
+	Entry("Empty IPPool list results in no IPPool with OpenShift",
 		&operator.Installation{
 			Spec: operator.InstallationSpec{
 				CalicoNetwork: &operator.CalicoNetworkSpec{
@@ -572,7 +568,7 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 		},
 	),
 
-	table.Entry("No OpenShift configuration provided",
+	Entry("No OpenShift configuration provided",
 		&operator.Installation{
 			Spec: operator.InstallationSpec{
 				CNI: &operator.CNISpec{
@@ -591,13 +587,13 @@ var _ = table.DescribeTable("Test OpenShift IP pool defaulting",
 var _ = Describe("fillDefaults()", func() {
 	var cli client.Client
 	var ctx context.Context
-	var currentPools *crdv1.IPPoolList
+	var currentPools *v3.IPPoolList
 	var instance *operator.Installation
 
 	BeforeEach(func() {
 		// The schema contains all objects that should be known to the fake client when the test runs.
 		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(configv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(appsv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
@@ -631,7 +627,7 @@ var _ = Describe("fillDefaults()", func() {
 
 	// This table verifies that kubernetes provider configuration is accounted for in defaulting. Specifically, it
 	// makes sure that defaulting takes OpenShift config.Network and the kubeadm configmap into account.
-	table.DescribeTable("incorporation of kubernetesProvider config",
+	DescribeTable("incorporation of kubernetesProvider config",
 		func(i *operator.Installation, openshift *configv1.Network, kubeadm *v1.ConfigMap) {
 			// Create the provided kubernetes provider configurations in the fake client.
 			if openshift != nil {
@@ -666,9 +662,9 @@ var _ = Describe("fillDefaults()", func() {
 			Expect(ValidatePools(i)).NotTo(HaveOccurred())
 		},
 
-		table.Entry("Empty config defaults IPPool", &operator.Installation{}, nil, nil),
+		Entry("Empty config defaults IPPool", &operator.Installation{}, nil, nil),
 
-		table.Entry("Openshift only CIDR",
+		Entry("Openshift only CIDR",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					CalicoNetwork: &operator.CalicoNetworkSpec{},
@@ -683,7 +679,7 @@ var _ = Describe("fillDefaults()", func() {
 			nil,
 		),
 
-		table.Entry("CIDR specified from OS config and Calico config",
+		Entry("CIDR specified from OS config and Calico config",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					CalicoNetwork: &operator.CalicoNetworkSpec{
@@ -702,7 +698,7 @@ var _ = Describe("fillDefaults()", func() {
 			nil,
 		),
 
-		table.Entry("kubeadm only CIDR",
+		Entry("kubeadm only CIDR",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					CalicoNetwork: &operator.CalicoNetworkSpec{},
@@ -712,7 +708,7 @@ var _ = Describe("fillDefaults()", func() {
 			&v1.ConfigMap{Data: map[string]string{"ClusterConfiguration": "podSubnet: 10.0.0.0/8"}},
 		),
 
-		table.Entry("CIDR specified from kubeadm config and Calico config",
+		Entry("CIDR specified from kubeadm config and Calico config",
 			&operator.Installation{
 				Spec: operator.InstallationSpec{
 					CalicoNetwork: &operator.CalicoNetworkSpec{

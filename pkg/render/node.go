@@ -35,7 +35,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
-	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -150,6 +149,8 @@ type NodeConfiguration struct {
 	FelixPrometheusMetricsEnabled bool
 
 	FelixPrometheusMetricsPort int
+
+	V3CRDs bool
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -460,7 +461,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// For monitoring Calico-specific configuration.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"bgpconfigurations",
 					"bgpfilters",
@@ -486,7 +487,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// calico/node monitors for caliconodestatus objects and writes its status back into the object.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"caliconodestatuses",
 				},
@@ -495,7 +496,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			{
 				// For migration code in calico/node startup only. Remove when the migration
 				// code is removed from node.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"globalbgpconfigs",
 					"globalfelixconfigs",
@@ -504,7 +505,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Calico creates some configuration on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"clusterinformations",
 					"felixconfigurations",
@@ -514,7 +515,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Calico creates some tiers on startup.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"tiers",
 				},
@@ -529,26 +530,27 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			{
 				// Most IPAM resources need full CRUD permissions so we can allocate and
 				// release IP addresses for pods.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"blockaffinities",
 					"ipamblocks",
-					"ipamconfigs",
 					"ipamhandles",
+					"ipamconfigurations",
+					"ipamconfigs",
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
 			},
 			{
-				// But, we only need to be able to query for IPAM config.
-				APIGroups: []string{"crd.projectcalico.org"},
-				Resources: []string{"ipamconfigs"},
-				Verbs:     []string{"get"},
-			},
-			{
 				// confd (and in some cases, felix) watches block affinities for route aggregation.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"blockaffinities"},
 				Verbs:     []string{"watch"},
+			},
+			{
+				// For monitoring KubeVirt live migration.
+				APIGroups: []string{"kubevirt.io"},
+				Resources: []string{"virtualmachineinstancemigrations"},
+				Verbs:     []string{"get", "list", "watch"},
 			},
 		},
 	}
@@ -556,7 +558,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Calico Enterprise needs to be able to read additional resources.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"bfdconfigurations",
 					"egressgatewaypolicies",
@@ -569,7 +571,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 			{
 				// Tigera Secure updates status for packet captures.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"packetcaptures",
 				},
@@ -618,11 +620,12 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 			{
 				// Most IPAM resources need full CRUD permissions so we can allocate and
 				// release IP addresses for pods.
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"blockaffinities",
 					"ipamblocks",
 					"ipamhandles",
+					"ipamconfigurations",
 					"ipamconfigs",
 					"clusterinformations",
 					"ippools",
@@ -630,12 +633,18 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
 			},
+			{
+				// The CNI plugin reads KubeVirt resources for IPAM of KubeVirt workloads.
+				APIGroups: []string{"kubevirt.io"},
+				Resources: []string{"virtualmachineinstances", "virtualmachines"},
+				Verbs:     []string{"get"},
+			},
 		},
 	}
 	return role
 }
 
-func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
+func (c *nodeComponent) createCalicoPluginConfig() map[string]any {
 	// Determine MTU to use for veth interfaces.
 	// Zero means to use auto-detection.
 	var mtu int32 = 0
@@ -667,22 +676,28 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	if c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds != nil {
 		linuxPolicySetupTimeoutSeconds = *c.cfg.Installation.CalicoNetwork.LinuxPolicySetupTimeoutSeconds
 	}
+	apiGroup := ""
+	if c.cfg.V3CRDs {
+		apiGroup = "projectcalico.org/v3"
+	}
+
 	// calico plugin
-	calicoPluginConfig := map[string]interface{}{
+	calicoPluginConfig := map[string]any{
 		"type":                   "calico",
 		"datastore_type":         "kubernetes",
 		"mtu":                    mtu,
 		"nodename_file_optional": nodenameFileOptional,
 		"log_file_path":          "/var/log/calico/cni/cni.log",
 		"ipam":                   ipam,
-		"container_settings": map[string]interface{}{
+		"container_settings": map[string]any{
 			"allow_ip_forwarding": ipForward,
 		},
-		"policy": map[string]interface{}{
+		"policy": map[string]any{
 			"type": "k8s",
 		},
 		"policy_setup_timeout_seconds": linuxPolicySetupTimeoutSeconds,
 		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().HostPath.Path, "endpoint-status"),
+		"calico_api_group":             apiGroup,
 	}
 
 	// Determine logging configuration
@@ -710,7 +725,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	}
 
 	// optional properties
-	kubernetes := map[string]interface{}{
+	kubernetes := map[string]any{
 		"kubeconfig": "__KUBECONFIG_FILEPATH__",
 	}
 	if apiRoot != "" {
@@ -719,7 +734,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	calicoPluginConfig["kubernetes"] = kubernetes
 
 	if c.vppDataplaneEnabled() {
-		calicoPluginConfig["dataplane_options"] = map[string]interface{}{
+		calicoPluginConfig["dataplane_options"] = map[string]any{
 			"type":   "grpc",
 			"socket": "unix:///var/run/calico/cni-server.sock",
 		}
@@ -728,9 +743,9 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 	return calicoPluginConfig
 }
 
-func (c *nodeComponent) createPortmapPlugin() map[string]interface{} {
+func (c *nodeComponent) createPortmapPlugin() map[string]any {
 	// Determine portmap configuration to use.
-	portmapPlugin := map[string]interface{}{
+	portmapPlugin := map[string]any{
 		"type": "portmap",
 		"snat": true,
 		"capabilities": map[string]bool{
@@ -741,10 +756,10 @@ func (c *nodeComponent) createPortmapPlugin() map[string]interface{} {
 	return portmapPlugin
 }
 
-func (c *nodeComponent) createTuningPlugin() map[string]interface{} {
+func (c *nodeComponent) createTuningPlugin() map[string]any {
 	// tuning plugin (sysctl)
 	sysctl := map[string]string{}
-	tuningPlugin := map[string]interface{}{
+	tuningPlugin := map[string]any{
 		"type":   "tuning",
 		"sysctl": sysctl,
 	}
@@ -766,7 +781,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 		return nil
 	}
 
-	plugins := make([]interface{}, 0)
+	plugins := make([]any, 0)
 	plugins = append(plugins, c.createCalicoPluginConfig())
 
 	// optional portmap plugin
@@ -801,7 +816,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 	}
 }
 
-func (c *nodeComponent) getCalicoIPAM() map[string]interface{} {
+func (c *nodeComponent) getCalicoIPAM() map[string]any {
 	// Determine what address families to enable.
 	var assign_ipv4 string
 	var assign_ipv6 string
@@ -815,32 +830,32 @@ func (c *nodeComponent) getCalicoIPAM() map[string]interface{} {
 	} else {
 		assign_ipv6 = "false"
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"type":        "calico-ipam",
 		"assign_ipv4": assign_ipv4,
 		"assign_ipv6": assign_ipv6,
 	}
 }
 
-func buildHostLocalIPAM(pools []operatorv1.IPPool) map[string]interface{} {
+func buildHostLocalIPAM(pools []operatorv1.IPPool) map[string]any {
 	v6 := GetIPv6Pool(pools) != nil
 	v4 := GetIPv4Pool(pools) != nil
 
 	if v4 && v6 {
 		// Dual-stack
-		return map[string]interface{}{
+		return map[string]any{
 			"type":   "host-local",
 			"ranges": [][]map[string]string{{{"subnet": "usePodCidr"}}, {{"subnet": "usePodCidrIPv6"}}},
 		}
 	} else if v6 {
 		// Single-stack v6
-		return map[string]interface{}{
+		return map[string]any{
 			"type":   "host-local",
 			"subnet": "usePodCidrIPv6",
 		}
 	} else {
 		// Single-stack v4
-		return map[string]interface{}{
+		return map[string]any{
 			"type":   "host-local",
 			"subnet": "usePodCidr",
 		}
@@ -944,10 +959,6 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	// This is required for the BPF dataplane, but also for the other dataplanes
 	// as we need to cleanup the BPF state when switching dataplanes.
 	initContainers = append(initContainers, c.bpfBootstrapInitContainer())
-
-	if c.runAsNonPrivileged() {
-		initContainers = append(initContainers, c.hostPathInitContainer())
-	}
 
 	var affinity *corev1.Affinity
 	if c.cfg.Installation.KubernetesProvider.IsAKS() {
@@ -1064,29 +1075,15 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 		c.cfg.TLS.TrustedBundle.Volume(),
 		c.cfg.TLS.NodeSecret.Volume(),
-	}
-
-	if c.runAsNonPrivileged() {
-		volumes = append(volumes,
-			corev1.Volume{Name: "var-run", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run"}}},
-			corev1.Volume{Name: "var-lib", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib"}}},
-			corev1.Volume{Name: "var-log", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log"}}},
-		)
-	} else {
-		volumes = append(volumes,
-			c.varRunCalicoVolume(),
-			corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico", Type: &dirOrCreate}}},
-		)
-	}
-
-	volumes = append(volumes,
+		c.varRunCalicoVolume(),
+		corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico", Type: &dirOrCreate}}},
 		// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
 		corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 		// Volume for the bpffs itself, used by the main node container.
 		corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
 		// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
 		corev1.Volume{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
-	)
+	}
 
 	if c.vppDataplaneEnabled() {
 		volumes = append(volumes,
@@ -1329,19 +1326,6 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 // nodeContainer creates the main node container.
 func (c *nodeComponent) nodeContainer() corev1.Container {
 	sc := securitycontext.NewRootContext(true)
-	if c.runAsNonPrivileged() {
-		sc = securitycontext.NewNonRootContext()
-		// Set the group to be the root user group since all container users should be a member
-		sc.RunAsGroup = ptr.Int64ToPtr(0)
-		sc.Capabilities.Add = []corev1.Capability{
-			"NET_ADMIN",
-			"NET_BIND_SERVICE",
-			"NET_RAW",
-		}
-		// Set the privilege escalation to true so that routes, ipsets can be programmed.
-		sc.AllowPrivilegeEscalation = ptr.BoolToPtr(true)
-		sc.Capabilities.Drop = []corev1.Capability{}
-	}
 
 	lp, rp := c.nodeLivenessReadinessProbes()
 
@@ -1371,21 +1355,12 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		corev1.VolumeMount{MountPath: "/lib/modules", Name: "lib-modules", ReadOnly: true},
 		corev1.VolumeMount{MountPath: "/run/xtables.lock", Name: "xtables-lock"},
 		corev1.VolumeMount{MountPath: "/var/run/nodeagent", Name: "policysync"},
+		corev1.VolumeMount{MountPath: "/var/run/calico", Name: "var-run-calico"},
+		corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
+		corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName},
 		c.cfg.TLS.NodeSecret.VolumeMount(c.SupportedOSType()),
 	)
-	if c.runAsNonPrivileged() {
-		nodeVolumeMounts = append(nodeVolumeMounts,
-			corev1.VolumeMount{MountPath: "/var/run", Name: "var-run"},
-			corev1.VolumeMount{MountPath: "/var/lib", Name: "var-lib"},
-			corev1.VolumeMount{MountPath: "/var/log", Name: "var-log"},
-		)
-	} else {
-		nodeVolumeMounts = append(nodeVolumeMounts,
-			corev1.VolumeMount{MountPath: "/var/run/calico", Name: "var-run-calico"},
-			corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"},
-		)
-	}
-	nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/sys/fs/bpf", Name: BPFVolumeName})
+
 	if c.vppDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})
 	}
@@ -1827,47 +1802,6 @@ func (c *nodeComponent) nodeMetricsService() *corev1.Service {
 			Ports:     ports,
 		},
 	}
-}
-
-// hostPathInitContainer creates an init container that changes the permissions on hostPath volumes
-// so that they can be written to by a non-root container.
-func (c *nodeComponent) hostPathInitContainer() corev1.Container {
-	mounts := []corev1.VolumeMount{
-		{
-			MountPath: "/var/run",
-			Name:      "var-run",
-			ReadOnly:  false,
-		},
-		{
-			MountPath: "/var/lib",
-			Name:      "var-lib",
-			ReadOnly:  false,
-		},
-		{
-			MountPath: "/var/log",
-			Name:      "var-log",
-			ReadOnly:  false,
-		},
-	}
-
-	return corev1.Container{
-		Name:            "hostpath-init",
-		Image:           c.nodeImage,
-		ImagePullPolicy: ImagePullPolicy(),
-		Command:         []string{"sh", "-c", "calico-node -hostpath-init"},
-		Env: []corev1.EnvVar{
-			{Name: "NODE_USER_ID", Value: "10001"},
-		},
-		SecurityContext: securitycontext.NewRootContext(true),
-		VolumeMounts:    mounts,
-	}
-}
-
-// runAsNonPrivileged checks to ensure that all of the proper installation values are set for running
-// Calico as non-privileged.
-func (c *nodeComponent) runAsNonPrivileged() bool {
-	// Check that the NonPrivileged flag is set
-	return c.cfg.Installation.NonPrivileged != nil && *c.cfg.Installation.NonPrivileged == operatorv1.NonPrivilegedEnabled
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

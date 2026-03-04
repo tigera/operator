@@ -227,7 +227,6 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	c.uiAPIsImage, err = components.GetReference(components.ComponentUIAPIs, reg, path, prefix, is)
-
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -274,8 +273,8 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	objsToCreate = append(objsToCreate,
-		c.managerAllowTigeraNetworkPolicy(),
-		networkpolicy.AllowTigeraDefaultDeny(c.cfg.Namespace),
+		c.managerCalicoSystemNetworkPolicy(),
+		networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace),
 		managerServiceAccount(c.cfg.Namespace),
 	)
 	objsToCreate = append(objsToCreate, c.getTLSObjects()...)
@@ -956,6 +955,8 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
+					"uisettings",
+					"uisettingsgroups",
 				},
 				Verbs: []string{"list"},
 			},
@@ -1083,6 +1084,20 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				},
 				Verbs: []string{"dismiss", "delete"},
 			},
+			{
+				// Required by the AuthorizationReview calculator in ui-apis to evaluate
+				// RBAC permissions for users.
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			{
+				// Required by the AuthorizationReview calculator in ui-apis to evaluate
+				// RBAC permissions for UISettingsGroups.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettingsgroups"},
+				Verbs:     []string{"list"},
+			},
 		},
 	}
 
@@ -1130,7 +1145,7 @@ func (c *managerComponent) getTLSObjects() []client.Object {
 }
 
 // Allow users to access Calico Enterprise Manager.
-func (c *managerComponent) managerAllowTigeraNetworkPolicy() *v3.NetworkPolicy {
+func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy {
 	networkpolicyHelper := networkpolicy.Helper(c.cfg.Tenant.MultiTenant(), c.cfg.Namespace)
 	egressRules := []v3.Rule{
 		{
@@ -1394,7 +1409,6 @@ func managerClusterWideDefaultView() *v3.UISettings {
 // can be removed for Calico Enterprise v3.26 which corresponds to operator version <todo> when the legacy names will no
 // longer be valid in our official support window
 func (m *managerComponent) deprecatedResources(tenant *operatorv1.Tenant, installNS, truthNS string) []client.Object {
-
 	objs := []client.Object{}
 	clusterRoleName := LegacyManagerClusterRole
 	clusterRoleBindingName := LegacyManagerClusterRoleBinding
@@ -1452,6 +1466,10 @@ func (m *managerComponent) deprecatedResources(tenant *operatorv1.Tenant, instal
 				TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			},
 		}
+		objs = append(objs,
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("manager-access", legacyNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", legacyNamespace),
+		)
 	}
 
 	managedClustersWatchObj.SetName(managedClustersWatchRoleBindingName)
@@ -1483,6 +1501,12 @@ func (m *managerComponent) deprecatedResources(tenant *operatorv1.Tenant, instal
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: LegacyVoltronLinseedPublicCert, Namespace: truthNS},
 		},
+	)
+
+	// allow-tigera Tier was renamed to calico-system
+	objs = append(objs,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("manager-access", installNS),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", installNS),
 	)
 
 	return objs

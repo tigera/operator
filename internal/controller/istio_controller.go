@@ -36,6 +36,6 @@ type IstioReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=istios/finalizers,verbs=update
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *IstioReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
+func (r *IstioReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return istio.Add(mgr, opts)
 }

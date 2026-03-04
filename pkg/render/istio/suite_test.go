@@ -17,14 +17,13 @@ package istio_test
 import (
 	"testing"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
-
-	"github.com/onsi/ginkgo/reporters"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 )
 
 func TestRender(t *testing.T) {
-	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter("../../../report/ut/istio_render_suite.xml")
-	RunSpecsWithDefaultAndCustomReporters(t, "pkg/render/istio Suite", []Reporter{junitReporter})
+	gomega.RegisterFailHandler(ginkgo.Fail)
+	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
+	reporterConfig.JUnitReport = "../../../report/ut/istio_render_suite.xml"
+	ginkgo.RunSpecs(t, "pkg/render/istio Suite", suiteConfig, reporterConfig)
 }

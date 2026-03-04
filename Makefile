@@ -101,8 +101,8 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.25.6-llvm18.1.8-k8s1.34.3
-CALICO_BASE_VER ?= ubi9-1769122535
+GO_BUILD_VER?=1.25.7-llvm18.1.8-k8s1.34.4
+CALICO_BASE_VER ?= ubi9-1771532994
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -141,8 +141,6 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e GOOS=linux \
 		-e GOARCH=$(ARCH) \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
-		-e ACK_GINKGO_RC=true \
-		-e ACK_GINKGO_DEPRECATIONS=1.16.5 \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS)
@@ -474,11 +472,10 @@ load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 ##
 deploy-crds: kubectl
 	@export KUBECONFIG=$(KIND_KUBECONFIG) && \
-		$(BINDIR)/kubectl create -f pkg/crds/operator/ && \
-		$(BINDIR)/kubectl apply -f pkg/crds/calico/ && \
-		$(BINDIR)/kubectl apply -f pkg/crds/enterprise/ && \
-		$(BINDIR)/kubectl apply -f deploy/crds/elastic/elasticsearch-crd.yaml && \
-		$(BINDIR)/kubectl apply -f deploy/crds/elastic/kibana-crd.yaml && \
+		$(BINDIR)/kubectl create -f pkg/imports/crds/operator/ && \
+		$(BINDIR)/kubectl apply -f pkg/imports/crds/calico/v1.crd.projectcalico.org/ && \
+		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/v1.crd.projectcalico.org/ && \
+		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/01-crd-eck-bundle.yaml && \
 		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
 create-tigera-operator-namespace: kubectl
@@ -521,9 +518,9 @@ format-check:
 dirty-check:
 	@if [ "$$(git diff --stat)" != "" ]; then \
 	echo "The following files are dirty"; git diff --stat; exit 1; fi
-	@# Check that no new CRDs needed to be committed
-	@if [ "$$(git status --porcelain pkg/crds)" != "" ]; then \
-	echo "The following CRD files need to be added"; git status --porcelain pkg/crds; exit 1; fi
+	@# Check that no new CRDs or admission policies needed to be committed
+	@if [ "$$(git status --porcelain pkg/imports)" != "" ]; then \
+	echo "The following imported files need to be added"; git status --porcelain pkg/imports; exit 1; fi
 
 foss-checks:
 	@echo Running $@...
@@ -559,54 +556,29 @@ endif
 ###############################################################################
 # Release
 ###############################################################################
-VERSION_REGEX := ^v[0-9]+\.[0-9]+\.[0-9]+$$
+## Create a release for the specified RELEASE_TAG.
 release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
-	$(eval VALID_TAG := $(shell echo $(RELEASE_TAG) | grep -Eq "$(VERSION_REGEX)" && echo true))
-	$(if $(VALID_TAG),,$(error $(RELEASE_TAG) is not a valid version. Please use a version in the format vX.Y.Z))
-
-# Skip releasing if the image already exists.
-	@if !$(MAKE) VERSION=$(RELEASE_TAG) release-check-image-exists; then \
-		echo "Images for $(RELEASE_TAG) already exists"; \
-		exit 0; \
-	fi
-
 	$(MAKE) release VERSION=$(RELEASE_TAG)
-	$(MAKE) release-publish-images VERSION=$(RELEASE_TAG)
-	$(MAKE) release-github VERSION=$(RELEASE_TAG)
+	REPO=$(REPO) CREATE_GITHUB_RELEASE=true $(MAKE) release-publish VERSION=$(RELEASE_TAG)
 
-
+## Generate release notes for the specified VERSION.
 release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
 	REPO=$(REPO) hack/bin/release notes
 
-## Tags and builds a release from start to finish.
-release: release-prereqs
-ifneq ($(VERSION), $(GIT_VERSION))
-	$(error Attempt to build $(VERSION) from $(GIT_VERSION))
-endif
-	$(MAKE) release-build
-	$(MAKE) release-verify
-
-	@echo ""
-	@echo "Release build complete. Next, push the produced images."
-	@echo ""
-	@echo "  make VERSION=$(VERSION) release-publish"
-	@echo ""
+## Build a release from start to finish.
+release: clean hack/bin/release
+	hack/bin/release build
 
 ## Produces a clean build of release artifacts at the specified version.
-release-build: release-prereqs clean
+release-build: release-prereqs var-require-all-VERSION-GIT_VERSION
 # Check that the correct code is checked out.
 ifneq ($(VERSION), $(GIT_VERSION))
 	$(error Attempt to build $(VERSION) from $(GIT_VERSION))
 endif
 	$(MAKE) image-all
-	$(MAKE) tag-images-all RELEASE=true IMAGETAG=$(VERSION)
+	$(MAKE) tag-images-all IMAGETAG=$(VERSION)
 	# Generate the `latest` images.
-	$(MAKE) tag-images-all RELEASE=true IMAGETAG=latest
-
-## Verifies the release artifacts produces by `make release-build` are correct.
-release-verify: release-prereqs
-	# Check the reported version is correct for each release artifact.
-	if ! docker run $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version | grep '^Operator: $(VERSION)$$'; then echo "Reported version:" `docker run $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION)-$(ARCH) --version ` "\nExpected version: $(VERSION)"; false; else echo "\nVersion check passed\n"; fi
+	$(MAKE) tag-images-all IMAGETAG=latest
 
 release-check-image-exists: release-prereqs
 	@echo "Checking if $(IMAGE_REGISTRY)/$(BUILD_IMAGE):$(VERSION) exists already"; \
@@ -617,14 +589,15 @@ release-check-image-exists: release-prereqs
 		echo "Image tag check passed; image does not already exist"; \
 	fi
 
-release-publish-images: release-prereqs release-check-image-exists
-	# Push images.
-	$(MAKE) push-all push-manifests push-non-manifests RELEASE=true IMAGETAG=$(VERSION)
+release-publish: hack/bin/release
+	hack/bin/release publish
 
-release-github: release-notes hack/bin/gh
-	@echo "Creating github release for $(VERSION)"
-	hack/bin/gh release create $(VERSION) --title $(VERSION) --draft --notes-file $(VERSION)-release-notes.md
-	@echo "$(VERSION) GitHub release created in draft state. Please review and publish: https://github.com/tigera/operator/releases/tag/$(VERSION) ."
+release-publish-images: release-prereqs release-check-image-exists var-require-all-VERSION
+	# Push images.
+	$(MAKE) push-all push-manifests push-non-manifests IMAGETAG=$(VERSION)
+
+release-github: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
+	hack/bin/release github
 
 GITHUB_CLI_VERSION?=2.62.0
 hack/bin/gh:
@@ -653,7 +626,7 @@ release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var
 # release-prereqs checks that the environment is configured properly to create a release.
 release-prereqs:
 ifndef VERSION
-	$(error VERSION is undefined - run using make release VERSION=vX.Y.Z)
+	$(error VERSION is undefined - specify using "VERSION=vX.Y.Z" with make target(s))
 endif
 ifdef LOCAL_BUILD
 	$(error LOCAL_BUILD must not be set for a release)
@@ -706,9 +679,12 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 # $(1) is the product
 define prep_local_crds
     $(eval product := $(1))
-	rm -rf pkg/crds/$(product)
+	rm -rf pkg/imports/crds/$(product)
+	rm -rf pkg/imports/admission/$(product)
 	rm -rf .crds/$(product)
-	mkdir -p pkg/crds/$(product)
+	mkdir -p pkg/imports/crds/$(product)/v1.crd.projectcalico.org/
+	mkdir -p pkg/imports/crds/$(product)/v3.projectcalico.org/
+	mkdir -p pkg/imports/admission/$(product)
 	mkdir -p .crds/$(product)
 endef
 
@@ -722,15 +698,25 @@ define fetch_crds
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
 	git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch git@github.com:$(project).git ./
 endef
-define copy_crds
+define copy_v1_crds
     $(eval dir := $(1))
 		$(eval product := $(2))
-	@cp $(dir)/libcalico-go/config/crd/* pkg/crds/$(product)/ && echo "Copied $(product) CRDs"
+	@cp $(dir)/libcalico-go/config/crd/* pkg/imports/crds/$(product)/v1.crd.projectcalico.org/ && echo "Copied $(product) CRDs"
+endef
+define copy_v3_crds
+    $(eval dir := $(1))
+		$(eval product := $(2))
+	@cp $(dir)/api/config/crd/* pkg/imports/crds/$(product)/v3.projectcalico.org/ && echo "Copied $(product) CRDs"
 endef
 define copy_eck_crds
     $(eval dir := $(1))
 		$(eval product := $(2))
-	@cp $(dir)/charts/tigera-operator/crds/eck/* pkg/crds/$(product)/ && echo "Copied $(product) ECK CRDs"
+	@cp $(dir)/charts/crd.projectcalico.org.v1/templates/eck/* pkg/imports/crds/$(product)/ && echo "Copied $(product) ECK CRDs"
+endef
+define copy_admission_policies
+    $(eval dir := $(1))
+		$(eval product := $(2))
+	@cp $(dir)/api/admission/* pkg/imports/admission/$(product)/ && echo "Copied $(product) admission policies"
 endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
@@ -748,7 +734,9 @@ read-libcalico-calico-version:
 	if [ -z "$(CALICO_BRANCH)" ]; then echo "libcalico branch not defined"; exit 1; fi
 
 update-calico-crds: fetch-calico-crds
-	$(call copy_crds, $(CALICO_CRDS_DIR),"calico")
+	$(call copy_v1_crds, $(CALICO_CRDS_DIR),"calico")
+	$(call copy_v3_crds, $(CALICO_CRDS_DIR),"calico")
+	$(call copy_admission_policies, $(CALICO_CRDS_DIR),"calico")
 
 prepare-for-calico-crds:
 	$(call prep_local_crds,"calico")
@@ -766,8 +754,10 @@ read-libcalico-enterprise-version:
 	if [ -z "$(CALICO_ENTERPRISE_BRANCH)" ]; then echo "libcalico enterprise branch not defined"; exit 1; fi
 
 update-enterprise-crds: fetch-enterprise-crds
-	$(call copy_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
+	$(call copy_v1_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
+	$(call copy_v3_crds, $(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_eck_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
+	$(call copy_admission_policies,$(ENTERPRISE_CRDS_DIR),"enterprise")
 
 prepare-for-enterprise-crds:
 	$(call prep_local_crds,"enterprise")
@@ -846,7 +836,7 @@ deploy: manifests kustomize
 manifests:
 	$(DOCKER_RUN) sh -c 'controller-gen crd paths="./api/..." output:crd:artifacts:config=config/crd/bases'
 	for x in $$(find config/crd/bases/*); do sed -i -e '/creationTimestamp: null/d' -e '/^---/d' -e '/^\s*$$/d' $$x; done
-	@docker run --rm --user $(id -u):$(id -g) -v $(CURDIR)/pkg/crds/operator/:/work/crds/operator/ tmknom/prettier --write --parser=yaml /work
+	@docker run --rm --user $(id -u):$(id -g) -v $(CURDIR)/pkg/imports/crds/operator/:/work/crds/operator/ tmknom/prettier --write --parser=yaml /work
 
 # Run go fmt against code
 fmt:

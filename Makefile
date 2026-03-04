@@ -559,7 +559,7 @@ endif
 ## Create a release for the specified RELEASE_TAG.
 release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release VERSION=$(RELEASE_TAG)
-	REPO=$(REPO) CREATE_GITHUB_RELEASE=true $(MAKE) release-publish VERSION=$(RELEASE_TAG)
+	REPO=$(REPO) $(MAKE) release-publish VERSION=$(RELEASE_TAG)
 
 ## Generate release notes for the specified VERSION.
 release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN

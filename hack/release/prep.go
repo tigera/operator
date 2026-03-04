@@ -172,7 +172,7 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 		// Update registry for Enterprise
 		if eRegistry := c.String(enterpriseRegistryFlag.Name); eRegistry != "" {
 			logrus.Debugf("Updating Enterprise registry to %s", eRegistry)
-			if err := modifyComponentImageConfig(repoRootDir, enterpriseRegistryConfigKey, eRegistry); err != nil {
+			if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, enterpriseRegistryConfigKey, eRegistry); err != nil {
 				return err
 			}
 		}

@@ -243,6 +243,13 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 	if c.Bool(hashreleaseFlag.Name) {
 		buildLog = buildLog.WithField("hashrelease", true)
 		buildEnv = append(buildEnv, fmt.Sprintf("GIT_VERSION=%s", c.String(versionFlag.Name)))
+		buildCleanupFns = append(buildCleanupFns, func(ctx context.Context) error {
+			if out, err := gitInDir(repoRootDir, append([]string{"checkout", "-f"}, changedFiles...)...); err != nil {
+				logrus.Error(out)
+				return fmt.Errorf("resetting git state in repo after hashrelease build: %w", err)
+			}
+			return nil
+		})
 		if err := setupHashreleaseBuild(ctx, c, repoRootDir); err != nil {
 			return fmt.Errorf("preparing hashrelease build environment: %w", err)
 		}
@@ -328,14 +335,6 @@ func assertOperatorImageVersion(registry, image, expectedVersion string) error {
 // setupHashreleaseBuild modifies component image config and versions for hashrelease builds.
 // It registers a cleanup function to reset git state after the build completes.
 var setupHashreleaseBuild = func(ctx context.Context, c *cli.Command, repoRootDir string) error {
-	buildCleanupFns = append(buildCleanupFns, func(ctx context.Context) error {
-		if out, err := gitInDirContext(ctx, repoRootDir, append([]string{"checkout", "-f"}, changedFiles...)...); err != nil {
-			logrus.Error(out)
-			return fmt.Errorf("resetting git state in repo after hashrelease build: %w", err)
-		}
-		return nil
-	})
-
 	image := c.String(imageFlag.Name)
 	if image != defaultImageName {
 		imageParts := strings.SplitN(c.String(imageFlag.Name), "/", 2)

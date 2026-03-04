@@ -162,7 +162,7 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
 	}), nil)
 	if err != nil {
-		log.V(1).Info("Error deleting deprecated allow-tigera tier", "error", err)
+		log.V(1).Info("Unable to delete deprecated allow-tigera tier at this time", "error", err)
 	}
 
 	r.status.ReadyToMonitor()

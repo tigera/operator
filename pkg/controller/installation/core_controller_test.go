@@ -2408,6 +2408,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		mockStatus       *status.MockStatus
 		componentHandler *fakeComponentHandler
 		log              logr.Logger
+		installation     *operator.Installation
 	)
 
 	BeforeEach(func() {
@@ -2425,6 +2426,12 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 		componentHandler = newFakeComponentHandler()
+		installation = &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operator.InstallationSpec{
+				Variant: operator.Calico,
+			},
+		}
 	})
 
 	AfterEach(func() {
@@ -2444,7 +2451,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, operator.Calico, log)
+		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
 
@@ -2477,7 +2484,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, operator.Calico, log)
+		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(BeEmpty())
 		mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
@@ -2496,7 +2503,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, operator.Calico, log)
+		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(BeEmpty())
 	})
@@ -2514,7 +2521,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, operator.Calico, log)
+		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(BeEmpty())
 	})
@@ -2532,7 +2539,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, operator.Calico, log)
+		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(BeEmpty())
 		mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
@@ -2567,7 +2574,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, operator.Calico, log)
+		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Should have created the desired resources.
@@ -2626,7 +2633,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, operator.Calico, log)
+		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Should have created the desired resources (update via passthrough).
@@ -2649,7 +2656,9 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, operator.TigeraSecureEnterprise, log)
+		installation.Spec.Variant = operator.TigeraSecureEnterprise
+
+		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
 	})

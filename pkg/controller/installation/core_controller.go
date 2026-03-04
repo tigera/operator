@@ -60,6 +60,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	calicoclient "github.com/tigera/api/pkg/client/clientset_generated/clientset"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -924,7 +925,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if err = r.updateMutatingAdmissionPolicies(ctx, instance.Spec.Variant, reqLogger); err != nil {
+	if err = r.updateMutatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -2139,7 +2140,7 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	return nil
 }
 
-func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Context, variant operatorv1.ProductVariant, log logr.Logger) error {
+func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Context, install *v1.Installation, log logr.Logger) error {
 	if !r.manageCRDs || !r.v3CRDs {
 		return nil
 	}
@@ -2148,9 +2149,9 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 		return nil
 	}
 
-	desired := admission.GetMutatingAdmissionPolicies(variant, r.v3CRDs)
+	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs)
 
-	// Build a set of desired resource names so we can identify stale objects to clean up.
+	// Build a set of desired resource names for comparison.
 	desiredMAPs := map[string]bool{}
 	desiredMAPBs := map[string]bool{}
 	for _, obj := range desired {

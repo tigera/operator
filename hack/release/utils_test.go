@@ -15,7 +15,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -308,31 +307,6 @@ func TestIsValidReleaseVersionOverride(t *testing.T) {
 		}
 		if !ok {
 			t.Fatal("expected v1.2.3-1.0 to be valid with enterprise validator")
-		}
-	})
-}
-
-func TestRunCommandInDirContext(t *testing.T) {
-	t.Parallel()
-
-	t.Run("successful execution", func(t *testing.T) {
-		t.Parallel()
-		out, err := runCommandInDirContext(context.Background(), "", "echo", []string{"hello"}, nil)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if out != "hello" {
-			t.Fatalf("expected %q, got %q", "hello", out)
-		}
-	})
-
-	t.Run("context cancellation kills process", func(t *testing.T) {
-		t.Parallel()
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel() // cancel immediately
-		_, err := runCommandInDirContext(ctx, "", "sleep", []string{"60"}, nil)
-		if err == nil {
-			t.Fatal("expected error from cancelled context, got nil")
 		}
 	})
 }

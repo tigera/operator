@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/urfave/cli/v3"
 )
@@ -31,6 +32,13 @@ var debugFlag = &cli.BoolFlag{
 	Name:    "debug",
 	Usage:   "Enable debug logging",
 	Sources: cli.EnvVars("DEBUG"),
+}
+
+var extensionTimeoutFlag = &cli.DurationFlag{
+	Name:    "timeout",
+	Usage:   "Timeout duration for extension execution",
+	Sources: cli.EnvVars("EXTENSION_TIMEOUT"),
+	Value:   5 * time.Minute,
 }
 
 // Git/GitHub related flags.
@@ -73,7 +81,7 @@ var (
 		Category: githubFlagCategory,
 		Usage:    "Create a GitHub release",
 		Sources:  cli.EnvVars("CREATE_GITHUB_RELEASE"),
-		Value:    false,
+		Value:    true,
 		Action: func(ctx context.Context, c *cli.Command, b bool) error {
 			if b && c.String(githubTokenFlag.Name) == "" {
 				return fmt.Errorf("github-token is required to create GitHub releases")
@@ -121,7 +129,7 @@ var (
 				// No need to validate version for hashrelease
 				return nil
 			}
-			if valid, err := isReleaseVersionFormat(s); err != nil {
+			if valid, err := isValidReleaseVersion(s); err != nil {
 				return fmt.Errorf("error validating version format: %w", err)
 			} else if !valid {
 				return fmt.Errorf("version %q is not a valid release version", s)
@@ -314,6 +322,19 @@ var (
 		Sources:  cli.EnvVars("CALICO_DIR"),
 		Action:   dirFlagCheck,
 	}
+	calicoGitRepoFlag = &cli.StringFlag{
+		Name:     "calico-repo",
+		Category: calicoFlagCategory,
+		Usage:    "The git repository to clone Calico from. Used when no Calico dir for CRDs is provided (development and testing purposes only)",
+		Sources:  cli.EnvVars("CALICO_REPO"),
+		Value:    "projectcalico/calico",
+	}
+	calicoGitBranchFlag = &cli.StringFlag{
+		Name:     "calico-branch",
+		Category: calicoFlagCategory,
+		Usage:    "The git branch to clone Calico from. Used when no Calico dir for CRDs is provided (development and testing purposes only)",
+		Sources:  cli.EnvVars("CALICO_BRANCH"),
+	}
 )
 
 // Enterprise related flags.
@@ -376,6 +397,19 @@ var (
 		Usage:    "The directory containing the Enterprise CRDs to bundle with the operator (development and testing purposes only)",
 		Sources:  cli.EnvVars("ENTERPRISE_DIR"),
 		Action:   dirFlagCheck,
+	}
+	enterpriseGitRepoFlag = &cli.StringFlag{
+		Name:     "enterprise-repo",
+		Category: enterpriseFlagCategory,
+		Usage:    "The git repository to clone Enterprise from. Used when no Enterprise dir for CRDs is provided (development and testing purposes only)",
+		Sources:  cli.EnvVars("ENTERPRISE_REPO"),
+		Value:    "tigera/calico-private",
+	}
+	enterpriseGitBranchFlag = &cli.StringFlag{
+		Name:     "enterprise-branch",
+		Category: enterpriseFlagCategory,
+		Usage:    "The git branch to clone Enterprise from. Use in place of specifying the Enterprise dir for CRDs (development and testing purposes only)",
+		Sources:  cli.EnvVars("ENTERPRISE_BRANCH", "CALICO_ENTERPRISE_BRANCH"),
 	}
 	exceptEnterpriseFlag = &cli.StringSliceFlag{
 		Name:     "except-calico-enterprise",

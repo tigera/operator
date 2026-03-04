@@ -54,12 +54,13 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 	configureLogging(c)
 
 	var err error
+
 	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
 	if err != nil {
 		return ctx, err
 	}
 
-	// Run verison validations. This is a mandatory check.
+	// Run version validations. This is a mandatory check.
 	ctx, err = checkVersion(ctx, c)
 	if err != nil {
 		return ctx, err
@@ -71,12 +72,7 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 		return ctx, nil
 	}
 
-	// If building a hashrelease, publishGithubRelease must be false
-	if c.Bool(hashreleaseFlag.Name) && c.Bool(createGithubReleaseFlag.Name) {
-		return ctx, fmt.Errorf("cannot publish GitHub release for hashrelease builds")
-	}
-
-	if !c.Bool(createGithubReleaseFlag.Name) {
+	if c.Bool(hashreleaseFlag.Name) || !c.Bool(createGithubReleaseFlag.Name) {
 		return ctx, nil
 	}
 
@@ -116,9 +112,9 @@ var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) err
 	return publishGithubRelease(ctx, c, repoRootDir)
 })
 
-// Publish the operator images to the specified registry.
+// publishImages publishes the operator images to the specified registry.
 // If the images are already published, it skips publishing.
-func publishImages(c *cli.Command, repoRootDir string) error {
+var publishImages = func(c *cli.Command, repoRootDir string) error {
 	version := c.String(versionFlag.Name)
 	log := logrus.WithField("version", version)
 	// Check if images are already published

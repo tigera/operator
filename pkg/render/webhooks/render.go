@@ -97,42 +97,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	// Network policy to allow traffic to/from the webhook pod.
-	egressRules := networkpolicy.AppendDNSEgressRules(nil, c.cfg.OpenShift)
-	egressRules = append(egressRules,
-		v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
-		},
-		v3.Rule{
-			Action: v3.Pass,
-		},
-	)
-	np := &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      WebhooksPolicyName,
-			Namespace: common.CalicoNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
-			Selector: networkpolicy.KubernetesAppSelector(WebhooksName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(6443),
-					},
-				},
-			},
-			Egress: egressRules,
-		},
-	}
-
 	// Create the correct security context for the webhook container. By default, it should run as non-root, but in Enterprise
 	// we need to run as root to be able to write audit logs to the host filesystem.
 	securtyContext := securitycontext.NewNonRootContext()
@@ -140,7 +104,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		securtyContext = securitycontext.NewRootContext(c.cfg.Installation.KubernetesProvider.IsOpenShift())
 	}
 
-	// Create the Deployment for the webhook.
+	// Create the Deployment for the webhook with defaults, then apply overrides.
 	dep := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -213,6 +177,54 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		rcomp.ApplyDeploymentOverrides(dep, overrides)
 	}
 
+	// Set DNSPolicy based on the final HostNetwork value (after overrides).
+	if dep.Spec.Template.Spec.HostNetwork {
+		dep.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirstWithHostNet
+	}
+
+	// Read the final container port from the deployment (after overrides) for use in the Service.
+	containerPort := dep.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort
+
+	// Network policy to allow traffic to/from the webhook pod. Skip if host networking is
+	// enabled, since network policy is ineffective for host-networked pods.
+	var np *v3.NetworkPolicy
+	if !dep.Spec.Template.Spec.HostNetwork {
+		egressRules := networkpolicy.AppendDNSEgressRules(nil, c.cfg.OpenShift)
+		egressRules = append(egressRules,
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: networkpolicy.KubeAPIServerEntityRule,
+			},
+			v3.Rule{
+				Action: v3.Pass,
+			},
+		)
+		np = &v3.NetworkPolicy{
+			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      WebhooksPolicyName,
+				Namespace: common.CalicoNamespace,
+			},
+			Spec: v3.NetworkPolicySpec{
+				Order:    &networkpolicy.HighPrecedenceOrder,
+				Tier:     networkpolicy.TigeraComponentTierName,
+				Selector: networkpolicy.KubernetesAppSelector(WebhooksName),
+				Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+				Ingress: []v3.Rule{
+					{
+						Action:   v3.Allow,
+						Protocol: &networkpolicy.TCPProtocol,
+						Destination: v3.EntityRule{
+							Ports: networkpolicy.Ports(uint16(containerPort)),
+						},
+					},
+				},
+				Egress: egressRules,
+			},
+		}
+	}
+
 	// Create the Service for the webhook.
 	svc := &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -224,7 +236,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				{
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt(6443),
+					TargetPort: intstr.FromInt32(containerPort),
 				},
 			},
 			Type: corev1.ServiceTypeClusterIP,
@@ -404,7 +416,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	objs := []client.Object{sa, np, dep, svc, vwc}
+	objs := []client.Object{sa}
+	if np != nil {
+		objs = append(objs, np)
+	}
+	objs = append(objs, dep, svc, vwc)
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		objs = append(objs, mwc)
 	}

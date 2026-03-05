@@ -257,10 +257,6 @@ func createPeriodicReconcileChannel(period time.Duration) chan event.GenericEven
 	return periodicReconcileEvents
 }
 
-func WaitToAddLicenseKeyWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
-	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}})
-}
-
 func WaitToAddClusterInformationWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.ClusterInformation{TypeMeta: metav1.TypeMeta{Kind: v3.KindClusterInformation}}})
 }
@@ -358,31 +354,11 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	return logCollector, nil
 }
 
-// FetchLicenseKey returns the license if it has been installed. It's useful
-// to prevent rollout of TSEE components that might require it.
-// It will return an error if the license is not installed/cannot be read
-func FetchLicenseKey(ctx context.Context, cli client.Client) (v3.LicenseKey, error) {
-	instance := &v3.LicenseKey{}
-	err := cli.Get(ctx, DefaultInstanceKey, instance)
-	return *instance, err
-}
-
 // FetchClusterInformation fetches and returns the clusterinformation.
 func FetchClusterInformation(ctx context.Context, cli client.Client) (v3.ClusterInformation, error) {
 	instance := &v3.ClusterInformation{}
 	err := cli.Get(ctx, DefaultInstanceKey, instance)
 	return *instance, err
-}
-
-// IsFeatureActive return true if the feature is listed in LicenseStatusKey
-func IsFeatureActive(license v3.LicenseKey, featureName string) bool {
-	for _, v := range license.Status.Features {
-		if v == featureName || v == "all" {
-			return true
-		}
-	}
-
-	return false
 }
 
 // ValidateCertPair checks if the given secret exists in the given
@@ -1078,7 +1054,11 @@ func MaintainInstallationFinalizer(
 		log.Error(err, "An error occurred when querying the Installation resource")
 		return finalizerSet, err
 	}
-	patchFrom := client.MergeFrom(installation.DeepCopy())
+	// Use optimistic locking so that concurrent finalizer patches from different controllers
+	// (e.g., whisker and goldmane) produce a conflict error instead of silently overwriting
+	// each other. JSON merge patch replaces the entire finalizers array, so without the lock
+	// the second writer wins and the first controller's finalizer is lost until re-reconciliation.
+	patchFrom := client.MergeFromWithOptions(installation.DeepCopy(), client.MergeFromWithOptimisticLock{})
 
 	// Determine the correct finalizers to apply to the Installation.
 	if mainResource != nil {

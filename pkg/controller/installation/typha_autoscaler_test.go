@@ -82,8 +82,10 @@ var _ = Describe("Test typha autoscaler ", func() {
 		n1 := CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		_ = CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
+		// Don't start the autoscaler - this test only exercises getNodeCounts(), which reads
+		// from the nodeIndexInformer directly. Starting it would race with node creation,
+		// since autoscaleReplicas() can fire before the informer has picked up the new nodes.
 		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
-		ta.start(ctx)
 
 		Eventually(func() error {
 			schedulableNodes, linuxNodes := ta.getNodeCounts()

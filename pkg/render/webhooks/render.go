@@ -329,7 +329,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				AdmissionReviewVersions: []string{"v1"},
 				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
 				TimeoutSeconds:          ptr.To[int32](5),
-				FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
+				FailurePolicy:           ptr.To(admissionregistrationv1.Ignore),
 			},
 			{
 				// This webhook is for audit logging. The webhook controller will get events for all relevant Calico API types

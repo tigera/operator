@@ -1200,6 +1200,65 @@ var _ = Describe("Common components render tests", func() {
 				}))
 			}),
 	)
+
+	Describe("resolveContainerName", func() {
+		It("should resolve known aliases to current names", func() {
+			Expect(resolveContainerName("tigera-manager")).To(Equal("calico-manager"))
+			Expect(resolveContainerName("tigera-voltron")).To(Equal("calico-voltron"))
+			Expect(resolveContainerName("tigera-ui-apis")).To(Equal("calico-ui-apis"))
+			Expect(resolveContainerName("tigera-es-proxy")).To(Equal("calico-ui-apis"))
+			Expect(resolveContainerName("tigera-voltron-linseed-tls-key-cert-provisioner")).To(Equal("calico-voltron-linseed-tls-key-cert-provisioner"))
+		})
+
+		It("should pass through unknown names unchanged", func() {
+			Expect(resolveContainerName("calico-manager")).To(Equal("calico-manager"))
+			Expect(resolveContainerName("calico-node")).To(Equal("calico-node"))
+			Expect(resolveContainerName("some-other-container")).To(Equal("some-other-container"))
+		})
+	})
+
+	It("should not have transitive aliases (no value appears as a key)", func() {
+		for _, target := range containerNameAliases {
+			_, isAlsoKey := containerNameAliases[target]
+			Expect(isAlsoKey).To(BeFalse(), "alias target %q is also an alias key, creating a transitive chain", target)
+		}
+	})
+
+	It("should apply overrides using deprecated container names to containers with current names", func() {
+		// Create a deployment with containers using current names.
+		d := appsv1.Deployment{}
+		d.Spec.Template.Spec.Containers = []corev1.Container{
+			{Name: "calico-manager"},
+			{Name: "calico-voltron"},
+			{Name: "calico-ui-apis"},
+		}
+		overrideResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu": resource.MustParse("2"),
+			},
+		}
+
+		// Apply overrides using deprecated names.
+		overrides := &v1.ManagerDeployment{
+			Spec: &v1.ManagerDeploymentSpec{
+				Template: &v1.ManagerDeploymentPodTemplateSpec{
+					Spec: &v1.ManagerDeploymentPodSpec{
+						Containers: []v1.ManagerDeploymentContainer{
+							{Name: "tigera-manager", Resources: &overrideResources},
+							{Name: "tigera-voltron", Resources: &overrideResources},
+							{Name: "tigera-es-proxy", Resources: &overrideResources},
+						},
+					},
+				},
+			},
+		}
+		ApplyDeploymentOverrides(&d, overrides)
+
+		// Verify overrides were applied to containers with current names.
+		for _, c := range d.Spec.Template.Spec.Containers {
+			Expect(c.Resources).To(Equal(overrideResources), "container %q should have overridden resources", c.Name)
+		}
+	})
 })
 
 func addContainer(cs []corev1.Container) []corev1.Container {

@@ -42,7 +42,7 @@ import (
 const (
 	DeepPacketInspectionNamespace            = "tigera-dpi"
 	DeepPacketInspectionName                 = "tigera-dpi"
-	DeepPacketInspectionPolicyName           = networkpolicy.TigeraComponentPolicyPrefix + DeepPacketInspectionName
+	DeepPacketInspectionPolicyName           = networkpolicy.CalicoComponentPolicyPrefix + DeepPacketInspectionName
 	DefaultMemoryLimit                       = "1Gi"
 	DefaultMemoryRequest                     = "100Mi"
 	DefaultCPULimit                          = "1"
@@ -572,7 +572,7 @@ func (d *dpiComponent) dpiCalicoSystemPolicy() *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(DeepPacketInspectionName),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,

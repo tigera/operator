@@ -49,7 +49,7 @@ const (
 	GoldmaneRoleName           = GoldmaneName
 	GoldmaneServicePort        = 7443
 	GoldmaneContainerName      = "goldmane"
-	GoldmanePolicyName         = networkpolicy.TigeraComponentPolicyPrefix + GoldmaneName
+	GoldmanePolicyName         = networkpolicy.CalicoComponentPolicyPrefix + GoldmaneName
 
 	GoldmaneKeyPairSecret = "goldmane-key-pair"
 	GoldmaneServiceName   = "goldmane"
@@ -323,7 +323,7 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: GoldmanePolicyName, Namespace: GoldmaneNamespace},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(GoldmaneDeploymentName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress},
 			Ingress: []v3.Rule{

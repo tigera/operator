@@ -84,11 +84,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		// Watch for changes to License and Tier, as their status is used as input to determine whether network policy should be reconciled by this controller.
 		go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, nil)
 	}
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
 
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 		{Name: render.GuardianPolicyName, Namespace: render.GuardianNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
+		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: render.GuardianNamespace},
 	})
 
 	// Watch for changes to ClusterInformation, as Guardian needs to restart the tunnel
@@ -436,7 +436,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
 	var tierAvailable bool
-	if err := r.cli.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err == nil {
+	if err := r.cli.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err == nil {
 		tierAvailable = true
 	} else if !k8serrors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)

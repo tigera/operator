@@ -46,7 +46,7 @@ const (
 	WhiskerNamespace          = common.CalicoNamespace
 	WhiskerServiceAccountName = WhiskerName
 	WhiskerDeploymentName     = WhiskerName
-	WhiskerPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + WhiskerName
+	WhiskerPolicyName         = networkpolicy.CalicoComponentPolicyPrefix + WhiskerName
 
 	WhiskerContainerName        = "whisker"
 	WhiskerBackendContainerName = "whisker-backend"
@@ -288,7 +288,7 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: WhiskerPolicyName, Namespace: WhiskerNamespace},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Selector: networkpolicy.KubernetesAppSelector(WhiskerDeploymentName),
 			Egress:   egressRules,

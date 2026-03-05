@@ -209,7 +209,7 @@ var _ = Describe("dex rendering tests", func() {
 			expectedResources := []client.Object{
 				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.DexPolicyName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
@@ -318,7 +318,7 @@ var _ = Describe("dex rendering tests", func() {
 				expectedResources := []client.Object{
 					&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.DexPolicyName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+					&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 					&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 					&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 					&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
@@ -425,7 +425,7 @@ var _ = Describe("dex rendering tests", func() {
 			expectedResources := []client.Object{
 				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName}, TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}},
 				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.DexPolicyName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 				&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.DexObjectName, Namespace: render.DexNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},

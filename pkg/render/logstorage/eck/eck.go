@@ -42,7 +42,7 @@ const (
 	OperatorName         = "elastic-operator"
 	OperatorNamespace    = "tigera-eck-operator"
 	LicenseConfigMapName = "elastic-licensing"
-	OperatorPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "elastic-operator-access"
+	OperatorPolicyName   = networkpolicy.CalicoComponentPolicyPrefix + "elastic-operator-access"
 	EnterpriseTrial      = "eck-trial-license"
 )
 
@@ -448,7 +448,7 @@ func (e *eck) operatorCalicoSystemPolicy() *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(OperatorName),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,

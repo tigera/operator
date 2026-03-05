@@ -81,8 +81,8 @@ const (
 	ElasticsearchInternalPort       = 9300
 	ElasticsearchAdminUserSecret    = "tigera-secure-es-elastic-user"
 	ElasticsearchLinseedUserSecret  = "tigera-ee-linseed-elasticsearch-user-secret"
-	ElasticsearchPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-access"
-	ElasticsearchInternalPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-internal"
+	ElasticsearchPolicyName         = networkpolicy.CalicoComponentPolicyPrefix + "elasticsearch-access"
+	ElasticsearchInternalPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "elasticsearch-internal"
 
 	KibanaBasePath = "tigera-kibana"
 
@@ -92,7 +92,7 @@ const (
 
 	ESCuratorName           = "elastic-curator"
 	EsCuratorServiceAccount = "tigera-elastic-curator"
-	EsCuratorPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + "allow-elastic-curator"
+	EsCuratorPolicyName     = networkpolicy.CalicoComponentPolicyPrefix + "allow-elastic-curator"
 
 	OIDCUsersConfigMapName = "tigera-known-oidc-users"
 	OIDCUsersESSecretName  = "tigera-oidc-users-elasticsearch-credentials"
@@ -996,7 +996,7 @@ func (es *elasticsearchComponent) elasticsearchCalicoSystemPolicy() *v3.NetworkP
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: ElasticsearchSelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
@@ -1046,7 +1046,7 @@ func (es *elasticsearchComponent) elasticsearchInternalCalicoSystemPolicy() *v3.
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: ElasticsearchSelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{

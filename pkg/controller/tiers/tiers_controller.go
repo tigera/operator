@@ -69,7 +69,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return err
 	}
 
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, nil)
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, nil)
 
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 		{Name: tiers.ClusterDNSPolicyName, Namespace: "openshift-dns"},

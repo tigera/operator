@@ -54,7 +54,7 @@ type ContainerName string
 const (
 	APIServerPort       = 5443
 	APIServerPortName   = "apiserver"
-	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "apiserver-access"
+	APIServerPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "apiserver-access"
 
 	auditLogsVolumeName   = "calico-audit-logs"
 	auditPolicyVolumeName = "calico-audit-policy"
@@ -535,7 +535,7 @@ func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy 
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(APIServerName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{

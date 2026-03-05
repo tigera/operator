@@ -29,9 +29,9 @@ import (
 )
 
 const (
-	TigeraComponentTierName              = "calico-system"
-	TigeraComponentPolicyPrefix          = TigeraComponentTierName + "."
-	TigeraComponentDefaultDenyPolicyName = TigeraComponentPolicyPrefix + "default-deny"
+	CalicoTierName                       = "calico-system"
+	CalicoComponentPolicyPrefix          = CalicoTierName + "."
+	CalicoComponentDefaultDenyPolicyName = CalicoComponentPolicyPrefix + "default-deny"
 )
 
 var (
@@ -184,11 +184,11 @@ func CalicoSystemDefaultDeny(namespace string) *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      TigeraComponentDefaultDenyPolicyName,
+			Name:      CalicoComponentDefaultDenyPolicyName,
 			Namespace: namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     TigeraComponentTierName,
+			Tier:     CalicoTierName,
 			Selector: "all()",
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 		},

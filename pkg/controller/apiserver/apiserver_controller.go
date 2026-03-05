@@ -80,7 +80,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
 	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, r.tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 		{Name: render.APIServerPolicyName, Namespace: render.APIServerNamespace},
@@ -413,7 +413,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
 	// We also exclude NetworkPolicy and do not degrade when the Tier watch is not ready, as this means the API server is not available.
 	if r.tierWatchReady.IsReady() {
-		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
 			if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
 				return reconcile.Result{}, err

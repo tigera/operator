@@ -65,7 +65,7 @@ const (
 	GuardianVolumeName    = "guardian-certs"
 	GuardianSecretName    = "tigera-managed-cluster-connection"
 	GuardianTargetPort    = 8080
-	GuardianPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
+	GuardianPolicyName    = networkpolicy.CalicoComponentPolicyPrefix + "guardian-access"
 	GuardianKeyPairSecret = "guardian-key-pair"
 
 	GoldmaneDeploymentName         = "goldmane"
@@ -558,7 +558,7 @@ func ossNetworkPolicy() *v3.NetworkPolicy {
 		ObjectMeta: metav1.ObjectMeta{Name: GuardianPolicyName, Namespace: GuardianNamespace},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress},
 			Ingress: []v3.Rule{
@@ -761,7 +761,7 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,

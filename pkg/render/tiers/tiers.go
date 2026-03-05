@@ -27,8 +27,8 @@ import (
 )
 
 const (
-	ClusterDNSPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "cluster-dns"
-	NodeLocalDNSPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "node-local-dns"
+	ClusterDNSPolicyName   = networkpolicy.CalicoComponentPolicyPrefix + "cluster-dns"
+	NodeLocalDNSPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "node-local-dns"
 )
 
 var defaultTierOrder = 100.0
@@ -95,7 +95,7 @@ func (t tiersComponent) calicoSystemTier() *v3.Tier {
 	return &v3.Tier{
 		TypeMeta: metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: networkpolicy.TigeraComponentTierName,
+			Name: networkpolicy.CalicoTierName,
 			Labels: map[string]string{
 				"projectcalico.org/system-tier": "true",
 			},
@@ -128,7 +128,7 @@ func (t tiersComponent) calicoSystemClusterDNSPolicy() *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: dnsPolicySelector,
 			Ingress: []v3.Rule{
 				{
@@ -163,7 +163,7 @@ func (t tiersComponent) calicoSystemNodeLocalDNSPolicy() *v3.GlobalNetworkPolicy
 		},
 		Spec: v3.GlobalNetworkPolicySpec{
 			Order:    &networkpolicy.AfterHighPrecendenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: createNamespaceSelector(t.cfg.CalicoNamespaces...),
 			Egress:   []v3.Rule{},
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},

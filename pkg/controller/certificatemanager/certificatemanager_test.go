@@ -430,6 +430,52 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			Expect(len(keyPair.HashAnnotationValue())).NotTo(BeNil())
 		})
 
+		It("should add cert metadata labels and annotations to the secret", func() {
+			By("creating a key pair signed by certificateManager")
+			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
+			Expect(err).NotTo(HaveOccurred())
+			secret := keyPair.Secret(appNs)
+
+			By("verifying the signer label is set")
+			Expect(secret.Labels).To(HaveKey("certificates.operator.tigera.io/signer"))
+			signerLabel := secret.Labels["certificates.operator.tigera.io/signer"]
+			Expect(signerLabel).To(ContainSubstring("tigera-operator-signer"))
+
+			By("verifying cert metadata annotations are present and correct")
+			Expect(secret.Annotations).To(HaveKey("certificates.operator.tigera.io/issuer"))
+			Expect(secret.Annotations).To(HaveKey("certificates.operator.tigera.io/signer"))
+			Expect(secret.Annotations).To(HaveKey("certificates.operator.tigera.io/expiry"))
+			Expect(secret.Annotations["certificates.operator.tigera.io/issuer"]).To(ContainSubstring("tigera-operator-signer"))
+			Expect(secret.Annotations["certificates.operator.tigera.io/signer"]).To(Equal(secret.Annotations["certificates.operator.tigera.io/issuer"]))
+			Expect(secret.Annotations["certificates.operator.tigera.io/expiry"]).To(MatchRegexp(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$`))
+
+			By("verifying DNS names annotation contains expected names")
+			Expect(secret.Annotations).To(HaveKey("certificates.operator.tigera.io/dns-names"))
+			Expect(secret.Annotations["certificates.operator.tigera.io/dns-names"]).To(ContainSubstring(appSecretName))
+
+			By("verifying the hash annotation is on the secret")
+			Expect(secret.Annotations).To(HaveKey(keyPair.HashAnnotationKey()))
+			Expect(secret.Annotations[keyPair.HashAnnotationKey()]).To(Equal(keyPair.HashAnnotationValue()))
+		})
+
+		It("should add cert metadata for BYO secrets", func() {
+			By("creating a BYO secret and fetching it via certificateManager")
+			Expect(cli.Create(ctx, byoSecret)).NotTo(HaveOccurred())
+			keyPair, err := certificateManager.GetOrCreateKeyPair(cli, appSecretName, appNs, appDNSNames)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(keyPair.BYO()).To(BeTrue())
+			secret := keyPair.Secret(appNs)
+
+			By("verifying the signer label reflects the BYO CA")
+			Expect(secret.Labels).To(HaveKey("certificates.operator.tigera.io/signer"))
+			Expect(secret.Labels["certificates.operator.tigera.io/signer"]).To(ContainSubstring("byo-ca"))
+
+			By("verifying cert metadata annotations reflect the BYO certificate")
+			Expect(secret.Annotations).To(HaveKey("certificates.operator.tigera.io/issuer"))
+			Expect(secret.Annotations["certificates.operator.tigera.io/issuer"]).To(ContainSubstring("byo-ca"))
+			Expect(secret.Annotations).To(HaveKey("certificates.operator.tigera.io/expiry"))
+		})
+
 		It("renders the right spec for certificate management", func() {
 			By("creating a key pair w/ certificate management")
 			installation.CertificateManagement = cm

@@ -37,13 +37,9 @@ Code architecture and design principles for the tigera/operator repository. For 
 
 ## Security
 
-- **Component-to-component communication must use mTLS.** All internal communication between operator-managed components must be secured with mutual TLS.
+- **Component-to-component communication must be authenticated and encrypted.** Use mTLS or TLS + token-based authentication for all internal communication between operator-managed components.
 
 ## Certificates and Secrets
 
-- **Operator-managed secrets use OwnerReferences** and are rendered via the Passthrough component.
-- **User-provided secrets must NOT have OwnerReferences.** This is how the operator distinguishes user-provided from operator-managed secrets.
-- **Secret naming conventions:**
-  - `PrivateCertSecret` — operator-managed cert + key
-  - `CustomizablePrivateCertSecret` — user-overridable cert + key
-  - `CertSecret` — cert only, no key
+- **Operator-managed secrets use OwnerReferences.** Secrets created by the operator should have OwnerReferences so they get cleaned up automatically.
+- **User-provided secrets must NOT have OwnerReferences.** This is how the operator distinguishes user-provided from operator-managed secrets. They may be copied to other namespaces (with OwnerReferences on the copies), but the originals must not be claimed.

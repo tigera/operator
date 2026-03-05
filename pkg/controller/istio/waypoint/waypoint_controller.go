@@ -43,8 +43,10 @@ const (
 	// IstioWaypointClassName is the GatewayClass name used by Istio waypoints.
 	IstioWaypointClassName = "istio-waypoint"
 
-	// WaypointPullSecretLabel is the label applied to secrets copied by this controller
-	// for tracking and cleanup purposes.
+	// WaypointPullSecretLabel labels secrets copied by this controller. We use a label rather
+	// than owner references because cleanup must also occur when cross-namespace resources change
+	// (e.g. the Istio CR is deleted or pull secrets are removed from Installation), and Kubernetes
+	// garbage collection only handles same-namespace owner references.
 	WaypointPullSecretLabel = "operator.tigera.io/istio-waypoint-pull-secret"
 )
 
@@ -119,104 +121,80 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(1).Info("Reconciling waypoint pull secrets")
 
-	// Get the Istio CR - if not found or being deleted, clean up all secrets.
+	// Determine which secrets need to exist (toCreate) based on current state,
+	// and which existing secrets are stale (toDelete).
+	var toCreate []client.Object
+	var toDelete []client.Object
+
+	// Get the Istio CR - if not found or being deleted, all existing secrets are stale.
 	instance := &operatorv1.Istio{}
 	err := r.Get(ctx, utils.DefaultInstanceKey, instance)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			reqLogger.V(1).Info("Istio CR not found, cleaning up all waypoint pull secrets")
-			return reconcile.Result{}, r.cleanupAllSecrets(ctx)
-		}
-		return reconcile.Result{}, err
-	}
-	if !instance.DeletionTimestamp.IsZero() {
-		reqLogger.V(1).Info("Istio CR being deleted, cleaning up all waypoint pull secrets")
-		return reconcile.Result{}, r.cleanupAllSecrets(ctx)
-	}
-
-	// Get Installation and pull secrets.
-	_, installation, err := utils.GetInstallation(ctx, r)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			reqLogger.V(1).Info("Installation not found")
-			return reconcile.Result{}, nil
-		}
+	istioActive := err == nil && instance.DeletionTimestamp.IsZero()
+	if err != nil && !errors.IsNotFound(err) {
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// If no pull secrets configured, clean up any previously copied secrets.
-	if len(pullSecrets) == 0 {
-		reqLogger.V(1).Info("No pull secrets configured, cleaning up waypoint pull secrets")
-		return reconcile.Result{}, r.cleanupAllSecrets(ctx)
-	}
-
-	// List all Gateway resources and filter for istio-waypoint class.
-	gatewayList := &gapi.GatewayList{}
-	if err := r.List(ctx, gatewayList); err != nil {
-		return reconcile.Result{}, fmt.Errorf("failed to list Gateways: %w", err)
-	}
-
-	// Build set of target namespaces (deduplicated).
+	// Build the desired set of secrets if Istio is active.
 	targetNamespaces := map[string]bool{}
-	for i := range gatewayList.Items {
-		gw := &gatewayList.Items[i]
-		if string(gw.Spec.GatewayClassName) == IstioWaypointClassName {
-			targetNamespaces[gw.Namespace] = true
-		}
-	}
-
-	// For each target namespace, copy pull secrets and apply the tracking label.
-	for ns := range targetNamespaces {
-		copied := secret.CopyToNamespace(ns, pullSecrets...)
-		var objs []client.Object
-		for _, s := range copied {
-			if s.Labels == nil {
-				s.Labels = map[string]string{}
+	if istioActive {
+		_, installation, err := utils.GetInstallation(ctx, r)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				reqLogger.V(1).Info("Installation not found")
+				return reconcile.Result{}, nil
 			}
-			s.Labels[WaypointPullSecretLabel] = "true"
-			objs = append(objs, s)
+			return reconcile.Result{}, err
 		}
 
-		hdlr := utils.NewComponentHandler(log, r, r.scheme, nil)
-		component := render.NewPassthrough(objs, nil)
-		if err := hdlr.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
-			return reconcile.Result{}, fmt.Errorf("failed to create/update pull secrets in namespace %s: %w", ns, err)
+		pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// List all Gateway resources and filter for istio-waypoint class.
+		gatewayList := &gapi.GatewayList{}
+		if err := r.List(ctx, gatewayList); err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed to list Gateways: %w", err)
+		}
+
+		for i := range gatewayList.Items {
+			gw := &gatewayList.Items[i]
+			if string(gw.Spec.GatewayClassName) == IstioWaypointClassName {
+				targetNamespaces[gw.Namespace] = true
+			}
+		}
+
+		// Build desired secrets for each target namespace.
+		for ns := range targetNamespaces {
+			copied := secret.CopyToNamespace(ns, pullSecrets...)
+			for _, s := range copied {
+				if s.Labels == nil {
+					s.Labels = map[string]string{}
+				}
+				s.Labels[WaypointPullSecretLabel] = "true"
+				toCreate = append(toCreate, s)
+			}
 		}
 	}
 
-	// Clean up stale secrets from namespaces that no longer have waypoints.
-	if err := r.cleanupStaleSecrets(ctx, targetNamespaces); err != nil {
-		return reconcile.Result{}, err
+	// List all existing secrets managed by this controller and mark stale ones for deletion.
+	existingSecrets := &corev1.SecretList{}
+	if err := r.List(ctx, existingSecrets, client.MatchingLabels{WaypointPullSecretLabel: "true"}); err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed to list waypoint pull secrets: %w", err)
+	}
+	for i := range existingSecrets.Items {
+		s := &existingSecrets.Items[i]
+		if !targetNamespaces[s.Namespace] {
+			toDelete = append(toDelete, s)
+		}
+	}
+
+	// Use a single passthrough component to handle both creation and deletion.
+	hdlr := utils.NewComponentHandler(log, r, r.scheme, nil)
+	component := render.NewPassthrough(toCreate, toDelete)
+	if err := hdlr.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed to reconcile waypoint pull secrets: %w", err)
 	}
 
 	return reconcile.Result{}, nil
-}
-
-// cleanupAllSecrets removes all secrets created by this controller.
-func (r *ReconcileWaypointSecrets) cleanupAllSecrets(ctx context.Context) error {
-	return r.cleanupStaleSecrets(ctx, nil)
-}
-
-// cleanupStaleSecrets removes tracking-labeled secrets from namespaces not in the active set.
-func (r *ReconcileWaypointSecrets) cleanupStaleSecrets(ctx context.Context, activeNamespaces map[string]bool) error {
-	secretList := &corev1.SecretList{}
-	if err := r.List(ctx, secretList, client.MatchingLabels{WaypointPullSecretLabel: "true"}); err != nil {
-		return fmt.Errorf("failed to list waypoint pull secrets: %w", err)
-	}
-
-	for i := range secretList.Items {
-		s := &secretList.Items[i]
-		if !activeNamespaces[s.Namespace] {
-			if err := r.Delete(ctx, s); err != nil && !errors.IsNotFound(err) {
-				return fmt.Errorf("failed to delete stale pull secret %s/%s: %w", s.Namespace, s.Name, err)
-			}
-		}
-	}
-
-	return nil
 }

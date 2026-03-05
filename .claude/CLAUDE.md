@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Kubernetes operator (built with operator-sdk/controller-runtime) that manages the lifecycle of Calico and Calico Enterprise installations. Each component (compliance, networking, apiserver, etc.) gets its own CRD, namespace, controller, and status manager. Controllers interact through the Kubernetes API.
+Kubernetes operator (built with operator-sdk/controller-runtime) that manages the lifecycle of Calico and Calico Enterprise installations. Each component (compliance, networking, apiserver, etc.) gets its own CRD, controller, and status manager. New components default to the `calico-system` namespace. Controllers interact through the Kubernetes API.
 
 ## Common Commands
 
@@ -62,19 +62,6 @@ make test-crds          # Validate CRD schemas
 - **`test/`** — Functional/integration tests (run against a local kind cluster with `make fv`).
 - **`config/`** — Kustomize overlays, sample CRs, and version YAML files (`calico_versions.yml`, `enterprise_versions.yml`).
 
-### Controller Pattern
-Each controller follows this pattern:
-1. Watches its primary CRD and any dependent resources
-2. Reconciles by reading current state from the Kubernetes API
-3. Calls `pkg/render` to generate desired Kubernetes resources
-4. Applies resources to the cluster via the `CreateOrUpdateOrDelete` pattern
-5. Reports status via the TigeraStatus API
-
-### Certificates and Secrets
-- Operator-managed secrets use OwnerReferences and are rendered via the Passthrough component
-- User-provided secrets must NOT have OwnerReferences set
-- Secret naming convention suffixes: `PrivateCertSecret` (operator-managed cert+key), `CustomizablePrivateCertSecret` (user-overridable cert+key), `CertSecret` (cert only, no key)
-
 ### Adding New Components
 ```bash
 # New CRD + API types:
@@ -88,12 +75,7 @@ After `gen-files`, verify the scope of existing resources wasn't changed to "Nam
 
 ## Design Principles
 
-See [`docs/principles.md`](../docs/principles.md) for code architecture and design principles, and [`docs/dev_guidelines.md`](../docs/dev_guidelines.md) for developer workflow and procedures. Key highlights:
-- API surface should be minimal; prefer auto-detection over configuration
-- New components default to `calico-system`; use separate namespaces only when circumstances specifically call for it
-- Prefer the `projectcalico.org/v3` API group over `crd.projectcalico.org/v1` wherever possible
-- TigeraStatus messages should be user-facing and actionable, not developer debug output
-- When cherry-picking to a release branch, also cherry-pick to all later release branches
+See [`docs/principles.md`](../docs/principles.md) for code architecture and design principles, and [`docs/dev_guidelines.md`](../docs/dev_guidelines.md) for developer workflow and procedures.
 
 ## Build Environment
 - Tests and builds run in a containerized environment (`calico/go-build`) by default

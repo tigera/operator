@@ -121,13 +121,13 @@ func (c *Component) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *Component) Objects() (toCreate, toDelete []client.Object) {
+func (c *Component) Objects() ([]client.Object, []client.Object) {
 	deployment := c.deployment()
 	if overrides := c.cfg.Whisker.Spec.WhiskerDeployment; overrides != nil {
 		rcomp.ApplyDeploymentOverrides(deployment, overrides)
 	}
 
-	objs := []client.Object{
+	toCreate := []client.Object{
 		c.serviceAccount(),
 		c.nginxConfigMap(),
 		deployment,
@@ -135,18 +135,18 @@ func (c *Component) Objects() (toCreate, toDelete []client.Object) {
 		c.networkPolicy(),
 	}
 
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(WhiskerNamespace, c.cfg.PullSecrets...)...)...)
+	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(WhiskerNamespace, c.cfg.PullSecrets...)...)...)
 
 	// Whisker needs to be removed if the installation is not Calico, since it's not supported (yet!) for any other variant.
-	if c.cfg.Installation.Variant == operatorv1.Calico {
-		toCreate = objs
-	} else {
-		toDelete = objs
+	var toDelete []client.Object
+	if c.cfg.Installation.Variant != operatorv1.Calico {
+		toDelete = toCreate
+		toCreate = nil
 	}
 
 	toDelete = append(toDelete, c.deprecatedObjects()...)
 
-	return
+	return toCreate, toDelete
 }
 
 func (c *Component) Ready() bool {
@@ -315,8 +315,11 @@ func (c *Component) nginxConfigMap() *corev1.ConfigMap {
 	}
 }
 
+// deprecatedObjects returns any objects that should be removed when Whisker is enabled, but were used in
+// previous versions of the operator.
 func (c *Component) deprecatedObjects() []client.Object {
 	return []client.Object{
+		// Deprecates k8s NetworkPolicy because Calico components now also have Tiers component enabled.
 		&netv1.NetworkPolicy{
 			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "whisker", Namespace: WhiskerNamespace},

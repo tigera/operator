@@ -78,7 +78,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("failed to create apiserver-controller: %w", err)
 	}
 
-	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
+	// Established deferred watches against the v3 API that should succeed after the API Server becomes available.
 	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
 	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 
@@ -315,6 +315,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	var keyValidatorConfig authentication.KeyValidatorConfig
+	includeV3NetworkPolicy := false
 
 	if installationSpec.Variant == operatorv1.TigeraSecureEnterprise {
 		trustedBundle, err = certificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, r.client,
@@ -405,7 +406,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
-	includeV3NetworkPolicy := false
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
 	//
 	// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that

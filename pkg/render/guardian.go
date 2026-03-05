@@ -88,9 +88,6 @@ func Guardian(cfg *GuardianConfiguration) Component {
 func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 	var policies []client.Object
 
-	// XXX TODO: To implement different policies when is Enterprise and
-	// EgressNetworkPolicy is not enabled for the license. For now on this
-	// situation everything is being denied by tier default-deny policy.
 	if cfg.IncludeEgressNetworkPolicy {
 		guardianAccessPolicy, err := guardianCalicoSystemPolicy(cfg)
 		if err != nil {

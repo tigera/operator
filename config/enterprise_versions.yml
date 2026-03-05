@@ -46,12 +46,12 @@ components:
     image: tigera/dex
     version: v3.22.2
   eck-kibana:
-    version: 8.19.10
+    version: 8.19.12
   kibana:
     image: tigera/kibana
     version: v3.22.2
   eck-elasticsearch:
-    version: 8.19.10
+    version: 8.19.12
   elasticsearch:
     image: tigera/elasticsearch
     version: v3.22.2

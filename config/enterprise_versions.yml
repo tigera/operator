@@ -47,13 +47,13 @@ components:
     version: v3.23.0-1.0
   # eck-kibana holds the version of Kibana built for tigera/kibana
   eck-kibana:
-    version: 8.19.10
+    version: 8.19.12
   kibana:
     image: kibana
     version: v3.23.0-1.0
   # eck-elasticsearch holds the version of Elasticsearch built for tigera/elasticsearch
   eck-elasticsearch:
-    version: 8.19.10
+    version: 8.19.12
   elasticsearch:
     image: elasticsearch
     version: v3.23.0-1.0

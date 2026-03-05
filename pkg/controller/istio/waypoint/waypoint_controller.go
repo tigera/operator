@@ -44,9 +44,11 @@ const (
 	IstioWaypointClassName = "istio-waypoint"
 
 	// WaypointPullSecretLabel labels secrets copied by this controller. We use a label rather
-	// than owner references because cleanup must also occur when cross-namespace resources change
-	// (e.g. the Istio CR is deleted or pull secrets are removed from Installation), and Kubernetes
-	// garbage collection only handles same-namespace owner references.
+	// than owner references because the controller needs to efficiently find and clean up its
+	// managed secrets during reconciliation — for example, when pull secrets are removed from
+	// Installation or when the Istio CR is deleted. A label selector provides a simple,
+	// cross-namespace query that covers all cleanup scenarios, whereas owner references would
+	// only automate Gateway-deletion cleanup via Kubernetes garbage collection.
 	WaypointPullSecretLabel = "operator.tigera.io/istio-waypoint-pull-secret"
 )
 

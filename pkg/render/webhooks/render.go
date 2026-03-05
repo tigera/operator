@@ -300,6 +300,38 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
 			},
 			{
+				// This webhook blocks user writes to ClusterInformation, which is a read-only resource managed by
+				// Calico system components. This mirrors the write protection provided by the aggregated API server.
+				Name: "cluster-info.api.projectcalico.org",
+				Rules: []admissionregistrationv1.RuleWithOperations{
+					{
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Create,
+							admissionregistrationv1.Update,
+							admissionregistrationv1.Delete,
+						},
+						Rule: admissionregistrationv1.Rule{
+							APIGroups:   []string{"projectcalico.org"},
+							APIVersions: []string{"v3"},
+							Resources:   []string{"clusterinformations"},
+							Scope:       ptr.To(admissionregistrationv1.AllScopes),
+						},
+					},
+				},
+				ClientConfig: admissionregistrationv1.WebhookClientConfig{
+					Service: &admissionregistrationv1.ServiceReference{
+						Namespace: common.CalicoNamespace,
+						Name:      WebhooksName,
+						Path:      ptr.To("/cluster-info"),
+					},
+					CABundle: c.cfg.KeyPair.GetCertificatePEM(),
+				},
+				AdmissionReviewVersions: []string{"v1"},
+				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
+				TimeoutSeconds:          ptr.To[int32](5),
+				FailurePolicy:           ptr.To(admissionregistrationv1.Ignore),
+			},
+			{
 				// This webhook is for audit logging. The webhook controller will get events for all relevant Calico API types
 				// and product audit logs for them.
 				Name: "audit-logging.api.projectcalico.org",

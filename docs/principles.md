@@ -39,7 +39,7 @@ Code architecture and design principles for the tigera/operator repository. For 
 
 - **Component-to-component communication must be authenticated and encrypted.** Use mTLS or TLS + token-based authentication for all internal communication between operator-managed components.
 
-## Certificates and Secrets
+## Resource Ownership
 
-- **Operator-managed secrets use OwnerReferences.** Secrets created by the operator should have OwnerReferences so they get cleaned up automatically.
-- **User-provided secrets must NOT have OwnerReferences.** This is how the operator distinguishes user-provided from operator-managed secrets. They may be copied to other namespaces (with OwnerReferences on the copies), but the originals must not be claimed.
+- **Operator-created resources use OwnerReferences.** Objects created by the operator should have OwnerReferences so they get cleaned up automatically. Exceptions exist for resources where cascading deletion would be catastrophic (e.g., CRDs).
+- **User-provided resources must NOT have OwnerReferences.** This is how the operator distinguishes user-provided from operator-managed resources. They may be copied to other namespaces (with OwnerReferences on the copies), but the originals must not be claimed.

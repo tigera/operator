@@ -53,21 +53,21 @@ const (
 
 	IntrusionDetectionInstallerJobName                     = "intrusion-detection-es-job-installer"
 	IntrusionDetectionControllerName                       = "intrusion-detection-controller"
-	IntrusionDetectionControllerPolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + IntrusionDetectionControllerName
-	IntrusionDetectionInstallerPolicyName                  = networkpolicy.TigeraComponentPolicyPrefix + "intrusion-detection-elastic"
+	IntrusionDetectionControllerPolicyName                 = networkpolicy.CalicoComponentPolicyPrefix + IntrusionDetectionControllerName
+	IntrusionDetectionInstallerPolicyName                  = networkpolicy.CalicoComponentPolicyPrefix + "intrusion-detection-elastic"
 	MultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-intrusion-detection-managed-cluster-access"
 	IntrusionDetectionManagedClustersWatchRoleBindingName  = "tigera-intrusion-detection-managed-cluster-watch"
 
 	ADAPIObjectName                 = "anomaly-detection-api"
 	IntrusionDetectionTLSSecretName = "intrusion-detection-tls"
 	DPITLSSecretName                = "deep-packet-inspection-tls"
-	ADAPIPolicyName                 = networkpolicy.TigeraComponentPolicyPrefix + ADAPIObjectName
+	ADAPIPolicyName                 = networkpolicy.CalicoComponentPolicyPrefix + ADAPIObjectName
 
 	ADPersistentVolumeClaimName = "tigera-anomaly-detection"
 	ADJobPodTemplateBaseName    = "tigera.io.detectors"
 	adDetectorPrefixName        = "tigera.io.detector."
 	adDetectorName              = "anomaly-detectors"
-	ADDetectorPolicyName        = networkpolicy.TigeraComponentPolicyPrefix + adDetectorName
+	ADDetectorPolicyName        = networkpolicy.CalicoComponentPolicyPrefix + adDetectorName
 )
 
 // Register secret/certs that need Server and Client Key usage
@@ -1052,7 +1052,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerCalicoSystemPo
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 		{
 			// Pass to subsequent tiers for further enforcement
@@ -1068,7 +1068,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerCalicoSystemPo
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(IntrusionDetectionControllerName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{

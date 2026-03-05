@@ -70,9 +70,9 @@ const (
 	IstioOperatorAnnotationMode       = "operator.tigera.io/istioAmbientMode"
 	IstioOperatorAnnotationDSCP       = "operator.tigera.io/istioDSCPMark"
 	IstioFinalizer                    = "operator.tigera.io/calico-istio"
-	IstioIstiodPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + IstioIstiodDeploymentName
-	IstioCNIPolicyName                = networkpolicy.TigeraComponentPolicyPrefix + IstioCNIDaemonSetName
-	IstioZTunnelPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + IstioZTunnelDaemonSetName
+	IstioIstiodPolicyName             = networkpolicy.CalicoComponentPolicyPrefix + IstioIstiodDeploymentName
+	IstioCNIPolicyName                = networkpolicy.CalicoComponentPolicyPrefix + IstioCNIDaemonSetName
+	IstioZTunnelPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + IstioZTunnelDaemonSetName
 	IstioIstiodServiceName            = "istiod"
 
 	istioFakeImageProxyv2 = "fake.io/fakeimg/proxyv2:faketag"
@@ -295,7 +295,7 @@ func (c *IstioComponent) istiodCalicoSystemPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 	}
 
@@ -324,7 +324,7 @@ func (c *IstioComponent) istiodCalicoSystemPolicy() *v3.NetworkPolicy {
 			Namespace: c.cfg.IstioNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(IstioIstiodDeploymentName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,
@@ -338,7 +338,7 @@ func (c *IstioComponent) istioCNICalicoSystemPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 	}
 
@@ -349,7 +349,7 @@ func (c *IstioComponent) istioCNICalicoSystemPolicy() *v3.NetworkPolicy {
 			Namespace: c.cfg.IstioNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(IstioCNIDaemonSetName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Egress:   egressRules,
@@ -374,7 +374,7 @@ func (c *IstioComponent) ztunnelCalicoSystemPolicy() *v3.NetworkPolicy {
 			Namespace: c.cfg.IstioNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(IstioZTunnelDaemonSetName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Egress:   egressRules,

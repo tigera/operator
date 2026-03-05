@@ -49,7 +49,7 @@ const (
 	ServiceAccountName    = "tigera-secure-es-gateway"
 	RoleName              = "tigera-secure-es-gateway"
 	ServiceName           = "tigera-secure-es-gateway-http"
-	PolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "es-gateway-access"
+	PolicyName            = networkpolicy.CalicoComponentPolicyPrefix + "es-gateway-access"
 	ElasticsearchPortName = "es-gateway-elasticsearch-port"
 	KibanaPortName        = "es-gateway-kibana-port"
 	Port                  = 5554
@@ -383,7 +383,7 @@ func (e *esGateway) esGatewayCalicoSystemPolicy() *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(DeploymentName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{

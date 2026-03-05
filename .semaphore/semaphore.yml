@@ -166,6 +166,10 @@ promotions:
     pipeline_file: release.yml
     auto_promote:
       when: "result = 'passed' AND tag =~ '^v'"
+  - name: Run Fossa scan
+    pipeline_file: fossa_scan.yml
+    auto_promote:
+      when: "branch =~ 'master|release-.*'"
   - name: Clean Up
     pipeline_file: clean_up.yml
     # Don't auto promote if this is master or a release branch so the cache is available for the Push Images pipeline.

@@ -57,7 +57,7 @@ components:
   cni:
     version: master
   eck-kibana:
-    version: 8.19.10
+    version: 8.19.12
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
@@ -88,7 +88,7 @@ components:
   cni:
     version: v1.32.4
   eck-kibana:
-    version: 8.19.10
+    version: 8.19.12
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:

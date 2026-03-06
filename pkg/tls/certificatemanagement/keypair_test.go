@@ -114,7 +114,7 @@ var _ = Describe("TLS secret metadata", func() {
 			}
 			Expect(kp.BYO()).To(BeTrue())
 			warning := kp.Warnings()
-			Expect(warning).To(ContainSubstring("BYO certificate"))
+			Expect(warning).To(ContainSubstring("user provided certificate"))
 			Expect(warning).To(ContainSubstring("my-tls-secret"))
 			Expect(warning).To(ContainSubstring("expires in"))
 		})

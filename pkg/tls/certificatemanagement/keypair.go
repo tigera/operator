@@ -125,7 +125,7 @@ func (k *KeyPair) Warnings() string {
 	}
 	remaining := time.Until(cert.NotAfter)
 	if remaining <= 30*24*time.Hour {
-		return fmt.Sprintf("BYO certificate %q expires in %d days", k.Name, int(remaining.Hours()/24))
+		return fmt.Sprintf("Warning: user provided certificate %q expires in %d days", k.Name, int(remaining.Hours()/24))
 	}
 	return ""
 }

@@ -15,7 +15,15 @@
 package certificatemanagement_test
 
 import (
+	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -79,6 +87,60 @@ var _ = Describe("TLS secret metadata", func() {
 			Expect(s.Labels).To(BeEmpty())
 			Expect(s.Annotations).To(HaveLen(1))
 			Expect(s.Annotations).To(HaveKey(kp.HashAnnotationKey()))
+		})
+	})
+
+	Describe("KeyPair.Warnings()", func() {
+		createCertPEM := func(notAfter time.Time) []byte {
+			key, err := rsa.GenerateKey(rand.Reader, 2048)
+			Expect(err).NotTo(HaveOccurred())
+			tmpl := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				Subject:      pkix.Name{CommonName: "test"},
+				NotBefore:    time.Now().Add(-time.Hour),
+				NotAfter:     notAfter,
+			}
+			der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+			Expect(err).NotTo(HaveOccurred())
+			var buf bytes.Buffer
+			Expect(pem.Encode(&buf, &pem.Block{Type: "CERTIFICATE", Bytes: der})).NotTo(HaveOccurred())
+			return buf.Bytes()
+		}
+
+		It("should return a warning for a BYO cert expiring within 30 days", func() {
+			kp := &certificatemanagement.KeyPair{
+				Name:           "my-tls-secret",
+				CertificatePEM: createCertPEM(time.Now().Add(10 * 24 * time.Hour)),
+			}
+			Expect(kp.BYO()).To(BeTrue())
+			warning := kp.Warnings()
+			Expect(warning).To(ContainSubstring("BYO certificate"))
+			Expect(warning).To(ContainSubstring("my-tls-secret"))
+			Expect(warning).To(ContainSubstring("expires in"))
+		})
+
+		It("should return empty for a BYO cert expiring in more than 30 days", func() {
+			kp := &certificatemanagement.KeyPair{
+				Name:           "my-tls-secret",
+				CertificatePEM: createCertPEM(time.Now().Add(60 * 24 * time.Hour)),
+			}
+			Expect(kp.BYO()).To(BeTrue())
+			Expect(kp.Warnings()).To(BeEmpty())
+		})
+
+		It("should return empty for a non-BYO cert even if expiring soon", func() {
+			secret, err := certificatemanagement.CreateSelfSignedSecret("test-secret", "test-ns", "test-cn", nil)
+			Expect(err).NotTo(HaveOccurred())
+			// NewKeyPair creates a BYO keypair (no issuer, no cert management)
+			// but a KeyPair with an Issuer is not BYO.
+			issuer := certificatemanagement.NewKeyPair(secret, nil, "cluster.local")
+			kp := &certificatemanagement.KeyPair{
+				Name:           "managed-secret",
+				CertificatePEM: createCertPEM(time.Now().Add(10 * 24 * time.Hour)),
+				Issuer:         issuer,
+			}
+			Expect(kp.BYO()).To(BeFalse())
+			Expect(kp.Warnings()).To(BeEmpty())
 		})
 	})
 

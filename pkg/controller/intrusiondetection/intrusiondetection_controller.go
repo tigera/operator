@@ -499,6 +499,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		intrusionDetectionComponent,
 	}
 
+	var dpiKeyPair certificatemanagement.KeyPairInterface
 	if !r.opts.MultiTenant {
 		// FIXME: core controller creates TyphaNodeTLSConfig, this controller should only get it.
 		// But changing the call from GetOrCreateTyphaNodeTLSConfig() to GetTyphaNodeTLSConfig()
@@ -511,7 +512,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		typhaNodeTLS.TrustedBundle.AddCertificates(linseedCertificate)
 
 		// dpiKeyPair is the key pair dpi presents to identify itself
-		dpiKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.DPITLSSecretName, helper.TruthNamespace(), []string{render.IntrusionDetectionTLSSecretName})
+		dpiKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.DPITLSSecretName, helper.TruthNamespace(), []string{render.IntrusionDetectionTLSSecretName})
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
@@ -579,6 +580,20 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		log.V(4).Info("IntrusionDetection is not activated as part of this license")
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", nil, reqLogger)
 		return reconcile.Result{}, nil
+	}
+
+	// Check BYO certificate expiry warnings.
+	for key, kp := range map[string]certificatemanagement.KeyPairInterface{
+		render.IntrusionDetectionTLSSecretName: intrusionDetectionKeyPair,
+		render.DPITLSSecretName:                dpiKeyPair,
+	} {
+		if kp != nil {
+			if w := kp.Warnings(); w != "" {
+				r.status.SetWarning(key, w)
+				continue
+			}
+		}
+		r.status.ClearWarning(key)
 	}
 
 	// Clear the degraded bit if we've reached this far.

@@ -167,12 +167,9 @@ func (m *statusManager) updateStatus() {
 		// We've collected knowledge about the current state of the objects we're monitoring.
 		// Now, use that to update the TigeraStatus object for this manager.
 		available := m.IsAvailable()
-		if m.IsAvailable() {
-			msg := "All objects available"
-			if w := m.warningMessage(); w != "" {
-				msg = msg + "; " + w
-			}
-			m.setAvailable(operator.AllObjectsAvailable, msg)
+		availableMsg := m.availableMessage()
+		if available {
+			m.setAvailable(operator.AllObjectsAvailable, availableMsg)
 		} else {
 			m.clearAvailable()
 		}
@@ -181,7 +178,7 @@ func (m *statusManager) updateStatus() {
 			m.setProgressing(operator.ResourceNotReady, m.progressingMessage())
 		} else {
 			if available {
-				m.clearProgressingWithReason(operator.AllObjectsAvailable, "All Objects Available")
+				m.clearProgressingWithReason(operator.AllObjectsAvailable, availableMsg)
 			} else {
 				m.clearProgressing()
 			}
@@ -191,7 +188,7 @@ func (m *statusManager) updateStatus() {
 			m.setDegraded(m.degradedReason(), m.degradedMessage())
 		} else {
 			if available {
-				m.clearDegradedWithReason(operator.AllObjectsAvailable, "All Objects Available")
+				m.clearDegradedWithReason(operator.AllObjectsAvailable, availableMsg)
 			} else {
 				m.clearDegraded()
 			}
@@ -846,6 +843,14 @@ func (m *statusManager) clearAvailable() {
 		{Type: operator.ComponentAvailable, Status: operator.ConditionFalse, Reason: string(operator.Unknown), Message: ""},
 	}
 	m.set(true, conditions...)
+}
+
+func (m *statusManager) availableMessage() string {
+	msg := "All objects available"
+	if w := m.warningMessage(); w != "" {
+		msg = msg + "; " + w
+	}
+	return msg
 }
 
 func (m *statusManager) progressingMessage() string {

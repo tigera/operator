@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -71,6 +72,8 @@ type StatusManager interface {
 	RemoveCertificateSigningRequests(name string)
 	SetDegraded(reason operator.TigeraStatusReason, msg string, err error, log logr.Logger)
 	ClearDegraded()
+	SetWarning(key string, msg string)
+	ClearWarning(key string)
 	IsAvailable() bool
 	IsProgressing() bool
 	IsDegraded() bool
@@ -94,6 +97,9 @@ type statusManager struct {
 	degraded               bool
 	explicitDegradedMsg    string
 	explicitDegradedReason operator.TigeraStatusReason
+
+	// warnings stores warning messages keyed by component/secret name.
+	warnings map[string]string
 
 	// Keep track of currently calculated status.
 	progressing []string
@@ -132,6 +138,7 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 		statefulsets:              make(map[string]types.NamespacedName),
 		cronjobs:                  make(map[string]types.NamespacedName),
 		certificatestatusrequests: make(map[string]map[string]string),
+		warnings:                  make(map[string]string),
 		kubernetesVersion:         kubernetesVersion,
 		crExists:                  crExists,
 	}
@@ -161,7 +168,11 @@ func (m *statusManager) updateStatus() {
 		// Now, use that to update the TigeraStatus object for this manager.
 		available := m.IsAvailable()
 		if m.IsAvailable() {
-			m.setAvailable(operator.AllObjectsAvailable, "All objects available")
+			msg := "All objects available"
+			if w := m.warningMessage(); w != "" {
+				msg = msg + "; " + w
+			}
+			m.setAvailable(operator.AllObjectsAvailable, msg)
 		} else {
 			m.clearAvailable()
 		}
@@ -262,6 +273,7 @@ func (m *statusManager) OnCRNotFound() {
 	m.deployments = make(map[string]types.NamespacedName)
 	m.statefulsets = make(map[string]types.NamespacedName)
 	m.cronjobs = make(map[string]types.NamespacedName)
+	m.warnings = make(map[string]string)
 }
 
 // AddDaemonsets tells the status manager to monitor the health of the given daemonsets.
@@ -375,6 +387,40 @@ func (m *statusManager) ClearDegraded() {
 	m.degraded = false
 	m.explicitDegradedReason = ""
 	m.explicitDegradedMsg = ""
+}
+
+// SetWarning sets a warning message for the given key. Warnings are appended to the Available
+// condition message so they are visible in `kubectl get tigerastatus`.
+func (m *statusManager) SetWarning(key string, msg string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.warnings[key] = msg
+}
+
+// ClearWarning removes the warning for the given key.
+func (m *statusManager) ClearWarning(key string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	delete(m.warnings, key)
+}
+
+// warningMessage returns all warning messages joined by "; ", or empty if there are none.
+func (m *statusManager) warningMessage() string {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	if len(m.warnings) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m.warnings))
+	for k := range m.warnings {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	msgs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		msgs = append(msgs, m.warnings[k])
+	}
+	return strings.Join(msgs, "; ")
 }
 
 // IsAvailable returns true if the component is available and false otherwise.

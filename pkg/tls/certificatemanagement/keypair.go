@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -111,6 +112,22 @@ func (k *KeyPair) HashAnnotationValue() string {
 		return ""
 	}
 	return rmeta.AnnotationHash(rmeta.AnnotationHash(k.CertificatePEM))
+}
+
+// Warnings returns a warning string if this is a BYO certificate expiring within 30 days.
+func (k *KeyPair) Warnings() string {
+	if !k.BYO() {
+		return ""
+	}
+	cert, err := ParseCertificate(k.CertificatePEM)
+	if err != nil {
+		return ""
+	}
+	remaining := time.Until(cert.NotAfter)
+	if remaining <= 30*24*time.Hour {
+		return fmt.Sprintf("BYO certificate %q expires in %d days", k.Name, int(remaining.Hours()/24))
+	}
+	return ""
 }
 
 func (k *KeyPair) Volume() corev1.Volume {

@@ -1696,6 +1696,26 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
 
+	// Check BYO certificate expiry warnings and propagate them to the status manager.
+	// Use a static key per slot so warnings are cleared even when a keypair becomes nil
+	// (e.g., when switching from Enterprise to Calico).
+	keyPairWarnings := map[string]certificatemanagement.KeyPairInterface{
+		render.TyphaTLSSecretName:                                    typhaNodeTLS.TyphaSecret,
+		render.NodeTLSSecretName:                                     typhaNodeTLS.NodeSecret,
+		render.TyphaTLSSecretName + render.TyphaNonClusterHostSuffix: typhaNodeTLS.TyphaSecretNonClusterHost,
+		render.NodePrometheusTLSServerSecret:                         nodePrometheusTLS,
+		kubecontrollers.KubeControllerPrometheusTLSSecret:            kubeControllerTLS,
+	}
+	for key, kp := range keyPairWarnings {
+		if kp != nil {
+			if w := kp.Warnings(); w != "" {
+				r.status.SetWarning(key, w)
+				continue
+			}
+		}
+		r.status.ClearWarning(key)
+	}
+
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
 

@@ -442,6 +442,48 @@ var _ = Describe("Status reporting tests", func() {
 			Expect(sm.IsProgressing()).To(BeFalse())
 		})
 
+		It("should include warnings in Available message", func() {
+			sm.ReadyToMonitor()
+			Expect(sm.IsAvailable()).To(BeTrue())
+
+			sm.SetWarning("cert-a", "BYO certificate \"a\" expires in 10 days")
+			sm.updateStatus()
+
+			stat := &operator.TigeraStatus{}
+			err := client.Get(context.TODO(), types.NamespacedName{Name: "test-component"}, stat)
+			Expect(err).NotTo(HaveOccurred())
+			for _, c := range stat.Status.Conditions {
+				if c.Type == operator.ComponentAvailable && c.Status == operator.ConditionTrue {
+					Expect(c.Message).To(ContainSubstring("All objects available"))
+					Expect(c.Message).To(ContainSubstring("BYO certificate \"a\" expires in 10 days"))
+				}
+			}
+		})
+
+		It("should clear warnings from Available message", func() {
+			sm.ReadyToMonitor()
+			sm.SetWarning("cert-a", "BYO certificate \"a\" expires in 10 days")
+			sm.updateStatus()
+			sm.ClearWarning("cert-a")
+			sm.updateStatus()
+
+			stat := &operator.TigeraStatus{}
+			err := client.Get(context.TODO(), types.NamespacedName{Name: "test-component"}, stat)
+			Expect(err).NotTo(HaveOccurred())
+			for _, c := range stat.Status.Conditions {
+				if c.Type == operator.ComponentAvailable && c.Status == operator.ConditionTrue {
+					Expect(c.Message).To(Equal("All objects available"))
+				}
+			}
+		})
+
+		It("should sort multiple warnings deterministically", func() {
+			sm.ReadyToMonitor()
+			sm.SetWarning("cert-b", "warning B")
+			sm.SetWarning("cert-a", "warning A")
+			Expect(sm.warningMessage()).To(Equal("warning A; warning B"))
+		})
+
 		It("should prioritize explicit degraded reason over pod failure", func() {
 			Expect(sm.degradedReason()).To(Equal(operator.Unknown))
 			sm.failing = []string{"This pod has died"}

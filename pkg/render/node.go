@@ -1281,10 +1281,10 @@ func JoinServiceEndpoints(endpoints []k8sapi.ServiceEndpoint) string {
 	var parts []string
 	for _, ep := range endpoints {
 
-		if ep.Host == "" || ep.Port == "" {
+		if ep.HostNetworkHost == "" || ep.HostNetworkPort == "" {
 			continue
 		}
-		parts = append(parts, net.JoinHostPort(ep.Host, ep.Port))
+		parts = append(parts, net.JoinHostPort(ep.HostNetworkHost, ep.HostNetworkPort))
 	}
 	return strings.Join(parts, ",")
 }

@@ -467,6 +467,19 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		}
 	}
 
+	// Check BYO certificate expiry warnings.
+	for key, kp := range map[string]certificatemanagement.KeyPairInterface{
+		render.PolicyRecommendationTLSSecretName: policyRecommendationKeyPair,
+	} {
+		if kp != nil {
+			if w := kp.Warnings(); w != "" {
+				r.status.SetWarning(key, w)
+				continue
+			}
+		}
+		r.status.ClearWarning(key)
+	}
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 

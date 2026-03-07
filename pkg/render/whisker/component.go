@@ -285,11 +285,11 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 
 	return &v3.NetworkPolicy{
-		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: WhiskerPolicyName, Namespace: WhiskerNamespace},
 		Spec: v3.NetworkPolicySpec{
 			Tier:     networkpolicy.CalicoTierName,
-			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Selector: networkpolicy.KubernetesAppSelector(WhiskerDeploymentName),
 			Egress:   egressRules,
 		},

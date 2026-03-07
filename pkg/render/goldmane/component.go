@@ -320,7 +320,7 @@ func (c *Component) role() *rbacv1.Role {
 
 func (c *Component) networkPolicy() *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
-		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: GoldmanePolicyName, Namespace: GoldmaneNamespace},
 		Spec: v3.NetworkPolicySpec{
 			Tier:     networkpolicy.CalicoTierName,

@@ -723,19 +723,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Check BYO certificate expiry warnings.
-	for key, kp := range map[string]certificatemanagement.KeyPairInterface{
+	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
 		render.ManagerTLSSecretName:         tlsSecret,
 		render.ManagerInternalTLSSecretName: internalTrafficSecret,
 		render.VoltronLinseedTLS:            linseedVoltronServerCert,
-	} {
-		if kp != nil {
-			if w := kp.Warnings(); w != "" {
-				r.status.SetWarning(key, w)
-				continue
-			}
-		}
-		r.status.ClearWarning(key)
-	}
+	}, r.status)
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

@@ -55,7 +55,7 @@ const (
 	BasePath     = ObjectName
 	ServiceName  = "tigera-secure-kb-http"
 	DefaultRoute = "/app/kibana#/dashboards?%s&title=%s"
-	PolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "kibana-access"
+	PolicyName   = networkpolicy.CalicoComponentPolicyPrefix + "kibana-access"
 	Port         = 5601
 
 	TLSAnnotationHash = "hash.operator.tigera.io/kb-secrets"
@@ -445,7 +445,7 @@ func (k *kibana) calicoSystemPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 		{
 			Action:      v3.Allow,
@@ -465,7 +465,7 @@ func (k *kibana) calicoSystemPolicy() *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(CRName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{

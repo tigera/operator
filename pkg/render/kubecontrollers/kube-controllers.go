@@ -52,13 +52,13 @@ const (
 	KubeControllerRole              = "calico-kube-controllers"
 	KubeControllerRoleBinding       = "calico-kube-controllers"
 	KubeControllerMetrics           = "calico-kube-controllers-metrics"
-	KubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "kube-controller-access"
+	KubeControllerNetworkPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "kube-controller-access"
 
 	EsKubeController                    = "es-calico-kube-controllers"
 	EsKubeControllerRole                = "es-calico-kube-controllers"
 	EsKubeControllerRoleBinding         = "es-calico-kube-controllers"
 	EsKubeControllerMetrics             = "es-calico-kube-controllers-metrics"
-	EsKubeControllerNetworkPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
+	EsKubeControllerNetworkPolicyName   = networkpolicy.CalicoComponentPolicyPrefix + "es-kube-controller-access"
 	ManagedClustersWatchRoleBindingName = "es-calico-kube-controllers-managed-cluster-watch"
 
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
@@ -833,7 +833,7 @@ func kubeControllersCalicoSystemPolicy(cfg *KubeControllersConfiguration) *v3.Ne
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(KubeController),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress, v3.PolicyTypeIngress},
 			Egress:   egressRules,
@@ -884,7 +884,7 @@ func esKubeControllersCalicoSystemPolicy(cfg *KubeControllersConfiguration) *v3.
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(EsKubeController),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,

@@ -83,11 +83,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		{Name: monitor.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: monitor.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: monitor.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
 	}
 
 	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
 
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, policyNames)
 
@@ -375,7 +375,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
 	includeV3NetworkPolicy := false
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
 		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that the
 		// License becomes available (in managed clusters). Therefore, if we fail to query the Tier, we exclude NetworkPolicy
 		// from reconciliation and tolerate errors arising from the Tier not being created.

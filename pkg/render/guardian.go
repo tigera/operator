@@ -40,14 +40,12 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
-	"github.com/tigera/operator/pkg/render/common/selector"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -67,7 +65,7 @@ const (
 	GuardianVolumeName    = "guardian-certs"
 	GuardianSecretName    = "tigera-managed-cluster-connection"
 	GuardianTargetPort    = 8080
-	GuardianPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
+	GuardianPolicyName    = networkpolicy.CalicoComponentPolicyPrefix + "guardian-access"
 	GuardianKeyPairSecret = "guardian-key-pair"
 
 	GoldmaneDeploymentName         = "goldmane"
@@ -88,16 +86,21 @@ func Guardian(cfg *GuardianConfiguration) Component {
 }
 
 func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
-	guardianAccessPolicy, err := guardianCalicoSystemPolicy(cfg)
-	if err != nil {
-		return nil, err
+	var policies []client.Object
+
+	if cfg.IncludeEgressNetworkPolicy {
+		guardianAccessPolicy, err := guardianCalicoSystemPolicy(cfg)
+		if err != nil {
+			return nil, err
+		}
+		policies = []client.Object{
+			guardianAccessPolicy,
+			networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
+		}
 	}
 
 	return NewPassthrough(
-		[]client.Object{
-			guardianAccessPolicy,
-			networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
-		},
+		policies,
 		[]client.Object{
 			// allow-tigera Tier was renamed to calico-system
 			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("guardian-access", GuardianNamespace),
@@ -116,6 +119,7 @@ type GuardianConfiguration struct {
 	TrustedCertBundle           certificatemanagement.TrustedBundleRO
 	TunnelCAType                operatorv1.CAType
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
+	IncludeEgressNetworkPolicy  bool
 
 	// PodProxies represents the resolved proxy configuration for each Guardian pod.
 	// If this slice is empty, then resolution has not yet occurred. Pods with no proxy
@@ -170,8 +174,6 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 			managerClusterWideTigeraLayer(),
 			managerClusterWideDefaultView(),
 		)
-	} else {
-		objs = append(objs, c.networkPolicy())
 	}
 
 	objs = append(objs,
@@ -547,30 +549,32 @@ func (c *GuardianComponent) annotations() map[string]string {
 	return annotations
 }
 
-func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
-	return &netv1.NetworkPolicy{
+func ossNetworkPolicy() *v3.NetworkPolicy {
+	return &v3.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: GuardianName, Namespace: GuardianNamespace},
-		Spec: netv1.NetworkPolicySpec{
-			PodSelector: *selector.PodLabelSelector(GuardianDeploymentName),
-			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
-			Ingress: []netv1.NetworkPolicyIngressRule{
+		ObjectMeta: metav1.ObjectMeta{Name: GuardianPolicyName, Namespace: GuardianNamespace},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.CalicoTierName,
+			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress},
+			Ingress: []v3.Rule{
 				{
-					From: []netv1.NetworkPolicyPeer{
-						{
-							PodSelector: selector.PodLabelSelector(GoldmaneDeploymentName),
-						},
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source: v3.EntityRule{
+						Selector: networkpolicy.KubernetesAppSelector(GoldmaneDeploymentName),
 					},
-					Ports: []netv1.NetworkPolicyPort{{
-						Protocol: ptr.ToPtr(corev1.ProtocolTCP),
-						Port:     ptr.ToPtr(intstr.FromInt32(GuardianTargetPort)),
-					}},
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(GuardianTargetPort),
+					},
 				},
 				{
-					Ports: []netv1.NetworkPolicyPort{{
-						Protocol: ptr.ToPtr(corev1.ProtocolUDP),
-						Port:     ptr.ToPtr(intstr.FromInt32(53)),
-					}},
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.UDPProtocol,
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(53),
+					},
 				},
 			},
 		},
@@ -578,6 +582,10 @@ func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
 }
 
 func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
+	if cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise {
+		return ossNetworkPolicy(), nil
+	}
+
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -687,7 +695,7 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 
 	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
 
-	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(8080)}
+	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(GuardianTargetPort)}
 	networkpolicyHelper := networkpolicy.DefaultHelper()
 	var ingressRules []v3.Rule
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -750,7 +758,7 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,
@@ -1108,6 +1116,12 @@ func deprecatedObjects() []client.Object {
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"},
+		},
+
+		// Clean up deprecated k8s NetworkPolicy
+		&netv1.NetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "guardian", Namespace: GuardianNamespace},
 		},
 	}
 }

@@ -53,8 +53,8 @@ const (
 	ComplianceSnapshotterName                                 = "compliance-snapshotter"
 	ComplianceReporterName                                    = "compliance-reporter"
 	ComplianceBenchmarkerName                                 = "compliance-benchmarker"
-	ComplianceAccessPolicyName                                = networkpolicy.TigeraComponentPolicyPrefix + "compliance-access"
-	ComplianceServerPolicyName                                = networkpolicy.TigeraComponentPolicyPrefix + ComplianceServerName
+	ComplianceAccessPolicyName                                = networkpolicy.CalicoComponentPolicyPrefix + "compliance-access"
+	ComplianceServerPolicyName                                = networkpolicy.CalicoComponentPolicyPrefix + ComplianceServerName
 	MultiTenantComplianceManagedClustersAccessRoleBindingName = "compliance-server-managed-cluster-access"
 
 	// ServiceAccount names.
@@ -1634,7 +1634,7 @@ func (c *complianceComponent) complianceAccessCalicoSystemNetworkPolicy() *v3.Ne
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 	}
 
@@ -1662,7 +1662,7 @@ func (c *complianceComponent) complianceAccessCalicoSystemNetworkPolicy() *v3.Ne
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(ComplianceBenchmarkerName, ComplianceControllerName, ComplianceSnapshotterName, ComplianceReporterName),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,
@@ -1677,7 +1677,7 @@ func (c *complianceComponent) complianceServerCalicoSystemNetworkPolicy() *v3.Ne
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 		{
 			Action:      v3.Allow,
@@ -1728,7 +1728,7 @@ func (c *complianceComponent) complianceServerCalicoSystemNetworkPolicy() *v3.Ne
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(ComplianceServerName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,

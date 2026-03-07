@@ -127,6 +127,8 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 	// RBAC rules, SELinux options, and sidecar injection settings.
 	if cfg.Installation.KubernetesProvider.IsGKE() {
 		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
+		istioResOpts.IstiodOpts.Global.Platform = "gke"
+		istioResOpts.ZTunnelOpts.Global.Platform = "gke"
 	}
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {
 		istioResOpts.IstioCNIOpts.Global.Platform = "openshift"

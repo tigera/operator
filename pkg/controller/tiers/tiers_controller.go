@@ -24,6 +24,7 @@ import (
 	"github.com/go-logr/logr"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -34,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 
 	"github.com/tigera/operator/pkg/common"
@@ -132,6 +134,15 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// Try to delete allow-tigera deprecated tier
+	err = componentHandler.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(&v3.Tier{
+		TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+	}), nil)
+	if err != nil {
+		log.V(1).Info("Unable to delete deprecated allow-tigera tier at this time", "error", err)
 	}
 
 	r.status.ReadyToMonitor()

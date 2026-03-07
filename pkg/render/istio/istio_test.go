@@ -730,19 +730,40 @@ var _ = Describe("Istio Component Rendering", func() {
 		It("should render all workloads successfully on GKE", func() {
 			objsToCreate, objsToDelete := component.Objects()
 
-			Expect(objsToCreate).To(HaveLen(33))
+			// GKE adds: istio-cni ResourceQuota + ztunnel ResourceQuota
+			Expect(objsToCreate).To(HaveLen(34))
 			Expect(objsToDelete).To(HaveLen(3))
 
 			// Start with common resources and append GKE-specific ones
 			expectedResources := getCommonExpectedResources()
 			expectedResources = append(expectedResources,
-				// ResourceQuota (GKE specific)
+				// ResourceQuotas (GKE specific)
 				&corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni-resource-quota", Namespace: istio.IstioNamespace}},
+				&corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "ztunnel", Namespace: istio.IstioNamespace}},
 			)
 			expectedDeleteResources := getCommonExpectedDeleteResources()
 
 			rtest.ExpectResources(objsToCreate, expectedResources)
 			rtest.ExpectResources(objsToDelete, expectedDeleteResources)
+		})
+
+		It("should set PLATFORM env var on istiod", func() {
+			objsToCreate, _ := component.Objects()
+			deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, istio.IstioIstiodDeploymentName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			foundPlatformEnv := false
+			for _, container := range deployment.Spec.Template.Spec.Containers {
+				if container.Name == "discovery" {
+					for _, env := range container.Env {
+						if env.Name == "PLATFORM" {
+							Expect(env.Value).To(Equal("gke"))
+							foundPlatformEnv = true
+						}
+					}
+				}
+			}
+			Expect(foundPlatformEnv).To(BeTrue(), "Expected PLATFORM=gke env var on istiod")
 		})
 	})
 

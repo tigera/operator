@@ -336,6 +336,49 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
+	// Create a MutatingWebhookConfiguration for UISettings webhooks.
+	mwc := &admissionregistrationv1.MutatingWebhookConfiguration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "api.projectcalico.org",
+		},
+		Webhooks: []admissionregistrationv1.MutatingWebhook{
+			{
+				// This webhook handles authorization, mutation, and validation for UISettings resources.
+				// On Create it sets ownerReferences and user fields; on all operations it performs
+				// authorization checks against the parent UISettingsGroup.
+				Name: "uisettings.api.projectcalico.org",
+				Rules: []admissionregistrationv1.RuleWithOperations{
+					{
+						Operations: []admissionregistrationv1.OperationType{
+							admissionregistrationv1.Create,
+							admissionregistrationv1.Update,
+							admissionregistrationv1.Delete,
+						},
+						Rule: admissionregistrationv1.Rule{
+							APIGroups:   []string{"projectcalico.org"},
+							APIVersions: []string{"v3"},
+							Resources:   []string{"uisettings"},
+							Scope:       ptr.To(admissionregistrationv1.AllScopes),
+						},
+					},
+				},
+				ClientConfig: admissionregistrationv1.WebhookClientConfig{
+					Service: &admissionregistrationv1.ServiceReference{
+						Namespace: common.CalicoNamespace,
+						Name:      WebhooksName,
+						Path:      ptr.To("/uisettings"),
+					},
+					CABundle: c.cfg.KeyPair.GetCertificatePEM(),
+				},
+				AdmissionReviewVersions: []string{"v1"},
+				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
+				TimeoutSeconds:          ptr.To[int32](10),
+				FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
+				MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
+			},
+		},
+	}
+
 	// Create a ClusterRole and ClusterRoleBinding for the webhook service account.
 	rules := []rbacv1.PolicyRule{
 		{
@@ -377,7 +420,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	if np != nil {
 		objs = append(objs, np)
 	}
-	objs = append(objs, dep, svc, vwc, cr, crb)
+	objs = append(objs, dep, svc, vwc)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		objs = append(objs, mwc)
+	}
+	objs = append(objs, cr, crb)
 	return objs, nil
 }
 

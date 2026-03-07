@@ -201,10 +201,6 @@ func (t *tiersComponent) deprecatedResources() (objs []client.Object) {
 	calicoSystemClusterDNSPolicy := t.calicoSystemClusterDNSPolicy()
 	objs = append(objs,
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("cluster-dns", calicoSystemClusterDNSPolicy.Namespace),
-		&v3.Tier{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "projectcalico.org/v3", Kind: "Tier"},
-			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
-		},
 	)
 	return
 }

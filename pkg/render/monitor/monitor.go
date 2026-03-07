@@ -1254,7 +1254,7 @@ func calicoSystemPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 		{
 			Action:   v3.Allow,
@@ -1386,7 +1386,7 @@ func calicoSystemPrometheusOperatorPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		Destination: networkpolicy.KubeAPIServerEntityRule,
 	})
 
 	return &v3.NetworkPolicy{

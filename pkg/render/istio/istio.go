@@ -293,7 +293,7 @@ func (c *IstioComponent) istiodCalicoSystemPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 	}
 
@@ -336,7 +336,7 @@ func (c *IstioComponent) istioCNICalicoSystemPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 	}
 

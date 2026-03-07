@@ -598,7 +598,7 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 		{
 			Action:      v3.Allow,

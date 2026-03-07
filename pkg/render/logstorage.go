@@ -981,7 +981,7 @@ func (es *elasticsearchComponent) elasticsearchCalicoSystemPolicy() *v3.NetworkP
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 	}...)
 

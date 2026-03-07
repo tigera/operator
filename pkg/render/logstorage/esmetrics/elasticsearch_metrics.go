@@ -289,7 +289,7 @@ func (e *elasticsearchMetrics) calicoSystemPolicy() *v3.NetworkPolicy {
 		v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 	)
 

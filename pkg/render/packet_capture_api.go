@@ -352,7 +352,7 @@ func calicoSystemPolicy(cfg *PacketCaptureApiConfiguration) *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 	}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)

@@ -1052,7 +1052,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerCalicoSystemPo
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 		{
 			// Pass to subsequent tiers for further enforcement

@@ -810,7 +810,7 @@ var _ = Describe("LogCollector controller tests", func() {
 		It("create namespace, operator secrets role and pull secrets", func() {
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+			Expect(result.RequeueAfter).To(Equal(esDataFlowCheckInterval))
 
 			// Expect namespace to be created
 			namespace := corev1.Namespace{
@@ -910,9 +910,8 @@ var _ = Describe("LogCollector controller tests", func() {
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Should requeue to re-reconcile when the grace period expires.
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-			Expect(result.RequeueAfter).To(BeNumerically("~", 89*24*time.Hour, 1*time.Hour))
+			// Should requeue at the ES data flow check interval (shorter than grace period).
+			Expect(result.RequeueAfter).To(Equal(esDataFlowCheckInterval))
 
 			// DaemonSet should still exist during the grace period.
 			ds := appsv1.DaemonSet{

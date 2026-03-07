@@ -172,6 +172,7 @@ type ReconcileLogCollector struct {
 	licenseAPIReady *utils.ReadyFlag
 	tierWatchReady  *utils.ReadyFlag
 	opts            options.ControllerOptions
+	promClient      PrometheusClient
 }
 
 // GetLogCollector returns the default LogCollector instance with defaults populated.
@@ -710,6 +711,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		render.EKSLogForwarderTLSSecretName:   eksLogForwarderKeyPair,
 	}, r.status)
 
+	// Check ES data flow via Prometheus metrics.
+	r.checkESDataFlow(ctx, trustedBundle)
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 
@@ -724,7 +728,56 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
-	return reconcile.Result{RequeueAfter: graceRequeueAfter}, nil
+
+	// Requeue periodically to check ES data flow, or sooner if grace period requires it.
+	requeueAfter := esDataFlowCheckInterval
+	if graceRequeueAfter > 0 && graceRequeueAfter < requeueAfter {
+		requeueAfter = graceRequeueAfter
+	}
+	return reconcile.Result{RequeueAfter: requeueAfter}, nil
+}
+
+// checkESDataFlow queries Prometheus to check if data is flowing to Elasticsearch
+// and sets an appropriate info or warning message on the status.
+func (r *ReconcileLogCollector) checkESDataFlow(ctx context.Context, trustedBundle certificatemanagement.TrustedBundle) {
+	// Lazily initialize the Prometheus client.
+	if r.promClient == nil {
+		pc, err := newPrometheusClient(trustedBundle)
+		if err != nil {
+			log.Info("Failed to create Prometheus client for ES data flow check, will retry", "error", err)
+			return
+		}
+		r.promClient = pc
+	}
+
+	// Check if data was sent in the last 5 minutes.
+	recentFlow, err := r.promClient.QueryDataFlowing(ctx, esDataFlowInfoQuery)
+	if err != nil {
+		log.Info("Failed to query Prometheus for ES data flow, will retry", "error", err)
+		r.promClient = nil
+		return
+	}
+
+	if recentFlow {
+		r.status.ClearWarning(esDataFlowWarningKey)
+		r.status.SetInfo(esDataFlowWarningKey, "Data was successfully sent to Elasticsearch in the last 5 minutes")
+		return
+	}
+
+	// No data in 5 minutes — check the 30-minute window.
+	longerFlow, err := r.promClient.QueryDataFlowing(ctx, esDataFlowWarningQuery)
+	if err != nil {
+		log.Info("Failed to query Prometheus for ES data flow (30m), will retry", "error", err)
+		r.promClient = nil
+		return
+	}
+
+	r.status.ClearInfo(esDataFlowWarningKey)
+	if !longerFlow {
+		r.status.SetWarning(esDataFlowWarningKey, "Warning: No data has been sent to Elasticsearch in the last 30 minutes")
+	} else {
+		r.status.ClearWarning(esDataFlowWarningKey)
+	}
 }
 
 func getS3Credential(client client.Client) (*render.S3Credential, error) {

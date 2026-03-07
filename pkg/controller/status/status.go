@@ -72,6 +72,8 @@ type StatusManager interface {
 	RemoveCertificateSigningRequests(name string)
 	SetDegraded(reason operator.TigeraStatusReason, msg string, err error, log logr.Logger)
 	ClearDegraded()
+	SetInfo(key string, msg string)
+	ClearInfo(key string)
 	SetWarning(key string, msg string)
 	ClearWarning(key string)
 	IsAvailable() bool
@@ -97,6 +99,9 @@ type statusManager struct {
 	degraded               bool
 	explicitDegradedMsg    string
 	explicitDegradedReason operator.TigeraStatusReason
+
+	// infos stores informational messages keyed by component name.
+	infos map[string]string
 
 	// warnings stores warning messages keyed by component/secret name.
 	warnings map[string]string
@@ -138,6 +143,7 @@ func New(client client.Client, component string, kubernetesVersion *common.Versi
 		statefulsets:              make(map[string]types.NamespacedName),
 		cronjobs:                  make(map[string]types.NamespacedName),
 		certificatestatusrequests: make(map[string]map[string]string),
+		infos:                     make(map[string]string),
 		warnings:                  make(map[string]string),
 		kubernetesVersion:         kubernetesVersion,
 		crExists:                  crExists,
@@ -270,6 +276,7 @@ func (m *statusManager) OnCRNotFound() {
 	m.deployments = make(map[string]types.NamespacedName)
 	m.statefulsets = make(map[string]types.NamespacedName)
 	m.cronjobs = make(map[string]types.NamespacedName)
+	m.infos = make(map[string]string)
 	m.warnings = make(map[string]string)
 }
 
@@ -384,6 +391,40 @@ func (m *statusManager) ClearDegraded() {
 	m.degraded = false
 	m.explicitDegradedReason = ""
 	m.explicitDegradedMsg = ""
+}
+
+// SetInfo sets an informational message for the given key. Info messages are appended to the
+// Available condition message so they are visible in `kubectl get tigerastatus`.
+func (m *statusManager) SetInfo(key string, msg string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.infos[key] = msg
+}
+
+// ClearInfo removes the info message for the given key.
+func (m *statusManager) ClearInfo(key string) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	delete(m.infos, key)
+}
+
+// infoMessage returns all info messages joined by "; ", or empty if there are none.
+func (m *statusManager) infoMessage() string {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	if len(m.infos) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(m.infos))
+	for k := range m.infos {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	msgs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		msgs = append(msgs, m.infos[k])
+	}
+	return strings.Join(msgs, "; ")
 }
 
 // SetWarning sets a warning message for the given key. Warnings are appended to the Available
@@ -849,6 +890,9 @@ func (m *statusManager) availableMessage() string {
 	msg := "All objects available"
 	if w := m.warningMessage(); w != "" {
 		msg = msg + "; " + w
+	}
+	if i := m.infoMessage(); i != "" {
+		msg = msg + "; " + i
 	}
 	return msg
 }

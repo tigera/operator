@@ -181,11 +181,11 @@ func (t *trustedBundle) Volume() corev1.Volume {
 	}
 }
 
-func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
+// GetCertificatesPEM returns the PEM-encoded certificates in the bundle.
+func (t *trustedBundle) GetCertificatesPEM() []byte {
 	pemBuf := bytes.Buffer{}
 
 	// Sort the certificates so that we get a consistent ordering.
-	// This reduces the number of changes we see in the configmap.
 	var certs []CertificateInterface
 	certs = append(certs, t.certificates...)
 	sort.Slice(certs, func(i, j int) bool {
@@ -195,7 +195,11 @@ func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 		pemBuf.WriteString(fmt.Sprintf("# certificate name: %s/%s\n%s\n\n", cert.GetNamespace(), cert.GetName(), string(cert.GetCertificatePEM())))
 	}
 
-	pemStr := pemBuf.String()
+	return pemBuf.Bytes()
+}
+
+func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
+	pemStr := string(t.GetCertificatesPEM())
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

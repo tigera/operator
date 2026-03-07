@@ -99,6 +99,14 @@ func (m *MockStatus) ClearDegraded() {
 	m.Called()
 }
 
+func (m *MockStatus) SetInfo(key string, msg string) {
+	m.Called(key, msg)
+}
+
+func (m *MockStatus) ClearInfo(key string) {
+	m.Called(key)
+}
+
 func (m *MockStatus) SetWarning(key string, msg string) {
 	m.Called(key, msg)
 }

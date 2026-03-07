@@ -81,6 +81,8 @@ type TrustedBundle interface {
 	VolumeMounts(osType meta.OSType) []corev1.VolumeMount
 	Volume() corev1.Volume
 	AddCertificates(certificates ...CertificateInterface)
+	// GetCertificatesPEM returns the PEM-encoded certificates in the bundle.
+	GetCertificatesPEM() []byte
 }
 
 // Read-only version of a trusted bundle, useful for rendering components without needing to parse certificates.

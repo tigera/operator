@@ -39,6 +39,8 @@ import (
 var (
 	defaultTLSKeyPair        = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "key-pair"}}, nil, "")
 	defaultTrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
+	numExpectedObjects       = 7
+	numDeprecatedObjects     = 1
 )
 
 var _ = Describe("ComponentRendering", func() {
@@ -58,7 +60,7 @@ var _ = Describe("ComponentRendering", func() {
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
 				Goldmane:              &operatorv1.Goldmane{},
 			},
-			7, 0,
+			numExpectedObjects, numDeprecatedObjects,
 		),
 		Entry("Should return objects to delete when variant is not Calico",
 			&goldmane.Configuration{
@@ -70,7 +72,7 @@ var _ = Describe("ComponentRendering", func() {
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
 				Goldmane:              &operatorv1.Goldmane{},
 			},
-			0, 7,
+			0, numExpectedObjects+numDeprecatedObjects,
 		),
 	)
 

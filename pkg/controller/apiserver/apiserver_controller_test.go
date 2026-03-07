@@ -380,7 +380,32 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(policies.Items).To(HaveLen(0))
 		})
 
-		It("should omit calico-system policy and not degrade when installation is calico", func() {
+		It("should render calico-system policy when installation is calico when tier and tier watch are ready", func() {
+			Expect(netv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			installation.Spec.Variant = operatorv1.Calico
+			installation.Status.Variant = operatorv1.Calico
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+
+			r := ReconcileAPIServer{
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+
+			Expect(err).ShouldNot(HaveOccurred())
+			policies := v3.NetworkPolicyList{}
+			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(1))
+			Expect(policies.Items[0].Name).To(Equal("calico-system.apiserver-access"))
+		})
+
+		It("should omit calico-system policy and not degrade when installation is calico when tier is not ready", func() {
 			Expect(netv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			installation.Spec.Variant = operatorv1.Calico
 			installation.Status.Variant = operatorv1.Calico
@@ -388,9 +413,34 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			r := ReconcileAPIServer{
-				client: cli,
-				scheme: scheme,
-				status: mockStatus,
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+				},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+
+			Expect(err).ShouldNot(HaveOccurred())
+			policies := v3.NetworkPolicyList{}
+			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
+			Expect(policies.Items).To(HaveLen(0))
+		})
+
+		It("should omit calico-system policy and not degrade when installation is calico when tier watch is not ready", func() {
+			Expect(netv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+			installation.Spec.Variant = operatorv1.Calico
+			installation.Status.Variant = operatorv1.Calico
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+
+			r := ReconcileAPIServer{
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: notReady,
 				opts: options.ControllerOptions{
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,

@@ -274,6 +274,26 @@ func GetKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
 	return nil, nil
 }
 
+// WarningReporter is a minimal interface for reporting certificate warnings to a status manager.
+type WarningReporter interface {
+	SetWarning(key string, msg string)
+	ClearWarning(key string)
+}
+
+// CheckKeyPairWarnings checks each keypair for BYO certificate expiry warnings and reports them
+// to the status manager. For nil keypairs or keypairs without warnings, the warning is cleared.
+func CheckKeyPairWarnings(keyPairs map[string]KeyPairInterface, status WarningReporter) {
+	for key, kp := range keyPairs {
+		if kp != nil {
+			if w := kp.Warnings(); w != "" {
+				status.SetWarning(key, w)
+				continue
+			}
+		}
+		status.ClearWarning(key)
+	}
+}
+
 // NewKeyPair returns a KeyPair, which wraps a Secret object that contains a private key and a certificate. Whether certificate
 // management is configured or not, KeyPair returns the right InitContainer, Volumemount or Volume (when applicable).
 func NewKeyPair(secret *corev1.Secret, dnsNames []string, clusterDomain string) KeyPairInterface {

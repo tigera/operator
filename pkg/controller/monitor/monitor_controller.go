@@ -434,18 +434,10 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	r.status.ReadyToMonitor()
 
 	// Check BYO certificate expiry warnings.
-	for key, kp := range map[string]certificatemanagement.KeyPairInterface{
+	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
 		monitor.PrometheusServerTLSSecretName: serverTLSSecret,
 		monitor.PrometheusClientTLSSecretName: clientTLSSecret,
-	} {
-		if kp != nil {
-			if w := kp.Warnings(); w != "" {
-				r.status.SetWarning(key, w)
-				continue
-			}
-		}
-		r.status.ClearWarning(key)
-	}
+	}, r.status)
 
 	r.status.ClearDegraded()
 

@@ -369,14 +369,6 @@ func (c *Component) role() *rbacv1.Role {
 	}
 }
 
-func (c *Component) deploymentSelector() *metav1.LabelSelector {
-	return &metav1.LabelSelector{
-		MatchLabels: map[string]string{
-			"app.kubernetes.io/name": GoldmaneDeploymentName,
-		},
-	}
-}
-
 func (c *Component) networkPolicy() *v3.NetworkPolicy {
 	ingressRules := []v3.Rule{
 		{

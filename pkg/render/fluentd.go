@@ -66,7 +66,7 @@ const (
 	FluentdMetricsPort                       = 9081
 	FluentdInputPortName                     = "fluentd-http-input-port"
 	FluentdInputPort                         = 9880
-	FluentdPolicyName                        = networkpolicy.TigeraComponentPolicyPrefix + "allow-fluentd-node"
+	FluentdPolicyName                        = networkpolicy.CalicoComponentPolicyPrefix + "allow-fluentd-node"
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
 	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
@@ -1348,7 +1348,7 @@ func (c *fluentdComponent) calicoSystemPolicy() *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:                  &networkpolicy.HighPrecedenceOrder,
-			Tier:                   networkpolicy.TigeraComponentTierName,
+			Tier:                   networkpolicy.CalicoTierName,
 			Selector:               networkpolicy.KubernetesAppSelector(FluentdNodeName, fluentdNodeWindowsName),
 			ServiceAccountSelector: "",
 			Types:                  []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},

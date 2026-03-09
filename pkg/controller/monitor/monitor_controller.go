@@ -433,6 +433,12 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
 
+	// Check BYO certificate expiry warnings.
+	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+		monitor.PrometheusServerTLSSecretName: serverTLSSecret,
+		monitor.PrometheusClientTLSSecretName: clientTLSSecret,
+	}, r.status)
+
 	r.status.ClearDegraded()
 
 	if !r.status.IsAvailable() {

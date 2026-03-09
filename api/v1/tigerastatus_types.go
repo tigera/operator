@@ -45,6 +45,7 @@ type TigeraStatusStatus struct {
 // +kubebuilder:printcolumn:name="Progressing",type="string",JSONPath=".status.conditions[?(@.type=='Progressing')].status",description="Whether the component is processing changes."
 // +kubebuilder:printcolumn:name="Degraded",type="string",JSONPath=".status.conditions[?(@.type=='Degraded')].status",description="Whether the component is degraded."
 // +kubebuilder:printcolumn:name="Since",type="date",JSONPath=".status.conditions[?(@.type=='Available')].lastTransitionTime",description="The time the component's Available status last changed."
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[?(@.type=='Degraded')].message",description="Error message when the component is degraded.",priority=0
 type TigeraStatus struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

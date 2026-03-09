@@ -46,7 +46,7 @@ const (
 	ElasticsearchMetricsServerTLSSecret = "tigera-ee-elasticsearch-metrics-tls"
 	ElasticsearchMetricsName            = "tigera-elasticsearch-metrics"
 	ElasticsearchMetricsRoleName        = "tigera-elasticsearch-metrics"
-	ElasticsearchMetricsPolicyName      = networkpolicy.TigeraComponentPolicyPrefix + "elasticsearch-metrics"
+	ElasticsearchMetricsPolicyName      = networkpolicy.CalicoComponentPolicyPrefix + "elasticsearch-metrics"
 	ElasticsearchMetricsPort            = 9081
 )
 
@@ -289,7 +289,7 @@ func (e *elasticsearchMetrics) calicoSystemPolicy() *v3.NetworkPolicy {
 		v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
 		},
 	)
 
@@ -301,7 +301,7 @@ func (e *elasticsearchMetrics) calicoSystemPolicy() *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:                  &networkpolicy.HighPrecedenceOrder,
-			Tier:                   networkpolicy.TigeraComponentTierName,
+			Tier:                   networkpolicy.CalicoTierName,
 			Selector:               networkpolicy.KubernetesAppSelector(ElasticsearchMetricsName),
 			ServiceAccountSelector: "",
 			Types:                  []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},

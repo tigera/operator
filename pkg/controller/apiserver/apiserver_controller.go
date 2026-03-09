@@ -464,6 +464,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	var components []render.Component
 
+	var webhooksTLS certificatemanagement.KeyPairInterface
 	certKeyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 	}
@@ -481,7 +482,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		//
 		// The network policy is included within the webhooks component so it is reconciled alongside
 		// the Deployment. The TLS keypair is provisioned by the CertificateManagement component below.
-		webhooksTLS, err := certificateManager.GetOrCreateKeyPair(
+		webhooksTLS, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
 			webhooks.WebhooksTLSSecretName,
 			common.OperatorNamespace(),
@@ -537,6 +538,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 	}
+
+	// Check BYO certificate expiry warnings.
+	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+		render.CalicoAPIServerTLSSecretName: tlsSecret,
+		webhooks.WebhooksTLSSecretName:      webhooksTLS,
+	}, r.status)
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

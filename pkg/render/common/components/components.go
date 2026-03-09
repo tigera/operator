@@ -36,6 +36,26 @@ import (
 
 var log = logf.Log.WithName("components")
 
+// containerNameAliases maps deprecated container names to their current names.
+// When a user provides an override using a deprecated name, it is transparently
+// resolved to the current name before matching against rendered containers.
+// To support a rename: add an entry mapping old name → current name.
+// Values must not also appear as keys (no transitive aliases).
+var containerNameAliases = map[string]string{
+	"tigera-manager":  "calico-manager",
+	"tigera-voltron":  "calico-voltron",
+	"tigera-ui-apis":  "calico-ui-apis",
+	"tigera-es-proxy": "calico-ui-apis",
+	"tigera-voltron-linseed-tls-key-cert-provisioner": "calico-voltron-linseed-tls-key-cert-provisioner",
+}
+
+func resolveContainerName(name string) string {
+	if current, ok := containerNameAliases[name]; ok {
+		return current
+	}
+	return name
+}
+
 // replicatedPodResource contains the overridable data for a Deployment or DaemonSet.
 type replicatedPodResource struct {
 	labels             map[string]string
@@ -151,7 +171,7 @@ func valueToContainers(value reflect.Value) []corev1.Container {
 		ports := valueToContainerPorts(v)
 		if !resources.IsNil() || ports != nil {
 			container := corev1.Container{
-				Name: name.String(),
+				Name: resolveContainerName(name.String()),
 			}
 			if !resources.IsNil() {
 				container.Resources = *(resources.Interface().(*corev1.ResourceRequirements))

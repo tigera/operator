@@ -82,6 +82,8 @@ var _ = Describe("Monitor controller tests", func() {
 		mockStatus.On("AddDeployments", mock.Anything).Return()
 		mockStatus.On("AddStatefulSets", mock.Anything)
 		mockStatus.On("ClearDegraded")
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return()
+		mockStatus.On("ClearWarning", mock.Anything).Return()
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")

@@ -303,6 +303,11 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		}
 	}
 
+	// Check BYO certificate expiry warnings.
+	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+		render.PacketCaptureServerCert: packetCaptureCertSecret,
+	}, r.status)
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 

@@ -429,6 +429,11 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		}
 	}
 
+	// Check BYO certificate expiry warnings.
+	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+		render.DexTLSSecretName: tlsKeyPair,
+	}, r.status)
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 

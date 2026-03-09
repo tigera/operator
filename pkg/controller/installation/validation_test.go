@@ -245,7 +245,7 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	// Previously, IPIP encapsulation were only possible with BGP enabled,
+	// Previously, IPIP encapsulation were only supported with BGP enabled,
 	// however, Felix can do the same thing now which means IPIP with BGP disabled
 	// is supported.
 	It("should allow IPIP if BGP is disabled", func() {

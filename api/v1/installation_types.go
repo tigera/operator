@@ -614,6 +614,11 @@ type CalicoNetworkSpec struct {
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	BGP *BGPOption `json:"bgp,omitempty"`
 
+	// BGP configures whether or not to enable Calico's BGP capabilities.
+	// +optional
+	// +kubebuilder:validation:Enum=BIRD;Felix
+	ClusterRoutingMode *string `json:"clusterRoutingMode,omitempty"`
+
 	// IPPools contains a list of IP pools to manage. If nil, a single IPv4 IP pool
 	// will be created by the operator. If an empty list is provided, the operator will not create any IP pools and will instead
 	// wait for IP pools to be created out-of-band.

@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"time"
 
@@ -207,16 +208,32 @@ func tlsSecretMetadata(certPEM []byte) (labels map[string]string, annotations ma
 	return labels, annotations
 }
 
+// labelUnsafe matches any character that is not alphanumeric, '-', '_', or '.'.
+var labelUnsafe = regexp.MustCompile(`[^A-Za-z0-9_.\-]`)
+
 // signerLabelValue returns a Kubernetes-label-safe signer identifier from the
-// issuer CN, truncated to 63 chars to satisfy the label value length limit.
+// issuer CN. It replaces invalid characters with '-', trims leading/trailing
+// non-alphanumeric characters, and truncates to 63 chars to satisfy the label
+// value constraints.
 func signerLabelValue(cn string) string {
-	if cn == "" {
+	// Replace any character not in [A-Za-z0-9_.-] with '-'.
+	v := labelUnsafe.ReplaceAllString(cn, "-")
+
+	// Trim leading/trailing characters that are not alphanumeric.
+	v = strings.TrimLeft(v, "-_.")
+	v = strings.TrimRight(v, "-_.")
+
+	// Truncate to 63 characters, then trim any trailing non-alphanumeric
+	// chars that truncation may have exposed.
+	if len(v) > 63 {
+		v = v[:63]
+		v = strings.TrimRight(v, "-_.")
+	}
+
+	if v == "" {
 		return "unknown"
 	}
-	if len(cn) > 63 {
-		return cn[:63]
-	}
-	return cn
+	return v
 }
 
 // ipStrings converts a slice of net.IP to their string representations.

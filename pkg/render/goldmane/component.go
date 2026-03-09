@@ -19,10 +19,12 @@ import (
 	"fmt"
 	"path/filepath"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -48,6 +50,7 @@ const (
 	GoldmaneRoleName           = GoldmaneName
 	GoldmaneServicePort        = 7443
 	GoldmaneContainerName      = "goldmane"
+	GoldmanePolicyName         = networkpolicy.CalicoComponentPolicyPrefix + GoldmaneName
 
 	GoldmaneKeyPairSecret = "goldmane-key-pair"
 	GoldmaneServiceName   = "goldmane"
@@ -125,15 +128,19 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GoldmaneNamespace, c.cfg.PullSecrets...)...)...)
 
 	// Goldmane needs to be removed if the installation is not Calico, since it's not supported (yet!) for any other variant.
+	var objsToDelete []client.Object
 	if c.cfg.Installation.Variant == operatorv1.Calico {
-		var objsToDelete []client.Object
 		if c.metricsPort() == 0 {
 			objsToDelete = append(objsToDelete, c.metricsService())
 		}
-		return objs, objsToDelete
 	} else {
-		return nil, objs
+		objsToDelete = objs
+		objs = nil
 	}
+
+	objsToDelete = append(objsToDelete, c.deprecatedObjects()...)
+
+	return objs, objsToDelete
 }
 
 func (c *Component) Ready() bool {
@@ -370,30 +377,45 @@ func (c *Component) deploymentSelector() *metav1.LabelSelector {
 	}
 }
 
-func (c *Component) networkPolicy() *netv1.NetworkPolicy {
-	ingressRules := []netv1.NetworkPolicyIngressRule{
+func (c *Component) networkPolicy() *v3.NetworkPolicy {
+	ingressRules := []v3.Rule{
 		{
-			Ports: []netv1.NetworkPolicyPort{{
-				Protocol: ptr.ToPtr(corev1.ProtocolTCP),
-				Port:     ptr.ToPtr(intstr.FromInt32(GoldmaneServicePort)),
-			}},
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(GoldmaneServicePort),
+			},
 		},
 	}
 	if port := c.metricsPort(); port != 0 {
-		ingressRules = append(ingressRules, netv1.NetworkPolicyIngressRule{
-			Ports: []netv1.NetworkPolicyPort{{
-				Protocol: ptr.ToPtr(corev1.ProtocolTCP),
-				Port:     ptr.ToPtr(intstr.FromInt32(port)),
-			}},
+		ingressRules = append(ingressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(uint16(port)),
+			},
 		})
 	}
-	return &netv1.NetworkPolicy{
-		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: GoldmaneName, Namespace: GoldmaneNamespace},
-		Spec: netv1.NetworkPolicySpec{
-			PodSelector: *c.deploymentSelector(),
-			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
-			Ingress:     ingressRules,
+	return &v3.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{Name: GoldmanePolicyName, Namespace: GoldmaneNamespace},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.CalicoTierName,
+			Selector: networkpolicy.KubernetesAppSelector(GoldmaneDeploymentName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress},
+			Ingress:  ingressRules,
+		},
+	}
+}
+
+// deprecatedObjects returns any objects that should be removed when Goldmane is enabled, but were used in
+// previous versions of the operator.
+func (c *Component) deprecatedObjects() []client.Object {
+	return []client.Object{
+		// Deprecates k8s NetworkPolicy because Calico components now also have Tiers component enabled.
+		&netv1.NetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "goldmane", Namespace: GoldmaneNamespace},
 		},
 	}
 }

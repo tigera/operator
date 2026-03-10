@@ -89,6 +89,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return()
+		mockStatus.On("ClearWarning", mock.Anything).Return()
 		mockStatus.On("SetDegraded", operatorv1.InvalidConfigurationError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("SetDegraded", operatorv1.ResourceUpdateError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()

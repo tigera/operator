@@ -393,6 +393,13 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			Resources: []string{"subjectaccessreviews"},
 			Verbs:     []string{"create"},
 		},
+		{
+			// The ManagedCluster cleanup controller watches ManagedCluster objects and clears their
+			// installation manifest field after creation.
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"managedclusters"},
+			Verbs:     []string{"list", "watch", "update"},
+		},
 	}
 
 	cr := &rbacv1.ClusterRole{

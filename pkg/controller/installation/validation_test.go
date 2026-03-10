@@ -245,12 +245,56 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	// Previously, IPIP encapsulation were only supported with BGP enabled,
-	// however, Felix can do the same thing now which means IPIP with BGP disabled
-	// is supported.
-	It("should allow IPIP if BGP is disabled", func() {
+	It("should prevent IPIP with BGP disabled in BIRD cluster routing mode", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationIPIP,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should prevent IPIP cross-subnet with BGP disabled in BIRD cluster routing mode", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationIPIPCrossSubnet,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should prevent no-encap with BGP disabled in BIRD cluster routing mode", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationNone,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should allow IPIP with BGP disabled in Felix cluster routing mode", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		clusterRoutingMode := "Felix"
+		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
 				CIDR:          "192.168.0.0/24",
@@ -263,13 +307,32 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should allow IPIP cross-subnet if BGP is disabled", func() {
+	It("should allow IPIP cross-subnet with BGP disabled in Felix cluster routing mode", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled
+		clusterRoutingMode := "Felix"
+		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
 				CIDR:          "192.168.0.0/24",
 				Encapsulation: operator.EncapsulationIPIPCrossSubnet,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should allow no-encap with BGP disabled in Felix cluster routing mode", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		clusterRoutingMode := "Felix"
+		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationNone,
 				NATOutgoing:   operator.NATOutgoingEnabled,
 				NodeSelector:  "all()",
 			},

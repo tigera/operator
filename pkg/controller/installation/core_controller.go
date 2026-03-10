@@ -2038,9 +2038,25 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 func (r *ReconcileInstallation) setDefaultsOnBGPConfiguration(ctx context.Context, install *operatorv1.Installation, bgpConfig *v3.BGPConfiguration, reqLogger logr.Logger, needNsMigration bool) (bool, error) {
 	updated := false
 
-	if install.Spec.CalicoNetwork.ClusterRoutingMode == "BGP" && bgpConfig.Spec.
+	desiredValue := "Enabled"
+	if felixProgramsClusterRoutes(install) {
+		desiredValue = "Disabled"
+	}
+
+	if bgpConfig.Spec.ProgramClusterRoutes != nil && *bgpConfig.Spec.ProgramClusterRoutes != desiredValue {
+		bgpConfig.Spec.ProgramClusterRouts = &desiredValue
+		updated = true
+	}
 
 	return updated, nil
+}
+
+func felixProgramsClusterRoutes(install *operatorv1.Installation) bool {
+	if install.Spec.CalicoNetwork != nil && install.Spec.CalicoNetwork.ClusterRoutingMode != nil &&
+		*install.Spec.CalicoNetwork.ClusterRoutingMode == "Felix" {
+		return true
+	}
+	return false
 }
 
 // setBPFUpdatesOnFelixConfiguration will take the passed in fc and update any BPF properties needed

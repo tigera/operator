@@ -512,6 +512,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{
 					"clusterinformations",
 					"felixconfigurations",
+					"bgpconfigurations",
 					"ippools",
 				},
 				Verbs: []string{"create", "update"},

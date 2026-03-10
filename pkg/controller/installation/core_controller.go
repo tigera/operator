@@ -2038,7 +2038,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 func (r *ReconcileInstallation) setDefaultsOnBGPConfiguration(ctx context.Context, install *operatorv1.Installation, bgpConfig *v3.BGPConfiguration, reqLogger logr.Logger, needNsMigration bool) (bool, error) {
 	updated := false
 
-	if install.Spec.CalicoNetwork.ClusterRoutingMode == "BGP" && bgpConfig.Spe
+	if install.Spec.CalicoNetwork.ClusterRoutingMode == "BGP" && bgpConfig.Spec.
 
 	return updated, nil
 }

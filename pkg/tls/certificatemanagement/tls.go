@@ -60,11 +60,15 @@ func CreateSelfSignedSecret(secretName, namespace, cn string, altNames []string)
 	if err := pem.Encode(&certPem, &pem.Block{Type: blockTypeCert, Bytes: cert}); err != nil {
 		panic(err)
 	}
+	labels, annotations := tlsSecretMetadata(certPem.Bytes())
+
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      secretName,
-			Namespace: namespace,
+			Name:        secretName,
+			Namespace:   namespace,
+			Labels:      labels,
+			Annotations: annotations,
 		},
 		Data: map[string][]byte{
 			corev1.TLSCertKey:       certPem.Bytes(),

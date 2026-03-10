@@ -664,6 +664,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Check BYO certificate expiry warnings.
+	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+		render.FluentdPrometheusTLSSecretName: fluentdKeyPair,
+		render.EKSLogForwarderTLSSecretName:   eksLogForwarderKeyPair,
+	}, r.status)
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 

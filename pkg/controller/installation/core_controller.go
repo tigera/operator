@@ -1626,6 +1626,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Check BYO certificate expiry warnings and propagate them to the status manager.
+	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+		render.TyphaTLSSecretName:                                    typhaNodeTLS.TyphaSecret,
+		render.NodeTLSSecretName:                                     typhaNodeTLS.NodeSecret,
+		render.TyphaTLSSecretName + render.TyphaNonClusterHostSuffix: typhaNodeTLS.TyphaSecretNonClusterHost,
+		render.NodePrometheusTLSServerSecret:                         nodePrometheusTLS,
+		kubecontrollers.KubeControllerPrometheusTLSSecret:            kubeControllerTLS,
+	}, r.status)
+
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
 

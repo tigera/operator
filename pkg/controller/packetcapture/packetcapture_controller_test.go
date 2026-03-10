@@ -138,6 +138,8 @@ var _ = Describe("packet capture controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return()
+		mockStatus.On("ClearWarning", mock.Anything).Return()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 		mockStatus.On("SetDegraded", "Waiting for LicenseKeyAPI to be ready", "").Return().Maybe()

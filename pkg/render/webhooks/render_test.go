@@ -138,6 +138,31 @@ var _ = Describe("Webhooks rendering tests", func() {
 				components.ComponentTigeraWebhooks.Version)))
 	})
 
+	It("should set control plane tolerations by default", func() {
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.Tolerations).To(ConsistOf(
+			corev1.Toleration{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
+			corev1.Toleration{Key: "node-role.kubernetes.io/control-plane", Effect: corev1.TaintEffectNoSchedule},
+		))
+	})
+
+	It("should use ControlPlaneReplicas from the installation", func() {
+		var replicas int32 = 3
+		installation.ControlPlaneReplicas = &replicas
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(*dep.Spec.Replicas).To(Equal(int32(3)))
+		Expect(dep.Spec.Template.Spec.Affinity).NotTo(BeNil())
+		Expect(dep.Spec.Template.Spec.Affinity.PodAntiAffinity).NotTo(BeNil())
+	})
+
 	It("should apply deployment overrides", func() {
 		apiServerSpec.CalicoWebhooksDeployment = &operatorv1.CalicoWebhooksDeployment{
 			Spec: &operatorv1.CalicoWebhooksDeploymentSpec{

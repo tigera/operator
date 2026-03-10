@@ -187,6 +187,22 @@ func AddBindingForKubeSystemNode(crb *rbacv1.ClusterRoleBinding) {
 	})
 }
 
+// AddBindingForKubeSystemCNIPlugin updates the ClusterRoleBinding passed in
+// to also bind the calico-cni-plugin service account in the kube-system namespace.
+// During migration, nodes that haven't been migrated yet still run the CNI plugin
+// as kube-system:calico-cni-plugin. Without this binding, pod creation fails on
+// those nodes because the CNI plugin loses permissions to access Calico CRDs.
+func AddBindingForKubeSystemCNIPlugin(crb *rbacv1.ClusterRoleBinding) {
+	if crb.Subjects == nil {
+		crb.Subjects = []rbacv1.Subject{}
+	}
+	crb.Subjects = append(crb.Subjects, rbacv1.Subject{
+		Kind:      "ServiceAccount",
+		Name:      "calico-cni-plugin",
+		Namespace: kubeSystem,
+	})
+}
+
 // We create a cluster role and cluster role binding to give the kube-system calico-node
 // permissions to create serviceaccount tokens. This is needed to make sure that the down-level calico-node maintains
 // the permissions it needs in order to launch, since the calico-node clusterrole is shared with the

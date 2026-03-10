@@ -1210,7 +1210,7 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 	}
 	if in.ClusterRoutingMode != nil {
 		in, out := &in.ClusterRoutingMode, &out.ClusterRoutingMode
-		*out = new(string)
+		*out = new(ClusterRoutingMode)
 		**out = **in
 	}
 	if in.IPPools != nil {

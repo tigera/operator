@@ -1147,7 +1147,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			return false, err
 		}
-		return u || u2, nil
+
+		// Configure cluster routing mode.
+		u3, err := r.setClusterRoutingOnFelixConfiguration(ctx, instance, fc, reqLogger)
+		if err != nil {
+			return false, err
+		}
+
+		updated := u || u2 || u3
+		return updated, nil
 	})
 	if err != nil {
 		return reconcile.Result{}, err
@@ -1156,17 +1164,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Set any non-default BGPConfiguration values that we need.
 	_, err = utils.PatchBGPConfiguration(ctx, r.client, func(bgpConfig *v3.BGPConfiguration) (bool, error) {
 		// Configure defaults.
-		u, err := r.setDefaultsOnBGPConfiguration(ctx, instance, bgpConfig, reqLogger, needsNamespaceMigration)
+		u, err := r.setClusterRoutingOnBGPConfiguration(ctx, instance, bgpConfig, reqLogger)
 		if err != nil {
 			return false, err
 		}
 
-		// Configure nftables mode.
-		u2, err := r.setNftablesMode(ctx, instance, fc, reqLogger)
-		if err != nil {
-			return false, err
-		}
-		return u || u2, nil
+		return u, nil
 	})
 	if err != nil {
 		return reconcile.Result{}, err
@@ -2035,17 +2038,46 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 
 // setDefaultOnBGPConfiguration will take the passed in bgpConfig and add any defaulting needed
 // based on the install config.
-func (r *ReconcileInstallation) setDefaultsOnBGPConfiguration(ctx context.Context, install *operatorv1.Installation, bgpConfig *v3.BGPConfiguration, reqLogger logr.Logger, needNsMigration bool) (bool, error) {
+func (r *ReconcileInstallation) setClusterRoutingOnFelixConfiguration(
+	ctx context.Context,
+	install *operatorv1.Installation,
+	fc *v3.FelixConfiguration,
+	reqLogger logr.Logger,
+) (bool, error) {
 	updated := false
+	desiredValue := "Disabled"
+	if felixProgramsClusterRoutes(install) {
+		desiredValue = "Enabled"
+	}
 
+	if fc.Spec.ProgramClusterRoutes == nil || *fc.Spec.ProgramClusterRoutes != desiredValue {
+		fc.Spec.ProgramClusterRoutes = &desiredValue
+		updated = true
+		reqLogger.Info("Patching FelixConfiguration", "programClusterRoutes", desiredValue)
+	}
+
+	return updated, nil
+}
+
+// setDefaultOnBGPConfiguration will take the passed in bgpConfig and add any defaulting needed
+// based on the install config.
+func (r *ReconcileInstallation) setClusterRoutingOnBGPConfiguration(
+	ctx context.Context,
+	install *operatorv1.Installation,
+	bgpConfig *v3.BGPConfiguration,
+	reqLogger logr.Logger,
+) (bool, error) {
+	updated := false
 	desiredValue := "Enabled"
+
 	if felixProgramsClusterRoutes(install) {
 		desiredValue = "Disabled"
 	}
 
-	if bgpConfig.Spec.ProgramClusterRoutes != nil && *bgpConfig.Spec.ProgramClusterRoutes != desiredValue {
-		bgpConfig.Spec.ProgramClusterRouts = &desiredValue
+	if bgpConfig.Spec.ProgramClusterRoutes == nil || *bgpConfig.Spec.ProgramClusterRoutes != desiredValue {
+		bgpConfig.Spec.ProgramClusterRoutes = &desiredValue
 		updated = true
+		reqLogger.Info("Patching BGPConfiguration", "programClusterRoutes", desiredValue)
 	}
 
 	return updated, nil

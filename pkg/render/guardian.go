@@ -88,11 +88,11 @@ func Guardian(cfg *GuardianConfiguration) Component {
 func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 	var policies []client.Object
 
-	if cfg.IncludeEgressNetworkPolicy {
-		guardianAccessPolicy, err := guardianCalicoSystemPolicy(cfg)
-		if err != nil {
-			return nil, err
-		}
+	guardianAccessPolicy, err := guardianCalicoSystemPolicy(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if guardianAccessPolicy != nil {
 		policies = []client.Object{
 			guardianAccessPolicy,
 			networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
@@ -584,6 +584,10 @@ func ossNetworkPolicy() *v3.NetworkPolicy {
 func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
 	if cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise {
 		return ossNetworkPolicy(), nil
+	}
+
+	if !cfg.IncludeEgressNetworkPolicy {
+		return nil, nil
 	}
 
 	egressRules := []v3.Rule{

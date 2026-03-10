@@ -27,6 +27,7 @@ import (
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -112,7 +113,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: ptr.To[int32](1),
+			Replicas: c.cfg.Installation.ControlPlaneReplicas,
 			Strategy: appsv1.DeploymentStrategy{
 				// Use RollingUpdate to avoid downtime during rollouts. Since this is a webhook with
 				// FailurePolicy=Fail, using Recreate would cause a window where no webhook pod is running,
@@ -130,6 +131,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				Spec: corev1.PodSpec{
 					HostNetwork:        render.HostNetworkRequired(c.cfg.Installation),
 					ServiceAccountName: WebhooksName,
+					Tolerations:        c.tolerations(),
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers: []corev1.Container{{
 						Name:            WebhooksName,
@@ -171,6 +173,10 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 			},
 		},
+	}
+
+	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
+		dep.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(WebhooksName, []string{common.CalicoNamespace})
 	}
 
 	if overrides := c.cfg.APIServer.CalicoWebhooksDeployment; overrides != nil {
@@ -430,4 +436,16 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 
 func (c *component) Ready() bool {
 	return true
+}
+
+// tolerations creates the tolerations used by the webhooks deployment.
+func (c *component) tolerations() []corev1.Toleration {
+	if render.HostNetworkRequired(c.cfg.Installation) {
+		return rmeta.TolerateAll
+	}
+	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+	return tolerations
 }

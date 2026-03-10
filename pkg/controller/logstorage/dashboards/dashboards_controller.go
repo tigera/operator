@@ -156,7 +156,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("log-storage-dashboards-controller failed to watch installer job: %v", err)
 	}
 
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, r.tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 		{Name: dashboards.PolicyName, Namespace: helper.InstallNamespace()},
 	})
@@ -210,7 +210,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
-	if err := d.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+	if err := d.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			d.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for calico-system tier to be created", err, reqLogger)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil

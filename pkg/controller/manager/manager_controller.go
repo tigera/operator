@@ -723,6 +723,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// Check BYO certificate expiry warnings.
+	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+		render.ManagerTLSSecretName:         tlsSecret,
+		render.ManagerInternalTLSSecretName: internalTrafficSecret,
+		render.VoltronLinseedTLS:            linseedVoltronServerCert,
+	}, r.status)
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 	instance.Status.State = operatorv1.TigeraStatusReady

@@ -92,6 +92,21 @@ var _ = Describe("Webhooks rendering tests", func() {
 		}
 
 		rtest.ExpectResources(resources, expectedResources)
+
+		// Verify the ClusterRole includes expected rules.
+		cr := rtest.GetResource(resources, webhooks.WebhooksName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(cr.Rules).To(ContainElements(
+			rbacv1.PolicyRule{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"subjectaccessreviews"},
+				Verbs:     []string{"create"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"list", "watch", "update"},
+			},
+		))
 	})
 
 	It("should render all resources for Enterprise with the correct image", func() {

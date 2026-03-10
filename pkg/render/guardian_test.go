@@ -334,11 +334,11 @@ var _ = Describe("Rendering tests", func() {
 			It("should render OSS network policy regardless of IncludeEgressNetworkPolicy flag", func() {
 				// OSS variant should always render a network policy, even when IncludeEgressNetworkPolicy is false
 				renderGuardianPolicy("127.0.0.1:1234", false, operatorv1.Calico, false)
-				
+
 				policyName := types.NamespacedName{Name: "calico-system.guardian-access", Namespace: "calico-system"}
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy).NotTo(BeNil(), "OSS variant should always render a network policy")
-				
+
 				// Verify it's the OSS policy (should only have Ingress type, no Egress)
 				Expect(policy.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress))
 				Expect(policy.Spec.Egress).To(BeEmpty())
@@ -347,7 +347,7 @@ var _ = Describe("Rendering tests", func() {
 			It("should not render Enterprise network policy when IncludeEgressNetworkPolicy is false", func() {
 				// Enterprise variant with IncludeEgressNetworkPolicy=false should not render any policy
 				renderGuardianPolicy("127.0.0.1:1234", false, operatorv1.TigeraSecureEnterprise, false)
-				
+
 				policyName := types.NamespacedName{Name: "calico-system.guardian-access", Namespace: "calico-system"}
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy).To(BeNil(), "Enterprise variant with IncludeEgressNetworkPolicy=false should not render a network policy")
@@ -356,11 +356,11 @@ var _ = Describe("Rendering tests", func() {
 			It("should render Enterprise network policy when IncludeEgressNetworkPolicy is true", func() {
 				// Enterprise variant with IncludeEgressNetworkPolicy=true should render the full policy
 				renderGuardianPolicy("127.0.0.1:1234", false, operatorv1.TigeraSecureEnterprise, true)
-				
+
 				policyName := types.NamespacedName{Name: "calico-system.guardian-access", Namespace: "calico-system"}
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy).NotTo(BeNil(), "Enterprise variant with IncludeEgressNetworkPolicy=true should render a network policy")
-				
+
 				// Verify it's the Enterprise policy (should have both Ingress and Egress types)
 				Expect(policy.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
 				Expect(policy.Spec.Egress).NotTo(BeEmpty())

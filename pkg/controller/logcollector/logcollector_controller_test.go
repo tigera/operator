@@ -79,6 +79,8 @@ var _ = Describe("LogCollector controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return()
+		mockStatus.On("ClearWarning", mock.Anything).Return()
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()

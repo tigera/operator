@@ -500,6 +500,11 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
+	// Check BYO certificate expiry warnings.
+	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+		render.CalicoAPIServerTLSSecretName: tlsSecret,
+	}, r.status)
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 

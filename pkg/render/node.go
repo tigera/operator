@@ -355,6 +355,9 @@ func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 			},
 		},
 	}
+	if c.cfg.MigrateNamespaces {
+		migration.AddBindingForKubeSystemCNIPlugin(crb)
+	}
 	return crb
 }
 

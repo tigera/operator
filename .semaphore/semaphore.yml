@@ -126,11 +126,13 @@ blocks:
           execution_time_limit:
             minutes: 30
           commands:
-            - make ut
+            - make ut 2>&1 | tee ut.log
             - make dirty-check
       epilogue:
+        always:
           commands:
-            - '[[ -d ./report/ut ]] && test-results publish ./report/ut'
+            - '[[ -f ut.log ]] && artifact push job ut.log'
+            - '[[ -d ./report/ut ]] && test-results publish --name "UT" ./report/ut'
 
   - name: 'FV'
     dependencies: [ "Build amd64" ]
@@ -144,11 +146,29 @@ blocks:
           execution_time_limit:
             minutes: 60
           commands:
-            - make fv
+            - make fv 2>&1 | tee fv.log
             - make dirty-check
       epilogue:
+        always:
           commands:
-            - '[[ -d ./report/fv ]] && test-results publish ./report/fv'
+            - '[[ -f fv.log ]] && artifact push job fv.log'
+            - '[[ -d ./report/fv ]] && test-results publish --name "FV" ./report/fv'
+
+  - name: Release tooling
+    dependencies:
+      - Pre-commit verification
+    run:
+      when: change_in('/hack/release/')
+    task:
+      jobs:
+        - name: "Run tests"
+          execution_time_limit:
+            minutes: 30
+          commands:
+            - make hack/release/ut
+      epilogue:
+        commands:
+          - '[[ -d ./report/release ]] && test-results publish --name "Release tool: tests" ./report/release'
 
 after_pipeline:
   task:

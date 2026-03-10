@@ -70,6 +70,59 @@ func GetFelixConfiguration(ctx context.Context, c client.Client) (*v3.FelixConfi
 	return fc, nil
 }
 
+func PatchBGPConfiguration(
+	ctx context.Context,
+	c client.Client,
+	patchFn func(bgpc *v3.BGPConfiguration) (bool, error),
+) (*v3.BGPConfiguration, error) {
+	// Fetch any existing default BGPConfiguration object.
+	bgpConfig := &v3.BGPConfiguration{}
+	err := c.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfig)
+	if err != nil && !errors.IsNotFound(err) {
+		return nil, fmt.Errorf("unable to read BGPConfiguration: %w", err)
+	}
+
+	// Create a base state for the upcoming patch operation.
+	patchFrom := client.MergeFrom(bgpConfig.DeepCopy())
+
+	if err = RestoreV3Metadata(bgpConfig); err != nil {
+		return nil, err
+	}
+
+	// Apply desired changes to the BGPConfiguration.
+	updated, err := patchFn(bgpConfig)
+	if err != nil {
+		return nil, err
+	}
+	if updated {
+		// Apply the patch.
+		if bgpConfig.ResourceVersion == "" {
+			bgpConfig.Name = "default"
+			if err := c.Create(ctx, bgpConfig); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := c.Patch(ctx, bgpConfig, patchFrom); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return bgpConfig, nil
+}
+
+func GetBGPConfiguration(
+	ctx context.Context,
+	c client.Client,
+) (*v3.BGPConfiguration, error) {
+	bgpConfig := &v3.BGPConfiguration{}
+	err := c.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfig)
+	if err != nil && !errors.IsNotFound(err) {
+		return nil, fmt.Errorf("unable to read BGPConfiguration: %w", err)
+	}
+	return bgpConfig, nil
+}
+
 func IsFelixPrometheusMetricsEnabled(felixConfiguration *v3.FelixConfiguration) bool {
 	if felixConfiguration.Spec.PrometheusMetricsEnabled != nil {
 		return *felixConfiguration.Spec.PrometheusMetricsEnabled

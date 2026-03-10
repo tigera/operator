@@ -2047,6 +2047,17 @@ var _ = Describe("Node rendering tests", func() {
 					},
 				))
 
+				cniCrbResource := rtest.GetResource(resources, "calico-cni-plugin", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
+				Expect(cniCrbResource).ToNot(BeNil())
+				cniCrb := cniCrbResource.(*rbacv1.ClusterRoleBinding)
+				Expect(cniCrb.Subjects).To(ContainElement(
+					rbacv1.Subject{
+						Kind:      "ServiceAccount",
+						Name:      "calico-cni-plugin",
+						Namespace: "kube-system",
+					},
+				))
+
 				Expect(rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).ToNot(BeNil())
 
 				dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")

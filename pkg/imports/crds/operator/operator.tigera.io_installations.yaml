@@ -1281,6 +1281,14 @@ spec:
                         - Disabled
                         - Enabled
                       type: string
+                    clusterRoutingMode:
+                      description:
+                        BGP configures whether or not to enable Calico's
+                        BGP capabilities.
+                      enum:
+                        - BIRD
+                        - Felix
+                      type: string
                     containerIPForwarding:
                       description: |-
                         ContainerIPForwarding configures whether ip forwarding will be enabled for containers in the CNI configuration.
@@ -10093,6 +10101,14 @@ spec:
                           enum:
                             - Disabled
                             - Enabled
+                          type: string
+                        clusterRoutingMode:
+                          description:
+                            BGP configures whether or not to enable Calico's
+                            BGP capabilities.
+                          enum:
+                            - BIRD
+                            - Felix
                           type: string
                         containerIPForwarding:
                           description: |-

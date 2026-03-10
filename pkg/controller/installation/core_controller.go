@@ -1153,6 +1153,25 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Set any non-default BGPConfiguration values that we need.
+	_, err = utils.PatchBGPConfiguration(ctx, r.client, func(bgpConfig *v3.BGPConfiguration) (bool, error) {
+		// Configure defaults.
+		u, err := r.setDefaultsOnBGPConfiguration(ctx, instance, bgpConfig, reqLogger, needsNamespaceMigration)
+		if err != nil {
+			return false, err
+		}
+
+		// Configure nftables mode.
+		u2, err := r.setNftablesMode(ctx, instance, fc, reqLogger)
+		if err != nil {
+			return false, err
+		}
+		return u || u2, nil
+	})
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// nodeReporterMetricsPort is a port used in Enterprise to host internal metrics.
 	// Operator is responsible for creating a service which maps to that port.
 	// Here, we'll check the default felixconfiguration to see if the user is specifying
@@ -2010,6 +2029,16 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 			}
 		}
 	}
+
+	return updated, nil
+}
+
+// setDefaultOnBGPConfiguration will take the passed in bgpConfig and add any defaulting needed
+// based on the install config.
+func (r *ReconcileInstallation) setDefaultsOnBGPConfiguration(ctx context.Context, install *operatorv1.Installation, bgpConfig *v3.BGPConfiguration, reqLogger logr.Logger, needNsMigration bool) (bool, error) {
+	updated := false
+
+	if install.Spec.CalicoNetwork.ClusterRoutingMode == "BGP" && bgpConfig.Spec.
 
 	return updated, nil
 }

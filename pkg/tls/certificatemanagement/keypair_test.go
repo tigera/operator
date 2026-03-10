@@ -150,7 +150,7 @@ var _ = Describe("TLS secret metadata", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying labels")
-			Expect(secret.Labels).To(HaveKeyWithValue("certificates.operator.tigera.io/signer", "my-issuer@1234567890"))
+			Expect(secret.Labels).To(HaveKeyWithValue("certificates.operator.tigera.io/signer", "my-issuer-1234567890"))
 
 			By("verifying annotations")
 			Expect(secret.Annotations["certificates.operator.tigera.io/issuer"]).To(Equal("my-issuer@1234567890"))
@@ -172,6 +172,34 @@ var _ = Describe("TLS secret metadata", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(len(secret.Labels["certificates.operator.tigera.io/signer"])).To(Equal(63))
+		})
+
+		It("should sanitize spaces in the signer label", func() {
+			secret, err := certificatemanagement.CreateSelfSignedSecret("my-secret", "my-ns", "My Company Root CA", nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(secret.Labels["certificates.operator.tigera.io/signer"]).To(Equal("My-Company-Root-CA"))
+		})
+
+		It("should sanitize commas and equals in the signer label", func() {
+			secret, err := certificatemanagement.CreateSelfSignedSecret("my-secret", "my-ns", "O=Foo, CN=Bar", nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(secret.Labels["certificates.operator.tigera.io/signer"]).To(Equal("O-Foo--CN-Bar"))
+		})
+
+		It("should trim leading/trailing special chars after sanitization", func() {
+			secret, err := certificatemanagement.CreateSelfSignedSecret("my-secret", "my-ns", "...leading-and-trailing---", nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(secret.Labels["certificates.operator.tigera.io/signer"]).To(Equal("leading-and-trailing"))
+		})
+
+		It("should return unknown when CN becomes empty after sanitization", func() {
+			secret, err := certificatemanagement.CreateSelfSignedSecret("my-secret", "my-ns", "   ", nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(secret.Labels["certificates.operator.tigera.io/signer"]).To(Equal("unknown"))
 		})
 	})
 })

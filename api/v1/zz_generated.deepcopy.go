@@ -1208,6 +1208,11 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 		*out = new(BGPOption)
 		**out = **in
 	}
+	if in.ClusterRoutingMode != nil {
+		in, out := &in.ClusterRoutingMode, &out.ClusterRoutingMode
+		*out = new(ClusterRoutingMode)
+		**out = **in
+	}
 	if in.IPPools != nil {
 		in, out := &in.IPPools, &out.IPPools
 		*out = make([]IPPool, len(*in))

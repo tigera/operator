@@ -22,10 +22,10 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
@@ -60,7 +60,7 @@ var _ = Describe("ComponentRendering", func() {
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
 				Goldmane:              &operatorv1.Goldmane{},
 			},
-			7, 1,
+			7, 2,
 		),
 		Entry("Should return objects to create when variant is Calico (with metrics)",
 			&goldmane.Configuration{
@@ -74,7 +74,7 @@ var _ = Describe("ComponentRendering", func() {
 					Spec: operatorv1.GoldmaneSpec{MetricsPort: &metricsPort},
 				},
 			},
-			8, 0,
+			8, 1,
 		),
 		Entry("Should return objects to delete when variant is not Calico",
 			&goldmane.Configuration{
@@ -86,7 +86,7 @@ var _ = Describe("ComponentRendering", func() {
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
 				Goldmane:              &operatorv1.Goldmane{},
 			},
-			0, 7,
+			0, 8,
 		),
 	)
 
@@ -208,7 +208,7 @@ var _ = Describe("ComponentRendering", func() {
 		}
 		component := goldmane.Goldmane(cfg)
 		objsToCreate, objsToDelete := component.Objects()
-		Expect(objsToDelete).To(BeEmpty())
+		Expect(objsToDelete).To(HaveLen(1))
 
 		// Verify the metrics service is created with prometheus annotations.
 		svc, err := rtest.GetResourceOfType[*corev1.Service](objsToCreate, goldmane.GoldmaneMetricsServiceName, goldmane.GoldmaneNamespace)
@@ -233,7 +233,7 @@ var _ = Describe("ComponentRendering", func() {
 		Expect(found).To(BeTrue(), "PROMETHEUS_PORT env var should be set")
 
 		// Verify the network policy includes the metrics port.
-		np, err := rtest.GetResourceOfType[*netv1.NetworkPolicy](objsToCreate, goldmane.GoldmaneName, goldmane.GoldmaneNamespace)
+		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, goldmane.GoldmanePolicyName, goldmane.GoldmaneNamespace)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(np.Spec.Ingress).To(HaveLen(2))
 	})
@@ -264,7 +264,7 @@ var _ = Describe("ComponentRendering", func() {
 		}
 
 		// Network policy should only have the gRPC port.
-		np, err := rtest.GetResourceOfType[*netv1.NetworkPolicy](objsToCreate, goldmane.GoldmaneName, goldmane.GoldmaneNamespace)
+		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, goldmane.GoldmanePolicyName, goldmane.GoldmaneNamespace)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(np.Spec.Ingress).To(HaveLen(1))
 	})

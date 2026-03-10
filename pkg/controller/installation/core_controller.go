@@ -2085,7 +2085,7 @@ func (r *ReconcileInstallation) setClusterRoutingOnBGPConfiguration(
 
 func felixProgramsClusterRoutes(install *operatorv1.Installation) bool {
 	if install.Spec.CalicoNetwork != nil && install.Spec.CalicoNetwork.ClusterRoutingMode != nil &&
-		*install.Spec.CalicoNetwork.ClusterRoutingMode == "Felix" {
+		*install.Spec.CalicoNetwork.ClusterRoutingMode == operatorv1.ClusterRoutingModeFelix {
 		return true
 	}
 	return false

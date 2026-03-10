@@ -293,7 +293,7 @@ var _ = Describe("Installation validation tests", func() {
 	It("should allow IPIP with BGP disabled in Felix cluster routing mode", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled
-		clusterRoutingMode := "Felix"
+		clusterRoutingMode := operator.ClusterRoutingModeFelix
 		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
@@ -310,7 +310,7 @@ var _ = Describe("Installation validation tests", func() {
 	It("should allow IPIP cross-subnet with BGP disabled in Felix cluster routing mode", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled
-		clusterRoutingMode := "Felix"
+		clusterRoutingMode := operator.ClusterRoutingModeFelix
 		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
@@ -327,7 +327,7 @@ var _ = Describe("Installation validation tests", func() {
 	It("should allow no-encap with BGP disabled in Felix cluster routing mode", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled
-		clusterRoutingMode := "Felix"
+		clusterRoutingMode := operator.ClusterRoutingModeFelix
 		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{

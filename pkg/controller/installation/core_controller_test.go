@@ -1447,7 +1447,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		It("should correctly patch FelixConfig and BGPConfig with ClusterRouteMode set to BIRD", func() {
-			bird := "BIRD"
+			bird := operator.ClusterRoutingModeBIRD
 			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{ClusterRoutingMode: &bird}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1467,7 +1467,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		})
 
 		It("should correctly patch FelixConfig and BGPConfig with ClusterRouteMode set to Felix", func() {
-			felix := "Felix"
+			felix := operator.ClusterRoutingModeFelix
 			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{ClusterRoutingMode: &felix}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})

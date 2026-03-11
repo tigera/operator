@@ -54,7 +54,7 @@ type ContainerName string
 const (
 	APIServerPort       = 5443
 	APIServerPortName   = "apiserver"
-	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "apiserver-access"
+	APIServerPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "apiserver-access"
 
 	auditLogsVolumeName   = "calico-audit-logs"
 	auditPolicyVolumeName = "calico-audit-policy"
@@ -327,12 +327,15 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// The apiserver now uses consistent resource names with 'calico' prefix across both EE and OSS variants.
 		objsToDelete = append(objsToDelete, c.deprecatedResources()...)
 	} else {
-		// Add in a NetworkPolicy.
-		namespacedObjects = append(namespacedObjects, c.networkPolicy())
-
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
+
+		// Clean up deprecated k8s NetworkPolicy
+		objsToDelete = append(objsToDelete, &netv1.NetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
+		})
 	}
 
 	// Add or remove the aggregation API server objects as needed.
@@ -532,7 +535,7 @@ func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy 
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(APIServerName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
@@ -1339,34 +1342,6 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 	return tolerations
-}
-
-// networkPolicy returns a NP to allow traffic to the API server. This prevents it from
-// being cut off from the main API server. The enterprise equivalent is currently handled in manifests.
-//
-// Calico only.
-func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
-	tcp := corev1.ProtocolTCP
-	apiServerPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
-	p := intstr.FromInt32(apiServerPort)
-	return &netv1.NetworkPolicy{
-		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
-		Spec: netv1.NetworkPolicySpec{
-			PodSelector: *c.deploymentSelector(),
-			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
-			Ingress: []netv1.NetworkPolicyIngressRule{
-				{
-					Ports: []netv1.NetworkPolicyPort{
-						{
-							Protocol: &tcp,
-							Port:     &p,
-						},
-					},
-				},
-			},
-		},
-	}
 }
 
 // tigeraAPIServerClusterRole creates a clusterrole that gives permissions to access backing CRDs

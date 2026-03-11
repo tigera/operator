@@ -78,15 +78,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("failed to create apiserver-controller: %w", err)
 	}
 
-	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
-	if opts.EnterpriseCRDExists {
-		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, r.tierWatchReady)
+	// Established deferred watches against the v3 API that should succeed after the API Server becomes available.
+	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 
-		go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
-			{Name: render.APIServerPolicyName, Namespace: render.APIServerNamespace},
-		})
-	}
+	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
+		{Name: render.APIServerPolicyName, Namespace: render.APIServerNamespace},
+	})
 
 	// Watch for changes to primary resource APIServer
 	err = c.WatchObject(&operatorv1.APIServer{}, &handler.EnqueueRequestForObject{})
@@ -353,23 +351,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			}
 		}
 
-		// Ensure the calico-system tier exists, before rendering any network policies within it.
-		//
-		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
-		// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
-		// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
-		// We also exclude NetworkPolicy and do not degrade when the Tier watch is not ready, as this means the API server is not available.
-		if r.tierWatchReady.IsReady() {
-			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
-				if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
-					return reconcile.Result{}, err
-				}
-			} else {
-				includeV3NetworkPolicy = true
-			}
-		}
-
 		prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
@@ -410,6 +391,23 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get KeyValidator Config", err, reqLogger)
 				return reconcile.Result{}, err
 			}
+		}
+	}
+
+	// Ensure the calico-system tier exists, before rendering any network policies within it.
+	//
+	// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
+	// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
+	// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
+	// We also exclude NetworkPolicy and do not degrade when the Tier watch is not ready, as this means the API server is not available.
+	if r.tierWatchReady.IsReady() {
+		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+			if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		} else {
+			includeV3NetworkPolicy = true
 		}
 	}
 

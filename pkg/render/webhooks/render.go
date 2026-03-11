@@ -47,7 +47,7 @@ const (
 	WebhooksSecretsRBACName = "calico-webhooks-secrets-access"
 )
 
-var WebhooksPolicyName = fmt.Sprintf("%s.%s", networkpolicy.TigeraComponentTierName, WebhooksName)
+var WebhooksPolicyName = fmt.Sprintf("%s.%s", networkpolicy.CalicoTierName, WebhooksName)
 
 // Configuration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/webhooks on a cluster.
@@ -217,7 +217,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			},
 			Spec: v3.NetworkPolicySpec{
 				Order:    &networkpolicy.HighPrecedenceOrder,
-				Tier:     networkpolicy.TigeraComponentTierName,
+				Tier:     networkpolicy.CalicoTierName,
 				Selector: networkpolicy.KubernetesAppSelector(WebhooksName),
 				Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 				Ingress: []v3.Rule{

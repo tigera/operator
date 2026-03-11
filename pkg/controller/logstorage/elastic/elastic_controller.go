@@ -135,14 +135,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	// Start goroutines to establish watches against projectcalico.org/v3 resources.
-	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, r.tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 		{Name: render.ElasticsearchPolicyName, Namespace: render.ElasticsearchNamespace},
 		{Name: kibana.PolicyName, Namespace: kibana.Namespace},
 		{Name: eck.OperatorPolicyName, Namespace: eck.OperatorNamespace},
 		{Name: render.ElasticsearchInternalPolicyName, Namespace: render.ElasticsearchNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: render.ElasticsearchNamespace},
-		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: kibana.Namespace},
+		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: render.ElasticsearchNamespace},
+		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: kibana.Namespace},
 	})
 
 	// Watch for changes in storage classes, as new storage classes may be made available for LogStorage.
@@ -302,7 +302,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for calico-system tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil

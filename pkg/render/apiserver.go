@@ -762,98 +762,12 @@ func (c *apiServerComponent) authClusterRole() client.Object {
 // multiTenantSecretsRBAC provides the tigera API server with the ability to read secrets on the cluster.
 // This is needed in multi-tenant management clusters only, in order to read tenant secrets for signing managed cluster certificates.
 func (c *apiServerComponent) multiTenantSecretsRBAC() []client.Object {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups:     []string{""},
-			Resources:     []string{"secrets"},
-			Verbs:         []string{"get"},
-			ResourceNames: []string{c.tunnelSecretName()},
-		},
-	}
-
-	return []client.Object{
-		// Return the cluster role itself.
-		&rbacv1.ClusterRole{
-			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: APIServerSecretsRBACName,
-			},
-			Rules: rules,
-		},
-
-		// And a binding to attach it to the API server.
-		&rbacv1.ClusterRoleBinding{
-			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: APIServerSecretsRBACName,
-			},
-			RoleRef: rbacv1.RoleRef{
-				Kind:     "ClusterRole",
-				Name:     APIServerSecretsRBACName,
-				APIGroup: "rbac.authorization.k8s.io",
-			},
-			Subjects: []rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      APIServerServiceAccountName,
-					Namespace: APIServerNamespace,
-				},
-			},
-		},
-	}
-}
-
-func (c *apiServerComponent) tunnelSecretName() string {
-	secretName := VoltronTunnelSecretName
-	if c.cfg.ManagementCluster != nil && c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName != "" {
-		secretName = c.cfg.ManagementCluster.Spec.TLS.SecretName
-	}
-	return secretName
+	return TunnelSecretRBAC(APIServerSecretsRBACName, APIServerServiceAccountName, c.cfg.ManagementCluster, true)
 }
 
 // secretsRBAC provides the tigera API server with the ability to read secrets from the API server's namespace.
 func (c *apiServerComponent) secretsRBAC() []client.Object {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups:     []string{""},
-			Resources:     []string{"secrets"},
-			Verbs:         []string{"get"},
-			ResourceNames: []string{c.tunnelSecretName()},
-		},
-	}
-
-	return []client.Object{
-		// Return the role itself.
-		&rbacv1.Role{
-			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      APIServerSecretsRBACName,
-				Namespace: APIServerNamespace,
-			},
-			Rules: rules,
-		},
-
-		// And a binding to attach it to the API server.
-		&rbacv1.RoleBinding{
-			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      APIServerSecretsRBACName,
-				Namespace: APIServerNamespace,
-			},
-			RoleRef: rbacv1.RoleRef{
-				Kind:     "Role",
-				Name:     APIServerSecretsRBACName,
-				APIGroup: "rbac.authorization.k8s.io",
-			},
-			Subjects: []rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      APIServerServiceAccountName,
-					Namespace: APIServerNamespace,
-				},
-			},
-		},
-	}
+	return TunnelSecretRBAC(APIServerSecretsRBACName, APIServerServiceAccountName, c.cfg.ManagementCluster, false)
 }
 
 // authClusterRoleBinding returns a clusterrolebinding to create, and a clusterrolebinding to delete.

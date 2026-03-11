@@ -357,6 +357,7 @@ run-fvs: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
 
 ## Create a local kind dual stack cluster.
+KIND_CLUSTER_NAME?=tigera-operator-kind
 KIND_KUBECONFIG?=./kubeconfig.yaml
 KINDEST_NODE_VERSION?=v1.31.12
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
@@ -365,11 +366,12 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 
 	# Create a kind cluster.
 	$(BINDIR)/kind create cluster \
+	        --name $(KIND_CLUSTER_NAME) \
 	        --config ./deploy/kind-config.yaml \
 	        --kubeconfig $(KIND_KUBECONFIG) \
 	        --image kindest/node:$(KINDEST_NODE_VERSION)
 
-	./deploy/scripts/ipv6_kind_cluster_update.sh
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) ./deploy/scripts/ipv6_kind_cluster_update.sh
 	# Deploy resources needed in test env.
 	$(MAKE) deploy-crds
 
@@ -459,7 +461,7 @@ IMAGE_TARS := calico-node.tar \
 
 load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 	# Load the latest tar files onto the currently running kind cluster.
-	KUBECONFIG=$(KIND_KUBECONFIG) ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
+	KUBECONFIG=$(KIND_KUBECONFIG) KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 	# Restart the Calico containers so they launch with the newly loaded code.
 	# TODO: We should be able to do this without restarting everything in kube-system.
 	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl delete pods -n kube-system --all
@@ -483,7 +485,7 @@ create-tigera-operator-namespace: kubectl
 
 ## Destroy local kind cluster
 cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
-	-$(BINDIR)/kind delete cluster
+	-$(BINDIR)/kind delete cluster --name $(KIND_CLUSTER_NAME)
 	rm -f $(KIND_KUBECONFIG)
 
 

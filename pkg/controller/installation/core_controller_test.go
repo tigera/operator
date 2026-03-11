@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -72,6 +73,19 @@ var (
 )
 
 var errMismatchedError = fmt.Errorf("installation spec.kubernetesProvider 'DockerEnterprise' does not match auto-detected value 'OpenShift'")
+
+// bpfTrackedValue extracts the BPFEnabled value from the consolidated field ownership annotation.
+func bpfTrackedValue(fc *v3.FelixConfiguration) string {
+	raw, ok := fc.Annotations["operator.tigera.io/managed-fields-installation"]
+	if !ok {
+		return ""
+	}
+	var fields map[string]string
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return ""
+	}
+	return fields["BPFEnabled"]
+}
 
 type fakeNamespaceMigration struct{}
 
@@ -1382,7 +1396,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Should set correct annoation and BPFEnabled field.
 			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("false"))
+			Expect(bpfTrackedValue(fc)).To(Equal("false"))
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
 		})
@@ -1488,7 +1502,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Should set correct annoation and BPFEnabled field.
 			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			Expect(bpfTrackedValue(fc)).To(Equal("true"))
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 		})
@@ -1506,7 +1520,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Should set correct annoation and BPFEnabled field.
 			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			Expect(bpfTrackedValue(fc)).To(Equal("true"))
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 		})
@@ -1527,7 +1541,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Should set correct annoation and BPFEnabled field.
 			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			Expect(bpfTrackedValue(fc)).To(Equal("true"))
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 
@@ -1546,7 +1560,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Should set correct annoation and BPFEnabled field.
 			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("false"))
+			Expect(bpfTrackedValue(fc)).To(Equal("false"))
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
 		})
@@ -1576,7 +1590,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// Should set correct annoation and BPFEnabled field.
 			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			Expect(bpfTrackedValue(fc)).To(Equal("true"))
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 		})

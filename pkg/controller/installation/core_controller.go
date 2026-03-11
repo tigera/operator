@@ -71,6 +71,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/fieldowner"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
@@ -1835,114 +1836,119 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 }
 
 func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *operatorv1.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
-	updated := false
+	if install.Spec.CalicoNetwork.LinuxDataplane == nil {
+		return false, nil
+	}
 
-	// Set the FelixConfiguration nftables dataplane mode based on the operator configuration. We do this unconditonally because
-	// we don't need to handle upgrades from versions that were previously FelixConfiguration only - nftables mode has always
-	// been controlled by the operator.
-	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
-		nftablesMode := v3.NFTablesModeDisabled
-		if install.Spec.IsNftables() {
-			// The operator is configured to use the nftables dataplane.
-			if install.Spec.BPFEnabled() {
-				// For BPF mode, we always use nftables, as we don't use the upstream kube-proxy and so don't need to
-				// worry about compatibility with its mode of operation.
-				nftablesMode = v3.NFTablesModeEnabled
-			} else {
-				// Otherwise, kube-proxy is running - configure Felix to auto-detect whether it should use nftables or iptables on
-				// a per-node basis, allowing for smoother upgrades.
-				nftablesMode = v3.NFTablesModeAuto
-			}
+	// Determine the desired nftables mode based on the operator configuration. NFTablesMode has always
+	// been controlled by the operator, so we use ConflictError to reject out-of-band modifications.
+	nftablesMode := v3.NFTablesModeDisabled
+	if install.Spec.IsNftables() {
+		if install.Spec.BPFEnabled() {
+			// For BPF mode, we always use nftables, as we don't use the upstream kube-proxy and so don't need to
+			// worry about compatibility with its mode of operation.
+			nftablesMode = v3.NFTablesModeEnabled
+		} else {
+			// Otherwise, kube-proxy is running - configure Felix to auto-detect whether it should use nftables or iptables on
+			// a per-node basis, allowing for smoother upgrades.
+			nftablesMode = v3.NFTablesModeAuto
 		}
-		updated = fc.Spec.NFTablesMode == nil || *fc.Spec.NFTablesMode != nftablesMode
+	}
+
+	t := fieldowner.ForObject(installationControllerName, fc)
+	shouldSet, err := t.Manage("NFTablesMode", fieldowner.FormatValue(fc.Spec.NFTablesMode), string(nftablesMode), fieldowner.ConflictError)
+	if err != nil {
+		return false, err
+	}
+	if shouldSet {
 		fc.Spec.NFTablesMode = &nftablesMode
+		reqLogger.Info("Patching nftables mode", "nftablesMode", nftablesMode)
 	}
-	if updated {
-		reqLogger.Info("Patching nftables mode", "nftablesMode", *fc.Spec.NFTablesMode)
-	}
-	return updated, nil
+	t.Flush(fc)
+	return shouldSet, nil
 }
 
-// setDefaultOnFelixConfiguration will take the passed in fc and add any defaulting needed
-// based on the install config.
+// setDefaultsOnFelixConfiguration sets default values on the FelixConfiguration based on the
+// Installation config. All fields use ConflictDefer — if a user has modified an operator-set
+// default, the operator backs off and lets the user's value persist.
 func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Context, install *operatorv1.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger, needNsMigration bool) (bool, error) {
 	updated := false
+	t := fieldowner.ForObject(installationControllerName, fc)
 
+	// RouteTableRange defaults depend on the CNI plugin.
+	var desiredRouteTableRange *v3.RouteTableRange
 	switch install.Spec.CNI.Type {
-	// If we're using the AWS CNI plugin we need to ensure the route tables that calico-node
-	// uses do not conflict with the ones the AWS CNI plugin uses so default them
-	// in the FelixConfiguration if they are not already set.
 	case operatorv1.PluginAmazonVPC:
-		if fc.Spec.RouteTableRange == nil {
-			updated = true
-			// Defaulting based on that AWS might be using the following:
-			// - The ENI device number + 1
-			//   Currently the max number of ENIs for any host is 15.
-			//   p4d.24xlarge is reported to support 4x15 ENI but it uses 4 cards
-			//   and AWS CNI only uses ENIs on card 0.
-			// - The VLAN table ID + 100 (there is doubt if this is true)
-			fc.Spec.RouteTableRange = &v3.RouteTableRange{
-				Min: 65,
-				Max: 99,
-			}
-		}
+		desiredRouteTableRange = &v3.RouteTableRange{Min: 65, Max: 99}
 	case operatorv1.PluginGKE:
-		if fc.Spec.RouteTableRange == nil {
+		desiredRouteTableRange = &v3.RouteTableRange{Min: 10, Max: 250}
+	}
+	if desiredRouteTableRange != nil {
+		shouldSet, err := t.Manage("RouteTableRange", fieldowner.FormatValue(fc.Spec.RouteTableRange), fieldowner.FormatValue(desiredRouteTableRange), fieldowner.ConflictDefer)
+		if err != nil {
+			return false, err
+		}
+		if shouldSet {
+			fc.Spec.RouteTableRange = desiredRouteTableRange
 			updated = true
-			// Don't conflict with the GKE CNI plugin's routes.
-			fc.Spec.RouteTableRange = &v3.RouteTableRange{
-				Min: 10,
-				Max: 250,
-			}
 		}
 	}
 
-	// Determine the felix health port to use. Prefer the configuration from FelixConfiguration,
-	// but default to 9099 (or 9199 on OpenShift). We will also write back whatever we select to FelixConfiguration.
+	// Default the felix health port. 9099 normally, 9199 on OpenShift.
 	felixHealthPort := 9099
 	if install.Spec.KubernetesProvider.IsOpenShift() {
 		felixHealthPort = 9199
 	}
-	if fc.Spec.HealthPort == nil {
+	shouldSet, err := t.Manage("HealthPort", fieldowner.FormatValue(fc.Spec.HealthPort), fieldowner.FormatValue(felixHealthPort), fieldowner.ConflictDefer)
+	if err != nil {
+		return false, err
+	}
+	if shouldSet {
 		fc.Spec.HealthPort = &felixHealthPort
 		updated = true
 	}
+
+	// VXLAN defaults. MKE uses non-standard values to avoid conflict with docker swarm vxlan.
 	vxlanVNI := 4096
 	vxlanPort := 4789
-	// MKE uses a vxlanVNI:4096 and vxlanPort:4789 for its docker swarm vxlan.
-	// This results in a conflict with calico's VXLAN and the vxlan.calico interface
-	// gets deleted. To fix this we change the vxlanVNI to 10000 as recommended by
-	// MKE docs (https://docs.mirantis.com/mke/3.7/cli-ref/mke-cli-install.html).
 	if install.Spec.KubernetesProvider == operatorv1.ProviderDockerEE {
 		vxlanVNI = 10000
-		// We are using a flow based VXLAN device for
-		// ebpf dataplane. This requires changing the default VXLAN port to
-		// 8472 to avoid conflict with the host's VXLAN interface.
 		if install.Spec.BPFEnabled() {
 			vxlanPort = 8472
 		}
 	}
-
-	if fc.Spec.VXLANVNI == nil {
+	shouldSet, err = t.Manage("VXLANVNI", fieldowner.FormatValue(fc.Spec.VXLANVNI), fieldowner.FormatValue(vxlanVNI), fieldowner.ConflictDefer)
+	if err != nil {
+		return false, err
+	}
+	if shouldSet {
 		fc.Spec.VXLANVNI = &vxlanVNI
 		updated = true
 	}
-
-	if fc.Spec.VXLANPort == nil {
+	shouldSet, err = t.Manage("VXLANPort", fieldowner.FormatValue(fc.Spec.VXLANPort), fieldowner.FormatValue(vxlanPort), fieldowner.ConflictDefer)
+	if err != nil {
+		return false, err
+	}
+	if shouldSet {
 		fc.Spec.VXLANPort = &vxlanPort
 		updated = true
 	}
 
-	if install.Spec.KubernetesProvider == operatorv1.ProviderDockerEE {
-		// Set bpfHostConntrackBypass to false for eBPF dataplane to work with MKE
-		if install.Spec.BPFEnabled() && fc.Spec.BPFHostConntrackBypass == nil {
+	// BPFHostConntrackBypass must be disabled for eBPF on MKE.
+	if install.Spec.KubernetesProvider == operatorv1.ProviderDockerEE && install.Spec.BPFEnabled() {
+		shouldSet, err = t.Manage("BPFHostConntrackBypass", fieldowner.FormatValue(fc.Spec.BPFHostConntrackBypass), "false", fieldowner.ConflictDefer)
+		if err != nil {
+			return false, err
+		}
+		if shouldSet {
 			disableBPFHostConntrackBypass(fc)
 			updated = true
 		}
 	}
 
+	// Some platforms need a different default for DNSTrustedServers because their DNS service
+	// is not named "kube-dns".
 	if install.Spec.Variant == operatorv1.TigeraSecureEnterprise {
-		// Some platforms need a different default setting for dnsTrustedServers, because their DNS service is not named "kube-dns".
 		dnsService := ""
 		switch install.Spec.KubernetesProvider {
 		case operatorv1.ProviderOpenShift:
@@ -1953,24 +1959,25 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		if dnsService != "" {
 			felixDefault := "k8s-service:kube-dns"
 			trustedServers := []string{dnsService}
-			// Keep any other values that are already configured, excepting the value
-			// that we are setting and the kube-dns default.
-			existingSetting := ""
 			if fc.Spec.DNSTrustedServers != nil {
-				existingSetting = strings.Join(*(fc.Spec.DNSTrustedServers), ",")
-				for _, server := range *(fc.Spec.DNSTrustedServers) {
+				for _, server := range *fc.Spec.DNSTrustedServers {
 					if server != felixDefault && server != dnsService {
 						trustedServers = append(trustedServers, server)
 					}
 				}
 			}
-			newSetting := strings.Join(trustedServers, ",")
-			if newSetting != existingSetting {
+			shouldSet, err = t.Manage("DNSTrustedServers", fieldowner.FormatValue(fc.Spec.DNSTrustedServers), fieldowner.FormatValue(trustedServers), fieldowner.ConflictDefer)
+			if err != nil {
+				return false, err
+			}
+			if shouldSet {
 				fc.Spec.DNSTrustedServers = &trustedServers
 				updated = true
 			}
 		}
 	}
+
+	t.Flush(fc)
 
 	// If BPF is enabled, but not set on FelixConfiguration, do so here. This could happen when an older
 	// version of operator is replaced by the new one. Older versions of the operator used an
@@ -1981,7 +1988,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	// If calico-node daemonset exists, we need to check the ENV VAR and set FelixConfiguration accordingly.
 	// Otherwise, this is a fresh install in eBPF mode, set the felix config.
 	ds := &appsv1.DaemonSet{}
-	err := r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, ds)
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, ds)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			reqLogger.Error(err, "An error occurred when getting the Daemonset resource")

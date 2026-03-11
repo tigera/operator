@@ -502,6 +502,15 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
+	// Check BYO certificate expiry warnings.
+	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+		render.ComplianceServerCertSecret:  complianceServerKeyPair,
+		render.ComplianceSnapshotterSecret: snapshotterKeyPair.Interface,
+		render.ComplianceBenchmarkerSecret: benchmarkerKeyPair.Interface,
+		render.ComplianceReporterSecret:    reporterKeyPair.Interface,
+		render.ComplianceControllerSecret:  controllerKeyPair.Interface,
+	}, r.status)
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 

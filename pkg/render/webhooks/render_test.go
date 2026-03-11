@@ -143,6 +143,14 @@ var _ = Describe("Webhooks rendering tests", func() {
 		))
 		Expect(mwc.Webhooks[0].Rules[0].Rule.Resources).To(Equal([]string{"uisettings"}))
 
+		// Verify the ClusterRole includes the UISettingsGroup rule for enterprise.
+		cr := rtest.GetResource(resources, webhooks.WebhooksName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(cr.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"uisettingsgroups"},
+			Verbs:     []string{"get"},
+		}))
+
 		// Verify Enterprise uses the Tigera webhooks image.
 		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
@@ -151,6 +159,93 @@ var _ = Describe("Webhooks rendering tests", func() {
 				components.TigeraImagePath,
 				components.ComponentTigeraWebhooks.Image,
 				components.ComponentTigeraWebhooks.Version)))
+	})
+
+	It("should not include UISettingsGroup rule for Calico", func() {
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		cr := rtest.GetResource(resources, webhooks.WebhooksName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(cr.Rules).NotTo(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"uisettingsgroups"},
+			Verbs:     []string{"get"},
+		}))
+	})
+
+	It("should render tunnel secret RBAC for a single-tenant management cluster", func() {
+		cfg.ManagementCluster = &operatorv1.ManagementCluster{
+			Spec: operatorv1.ManagementClusterSpec{
+				TLS: &operatorv1.TLS{
+					SecretName: "test-tunnel-secret",
+				},
+			},
+		}
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		// Should have a namespace-scoped Role and RoleBinding.
+		role := rtest.GetResource(resources, webhooks.WebhooksSecretsRBACName, common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		Expect(role.Rules).To(ConsistOf(rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"test-tunnel-secret"},
+		}))
+
+		rb := rtest.GetResource(resources, webhooks.WebhooksSecretsRBACName, common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(rb.RoleRef.Name).To(Equal(webhooks.WebhooksSecretsRBACName))
+		Expect(rb.Subjects).To(ConsistOf(rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      webhooks.WebhooksName,
+			Namespace: common.CalicoNamespace,
+		}))
+	})
+
+	It("should render tunnel secret RBAC for a multi-tenant management cluster", func() {
+		cfg.ManagementCluster = &operatorv1.ManagementCluster{
+			Spec: operatorv1.ManagementClusterSpec{
+				TLS: &operatorv1.TLS{
+					SecretName: "test-tunnel-secret",
+				},
+			},
+		}
+		cfg.MultiTenant = true
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		// Should have a cluster-scoped ClusterRole and ClusterRoleBinding.
+		cr := rtest.GetResource(resources, webhooks.WebhooksSecretsRBACName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(cr.Rules).To(ConsistOf(rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{"test-tunnel-secret"},
+		}))
+
+		crb := rtest.GetResource(resources, webhooks.WebhooksSecretsRBACName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		Expect(crb.RoleRef.Name).To(Equal(webhooks.WebhooksSecretsRBACName))
+		Expect(crb.Subjects).To(ConsistOf(rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      webhooks.WebhooksName,
+			Namespace: common.CalicoNamespace,
+		}))
+	})
+
+	It("should clean up tunnel secret RBAC when not a management cluster", func() {
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		_, objsToDelete := component.Objects()
+
+		Expect(objsToDelete).To(ContainElements(
+			&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksSecretsRBACName}},
+			&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksSecretsRBACName}},
+			&rbacv1.Role{TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksSecretsRBACName, Namespace: common.CalicoNamespace}},
+			&rbacv1.RoleBinding{TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksSecretsRBACName, Namespace: common.CalicoNamespace}},
+		))
 	})
 
 	It("should set control plane tolerations by default", func() {

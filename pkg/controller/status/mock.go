@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -97,6 +97,14 @@ func (m *MockStatus) SetDegraded(reason operator.TigeraStatusReason, msg string,
 
 func (m *MockStatus) ClearDegraded() {
 	m.Called()
+}
+
+func (m *MockStatus) SetWarning(key string, msg string) {
+	m.Called(key, msg)
+}
+
+func (m *MockStatus) ClearWarning(key string) {
+	m.Called(key)
 }
 
 func (m *MockStatus) IsAvailable() bool {

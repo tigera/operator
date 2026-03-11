@@ -238,6 +238,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"k8s-app": WebhooksName},
 			Ports: []corev1.ServicePort{
 				{
 					Port:       443,

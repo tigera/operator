@@ -268,18 +268,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
-	if r.opts.UseV3CRDs && installationSpec.Variant == operatorv1.Calico {
-		// For Calico OSS, if we're running in v3 CRD mode, there is no reason to continue. For Enterprise,
-		// we still install some containers with this controller so we'll need to carry on.
-		r.status.SetDegraded(
-			operatorv1.ResourceValidationError,
-			"APIServer should not be used when using v3 CRDs, please delete the APIServer CR",
-			nil,
-			reqLogger,
-		)
-		return reconcile.Result{}, nil
-	}
-
 	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)

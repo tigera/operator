@@ -834,6 +834,49 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-webhooks"))
 		})
 
+		It("should create webhook deployment for OSS with UseV3CRDs", func() {
+			replicas := int32(2)
+			ossInstallation := &operatorv1.Installation{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "default",
+					Generation: 2,
+				},
+				Status: operatorv1.InstallationStatus{
+					Variant:  operatorv1.Calico,
+					Computed: &operatorv1.InstallationSpec{},
+				},
+				Spec: operatorv1.InstallationSpec{
+					ControlPlaneReplicas: &replicas,
+					Variant:              operatorv1.Calico,
+					Registry:             "some.registry.org/",
+				},
+			}
+			Expect(cli.Create(ctx, ossInstallation)).To(BeNil())
+
+			r := ReconcileAPIServer{
+				client:         cli,
+				scheme:         scheme,
+				status:         mockStatus,
+				tierWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: false,
+					DetectedProvider:    operatorv1.ProviderNone,
+					UseV3CRDs:           true,
+					ClusterDomain:       dns.DefaultClusterDomain,
+				},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := appsv1.Deployment{
+				TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-webhooks", Namespace: common.CalicoNamespace},
+			}
+			Expect(test.GetResource(cli, &d)).To(BeNil())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-webhooks"))
+		})
+
 		It("should not create webhook deployment when UseV3CRDs is false", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 

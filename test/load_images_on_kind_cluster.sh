@@ -10,7 +10,8 @@ function load_image() {
     done
 }
 
-KIND_NODES="kind-control-plane kind-worker kind-worker2 kind-worker3"
+: ${KIND_CLUSTER_NAME:=tigera-operator-kind}
+KIND_NODES="${KIND_CLUSTER_NAME}-control-plane ${KIND_CLUSTER_NAME}-worker ${KIND_CLUSTER_NAME}-worker2 ${KIND_CLUSTER_NAME}-worker3"
 
 for NODE in ${KIND_NODES}
 do

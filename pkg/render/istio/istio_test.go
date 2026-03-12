@@ -851,7 +851,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			Expect(foundPlatformEnv).To(BeTrue(), "Expected PLATFORM=openshift env var on istiod")
 		})
 
-		It("should set trusted ztunnel namespace to kube-system on istiod", func() {
+		It("should set trusted ztunnel namespace to calico-system on istiod", func() {
 			objsToCreate, _ := component.Objects()
 
 			deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, istio.IstioIstiodDeploymentName, istio.IstioNamespace)
@@ -862,13 +862,13 @@ var _ = Describe("Istio Component Rendering", func() {
 				if container.Name == "discovery" {
 					for _, env := range container.Env {
 						if env.Name == "CA_TRUSTED_NODE_ACCOUNTS" {
-							Expect(env.Value).To(Equal("kube-system/ztunnel"))
+							Expect(env.Value).To(Equal("calico-system/ztunnel"))
 							foundTrustedAccounts = true
 						}
 					}
 				}
 			}
-			Expect(foundTrustedAccounts).To(BeTrue(), "Expected CA_TRUSTED_NODE_ACCOUNTS=kube-system/ztunnel on istiod")
+			Expect(foundTrustedAccounts).To(BeTrue(), "Expected CA_TRUSTED_NODE_ACCOUNTS=calico-system/ztunnel on istiod")
 		})
 
 		It("should set SELinux context on ztunnel", func() {

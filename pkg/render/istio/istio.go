@@ -27,7 +27,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
@@ -186,7 +185,7 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 
-	if c.cfg.Installation.Variant == v1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.IstioPilotImage, err = components.GetReference(components.ComponentIstioPilot, reg, path, prefix, is)
 		if err != nil {
 			return err

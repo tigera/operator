@@ -103,10 +103,15 @@ var _ = Describe("Webhooks rendering tests", func() {
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"list", "watch", "update"},
+				Resources: []string{"tiers"},
+				Verbs:     []string{"get"},
 			},
 		))
+		Expect(cr.Rules).NotTo(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"managedclusters"},
+			Verbs:     []string{"list", "watch", "update"},
+		}))
 	})
 
 	It("should render all resources for Enterprise with the correct image", func() {
@@ -143,13 +148,20 @@ var _ = Describe("Webhooks rendering tests", func() {
 		))
 		Expect(mwc.Webhooks[0].Rules[0].Rule.Resources).To(Equal([]string{"uisettings"}))
 
-		// Verify the ClusterRole includes the UISettingsGroup rule for enterprise.
+		// Verify the ClusterRole includes the enterprise-only rules.
 		cr := rtest.GetResource(resources, webhooks.WebhooksName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(cr.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"uisettingsgroups"},
-			Verbs:     []string{"get"},
-		}))
+		Expect(cr.Rules).To(ContainElements(
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"list", "watch", "update"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettingsgroups"},
+				Verbs:     []string{"get"},
+			},
+		))
 
 		// Verify Enterprise uses the Tigera webhooks image.
 		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)

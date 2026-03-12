@@ -188,7 +188,7 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 				errMsgs = append(errMsgs, err.Error())
 			}
 		}
-	} else {
+	} else if c.cfg.RequiresAggregationServer {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServerFIPS, reg, path, prefix, is)
 			if err != nil {
@@ -235,12 +235,23 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	secrets := secret.CopyToNamespace(APIServerNamespace, c.cfg.PullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
-	namespacedObjects = append(namespacedObjects,
-		c.apiServerServiceAccount(),
-		c.apiServerDeployment(),
-		c.apiServerService(),
-		c.apiServerPodDisruptionBudget(),
-	)
+	// The deployment and its supporting objects are needed when running the aggregation API server
+	// or when running Enterprise (which always needs the queryserver).
+	if c.cfg.RequiresAggregationServer || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		namespacedObjects = append(namespacedObjects,
+			c.apiServerServiceAccount(),
+			c.apiServerDeployment(),
+			c.apiServerService(),
+			c.apiServerPodDisruptionBudget(),
+		)
+	} else {
+		objsToDelete = append(objsToDelete,
+			&corev1.ServiceAccount{TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerServiceAccountName, Namespace: APIServerNamespace}},
+			&appsv1.Deployment{TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerName, Namespace: APIServerNamespace}},
+			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerServiceName, Namespace: APIServerNamespace}},
+			&policyv1.PodDisruptionBudget{TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerName, Namespace: APIServerNamespace}},
+		)
+	}
 
 	// These are objects that only need to exist when we are running an aggregation API server to
 	// serve projectcalico.org/v3 APIs. If using CRDs for this API group, we can remove these objects.

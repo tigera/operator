@@ -1921,6 +1921,31 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Entry("custom cluster domain", "custom-domain.internal"),
 	)
 
+	It("should not render deployment for OSS without aggregation server", func() {
+		cfg.RequiresAggregationServer = false
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, deleteResources := component.Objects()
+
+		// Should not include deployment, service, SA, or PDB.
+		Expect(rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")).To(BeNil())
+		Expect(rtest.GetResource(resources, "calico-api", "calico-system", "", "v1", "Service")).To(BeNil())
+		Expect(rtest.GetResource(resources, "calico-apiserver", "calico-system", "", "v1", "ServiceAccount")).To(BeNil())
+		Expect(rtest.GetResource(resources, "calico-apiserver", "calico-system", "policy", "v1", "PodDisruptionBudget")).To(BeNil())
+
+		// Should still include RBAC.
+		Expect(rtest.GetResource(resources, "calico-crds", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
+		Expect(rtest.GetResource(resources, "calico-webhook-reader", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")).ToNot(BeNil())
+
+		// Deployment and related objects should be in the delete list.
+		rtest.ExpectResourceInList(deleteResources, "calico-apiserver", "calico-system", "", "v1", "ServiceAccount")
+		rtest.ExpectResourceInList(deleteResources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")
+		rtest.ExpectResourceInList(deleteResources, "calico-api", "calico-system", "", "v1", "Service")
+		rtest.ExpectResourceInList(deleteResources, "calico-apiserver", "calico-system", "policy", "v1", "PodDisruptionBudget")
+	})
+
 	It("should render an API server with custom configuration", func() {
 		expectedResources := []client.Object{
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ServiceAccount"}},

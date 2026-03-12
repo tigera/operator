@@ -436,28 +436,28 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentCalicoIstioPilot = Component{
+	ComponentIstioPilot = Component{
 		Version:  "master",
 		Image:    "istio-pilot",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
 
-	ComponentCalicoIstioInstallCNI = Component{
+	ComponentIstioInstallCNI = Component{
 		Version:  "master",
 		Image:    "istio-install-cni",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
 
-	ComponentCalicoIstioZTunnel = Component{
+	ComponentIstioZTunnel = Component{
 		Version:  "master",
 		Image:    "istio-ztunnel",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
 
-	ComponentCalicoIstioProxyv2 = Component{
+	ComponentIstioProxyv2 = Component{
 		Version:  "master",
 		Image:    "istio-proxyv2",
 		Registry: "",
@@ -524,10 +524,10 @@ var (
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,
-		ComponentCalicoIstioPilot,
-		ComponentCalicoIstioInstallCNI,
-		ComponentCalicoIstioZTunnel,
-		ComponentCalicoIstioProxyv2,
+		ComponentIstioPilot,
+		ComponentIstioInstallCNI,
+		ComponentIstioZTunnel,
+		ComponentIstioProxyv2,
 		ComponentTigeraWebhooks,
 	}
 )

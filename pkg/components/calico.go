@@ -220,6 +220,38 @@ var (
 		variant:   calicoVariant,
 	}
 
+	ComponentCalicoIstioPilot = Component{
+		Version:   "master",
+		Image:     "istio-pilot",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoIstioInstallCNI = Component{
+		Version:   "master",
+		Image:     "istio-install-cni",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoIstioZTunnel = Component{
+		Version:   "master",
+		Image:     "istio-ztunnel",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoIstioProxyv2 = Component{
+		Version:   "master",
+		Image:     "istio-proxyv2",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
 	ComponentCalicoWebhooks = Component{
 		Version:   "master",
 		Image:     "webhooks",
@@ -254,6 +286,10 @@ var (
 		ComponentCalicoEnvoyProxy,
 		ComponentCalicoEnvoyRatelimit,
 		ComponentCalicoGuardian,
+		ComponentCalicoIstioPilot,
+		ComponentCalicoIstioInstallCNI,
+		ComponentCalicoIstioZTunnel,
+		ComponentCalicoIstioProxyv2,
 		ComponentCalicoWebhooks,
 	}
 )

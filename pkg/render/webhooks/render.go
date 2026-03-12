@@ -398,22 +398,30 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			Verbs:     []string{"create"},
 		},
 		{
-			// The ManagedCluster cleanup controller watches ManagedCluster objects and clears their
-			// installation manifest field after creation.
+			// The webhook needs to GET tiers to verify tier existence when validating tiered policies.
 			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"managedclusters"},
-			Verbs:     []string{"list", "watch", "update"},
+			Resources: []string{"tiers"},
+			Verbs:     []string{"get"},
 		},
 	}
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		rules = append(rules, rbacv1.PolicyRule{
-			// The UISettings webhook needs to GET UISettingsGroups to verify group existence
-			// and build owner references when creating UISettings.
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"uisettingsgroups"},
-			Verbs:     []string{"get"},
-		})
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				// The ManagedCluster cleanup controller watches ManagedCluster objects and clears their
+				// installation manifest field after creation.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"list", "watch", "update"},
+			},
+			rbacv1.PolicyRule{
+				// The UISettings webhook needs to GET UISettingsGroups to verify group existence
+				// and build owner references when creating UISettings.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettingsgroups"},
+				Verbs:     []string{"get"},
+			},
+		)
 	}
 
 	cr := &rbacv1.ClusterRole{

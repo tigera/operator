@@ -171,14 +171,14 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 						// In BIRD cluster routing mode, IPIP currently requires BGP to be running in order to program routes.
 						if !felixClusterRoutingMode &&
 							(instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled) {
-							return fmt.Errorf("With BIRD cluster routing mode, IPIP encapsulation requires that BGP is enabled")
+							return fmt.Errorf("with BIRD cluster routing mode, IPIP encapsulation requires that BGP is enabled")
 						}
 					case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
 					case operatorv1.EncapsulationNone:
 						// In BIRD cluster routing mode, Unencapsulated currently requires BGP to be running in order to program routes.
 						if !felixClusterRoutingMode &&
 							(instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled) {
-							return fmt.Errorf("With BIRD cluster routing mode, unencapsulated IP pools require that BGP is enabled")
+							return fmt.Errorf("with BIRD cluster routing mode, unencapsulated IP pools require that BGP is enabled")
 						}
 					}
 				case operatorv1.IPAMPluginHostLocal:

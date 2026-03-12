@@ -43,5 +43,5 @@ jobs:
             `${{ matrix.branch }}` via `make gen-versions`.
 
             Triggered by scheduled workflow.
-          labels: auto-sync,docs-not-required,release-note-not-required
+          labels: auto-sync,docs-not-required,release-note-not-required,merge-when-ready
           delete-branch: true

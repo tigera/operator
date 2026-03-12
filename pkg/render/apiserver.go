@@ -54,7 +54,7 @@ type ContainerName string
 const (
 	APIServerPort       = 5443
 	APIServerPortName   = "apiserver"
-	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "apiserver-access"
+	APIServerPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "apiserver-access"
 
 	auditLogsVolumeName   = "calico-audit-logs"
 	auditPolicyVolumeName = "calico-audit-policy"
@@ -188,7 +188,7 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 				errMsgs = append(errMsgs, err.Error())
 			}
 		}
-	} else {
+	} else if c.cfg.RequiresAggregationServer {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServerFIPS, reg, path, prefix, is)
 			if err != nil {
@@ -235,12 +235,23 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	secrets := secret.CopyToNamespace(APIServerNamespace, c.cfg.PullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
-	namespacedObjects = append(namespacedObjects,
-		c.apiServerServiceAccount(),
-		c.apiServerDeployment(),
-		c.apiServerService(),
-		c.apiServerPodDisruptionBudget(),
-	)
+	// The deployment and its supporting objects are needed when running the aggregation API server
+	// or when running Enterprise (which always needs the queryserver).
+	if c.cfg.RequiresAggregationServer || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		namespacedObjects = append(namespacedObjects,
+			c.apiServerServiceAccount(),
+			c.apiServerDeployment(),
+			c.apiServerService(),
+			c.apiServerPodDisruptionBudget(),
+		)
+	} else {
+		objsToDelete = append(objsToDelete,
+			&corev1.ServiceAccount{TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerServiceAccountName, Namespace: APIServerNamespace}},
+			&appsv1.Deployment{TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerName, Namespace: APIServerNamespace}},
+			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerServiceName, Namespace: APIServerNamespace}},
+			&policyv1.PodDisruptionBudget{TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerName, Namespace: APIServerNamespace}},
+		)
+	}
 
 	// These are objects that only need to exist when we are running an aggregation API server to
 	// serve projectcalico.org/v3 APIs. If using CRDs for this API group, we can remove these objects.
@@ -327,12 +338,15 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// The apiserver now uses consistent resource names with 'calico' prefix across both EE and OSS variants.
 		objsToDelete = append(objsToDelete, c.deprecatedResources()...)
 	} else {
-		// Add in a NetworkPolicy.
-		namespacedObjects = append(namespacedObjects, c.networkPolicy())
-
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
+
+		// Clean up deprecated k8s NetworkPolicy
+		objsToDelete = append(objsToDelete, &netv1.NetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
+		})
 	}
 
 	// Add or remove the aggregation API server objects as needed.
@@ -532,7 +546,7 @@ func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy 
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(APIServerName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
@@ -762,98 +776,12 @@ func (c *apiServerComponent) authClusterRole() client.Object {
 // multiTenantSecretsRBAC provides the tigera API server with the ability to read secrets on the cluster.
 // This is needed in multi-tenant management clusters only, in order to read tenant secrets for signing managed cluster certificates.
 func (c *apiServerComponent) multiTenantSecretsRBAC() []client.Object {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups:     []string{""},
-			Resources:     []string{"secrets"},
-			Verbs:         []string{"get"},
-			ResourceNames: []string{c.tunnelSecretName()},
-		},
-	}
-
-	return []client.Object{
-		// Return the cluster role itself.
-		&rbacv1.ClusterRole{
-			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: APIServerSecretsRBACName,
-			},
-			Rules: rules,
-		},
-
-		// And a binding to attach it to the API server.
-		&rbacv1.ClusterRoleBinding{
-			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: APIServerSecretsRBACName,
-			},
-			RoleRef: rbacv1.RoleRef{
-				Kind:     "ClusterRole",
-				Name:     APIServerSecretsRBACName,
-				APIGroup: "rbac.authorization.k8s.io",
-			},
-			Subjects: []rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      APIServerServiceAccountName,
-					Namespace: APIServerNamespace,
-				},
-			},
-		},
-	}
-}
-
-func (c *apiServerComponent) tunnelSecretName() string {
-	secretName := VoltronTunnelSecretName
-	if c.cfg.ManagementCluster != nil && c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName != "" {
-		secretName = c.cfg.ManagementCluster.Spec.TLS.SecretName
-	}
-	return secretName
+	return TunnelSecretRBAC(APIServerSecretsRBACName, APIServerServiceAccountName, c.cfg.ManagementCluster, true)
 }
 
 // secretsRBAC provides the tigera API server with the ability to read secrets from the API server's namespace.
 func (c *apiServerComponent) secretsRBAC() []client.Object {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups:     []string{""},
-			Resources:     []string{"secrets"},
-			Verbs:         []string{"get"},
-			ResourceNames: []string{c.tunnelSecretName()},
-		},
-	}
-
-	return []client.Object{
-		// Return the role itself.
-		&rbacv1.Role{
-			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      APIServerSecretsRBACName,
-				Namespace: APIServerNamespace,
-			},
-			Rules: rules,
-		},
-
-		// And a binding to attach it to the API server.
-		&rbacv1.RoleBinding{
-			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      APIServerSecretsRBACName,
-				Namespace: APIServerNamespace,
-			},
-			RoleRef: rbacv1.RoleRef{
-				Kind:     "Role",
-				Name:     APIServerSecretsRBACName,
-				APIGroup: "rbac.authorization.k8s.io",
-			},
-			Subjects: []rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      APIServerServiceAccountName,
-					Namespace: APIServerNamespace,
-				},
-			},
-		},
-	}
+	return TunnelSecretRBAC(APIServerSecretsRBACName, APIServerServiceAccountName, c.cfg.ManagementCluster, false)
 }
 
 // authClusterRoleBinding returns a clusterrolebinding to create, and a clusterrolebinding to delete.
@@ -1425,34 +1353,6 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 	return tolerations
-}
-
-// networkPolicy returns a NP to allow traffic to the API server. This prevents it from
-// being cut off from the main API server. The enterprise equivalent is currently handled in manifests.
-//
-// Calico only.
-func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
-	tcp := corev1.ProtocolTCP
-	apiServerPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
-	p := intstr.FromInt32(apiServerPort)
-	return &netv1.NetworkPolicy{
-		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
-		Spec: netv1.NetworkPolicySpec{
-			PodSelector: *c.deploymentSelector(),
-			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
-			Ingress: []netv1.NetworkPolicyIngressRule{
-				{
-					Ports: []netv1.NetworkPolicyPort{
-						{
-							Protocol: &tcp,
-							Port:     &p,
-						},
-					},
-				},
-			},
-		},
-	}
 }
 
 // tigeraAPIServerClusterRole creates a clusterrole that gives permissions to access backing CRDs

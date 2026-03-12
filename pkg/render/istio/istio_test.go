@@ -231,7 +231,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			// Verify istiod policy
 			istiodPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioIstiodPolicyName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(istiodPolicy.Spec.Tier).To(Equal(networkpolicy.TigeraComponentTierName))
+			Expect(istiodPolicy.Spec.Tier).To(Equal(networkpolicy.CalicoTierName))
 			Expect(istiodPolicy.Spec.Selector).To(Equal(networkpolicy.KubernetesAppSelector(istio.IstioIstiodDeploymentName)))
 			Expect(istiodPolicy.Spec.Ingress).To(HaveLen(1))
 			Expect(istiodPolicy.Spec.Ingress[0].Destination.Ports).To(ContainElements(
@@ -244,7 +244,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			// Verify istio-cni policy
 			cniPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioCNIPolicyName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(cniPolicy.Spec.Tier).To(Equal(networkpolicy.TigeraComponentTierName))
+			Expect(cniPolicy.Spec.Tier).To(Equal(networkpolicy.CalicoTierName))
 			Expect(cniPolicy.Spec.Selector).To(Equal(networkpolicy.KubernetesAppSelector(istio.IstioCNIDaemonSetName)))
 			Expect(cniPolicy.Spec.Egress).To(HaveLen(1))
 			Expect(cniPolicy.Spec.Egress[0].Action).To(Equal(v3.Allow))
@@ -252,7 +252,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			// Verify ztunnel policy
 			ztunnelPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioZTunnelPolicyName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(ztunnelPolicy.Spec.Tier).To(Equal(networkpolicy.TigeraComponentTierName))
+			Expect(ztunnelPolicy.Spec.Tier).To(Equal(networkpolicy.CalicoTierName))
 			Expect(ztunnelPolicy.Spec.Selector).To(Equal(networkpolicy.KubernetesAppSelector(istio.IstioZTunnelDaemonSetName)))
 			Expect(ztunnelPolicy.Spec.Egress).NotTo(BeEmpty())
 			foundIstiodRule := false
@@ -882,7 +882,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			Expect(foundPlatformEnv).To(BeTrue(), "Expected PLATFORM=openshift env var on istiod")
 		})
 
-		It("should set trusted ztunnel namespace to kube-system on istiod", func() {
+		It("should set trusted ztunnel namespace to calico-system on istiod", func() {
 			objsToCreate, _ := component.Objects()
 
 			deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, istio.IstioIstiodDeploymentName, istio.IstioNamespace)
@@ -893,13 +893,13 @@ var _ = Describe("Istio Component Rendering", func() {
 				if container.Name == "discovery" {
 					for _, env := range container.Env {
 						if env.Name == "CA_TRUSTED_NODE_ACCOUNTS" {
-							Expect(env.Value).To(Equal("kube-system/ztunnel"))
+							Expect(env.Value).To(Equal("calico-system/ztunnel"))
 							foundTrustedAccounts = true
 						}
 					}
 				}
 			}
-			Expect(foundTrustedAccounts).To(BeTrue(), "Expected CA_TRUSTED_NODE_ACCOUNTS=kube-system/ztunnel on istiod")
+			Expect(foundTrustedAccounts).To(BeTrue(), "Expected CA_TRUSTED_NODE_ACCOUNTS=calico-system/ztunnel on istiod")
 		})
 
 		It("should set SELinux context on ztunnel", func() {

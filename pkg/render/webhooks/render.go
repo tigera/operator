@@ -43,19 +43,22 @@ import (
 const (
 	WebhooksTLSSecretName = "calico-webhooks-tls"
 
-	WebhooksName = "calico-webhooks"
+	WebhooksName            = "calico-webhooks"
+	WebhooksSecretsRBACName = "calico-webhooks-secrets-access"
 )
 
-var WebhooksPolicyName = fmt.Sprintf("%s.%s", networkpolicy.TigeraComponentTierName, WebhooksName)
+var WebhooksPolicyName = fmt.Sprintf("%s.%s", networkpolicy.CalicoTierName, WebhooksName)
 
 // Configuration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/webhooks on a cluster.
 type Configuration struct {
-	PullSecrets  []*corev1.Secret
-	KeyPair      certificatemanagement.KeyPairInterface
-	Installation *operatorv1.InstallationSpec
-	APIServer    *operatorv1.APIServerSpec
-	OpenShift    bool
+	PullSecrets       []*corev1.Secret
+	KeyPair           certificatemanagement.KeyPairInterface
+	Installation      *operatorv1.InstallationSpec
+	APIServer         *operatorv1.APIServerSpec
+	ManagementCluster *operatorv1.ManagementCluster
+	MultiTenant       bool
+	OpenShift         bool
 }
 
 func Component(cfg *Configuration) render.Component {
@@ -214,7 +217,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			},
 			Spec: v3.NetworkPolicySpec{
 				Order:    &networkpolicy.HighPrecedenceOrder,
-				Tier:     networkpolicy.TigeraComponentTierName,
+				Tier:     networkpolicy.CalicoTierName,
 				Selector: networkpolicy.KubernetesAppSelector(WebhooksName),
 				Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 				Ingress: []v3.Rule{
@@ -238,6 +241,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: corev1.ServiceSpec{
+			Selector: map[string]string{"k8s-app": WebhooksName},
 			Ports: []corev1.ServicePort{
 				{
 					Port:       443,
@@ -393,6 +397,31 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			Resources: []string{"subjectaccessreviews"},
 			Verbs:     []string{"create"},
 		},
+		{
+			// The webhook needs to GET tiers to verify tier existence when validating tiered policies.
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"tiers"},
+			Verbs:     []string{"get"},
+		},
+	}
+
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				// The ManagedCluster cleanup controller watches ManagedCluster objects and clears their
+				// installation manifest field after creation.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"managedclusters"},
+				Verbs:     []string{"list", "watch", "update"},
+			},
+			rbacv1.PolicyRule{
+				// The UISettings webhook needs to GET UISettingsGroups to verify group existence
+				// and build owner references when creating UISettings.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettingsgroups"},
+				Verbs:     []string{"get"},
+			},
+		)
 	}
 
 	cr := &rbacv1.ClusterRole{
@@ -431,7 +460,22 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, mwc)
 	}
 	objs = append(objs, cr, crb)
-	return objs, nil
+
+	// Management clusters need access to the tunnel CA secret for signing managed cluster certificates.
+	var objsToDelete []client.Object
+	if c.cfg.ManagementCluster != nil {
+		objs = append(objs, render.TunnelSecretRBAC(WebhooksSecretsRBACName, WebhooksName, c.cfg.ManagementCluster, c.cfg.MultiTenant)...)
+	} else {
+		// Clean up secrets RBAC when not a management cluster.
+		objsToDelete = append(objsToDelete,
+			&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: WebhooksSecretsRBACName}},
+			&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: WebhooksSecretsRBACName}},
+			&rbacv1.Role{TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: WebhooksSecretsRBACName, Namespace: common.CalicoNamespace}},
+			&rbacv1.RoleBinding{TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: WebhooksSecretsRBACName, Namespace: common.CalicoNamespace}},
+		)
+	}
+
+	return objs, objsToDelete
 }
 
 func (c *component) Ready() bool {

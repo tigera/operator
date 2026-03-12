@@ -20,6 +20,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -84,6 +85,7 @@ var _ = Describe("Rendering tests", func() {
 			TrustedCertBundle:           bundle,
 			OpenShift:                   openshift,
 			ManagementClusterConnection: &operatorv1.ManagementClusterConnection{},
+			IncludeEgressNetworkPolicy:  true,
 		}
 	}
 
@@ -123,6 +125,7 @@ var _ = Describe("Rendering tests", func() {
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager", Namespace: "tigera-manager"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-role"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&netv1.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "guardian", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"}},
 			}
 
 			rtest.ExpectResources(resources, expectedResources)
@@ -315,12 +318,54 @@ var _ = Describe("Rendering tests", func() {
 		guardianPolicy := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian.json")
 		guardianPolicyForOCP := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/guardian_ocp.json")
 
-		renderGuardianPolicy := func(addr string, openshift bool) {
-			cfg := createGuardianConfig(operatorv1.InstallationSpec{Registry: "my-reg/"}, addr, openshift)
+		renderGuardianPolicy := func(addr string, openshift bool, variant operatorv1.ProductVariant, includeEgressNetworkPolicy bool) {
+			installation := operatorv1.InstallationSpec{
+				Registry: "my-reg/",
+			}
+			cfg := createGuardianConfig(installation, addr, openshift)
+			cfg.Installation.Variant = variant
+			cfg.IncludeEgressNetworkPolicy = includeEgressNetworkPolicy
 			g, err := render.GuardianPolicy(cfg)
 			Expect(err).NotTo(HaveOccurred())
 			resources, _ = g.Objects()
 		}
+
+		Context("policy rendering based on variant and IncludeEgressNetworkPolicy", func() {
+			It("should render OSS network policy regardless of IncludeEgressNetworkPolicy flag", func() {
+				// OSS variant should always render a network policy, even when IncludeEgressNetworkPolicy is false
+				renderGuardianPolicy("127.0.0.1:1234", false, operatorv1.Calico, false)
+
+				policyName := types.NamespacedName{Name: "calico-system.guardian-access", Namespace: "calico-system"}
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy).NotTo(BeNil(), "OSS variant should always render a network policy")
+
+				// Verify it's the OSS policy (should only have Ingress type, no Egress)
+				Expect(policy.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress))
+				Expect(policy.Spec.Egress).To(BeEmpty())
+			})
+
+			It("should not render Enterprise network policy when IncludeEgressNetworkPolicy is false", func() {
+				// Enterprise variant with IncludeEgressNetworkPolicy=false should not render any policy
+				renderGuardianPolicy("127.0.0.1:1234", false, operatorv1.TigeraSecureEnterprise, false)
+
+				policyName := types.NamespacedName{Name: "calico-system.guardian-access", Namespace: "calico-system"}
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy).To(BeNil(), "Enterprise variant with IncludeEgressNetworkPolicy=false should not render a network policy")
+			})
+
+			It("should render Enterprise network policy when IncludeEgressNetworkPolicy is true", func() {
+				// Enterprise variant with IncludeEgressNetworkPolicy=true should render the full policy
+				renderGuardianPolicy("127.0.0.1:1234", false, operatorv1.TigeraSecureEnterprise, true)
+
+				policyName := types.NamespacedName{Name: "calico-system.guardian-access", Namespace: "calico-system"}
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy).NotTo(BeNil(), "Enterprise variant with IncludeEgressNetworkPolicy=true should render a network policy")
+
+				// Verify it's the Enterprise policy (should have both Ingress and Egress types)
+				Expect(policy.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
+				Expect(policy.Spec.Egress).NotTo(BeEmpty())
+			})
+		})
 
 		Context("calico-system rendering", func() {
 			policyName := types.NamespacedName{Name: "calico-system.guardian-access", Namespace: "calico-system"}
@@ -335,7 +380,7 @@ var _ = Describe("Rendering tests", func() {
 
 			DescribeTable("should render calico-system policy",
 				func(scenario testutils.CalicoSystemScenario) {
-					renderGuardianPolicy("127.0.0.1:1234", scenario.OpenShift)
+					renderGuardianPolicy("127.0.0.1:1234", scenario.OpenShift, operatorv1.TigeraSecureEnterprise, true)
 					policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 					expectedPolicy := getExpectedPolicy(policyName, scenario)
 					Expect(policy).To(Equal(expectedPolicy))
@@ -347,7 +392,7 @@ var _ = Describe("Rendering tests", func() {
 			// The test matrix above validates against an IP-based management cluster address.
 			// Validate policy adaptation for domain-based management cluster address here.
 			It("should adapt Guardian policy if ManagementClusterAddr is domain-based", func() {
-				renderGuardianPolicy("mydomain.io:8080", false)
+				renderGuardianPolicy("mydomain.io:8080", false, operatorv1.TigeraSecureEnterprise, true)
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				managementClusterEgressRule := policy.Spec.Egress[5]
 				Expect(managementClusterEgressRule.Destination.Domains).To(Equal([]string{"mydomain.io"}))

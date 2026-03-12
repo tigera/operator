@@ -623,7 +623,7 @@ type CalicoNetworkSpec struct {
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	BGP *BGPOption `json:"bgp,omitempty"`
 
-	// ClusterRoutingMode controls how nodes gets a route to a workload on another node,
+	// ClusterRoutingMode controls how nodes get a route to a workload on another node,
 	// when that workload's IP comes from an IP Pool with vxlanMode: Never. When ClusterRoutingMode is BIRD,
 	// confd and BIRD program that route. When ClusterRoutingMode is Felix, it is expected that Felix will program that route.
 	// Felix always programs such routes for IP Pools with vxlanMode: Always or vxlanMode: CrossSubnet. [Default: BIRD]

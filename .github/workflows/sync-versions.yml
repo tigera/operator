@@ -20,21 +20,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [master, release-v1.41, release-v1.40]
+        branch: [master, release-v1.41, release-v1.40, release-v1.38]
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ matrix.branch }}
 
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.PRIVATE_REPO_SSH_KEY }}
-
       - name: Sync versions
+        with:
+          token: ${{ secrets.MARVIN_PAT }}
         run: |
-          # GIT_USE_SSH=true ensures the Makefile uses SSH for private repositories.
-          make gen-versions GIT_USE_SSH=true
+          make gen-versions
 
       - uses: peter-evans/create-pull-request@v6
         with:

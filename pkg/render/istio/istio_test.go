@@ -41,8 +41,22 @@ import (
 	"github.com/tigera/operator/pkg/render/istio"
 )
 
-// getTestImageSet returns a standard imageSet for testing
-func getTestImageSet() *operatorv1.ImageSet {
+// getCalicoTestImageSet returns a standard imageSet for testing with Calico variant
+func getCalicoTestImageSet() *operatorv1.ImageSet {
+	return &operatorv1.ImageSet{
+		Spec: operatorv1.ImageSetSpec{
+			Images: []operatorv1.Image{
+				{Image: "calico/istio-pilot", Digest: "sha256:test-pilot-digest"},
+				{Image: "calico/istio-install-cni", Digest: "sha256:test-cni-digest"},
+				{Image: "calico/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
+				{Image: "calico/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
+			},
+		},
+	}
+}
+
+// getEnterpriseTestImageSet returns a standard imageSet for testing with Enterprise variant
+func getEnterpriseTestImageSet() *operatorv1.ImageSet {
 	return &operatorv1.ImageSet{
 		Spec: operatorv1.ImageSetSpec{
 			Images: []operatorv1.Image{
@@ -636,16 +650,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			imageSet := &operatorv1.ImageSet{
-				Spec: operatorv1.ImageSetSpec{
-					Images: []operatorv1.Image{
-						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
-						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
-						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-					},
-				},
-			}
+			imageSet := getCalicoTestImageSet()
 			err = component.ResolveImages(imageSet)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -700,7 +705,84 @@ var _ = Describe("Istio Component Rendering", func() {
 		It("should patch ConfigMap with proxyv2 image", func() {
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
-			err = component.ResolveImages(getTestImageSet())
+			err = component.ResolveImages(getCalicoTestImageSet())
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, _ := component.Objects()
+
+			// Find the istio-sidecar-injector ConfigMap
+			configMap, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, "istio-sidecar-injector", istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Verify that the fake image has been replaced
+			for _, data := range configMap.Data {
+				Expect(data).NotTo(ContainSubstring("fake.io/fakeimg/proxyv2:faketag"))
+			}
+		})
+
+		It("should patch all required images for Enterprise variant", func() {
+			cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			imageSet := getEnterpriseTestImageSet()
+			err = component.ResolveImages(imageSet)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, _ := component.Objects()
+
+			// Verify istiod deployment image
+			deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, istio.IstioIstiodDeploymentName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			foundDiscoveryContainer := false
+			for _, container := range deployment.Spec.Template.Spec.Containers {
+				if container.Name == "discovery" {
+					foundDiscoveryContainer = true
+					expectedImage, _ := components.GetReference(components.ComponentIstioPilot, cfg.Installation.Registry, cfg.Installation.ImagePath, cfg.Installation.ImagePrefix, imageSet)
+					Expect(container.Image).To(Equal(expectedImage))
+					break
+				}
+			}
+			Expect(foundDiscoveryContainer).To(BeTrue(), "discovery container not found in istiod deployment")
+
+			// Verify CNI daemonset image
+			cniDS, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			foundInstallCNIContainer := false
+			for _, container := range cniDS.Spec.Template.Spec.Containers {
+				if container.Name == "install-cni" {
+					foundInstallCNIContainer = true
+					expectedImage, _ := components.GetReference(components.ComponentIstioInstallCNI, cfg.Installation.Registry, cfg.Installation.ImagePath, cfg.Installation.ImagePrefix, imageSet)
+					Expect(container.Image).To(Equal(expectedImage))
+					break
+				}
+			}
+			Expect(foundInstallCNIContainer).To(BeTrue(), "install-cni container not found in CNI daemonset")
+
+			// Verify ztunnel daemonset image
+			ztunnelDS, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioZTunnelDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			foundIstioProxyContainer := false
+			for _, container := range ztunnelDS.Spec.Template.Spec.Containers {
+				if container.Name == "istio-proxy" {
+					foundIstioProxyContainer = true
+					expectedImage, _ := components.GetReference(components.ComponentIstioZTunnel, cfg.Installation.Registry, cfg.Installation.ImagePath, cfg.Installation.ImagePrefix, imageSet)
+					Expect(container.Image).To(Equal(expectedImage))
+					break
+				}
+			}
+			Expect(foundIstioProxyContainer).To(BeTrue(), "istio-proxy container not found in ztunnel daemonset")
+		})
+
+		It("should patch ConfigMap with proxyv2 image for Enterprise variant", func() {
+			cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = component.ResolveImages(getEnterpriseTestImageSet())
 			Expect(err).ShouldNot(HaveOccurred())
 
 			objsToCreate, _ := component.Objects()

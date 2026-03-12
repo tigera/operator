@@ -1,0 +1,51 @@
+# Sync Calico and Calico Enterprise versions and CRDs into this repo.
+# Creates or updates a PR if anything changed.
+---
+name: Sync versions
+on:
+  schedule:
+    - cron: '0 * * * *'  # every hour
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    concurrency:
+      group: sync-versions-${{ matrix.branch }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [master, release-v1.41, release-v1.40]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PRIVATE_REPO_SSH_KEY }}
+
+      - name: Sync versions
+        run: |
+          # GIT_USE_SSH=true ensures the Makefile uses SSH for private repositories.
+          make gen-versions GIT_USE_SSH=true
+
+      - uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "Sync versions from Calico and Calico Enterprise"
+          branch: auto-sync-versions-${{ matrix.branch }}
+          base: ${{ matrix.branch }}
+          title: "Auto: sync versions [${{ matrix.branch }}]"
+          body: |
+            Automated sync of versions and CRDs from Calico and Calico Enterprise into
+            `${{ matrix.branch }}` via `make gen-versions`.
+
+            Triggered by scheduled workflow.
+          labels: auto-sync,docs-not-required,release-note-not-required
+          delete-branch: true

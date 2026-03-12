@@ -538,8 +538,7 @@ func BGPOptionPtr(b BGPOption) *BGPOption {
 }
 
 // ClusterRoutingMode describes the mode of cluster routing.
-//
-// One of: BIRD, Felix
+// +kubebuilder:validation:Enum=BIRD;Felix
 type ClusterRoutingMode string
 
 const (
@@ -629,7 +628,6 @@ type CalicoNetworkSpec struct {
 	// confd and BIRD program that route. When ClusterRoutingMode is Felix, it is expected that Felix will program that route.
 	// Felix always programs such routes for IP Pools with vxlanMode: Always or vxlanMode: CrossSubnet. [Default: BIRD]
 	// +optional
-	// +kubebuilder:validation:Enum=BIRD;Felix
 	ClusterRoutingMode *ClusterRoutingMode `json:"clusterRoutingMode,omitempty"`
 
 	// IPPools contains a list of IP pools to manage. If nil, a single IPv4 IP pool

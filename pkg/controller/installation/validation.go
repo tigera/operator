@@ -139,7 +139,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	// Verify Calico settings, if specified.
 	if instance.Spec.CalicoNetwork != nil {
 		bpfDataplane := instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
-		birdClusterRoutingMode := !felixProgramsClusterRoutes(instance)
+		felixClusterRoutingMode := felixProgramsClusterRoutes(instance)
 
 		// Perform validation on non-IPPool fields that rely on IP pool configuration. Validation of the IP pools themselves
 		// happens in the IP pool controller.
@@ -169,16 +169,16 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 					switch pool.Encapsulation {
 					case operatorv1.EncapsulationIPIP, operatorv1.EncapsulationIPIPCrossSubnet:
 						// In BIRD cluster routing mode, IPIP currently requires BGP to be running in order to program routes.
-						if birdClusterRoutingMode &&
+						if !felixClusterRoutingMode &&
 							(instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled) {
-							return fmt.Errorf("IPIP encapsulation requires that BGP is enabled")
+							return fmt.Errorf("With BIRD cluster routing mode, IPIP encapsulation requires that BGP is enabled")
 						}
 					case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
 					case operatorv1.EncapsulationNone:
 						// In BIRD cluster routing mode, Unencapsulated currently requires BGP to be running in order to program routes.
-						if birdClusterRoutingMode &&
+						if !felixClusterRoutingMode &&
 							(instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled) {
-							return fmt.Errorf("unencapsulated IP pools require that BGP is enabled")
+							return fmt.Errorf("With BIRD cluster routing mode, unencapsulated IP pools require that BGP is enabled")
 						}
 					}
 				case operatorv1.IPAMPluginHostLocal:

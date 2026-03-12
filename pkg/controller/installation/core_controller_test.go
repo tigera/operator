@@ -1486,6 +1486,33 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*bgpConfig.Spec.ProgramClusterRoutes).To(Equal("Disabled"))
 		})
 
+		It("should create the default BGPConfig and FelixConfig with ClusterRoutingMode set", func() {
+			bgpConfig := &v3.BGPConfiguration{}
+			err := c.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfig)
+			Expect(err).Should(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).Should(HaveOccurred())
+
+			felix := operator.ClusterRoutingModeFelix
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{ClusterRoutingMode: &felix}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(fc.Spec.ProgramClusterRoutes).NotTo(BeNil())
+			Expect(*fc.Spec.ProgramClusterRoutes).To(Equal("Enabled"))
+
+			bgpConfig = &v3.BGPConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfig)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(bgpConfig.Spec.ProgramClusterRoutes).NotTo(BeNil())
+			Expect(*bgpConfig.Spec.ProgramClusterRoutes).To(Equal("Disabled"))
+		})
+
 		It("should set vxlanVNI to 10000 when provider is DockerEE", func() {
 			cr.Spec.KubernetesProvider = operator.ProviderDockerEE
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())

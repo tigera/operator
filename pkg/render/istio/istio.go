@@ -185,21 +185,40 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 
-	c.IstioPilotImage, err = components.GetReference(components.ComponentCalicoIstioPilot, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
-	c.IstioInstallCNIImage, err = components.GetReference(components.ComponentCalicoIstioInstallCNI, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
-	c.IstioZTunnelImage, err = components.GetReference(components.ComponentCalicoIstioZTunnel, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
-	c.IstioProxyv2Image, err = components.GetReference(components.ComponentCalicoIstioProxyv2, reg, path, prefix, is)
-	if err != nil {
-		return err
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		c.IstioPilotImage, err = components.GetReference(components.ComponentIstioPilot, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		c.IstioInstallCNIImage, err = components.GetReference(components.ComponentIstioInstallCNI, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		c.IstioZTunnelImage, err = components.GetReference(components.ComponentIstioZTunnel, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		c.IstioProxyv2Image, err = components.GetReference(components.ComponentIstioProxyv2, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+	} else {
+		c.IstioPilotImage, err = components.GetReference(components.ComponentCalicoIstioPilot, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		c.IstioInstallCNIImage, err = components.GetReference(components.ComponentCalicoIstioInstallCNI, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		c.IstioZTunnelImage, err = components.GetReference(components.ComponentCalicoIstioZTunnel, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		c.IstioProxyv2Image, err = components.GetReference(components.ComponentCalicoIstioProxyv2, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
 	}
 
 	if err = c.patchImages(); err != nil {

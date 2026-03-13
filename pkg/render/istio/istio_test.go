@@ -15,6 +15,8 @@
 package istio_test
 
 import (
+	"strings"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -325,6 +327,54 @@ var _ = Describe("Istio Component Rendering", func() {
 			ztunnelDS, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioZTunnelDaemonSetName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(ztunnelDS.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(corev1.LocalObjectReference{Name: "test-pull-secret"}))
+		})
+
+		It("should include imagePullSecrets in istiod Helm values", func() {
+			pullSecret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "my-pull-secret",
+					Namespace: istio.IstioNamespace,
+				},
+			}
+			cfg.PullSecrets = []*corev1.Secret{pullSecret}
+
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, _ := component.Objects()
+
+			// The "values" ConfigMap contains the serialized Helm values for istiod.
+			// Verify that imagePullSecrets appears in its data.
+			valuesConfigMap, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, "values", istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// The values ConfigMap should contain the imagePullSecrets key with the secret name
+			found := false
+			for _, v := range valuesConfigMap.Data {
+				if strings.Contains(v, "imagePullSecrets") && strings.Contains(v, "my-pull-secret") {
+					found = true
+					break
+				}
+			}
+			Expect(found).To(BeTrue(), "Expected imagePullSecrets with 'my-pull-secret' in istiod values ConfigMap")
+		})
+
+		It("should not include secret names in imagePullSecrets Helm values when no pull secrets configured", func() {
+			cfg.PullSecrets = nil
+
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, _ := component.Objects()
+
+			valuesConfigMap, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, "values", istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// When no pull secrets are configured, imagePullSecrets should be
+			// an empty array (the Helm chart default), not populated with names.
+			for _, v := range valuesConfigMap.Data {
+				Expect(v).NotTo(ContainSubstring("my-pull-secret"), "Expected no secret names in imagePullSecrets when none configured")
+			}
 		})
 	})
 

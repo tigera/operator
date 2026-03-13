@@ -34,6 +34,7 @@ type IstioReconciler struct {
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=istios,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=istios/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=istios/finalizers,verbs=update
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *IstioReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {

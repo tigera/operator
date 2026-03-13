@@ -121,8 +121,6 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			mockStatus.On("ClearDegraded")
 			mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 			mockStatus.On("OnCRNotFound")
-			mockStatus.On("SetWarning", mock.Anything, mock.Anything)
-			mockStatus.On("ClearWarning", mock.Anything)
 		})
 
 		It("fills defaults on an empty LogStorage", func() {
@@ -199,7 +197,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			Expect(ls.Status.State).Should(Equal(operatorv1.TigeraStatusDegraded))
 		})
 
-		It("sets a warning when node count only exceeds replicas by 1", func() {
+		It("logs a warning but does not degrade when node count only exceeds replicas by 1", func() {
 			var replicas int32 = 1
 			ls := &operatorv1.LogStorage{}
 			ls.Name = "tigera-secure"
@@ -213,7 +211,6 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)).Should(BeTrue())
-			mockStatus.AssertCalled(GinkgoT(), "SetWarning", "replicaNodeCount", mock.Anything)
 
 			ls = &operatorv1.LogStorage{}
 			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-secure"}, ls)).ShouldNot(HaveOccurred())

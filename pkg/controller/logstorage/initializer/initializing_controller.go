@@ -181,6 +181,7 @@ func validateReplicasForNodeCount(spec *operatorv1.LogStorageSpec) (error, strin
 	if spec.Nodes == nil || spec.Indices == nil || spec.Indices.Replicas == nil {
 		return nil, ""
 	}
+
 	replicas := int(*spec.Indices.Replicas)
 	nodeCount := int(spec.Nodes.Count)
 	if replicas > 0 && nodeCount <= replicas {
@@ -190,6 +191,7 @@ func validateReplicasForNodeCount(spec *operatorv1.LogStorageSpec) (error, strin
 	if replicas > 0 && nodeCount == replicas+1 {
 		return nil, fmt.Sprintf("LogStorage spec.nodes.count (%d) is only 1 more than spec.indices.replicas (%d); this may prevent voluntary pod evictions (e.g., node repaving) due to PodDisruptionBudget constraints. If this is expected for your environment, no action is needed. Otherwise, consider setting spec.nodes.count to at least %d", nodeCount, replicas, replicas+2)
 	}
+
 	return nil, ""
 }
 

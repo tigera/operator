@@ -26,11 +26,11 @@ jobs:
         with:
           ref: ${{ matrix.branch }}
 
-      - name: Sync versions
-        with:
-          token: ${{ secrets.MARVIN_PAT }}
+      - name: Gen versions
         run: |
           make gen-versions
+        env:
+          MARVIN_PAT: ${{ secrets.MARVIN_PAT }}
 
       - uses: peter-evans/create-pull-request@v6
         with:

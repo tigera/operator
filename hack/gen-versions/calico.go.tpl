@@ -237,6 +237,42 @@ var (
 		variant:   calicoVariant,
 	}
 {{- end }}
+{{ with index .Components "istio-pilot" }}
+	ComponentCalicoIstioPilot = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-install-cni" }}
+	ComponentCalicoIstioInstallCNI = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-ztunnel" }}
+	ComponentCalicoIstioZTunnel = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with index .Components "istio-proxyv2" }}
+	ComponentCalicoIstioProxyv2 = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
 {{ with index .Components.webhooks }}
 	ComponentCalicoWebhooks = Component{
 		Version:   "{{ .Version }}",
@@ -273,6 +309,10 @@ var (
 		ComponentCalicoEnvoyProxy,
 		ComponentCalicoEnvoyRatelimit,
 		ComponentCalicoGuardian,
+		ComponentCalicoIstioPilot,
+		ComponentCalicoIstioInstallCNI,
+		ComponentCalicoIstioZTunnel,
+		ComponentCalicoIstioProxyv2,
 		ComponentCalicoWebhooks,
 	}
 )

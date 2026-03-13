@@ -112,6 +112,7 @@ SRC_FILES+=$(shell find ./test -name '*.go')
 SRC_FILES+=cmd/main.go
 
 EXTRA_DOCKER_ARGS += -e GOPRIVATE=github.com/tigera/*
+GIT_CLONE_URL_BASE?=git@github.com:
 ifeq ($(GIT_USE_SSH),true)
 	GIT_CONFIG_SSH ?= git config --global url."ssh://git@github.com/".insteadOf "https://github.com/";
 endif
@@ -698,7 +699,7 @@ define fetch_crds
     $(eval branch := $(2))
     $(eval dir := $(3))
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
-	git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch git@github.com:$(project).git ./
+	git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch $(GIT_CLONE_URL_BASE)$(project).git ./
 endef
 define copy_v1_crds
     $(eval dir := $(1))

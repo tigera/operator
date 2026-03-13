@@ -26,11 +26,15 @@ jobs:
         with:
           ref: ${{ matrix.branch }}
 
-      - name: Gen versions
+      - name: Configure git auth
         run: |
-          make gen-versions
+          git config --global credential.helper store
+          echo "https://marvin-tigera:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
         env:
-          MARVIN_PAT: ${{ secrets.MARVIN_PAT }}
+          GITHUB_TOKEN: ${{ secrets.MARVIN_PAT }}
+
+      - name: Gen versions
+        run: make gen-versions GIT_CLONE_URL_BASE=https://github.com/
 
       - uses: peter-evans/create-pull-request@v6
         with:

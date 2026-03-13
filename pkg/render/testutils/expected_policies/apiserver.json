@@ -55,7 +55,7 @@
         "protocol": "UDP",
         "destination": {
           "namespaceSelector": "projectcalico.org/name == 'kube-system'",
-          "selector": "k8s-app == 'kube-dns'",
+          "selector": "k8s-app == 'kube-dns' || k8s-app == 'coredns'",
           "ports": [
             53
           ]

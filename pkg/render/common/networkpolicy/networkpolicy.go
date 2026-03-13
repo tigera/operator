@@ -70,8 +70,9 @@ func AppendDNSEgressRules(egressRules []v3.Rule, openShift bool) []v3.Rule {
 			Protocol: &UDPProtocol,
 			Destination: v3.EntityRule{
 				NamespaceSelector: "projectcalico.org/name == 'kube-system'",
-				Selector:          "k8s-app == 'kube-dns'",
-				Ports:             Ports(53),
+				// In most Kubernetes distros the label is for kube-dns, but in Canonical it is for codedns.
+				Selector: "k8s-app == 'kube-dns' || k8s-app == 'coredns'",
+				Ports:    Ports(53),
 			},
 		})
 	}
@@ -138,16 +139,29 @@ func AppendServiceSelectorDNSEgressRules(egressRules []v3.Rule, openShift bool) 
 			},
 		}...)
 	} else {
-		egressRules = append(egressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &UDPProtocol,
-			Destination: v3.EntityRule{
-				Services: &v3.ServiceMatch{
-					Namespace: "kube-system",
-					Name:      "kube-dns",
+		// In most Kubernetes distros, the DNS service is kube-dns, but in Canonical it is coredns.
+		egressRules = append(egressRules, []v3.Rule{
+			{
+				Action:   v3.Allow,
+				Protocol: &UDPProtocol,
+				Destination: v3.EntityRule{
+					Services: &v3.ServiceMatch{
+						Namespace: "kube-system",
+						Name:      "kube-dns",
+					},
 				},
 			},
-		})
+			{
+				Action:   v3.Allow,
+				Protocol: &UDPProtocol,
+				Destination: v3.EntityRule{
+					Services: &v3.ServiceMatch{
+						Namespace: "kube-system",
+						Name:      "coredns",
+					},
+				},
+			},
+		}...)
 	}
 
 	return egressRules

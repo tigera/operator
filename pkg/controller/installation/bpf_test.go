@@ -15,29 +15,37 @@
 package installation
 
 import (
-	"strconv"
-
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/common"
-
-	"github.com/tigera/operator/pkg/render"
+	"encoding/json"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/render"
 )
 
-var _ = Describe("BPF functional tests", func() {
-	Context("Annotations validation tests", func() {
-		var fc *v3.FelixConfiguration
-		var textTrue, textFalse string
-		var enabled, notEnabled bool
+const managedFieldsAnnotation = "operator.tigera.io/managed-fields-installation"
 
-		textTrue = strconv.FormatBool(true)
-		textFalse = strconv.FormatBool(false)
+// trackedFields parses the consolidated managed-fields annotation on the FC.
+func trackedFields(fc *v3.FelixConfiguration) map[string]string {
+	raw, ok := fc.Annotations[managedFieldsAnnotation]
+	if !ok {
+		return nil
+	}
+	var fields map[string]string
+	ExpectWithOffset(1, json.Unmarshal([]byte(raw), &fields)).To(Succeed())
+	return fields
+}
+
+var _ = Describe("BPF functional tests", func() {
+	Context("setBPFEnabledOnFelixConfiguration conflict detection", func() {
+		var fc *v3.FelixConfiguration
+		var enabled, notEnabled bool
 
 		enabled = true
 		notEnabled = false
@@ -52,57 +60,86 @@ var _ = Describe("BPF functional tests", func() {
 			}
 		})
 
-		It("should return error if the value is not a boolean", func() {
-			fc.Annotations[render.BPFOperatorAnnotation] = "NotBoolean"
-			err := bpfValidateAnnotations(fc)
-			Expect(err).Should(HaveOccurred())
-		})
-
-		It("should return error if the annotation is nil and the spec field is not", func() {
-			fc.Annotations = nil
-			fc.Spec.BPFEnabled = &enabled
-			err := bpfValidateAnnotations(fc)
-			Expect(err).Should(HaveOccurred())
-		})
-
-		It("should return error if the annotation is not nil and the spec field is", func() {
-			fc.Annotations[render.BPFOperatorAnnotation] = textFalse
-			err := bpfValidateAnnotations(fc)
-			Expect(err).Should(HaveOccurred())
-		})
-
-		It("should return error if the annotation is true and the spec field is false", func() {
-			fc.Annotations[render.BPFOperatorAnnotation] = textTrue
+		It("should error when spec was modified out-of-band (tracked true, spec false)", func() {
+			// Simulate: operator previously set BPFEnabled=true, user changed to false.
+			fc.Annotations[managedFieldsAnnotation] = `{"BPFEnabled":"true"}`
 			fc.Spec.BPFEnabled = &notEnabled
-			err := bpfValidateAnnotations(fc)
+			err := setBPFEnabledOnFelixConfiguration(fc, true)
 			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("modified by another actor"))
 		})
 
-		It("should return error if the annotation is false and the spec field is true", func() {
-			fc.Annotations[render.BPFOperatorAnnotation] = textFalse
+		It("should error when spec was modified out-of-band (tracked false, spec true)", func() {
+			fc.Annotations[managedFieldsAnnotation] = `{"BPFEnabled":"false"}`
 			fc.Spec.BPFEnabled = &enabled
-			err := bpfValidateAnnotations(fc)
+			err := setBPFEnabledOnFelixConfiguration(fc, false)
 			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("modified by another actor"))
 		})
 
-		It("should return valid if both annotation and the spec field are nil", func() {
+		It("should succeed when both are nil (fresh install)", func() {
 			fc.Annotations = nil
-			err := bpfValidateAnnotations(fc)
+			err := setBPFEnabledOnFelixConfiguration(fc, true)
 			Expect(err).ShouldNot(HaveOccurred())
+			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
+			Expect(trackedFields(fc)).To(HaveKeyWithValue("BPFEnabled", "true"))
 		})
 
-		It("should return valid if the annotation is false and the spec field is false", func() {
-			fc.Annotations[render.BPFOperatorAnnotation] = textFalse
+		It("should succeed when tracked matches spec", func() {
+			fc.Annotations[managedFieldsAnnotation] = `{"BPFEnabled":"false"}`
 			fc.Spec.BPFEnabled = &notEnabled
-			err := bpfValidateAnnotations(fc)
+			err := setBPFEnabledOnFelixConfiguration(fc, false)
 			Expect(err).ShouldNot(HaveOccurred())
 		})
 
-		It("should return valid if the annotation is true and the spec field is true", func() {
-			fc.Annotations[render.BPFOperatorAnnotation] = textTrue
-			fc.Spec.BPFEnabled = &enabled
-			err := bpfValidateAnnotations(fc)
+		It("should update tracked value when operator changes desired value", func() {
+			fc.Annotations[managedFieldsAnnotation] = `{"BPFEnabled":"false"}`
+			fc.Spec.BPFEnabled = &notEnabled
+			err := setBPFEnabledOnFelixConfiguration(fc, true)
 			Expect(err).ShouldNot(HaveOccurred())
+			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
+			Expect(trackedFields(fc)).To(HaveKeyWithValue("BPFEnabled", "true"))
+		})
+	})
+
+	Context("Legacy annotation migration", func() {
+		It("should migrate old per-field annotation to consolidated tracker", func() {
+			fc := &v3.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+					Annotations: map[string]string{
+						render.BPFOperatorAnnotation: "true",
+					},
+				},
+				Spec: v3.FelixConfigurationSpec{
+					BPFEnabled: boolPtr(true),
+				},
+			}
+
+			err := setBPFEnabledOnFelixConfiguration(fc, true)
+			Expect(err).ShouldNot(HaveOccurred())
+			// Old annotation should be removed.
+			Expect(fc.Annotations).NotTo(HaveKey(render.BPFOperatorAnnotation))
+			// New consolidated annotation should exist.
+			Expect(trackedFields(fc)).To(HaveKeyWithValue("BPFEnabled", "true"))
+		})
+
+		It("should detect conflict after migrating legacy annotation", func() {
+			fc := &v3.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "default",
+					Annotations: map[string]string{
+						render.BPFOperatorAnnotation: "true",
+					},
+				},
+				Spec: v3.FelixConfigurationSpec{
+					BPFEnabled: boolPtr(false), // User changed it.
+				},
+			}
+
+			err := setBPFEnabledOnFelixConfiguration(fc, true)
+			Expect(err).Should(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("modified by another actor"))
 		})
 	})
 
@@ -263,29 +300,22 @@ var _ = Describe("BPF functional tests", func() {
 			}
 		})
 
-		It("should return error if annotation validation failed", func() {
-			fc.Annotations = make(map[string]string)
-			fc.Annotations[render.BPFOperatorAnnotation] = "NotBoolean"
-			err := bpfValidateAnnotations(fc)
-			Expect(err).Should(HaveOccurred())
-			err = setBPFEnabledOnFelixConfiguration(fc, true)
-			Expect(err).Should(HaveOccurred())
-		})
-
-		It("should set correct annotation", func() {
+		It("should set correct annotation and spec value", func() {
 			err := setBPFEnabledOnFelixConfiguration(fc, true)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			annotations := fc.Annotations[render.BPFOperatorAnnotation]
-			Expect(annotations).To(Equal("true"))
+			Expect(trackedFields(fc)).To(HaveKeyWithValue("BPFEnabled", "true"))
 			Expect(*fc.Spec.BPFEnabled).To(Equal(true))
 
 			err = setBPFEnabledOnFelixConfiguration(fc, false)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			annotations = fc.Annotations[render.BPFOperatorAnnotation]
-			Expect(annotations).To(Equal("false"))
+			Expect(trackedFields(fc)).To(HaveKeyWithValue("BPFEnabled", "false"))
 			Expect(*fc.Spec.BPFEnabled).To(Equal(false))
 		})
 	})
 })
+
+func boolPtr(v bool) *bool {
+	return &v
+}

@@ -537,6 +537,15 @@ func BGPOptionPtr(b BGPOption) *BGPOption {
 	return &b
 }
 
+// ClusterRoutingMode describes the mode of cluster routing.
+// +kubebuilder:validation:Enum=BIRD;Felix
+type ClusterRoutingMode string
+
+const (
+	ClusterRoutingModeBIRD  ClusterRoutingMode = "BIRD"
+	ClusterRoutingModeFelix ClusterRoutingMode = "Felix"
+)
+
 const (
 	BGPEnabled  BGPOption = "Enabled"
 	BGPDisabled BGPOption = "Disabled"
@@ -613,6 +622,13 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	BGP *BGPOption `json:"bgp,omitempty"`
+
+	// ClusterRoutingMode controls how nodes get a route to a workload on another node,
+	// when that workload's IP comes from an IP Pool with vxlanMode: Never. When ClusterRoutingMode is BIRD,
+	// confd and BIRD program that route. When ClusterRoutingMode is Felix, it is expected that Felix will program that route.
+	// Felix always programs such routes for IP Pools with vxlanMode: Always or vxlanMode: CrossSubnet. [Default: BIRD]
+	// +optional
+	ClusterRoutingMode *ClusterRoutingMode `json:"clusterRoutingMode,omitempty"`
 
 	// IPPools contains a list of IP pools to manage. If nil, a single IPv4 IP pool
 	// will be created by the operator. If an empty list is provided, the operator will not create any IP pools and will instead

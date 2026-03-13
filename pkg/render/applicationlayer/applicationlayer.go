@@ -347,6 +347,12 @@ func (c *component) containers() []corev1.Container {
 			commandArgs = append(commandArgs, "--per-host-alp-enabled")
 		}
 
+		// Determine dataplane mode for dikastes
+		dataplane := "iptables"
+		if c.config.Installation.IsNftables() {
+			dataplane = "nftables"
+		}
+
 		dikastes := corev1.Container{
 			Name:            DikastesContainerName,
 			Image:           c.config.dikastesImage,
@@ -355,6 +361,7 @@ func (c *component) containers() []corev1.Container {
 			Env: []corev1.EnvVar{
 				{Name: "LOG_LEVEL", Value: "Info"},
 				{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},
+				{Name: "DATAPLANE", Value: dataplane},
 			},
 			VolumeMounts:    volMounts,
 			SecurityContext: securitycontext.NewRootContext(true),

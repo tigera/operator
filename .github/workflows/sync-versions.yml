@@ -31,6 +31,7 @@ jobs:
         run: |
           git config --global credential.helper store
           echo "https://marvin-tigera:${GITHUB_TOKEN}@github.com" > ~/.git-credentials
+          git config --global url."https://github.com/".insteadOf "git@github.com:"
         env:
           GITHUB_TOKEN: ${{ secrets.MARVIN_PAT }}
 
